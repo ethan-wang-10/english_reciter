@@ -1,6 +1,96 @@
 {
   "all_words": [
     {
+      "english": "blow",
+      "chinese": "吹；打击",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "The wind will blow away these fallen leaves._风会把落叶吹走。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "carton",
+      "chinese": "纸板箱；纸盒",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "He drank a carton of milk for breakfast._他早餐喝了一盒牛奶。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "paper",
+      "chinese": "纸；纸张；论文",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "She wrote her phone number on a piece of paper._她把电话号码写在了一张纸上。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "diary",
+      "chinese": "日记；日记本",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "She keeps a diary to record her daily life._她通过写日记来记录日常生活。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "machine",
+      "chinese": "机器；机械装置",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "This washing machine is very energy-efficient._这台洗衣机非常省水省电。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "rescue",
+      "chinese": "营救；救援",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "The firefighters rescued the cat from the tree._消防员把猫从树上救了下来。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "plant",
+      "chinese": "植物；工厂；种植",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "This plant needs plenty of sunlight._这种植物需要充足的阳光。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "shelf",
+      "chinese": "架子；搁板",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "Please put the book back on the shelf._请把书放回架子上。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "stationery",
+      "chinese": "文具",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "I need to buy some stationery for the new semester._我需要为新学期买些文具。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "recycling",
+      "chinese": "回收利用",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "Recycling helps to protect our environment._回收利用有助于保护环境。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
       "english": "camp",
       "chinese": "露营；营地",
       "success_count": 1,
