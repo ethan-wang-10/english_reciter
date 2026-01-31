@@ -387,6 +387,53 @@ docker-compose build
 docker-compose up -d
 ```
 
+## 无音频服务器配置
+
+如果服务器没有声卡（如云服务器），需要配置应用以兼容无音频环境：
+
+### 1. 禁用 TTS 功能
+在服务器上创建或修改配置文件，禁用文本转语音功能：
+
+```bash
+# 创建用户配置目录
+mkdir -p user_data_simple/your-username
+
+# 创建配置文件
+cat > user_data_simple/your-username/config.json << 'EOF'
+{
+  "tts_enabled": false,
+  "max_success_count": 8,
+  "max_review_round": 8,
+  "review_interval_days": [1, 2, 4, 7, 15, 30, 60, 90],
+  "backup_enabled": true,
+  "backup_interval_days": 7,
+  "max_backups": 10,
+  "language": "zh",
+  "log_level": "INFO"
+}
+EOF
+```
+
+### 2. 代码自动兼容
+最新代码已包含以下兼容性改进：
+- **自动检测**：如果 `say` 命令不存在，自动跳过语音播放
+- **优雅降级**：TTS 失败不会影响其他功能
+- **跨平台支持**：macOS、Linux、Windows 均可运行
+
+### 3. 前端适配
+前端会自动处理以下情况：
+- 如果语音播放不可用，朗读按钮将显示为禁用状态
+- 用户仍可正常使用所有学习功能
+
+### 4. 验证配置
+```bash
+# 检查 say 命令是否存在
+which say
+
+# 如果返回空，表示系统不支持 TTS
+# 应用将自动跳过语音功能
+```
+
 ## 故障排查
 
 ### 问题 1: 无法启动

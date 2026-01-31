@@ -2,6 +2,7 @@ import os
 import json
 import random
 import shutil
+import platform
 from collections import defaultdict
 from typing import Dict, List, Optional
 from datetime import date, timedelta, datetime
@@ -517,8 +518,17 @@ class WordReciter:
         return self.config.REVIEW_INTERVAL_DAYS[-1]
     
     def _text_to_speech(self, text: str) -> None:
-        """文本转语音（使用 macOS 系统命令）"""
+        """文本转语音（跨平台支持）
+        
+        - macOS: 使用系统 say 命令
+        - Linux/Windows: 如果 say 命令不存在则静默跳过
+        """
         if not self.config.TTS_ENABLED:
+            return
+        
+        # 检查 say 命令是否可用
+        if shutil.which('say') is None:
+            logger.debug("say 命令不可用，跳过语音播放")
             return
         
         try:
@@ -531,7 +541,11 @@ class WordReciter:
                 logger.warning("无法提取有效的英文文本")
                 return
             
-            os.system(f'say "{en_text}"')
+            # 使用 say 命令，跨平台忽略输出和错误
+            if platform.system() == 'Windows':
+                os.system(f'say "{en_text}" > NUL 2>&1')
+            else:
+                os.system(f'say "{en_text}" > /dev/null 2>&1')
         except Exception as e:
             logger.error(f"语音生成失败: {e}")
     

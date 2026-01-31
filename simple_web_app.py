@@ -9,6 +9,8 @@ import os
 import json
 import hashlib
 import secrets
+import shutil
+import platform
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from functools import wraps
@@ -387,7 +389,11 @@ def practice_word(username):
 @app.route('/api/words/speak', methods=['POST'])
 @token_required
 def speak_text(username):
-    """朗读文本"""
+    """朗读文本（跨平台支持）
+    
+    - macOS: 使用系统 say 命令
+    - Linux/Windows: 如果 say 命令不存在则静默跳过
+    """
     try:
         data = request.get_json()
         if not data:
@@ -402,8 +408,16 @@ def speak_text(username):
         if not en_text:
             return jsonify({'error': '无法提取有效的英文文本'}), 400
         
-        # 使用macOS say命令
-        os.system(f'say "{en_text}"')
+        # 检查 say 命令是否可用
+        if shutil.which('say') is None:
+            logger.debug(f"用户 {username} 尝试朗读但 say 命令不可用")
+            return jsonify({'message': '语音播放不可用，已跳过'}), 200
+        
+        # 使用 say 命令，跨平台忽略输出和错误
+        if platform.system() == 'Windows':
+            os.system(f'say "{en_text}" > NUL 2>&1')
+        else:
+            os.system(f'say "{en_text}" > /dev/null 2>&1')
         
         return jsonify({'message': '朗读完成'}), 200
     except Exception as e:
