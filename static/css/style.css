@@ -508,3 +508,104 @@ body {
 .section.active {
     display: block;
 }
+
+/* 例句容器和朗读按钮 */
+.word-example-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 30px;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary-color);
+}
+
+#current-word-example {
+    font-size: 18px;
+    color: var(--text-secondary);
+    flex: 1;
+    line-height: 1.5;
+}
+
+.btn-speak {
+    background: var(--secondary-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-speak:hover {
+    background: #1976D2;
+}
+
+.btn-speak:active {
+    transform: scale(0.95);
+}
+
+/* 下划线输入组件 */
+.underline-input {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 15px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--text-primary);
+    background: white;
+    cursor: text;
+    min-height: 60px;
+}
+
+.underline-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.underline-char {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 40px;
+    border-bottom: 3px solid var(--text-secondary);
+    text-align: center;
+    position: relative;
+}
+
+.underline-char.filled {
+    border-bottom-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.underline-char.empty {
+    color: transparent;
+}
+
+.underline-cursor {
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 20px;
+    background-color: var(--primary-color);
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}

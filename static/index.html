@@ -106,16 +106,19 @@
                     </div>
                     
                     <div id="review-container" class="review-container">
-                        <div class="review-box">
+                        <div id="review-box" class="review-box">
                             <div class="review-header">
                                 <span class="word-english" id="current-word-english">apple</span>
                                 <span class="word-progress" id="current-word-progress">3/8</span>
                             </div>
                             <div class="review-content">
                                 <div class="word-chinese" id="current-word-chinese">苹果</div>
-                                <div class="word-example" id="current-word-example">This is an example.</div>
+                                <div class="word-example-container">
+                                    <span id="current-word-example">This is an example.</span>
+                                    <button id="speak-example-btn" class="btn-speak" title="朗读例句">🔊</button>
+                                </div>
                                 <div class="word-input">
-                                    <input type="text" id="word-answer" placeholder="请输入英文单词" autocomplete="off">
+                                    <div id="underline-input" class="underline-input" tabindex="0"></div>
                                     <button id="submit-answer" class="btn btn-primary">提交</button>
                                 </div>
                                 <div class="word-message" id="word-message"></div>

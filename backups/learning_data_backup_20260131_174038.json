@@ -3,188 +3,188 @@
     {
       "english": "camp",
       "chinese": "露营；营地",
-      "success_count": 1,
-      "next_review_date": "2026-01-08",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "After the hike to the river the soldiers camped for the night. 士兵们步行到达那条河后露营过夜。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "hike",
       "chinese": "徒步旅行；提高",
-      "success_count": 1,
-      "next_review_date": "2026-01-08",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "They went on a ten-mile hike through the forest. 他们做了一次穿越森林的十英里徒步旅行。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "ride a horse",
       "chinese": "骑马",
-      "success_count": 1,
-      "next_review_date": "2026-01-08",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "I love to ride horses on the beach. 我喜欢在海滩上骑马。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 3
     },
     {
       "english": "surf",
       "chinese": "冲浪；海浪",
-      "success_count": 1,
-      "next_review_date": "2026-01-08",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "If you wish to avoid becoming shark bait yourself, take particular care if you surf. 如果你不想被鲨鱼攻击，那么你在冲浪时要特别小心。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "fish",
       "chinese": "钓鱼；鱼",
-      "success_count": 1,
-      "next_review_date": "2026-01-08",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "We often fish at the lake on weekends. 我们经常周末在湖边钓鱼。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "ski",
       "chinese": "滑雪",
-      "success_count": 1,
-      "next_review_date": "2026-01-08",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "They go to the Alps to ski every winter. 他们每年冬天都去阿尔卑斯山滑雪。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "land",
       "chinese": "陆地；土地",
-      "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "This crop is widely grown on sandy land. 这种作物广泛种植在沙质土地上。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 6
     },
     {
       "english": "landfill",
       "chinese": "垃圾填埋；垃圾填埋场",
       "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "next_review_date": "2026-01-31",
       "example": "A large amount of waste is buried in the landfill each year. 每年有大量垃圾被埋在这个垃圾填埋场。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 7
     },
     {
       "english": "reduce",
       "chinese": "减少；降低",
       "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "next_review_date": "2026-01-31",
       "example": "We should find ways to reduce pollution. 我们应设法减少污染。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 8
     },
     {
       "english": "resource",
       "chinese": "资源",
-      "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "Water is a precious natural resource. 水是宝贵的自然资源。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 7
     },
     {
       "english": "reuse",
       "chinese": "再利用",
-      "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "We encourage people to reuse shopping bags. 我们鼓励人们重复使用购物袋。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 5
     },
     {
       "english": "smoke",
       "chinese": "烟；吸烟",
-      "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "Long-term exposure to smoke can harm the respiratory tract. 长期暴露在烟雾环境中可能损害呼吸道。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 5
     },
     {
       "english": "sunlight",
       "chinese": "阳光",
-      "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "Plants need sufficient sunlight to grow well. 植物需要充足的阳光才能生长良好。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 5
     },
     {
       "english": "trash",
       "chinese": "垃圾",
-      "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "Please remember to take out the trash. 请记得把垃圾拿出去。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 5
     },
     {
       "english": "wood",
       "chinese": "木材；木头",
-      "success_count": 4,
-      "next_review_date": "2026-01-14",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "This table is made of solid wood. 这张桌子是用实木制成的。",
       "review_round": 0,
-      "review_count": 4
+      "review_count": 5
     },
     {
       "english": "computer",
       "chinese": "计算机，电脑",
-      "success_count": 5,
-      "next_review_date": "2026-01-13",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "I use my computer for work and studying every day. 我每天用电脑工作和学习。",
       "review_round": 0,
-      "review_count": 5
+      "review_count": 6
     },
     {
       "english": "laptop",
       "chinese": "笔记本电脑",
-      "success_count": 5,
-      "next_review_date": "2026-01-13",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "She bought a new laptop for university classes. 她为大学课程买了一台新笔记本电脑。",
       "review_round": 0,
-      "review_count": 5
+      "review_count": 6
     },
     {
       "english": "camera",
       "chinese": "照相机，摄像头",
-      "success_count": 5,
-      "next_review_date": "2026-01-13",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "The camera on this smartphone takes excellent photos in low light. 这款智能手机的摄像头在弱光下能拍出很棒的照片。",
       "review_round": 0,
-      "review_count": 5
+      "review_count": 6
     },
     {
       "english": "headphones",
       "chinese": "耳机",
-      "success_count": 5,
-      "next_review_date": "2026-01-13",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "He always wears headphones when listening to music on the bus. 他在公交车上听音乐时总是戴着耳机。",
       "review_round": 0,
-      "review_count": 5
+      "review_count": 8
     },
     {
       "english": "tablet",
       "chinese": "平板电脑",
       "success_count": 5,
-      "next_review_date": "2026-01-13",
+      "next_review_date": "2026-01-31",
       "example": "The children use a tablet for their online learning activities. 孩子们用平板电脑进行在线学习活动。",
       "review_round": 0,
-      "review_count": 5
+      "review_count": 6
     },
     {
       "english": "cellphone",
       "chinese": "手机，移动电话",
       "success_count": 5,
-      "next_review_date": "2026-01-13",
+      "next_review_date": "2026-01-31",
       "example": "Please remember to charge your cellphone before going out. 出门前请记得给手机充电。",
       "review_round": 0,
       "review_count": 5
@@ -436,7 +436,7 @@
       "english": "worm",
       "chinese": "蠕虫/虫",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The early bird catches the worm_早起的鸟儿有虫吃",
       "review_round": 0,
       "review_count": 6
@@ -445,7 +445,7 @@
       "english": "berry",
       "chinese": "浆果/莓果",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "She picked some fresh berries from the bush_她从灌木丛中摘了一些新鲜浆果",
       "review_round": 0,
       "review_count": 6
@@ -454,7 +454,7 @@
       "english": "hunt",
       "chinese": "狩猎/搜寻",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "Lions hunt together in groups to catch their prey_狮子成群结队地狩猎以捕捉猎物",
       "review_round": 0,
       "review_count": 6
@@ -463,7 +463,7 @@
       "english": "escape",
       "chinese": "逃跑/逃脱",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The rabbit managed to escape from the fox_兔子成功从狐狸那里逃脱了",
       "review_round": 0,
       "review_count": 6
@@ -472,7 +472,7 @@
       "english": "creep",
       "chinese": "爬行/悄悄移动",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The cat began to creep slowly toward the mouse_猫开始慢慢地向老鼠爬去",
       "review_round": 0,
       "review_count": 6
@@ -481,7 +481,7 @@
       "english": "fight",
       "chinese": "打架/战斗",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The two boys were told not to fight on the playground_两个男孩被告知不要在操场上打架",
       "review_round": 0,
       "review_count": 6
@@ -490,7 +490,7 @@
       "english": "peck",
       "chinese": "啄/啄食",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The chicken pecks at the grains on the ground_鸡啄食地上的谷粒",
       "review_round": 0,
       "review_count": 7
@@ -499,7 +499,7 @@
       "english": "pinecone",
       "chinese": "松果",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "Squirrels like to collect pinecones for the seeds inside_松鼠喜欢收集松果以获取里面的种子",
       "review_round": 0,
       "review_count": 11
@@ -508,7 +508,7 @@
       "english": "squawk",
       "chinese": "咯咯叫/刺耳叫声",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The hen gave a loud squawk when it saw the cat_母鸡看到猫时发出了响亮的咯咯叫声",
       "review_round": 0,
       "review_count": 11
@@ -517,7 +517,7 @@
       "english": "traffic light",
       "chinese": "交通信号灯/红绿灯",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "We must stop when the traffic light turns red_当交通信号灯变红时我们必须停车",
       "review_round": 0,
       "review_count": 6
@@ -526,7 +526,7 @@
       "english": "take turns",
       "chinese": "轮流/依次",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The children learned to take turns on the slide_孩子们学会了在滑梯上轮流玩耍",
       "review_round": 0,
       "review_count": 6
@@ -535,7 +535,7 @@
       "english": "polite",
       "chinese": "有礼貌的/文雅的",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "It is polite to say 'please' and 'thank you'_说'请'和'谢谢'是有礼貌的",
       "review_round": 0,
       "review_count": 6
@@ -544,7 +544,7 @@
       "english": "clean up",
       "chinese": "清理/打扫",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "We need to clean up the classroom after the party_派对后我们需要打扫教室",
       "review_round": 0,
       "review_count": 6
@@ -553,7 +553,7 @@
       "english": "litter",
       "chinese": "垃圾/废弃物",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "Please don't drop litter on the ground_请不要在地上扔垃圾",
       "review_round": 0,
       "review_count": 6
@@ -562,7 +562,7 @@
       "english": "crossing guard",
       "chinese": "交通协管员/过路指挥员",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The crossing guard helps children cross the street safely_交通协管员帮助孩子们安全过马路",
       "review_round": 0,
       "review_count": 6
@@ -571,7 +571,7 @@
       "english": "principal",
       "chinese": "校长/负责人",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "Our school principal announced a holiday tomorrow_我们学校校长宣布明天放假",
       "review_round": 0,
       "review_count": 6
@@ -580,7 +580,7 @@
       "english": "lifeguard",
       "chinese": "救生员",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The lifeguard rescued the swimmer who was in trouble_救生员救了遇到麻烦的游泳者",
       "review_round": 0,
       "review_count": 6
@@ -589,7 +589,7 @@
       "english": "librarian",
       "chinese": "图书管理员",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The librarian helped me find the book I needed_图书管理员帮我找到了我需要的书",
       "review_round": 0,
       "review_count": 6
@@ -598,7 +598,7 @@
       "english": "steal",
       "chinese": "偷窃/窃取/偷偷移动",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "Someone stole my wallet on the train when I wasn't paying attention_当我不注意时，有人在火车上偷了我的钱包",
       "review_round": 0,
       "review_count": 6
@@ -607,7 +607,7 @@
       "english": "face",
       "chinese": "脸/面部/面对/面临",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "She had a big smile on her face when she received the good news_当她收到好消息时，脸上露出了灿烂的笑容",
       "review_round": 0,
       "review_count": 6
@@ -616,7 +616,7 @@
       "english": "nose",
       "chinese": "鼻子/嗅觉/嗅出",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The dog used its sensitive nose to find the hidden treats_狗用它敏感的鼻子找到了藏起来的零食",
       "review_round": 0,
       "review_count": 6
@@ -625,7 +625,7 @@
       "english": "dig",
       "chinese": "挖掘/掘土/探究",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The archaeologists will dig carefully to uncover ancient artifacts_考古学家将仔细挖掘以 uncover 古代文物",
       "review_round": 0,
       "review_count": 6
@@ -634,7 +634,7 @@
       "english": "hand",
       "chinese": "手/传递/协助",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "She reached out her hand to help the elderly man cross the street_她伸出手帮助老人过马路",
       "review_round": 0,
       "review_count": 6
@@ -643,7 +643,7 @@
       "english": "hide",
       "chinese": "隐藏/隐瞒/兽皮",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The children decided to hide behind the big tree during the game_孩子们决定在游戏过程中躲在大树后面",
       "review_round": 0,
       "review_count": 6
@@ -652,7 +652,7 @@
       "english": "knee",
       "chinese": "膝盖/膝部",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "He fell down and scraped his knee while playing basketball_他在打篮球时摔倒擦伤了膝盖",
       "review_round": 0,
       "review_count": 6
@@ -661,7 +661,7 @@
       "english": "jar",
       "chinese": "罐子/广口瓶/震动",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "She stored the homemade cookies in a large glass jar_她把自制饼干存放在一个大玻璃罐里",
       "review_round": 0,
       "review_count": 6
@@ -670,7 +670,7 @@
       "english": "foot",
       "chinese": "脚/英尺/底部",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "After walking all day, his feet were tired and sore_走了一整天后，他的脚又累又痛",
       "review_round": 0,
       "review_count": 6
@@ -679,7 +679,7 @@
       "english": "greedy",
       "chinese": "贪婪的/贪心的",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The greedy child took all the candies without sharing with others_这个贪婪的孩子拿走了所有的糖果，没有与别人分享",
       "review_round": 0,
       "review_count": 6
@@ -688,7 +688,7 @@
       "english": "arm",
       "chinese": "手臂/胳膊/武器",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "She lifted the heavy box with both arms_她用双臂提起了沉重的箱子",
       "review_round": 0,
       "review_count": 6
@@ -697,7 +697,7 @@
       "english": "bored",
       "chinese": "无聊的/厌烦的",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The students looked bored during the long and difficult lecture_在漫长而困难的讲座中，学生们看起来很无聊",
       "review_round": 0,
       "review_count": 6
@@ -706,7 +706,7 @@
       "english": "baker",
       "chinese": "面包师/烘焙师",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "The baker wakes up early every morning to prepare fresh bread_面包师每天早起准备新鲜面包",
       "review_round": 0,
       "review_count": 6
@@ -715,7 +715,7 @@
       "english": "cook",
       "chinese": "烹饪/厨师/做饭",
       "success_count": 6,
-      "next_review_date": "2026-01-25",
+      "next_review_date": "2026-01-31",
       "example": "My father likes to cook delicious meals for our family on weekends_我父亲喜欢在周末为家人烹饪美味佳肴",
       "review_round": 0,
       "review_count": 6
@@ -724,7 +724,7 @@
       "english": "monitor",
       "chinese": "显示器/监控器；监视/监控",
       "success_count": 6,
-      "next_review_date": "2026-01-10",
+      "next_review_date": "2026-01-31",
       "example": "The system administrator uses specialized software to monitor the server's performance in real-time_系统管理员使用专业软件实时监控服务器的性能",
       "review_round": 0,
       "review_count": 6
@@ -733,7 +733,7 @@
       "english": "since",
       "chinese": "自从/因为",
       "success_count": 6,
-      "next_review_date": "2026-01-10",
+      "next_review_date": "2026-01-31",
       "example": "She has been learning English since she was ten years old_她从十岁起就开始学习英语了",
       "review_round": 0,
       "review_count": 6
@@ -742,7 +742,7 @@
       "english": "mark",
       "chinese": "标记/分数/痕迹",
       "success_count": 6,
-      "next_review_date": "2026-01-10",
+      "next_review_date": "2026-01-31",
       "example": "Please mark the important points in the document with a highlighter_请用荧光笔标记出文档中的重要点",
       "review_round": 0,
       "review_count": 7
@@ -751,7 +751,7 @@
       "english": "route",
       "chinese": "路线/路径",
       "success_count": 6,
-      "next_review_date": "2026-01-10",
+      "next_review_date": "2026-01-31",
       "example": "The delivery driver planned the most efficient route to save time and fuel_送货司机规划了最有效的路线以节省时间和燃料[1](@ref)",
       "review_round": 0,
       "review_count": 7
@@ -760,7 +760,7 @@
       "english": "remind",
       "chinese": "提醒/使想起",
       "success_count": 6,
-      "next_review_date": "2026-01-10",
+      "next_review_date": "2026-01-31",
       "example": "Could you please remind me to call my mother after the meeting_你能提醒我在会议结束后给我妈妈打电话吗",
       "review_round": 0,
       "review_count": 7
@@ -769,7 +769,7 @@
       "english": "journey",
       "chinese": "旅程/旅行",
       "success_count": 6,
-      "next_review_date": "2026-01-10",
+      "next_review_date": "2026-01-31",
       "example": "Their journey across the continent took them through many different landscapes and cultures_他们穿越大陆的旅程经历了许多不同的景观和文化[6](@ref)",
       "review_round": 0,
       "review_count": 8
@@ -778,7 +778,7 @@
       "english": "without",
       "chinese": "没有/无",
       "success_count": 6,
-      "next_review_date": "2026-01-10",
+      "next_review_date": "2026-01-31",
       "example": "He completed the entire project without any help from his colleagues_他在没有任何同事帮助的情况下完成了整个项目",
       "review_round": 0,
       "review_count": 7
@@ -1048,7 +1048,7 @@
       "english": "laughter",
       "chinese": "笑声",
       "success_count": 7,
-      "next_review_date": "2026-01-24",
+      "next_review_date": "2026-01-31",
       "example": "The sound of laughter echoed through the hall_笑声在整个大厅里回荡",
       "review_round": 0,
       "review_count": 8
@@ -1057,7 +1057,7 @@
       "english": "fill",
       "chinese": "填充/装满",
       "success_count": 7,
-      "next_review_date": "2026-01-24",
+      "next_review_date": "2026-01-31",
       "example": "Please fill the glass with water_请把杯子装满水",
       "review_round": 0,
       "review_count": 7
@@ -1066,7 +1066,7 @@
       "english": "packet",
       "chinese": "包/数据包",
       "success_count": 7,
-      "next_review_date": "2026-01-24",
+      "next_review_date": "2026-01-31",
       "example": "She received a packet of seeds from the garden center_她从园艺中心收到了一包种子",
       "review_round": 0,
       "review_count": 8

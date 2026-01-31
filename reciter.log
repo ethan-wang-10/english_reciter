@@ -96,3 +96,178 @@
 2026-01-31 14:15:08,747 - __main__ - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
 2026-01-31 14:15:08,748 - __main__ - INFO - 更新了 63 个过期单词的复习日期
 2026-01-31 14:15:08,748 - __main__ - INFO - 数据备份成功: backups/learning_data_backup_20260131_141508.json
+2026-01-31 16:03:33,551 - __main__ - INFO - 新用户注册: ethan
+2026-01-31 16:03:33,564 - reciter - WARNING - 数据文件 user_data_simple/ethan/learning_data.json 不存在，将创建新文件
+2026-01-31 16:03:33,565 - reciter - WARNING - 数据文件不存在，跳过备份
+2026-01-31 16:04:20,047 - reciter - WARNING - 数据文件 user_data_simple/ethan/learning_data.json 不存在，将创建新文件
+2026-01-31 16:04:20,048 - reciter - WARNING - 数据文件不存在，跳过备份
+2026-01-31 16:05:09,738 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:05:09,738 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:05:09,742 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_160509.json
+2026-01-31 16:05:24,553 - __main__ - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:05:24,554 - __main__ - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:05:57,767 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:05:57,768 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:12:11,976 - __main__ - INFO - 新用户注册: testuser
+2026-01-31 16:12:44,205 - reciter - WARNING - 数据文件 user_data_simple/testuser/learning_data.json 不存在，将创建新文件
+2026-01-31 16:12:44,207 - reciter - WARNING - 数据文件 user_data_simple/testuser/learning_data.json 不存在，将创建新文件
+2026-01-31 16:17:18,930 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:17:18,930 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:17:43,041 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:17:43,041 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:20:39,254 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:20:39,254 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:21:09,637 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:21:09,637 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:25:31,708 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:25:31,708 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:25:33,596 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:25:33,596 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:25:36,873 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:25:36,873 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:25:39,709 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:25:39,710 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:25:40,831 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:25:40,831 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:25:49,023 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 16:25:49,023 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 16:25:49,030 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_162549.json
+2026-01-31 16:25:50,546 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:25:57,307 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:26:05,049 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:31:40,061 - reciter - WARNING - 数据文件 user_data_simple/testuser/learning_data.json 不存在，将创建新文件
+2026-01-31 16:33:07,005 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:16,858 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:18,370 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:29,115 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:29,120 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_163329.json
+2026-01-31 16:33:30,640 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:37,848 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:37,853 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_163337.json
+2026-01-31 16:33:39,370 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:43,483 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:43,489 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_163343.json
+2026-01-31 16:33:45,007 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:47,129 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:47,134 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_163347.json
+2026-01-31 16:33:48,651 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:53,116 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:33:55,167 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:34:01,760 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:34:07,402 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:34:08,594 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:34:09,401 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:34:17,834 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:34:17,840 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_163417.json
+2026-01-31 16:34:19,359 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:34:26,428 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 16:34:26,434 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_141444.json
+2026-01-31 16:34:26,434 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_163426.json
+2026-01-31 16:34:27,948 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:16,167 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:18,245 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:18,955 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:24,634 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:24,641 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_141508.json
+2026-01-31 17:32:24,641 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173224.json
+2026-01-31 17:32:28,625 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:28,631 - reciter - INFO - 删除旧备份: backups/learning_data_backup_2026-01-31.json
+2026-01-31 17:32:28,631 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173228.json
+2026-01-31 17:32:30,148 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:32,783 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:32,785 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_160509.json
+2026-01-31 17:32:32,786 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173232.json
+2026-01-31 17:32:51,503 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:51,511 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_162549.json
+2026-01-31 17:32:51,511 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173251.json
+2026-01-31 17:32:52,023 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:32:52,031 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_163329.json
+2026-01-31 17:32:52,031 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173252.json
+2026-01-31 17:32:53,551 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:33:21,097 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.1
+2026-01-31 17:33:21,104 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_163337.json
+2026-01-31 17:33:21,104 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173321.json
+2026-01-31 17:33:21,482 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:33:21,491 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173321.json
+2026-01-31 17:33:21,737 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:33:21,743 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173321.json
+2026-01-31 17:33:22,199 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:33:22,207 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_163343.json
+2026-01-31 17:33:22,207 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173322.json
+2026-01-31 17:33:23,258 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:33:23,721 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:38:54,624 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:38:57,497 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:38:58,365 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:01,357 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:01,363 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_163347.json
+2026-01-31 17:39:01,363 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173901.json
+2026-01-31 17:39:12,704 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:12,710 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_163417.json
+2026-01-31 17:39:12,710 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173912.json
+2026-01-31 17:39:16,528 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:16,536 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_163426.json
+2026-01-31 17:39:16,537 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173916.json
+2026-01-31 17:39:18,058 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:43,550 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:43,556 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173224.json
+2026-01-31 17:39:43,556 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173943.json
+2026-01-31 17:39:45,071 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:48,585 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:48,591 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173228.json
+2026-01-31 17:39:48,591 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173948.json
+2026-01-31 17:39:50,112 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:55,619 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:55,624 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173232.json
+2026-01-31 17:39:55,624 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173955.json
+2026-01-31 17:39:57,140 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:59,858 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:39:59,865 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173251.json
+2026-01-31 17:39:59,865 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_173959.json
+2026-01-31 17:40:01,378 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:40:02,621 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:40:02,627 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173252.json
+2026-01-31 17:40:02,628 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174002.json
+2026-01-31 17:40:04,143 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:40:06,253 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.2
+2026-01-31 17:40:06,258 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173321.json
+2026-01-31 17:40:06,258 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174006.json
+2026-01-31 17:40:07,774 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:11,321 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:11,327 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173322.json
+2026-01-31 17:40:11,327 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174011.json
+2026-01-31 17:40:12,844 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:14,934 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:14,940 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173901.json
+2026-01-31 17:40:14,940 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174014.json
+2026-01-31 17:40:16,456 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:20,449 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:20,454 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173912.json
+2026-01-31 17:40:20,454 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174020.json
+2026-01-31 17:40:22,473 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:22,478 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173916.json
+2026-01-31 17:40:22,478 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174022.json
+2026-01-31 17:40:27,655 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:27,661 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173943.json
+2026-01-31 17:40:27,662 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174027.json
+2026-01-31 17:40:29,182 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:38,523 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:38,528 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173948.json
+2026-01-31 17:40:38,528 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174038.json
+2026-01-31 17:40:43,503 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:43,509 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173955.json
+2026-01-31 17:40:43,509 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174043.json
+2026-01-31 17:40:47,747 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:40:47,752 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_173959.json
+2026-01-31 17:40:47,753 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_174047.json
+2026-01-31 17:40:49,270 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:58:56,401 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:58:57,613 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:59:04,036 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:59:04,041 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_174002.json
+2026-01-31 17:59:04,041 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_175904.json
+2026-01-31 17:59:05,547 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:59:09,952 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
+2026-01-31 17:59:09,958 - reciter - INFO - 删除旧备份: backups/learning_data_backup_20260131_174006.json
+2026-01-31 17:59:09,958 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_175909.json
+2026-01-31 17:59:11,467 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.3
