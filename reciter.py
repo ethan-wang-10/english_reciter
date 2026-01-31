@@ -2,24 +2,37 @@ import os
 import json
 import random
 import shutil
+from collections import defaultdict
 from typing import Dict, List, Optional
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from pathlib import Path
-from gtts import gTTS
 from prettytable import PrettyTable
 import readchar
 import logging
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('reciter.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+# 常量定义
+MAX_ATTEMPTS = 3  # 最大尝试次数
+
+def get_logger(name: str = __name__) -> logging.Logger:
+    """获取日志记录器（单例模式）"""
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        logger.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
+        # 文件处理器
+        file_handler = logging.FileHandler('reciter.log', encoding='utf-8')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        
+        # 控制台处理器
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+    
+    return logger
+
+logger = get_logger()
 
 
 class Config:
@@ -107,7 +120,15 @@ class ExampleGenerator:
             
         Returns:
             例句（格式：英文_中文）
+            
+        Raises:
+            ValueError: 如果 word 或 chinese 为空
         """
+        if not word or not isinstance(word, str):
+            raise ValueError("单词不能为空")
+        if not chinese or not isinstance(chinese, str):
+            raise ValueError("中文释义不能为空")
+        
         word_lower = word.lower()
         
         if word_lower in self.local_db:
@@ -115,7 +136,6 @@ class ExampleGenerator:
         
         # 尝试使用 NLTK WordNet
         try:
-            import nltk
             from nltk.corpus import wordnet as wn
             nltk.data.path.append(str(Path.home() / 'nltk_data'))
             
@@ -246,7 +266,7 @@ class WordRepository:
             logger.error(f"加载数据时发生未知错误: {e}")
             return [], []
     
-    def save_data(self, all_words: List[Word], mastered_words: List[Word]) -> None:
+    def save_data(self, all_words: list[Word], mastered_words: list[Word]) -> None:
         """保存学习数据"""
         try:
             data = {
@@ -260,16 +280,23 @@ class WordRepository:
             logger.error(f"保存数据失败: {e}")
     
     def backup_data(self) -> Optional[str]:
-        """备份数据文件"""
+        """
+        备份数据文件
+        
+        Returns:
+            备份文件路径，失败返回 None
+        """
         if not self.config.BACKUP_ENABLED:
             return None
         
         try:
-            today = date.today()
+            now = datetime.now()
             backup_dir = Path("backups")
             backup_dir.mkdir(exist_ok=True)
             
-            backup_file = backup_dir / f"learning_data_backup_{today.isoformat()}.json"
+            # 添加时间戳避免同一天多次备份冲突
+            timestamp = now.strftime("%Y%m%d_%H%M%S")
+            backup_file = backup_dir / f"learning_data_backup_{timestamp}.json"
             
             shutil.copy2(self.config.DATA_FILE, backup_file)
             
@@ -413,10 +440,9 @@ class WordReciter:
         if not overdue_words:
             return []
         
-        words_by_round: dict[int, List[Word]] = {}
+        # 使用 defaultdict 简化代码
+        words_by_round: dict[int, List[Word]] = defaultdict(list)
         for word in overdue_words:
-            if word.review_round not in words_by_round:
-                words_by_round[word.review_round] = []
             words_by_round[word.review_round].append(word)
         
         if self.current_review_round in words_by_round:
@@ -468,15 +494,27 @@ class WordReciter:
     
     def _get_example(self, word: Word) -> str:
         """获取最佳例句"""
-        if word.example:
-            return word.example
-        
-        example = self.example_generator.get_example(word.english, word.chinese)
-        
         if not word.example:
-            word.example = example
+            word.example = self.example_generator.get_example(word.english, word.chinese)
+        return word.example
+    
+    def _calculate_review_days(self, success_count: int) -> int:
+        """
+        计算复习间隔天数
         
-        return example
+        Args:
+            success_count: 成功次数
+            
+        Returns:
+            距离下次复习的天数
+        """
+        if success_count == 0:
+            return 0
+        
+        success_index = success_count - 1
+        if success_index < len(self.config.REVIEW_INTERVAL_DAYS):
+            return self.config.REVIEW_INTERVAL_DAYS[success_index]
+        return self.config.REVIEW_INTERVAL_DAYS[-1]
     
     def _text_to_speech(self, text: str) -> None:
         """文本转语音（使用 macOS 系统命令）"""
@@ -504,12 +542,10 @@ class WordReciter:
         
         example = self._get_example(word)
         
+        # 清理例句中多余的英文下划线
         if '_' in example:
             first_occurrence = example.index('_')
             example = example[:first_occurrence+1] + example[first_occurrence+1:].replace('_', '')
-        
-        if not word.example:
-            word.example = example
         
         en_example, zh_example = example.split('_') if '_' in example else (example, "")
         
@@ -529,7 +565,7 @@ class WordReciter:
             print(f"🌏 例句翻译: {zh_example}")
         
         attempt = 0
-        while attempt < 3:
+        while attempt < MAX_ATTEMPTS:
             answer = ""
             print("请输入英文单词（h=显示答案，s=播放语音）: ", end='', flush=True)
             
@@ -546,7 +582,8 @@ class WordReciter:
                         answer += char
                         print(char, end='', flush=True)
                     
-                    print(f"\r已输入 {len(answer)} 个字母。请输入英文单词（h=显示答案，s=播放语音）: {answer}", end='', flush=True)
+                    # 显示字母计数，不重复提示文字
+                    print(f" ({len(answer)})", end='', flush=True)
                 except Exception as e:
                     logger.error(f"读取输入时出错: {e}")
                     break
@@ -564,7 +601,7 @@ class WordReciter:
                 self._text_to_speech(example)
                 return True
             attempt += 1
-            print(f"\n❌ 错误（剩余尝试次数 {3 - attempt}）")
+            print(f"\n❌ 错误（剩余尝试次数 {MAX_ATTEMPTS - attempt}）")
         
         print(f"\n📢 正确答案: {word.english}")
         return False
@@ -600,15 +637,7 @@ class WordReciter:
                     mastered_today += 1
                     print(f"🎉 已掌握单词: {word.english}")
                 else:
-                    if word.success_count == 0:
-                        delta_days = 0
-                    else:
-                        success_index = word.success_count - 1
-                        if success_index < len(self.config.REVIEW_INTERVAL_DAYS):
-                            delta_days = self.config.REVIEW_INTERVAL_DAYS[success_index]
-                        else:
-                            delta_days = self.config.REVIEW_INTERVAL_DAYS[-1]
-                    
+                    delta_days = self._calculate_review_days(word.success_count)
                     word.next_review_date = self.today + timedelta(days=delta_days)
                     print(f"⏱ 下次复习: {word.next_review_date} (+{delta_days}天，第{word.success_count}次成功)")
             else:
@@ -648,16 +677,7 @@ class WordReciter:
                 for word in self.all_words:
                     if word.review_round < self.current_review_round:
                         word.review_round = self.current_review_round
-                        
-                        if word.success_count == 0:
-                            delta_days = 0
-                        else:
-                            success_index = word.success_count - 1
-                            if success_index < len(self.config.REVIEW_INTERVAL_DAYS):
-                                delta_days = self.config.REVIEW_INTERVAL_DAYS[success_index]
-                            else:
-                                delta_days = self.config.REVIEW_INTERVAL_DAYS[-1]
-                        
+                        delta_days = self._calculate_review_days(word.success_count)
                         word.next_review_date = self.today + timedelta(days=delta_days)
     
     def add_words(self, words: list) -> None:

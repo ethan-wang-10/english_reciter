@@ -33,3 +33,66 @@
 2026-01-31 14:07:46,941 - __main__ - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
 2026-01-31 14:07:46,942 - __main__ - INFO - 更新了 63 个过期单词的复习日期
 2026-01-31 14:07:46,942 - __main__ - INFO - 数据备份成功: backups/learning_data_backup_2026-01-31.json
+2026-01-31 14:11:52,555 - reciter - WARNING - 配置文件加载失败，使用默认配置: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:52,555 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:52,555 - reciter - INFO - 为单词 'test' 添加了新例句
+2026-01-31 14:11:52,555 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:53,241 - reciter - WARNING - NLTK 获取例句失败: name 'nltk' is not defined
+2026-01-31 14:11:53,241 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:53,241 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:11:53,241 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:11:53,241 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:11:53,241 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:53,241 - reciter - INFO - 为单词 'save' 添加了新例句
+2026-01-31 14:11:53,242 - reciter - INFO - 例句库保存成功
+2026-01-31 14:11:53,242 - reciter - INFO - 成功加载本地例句库: 1 个单词
+2026-01-31 14:11:53,242 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpi40tcmxa.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:53,242 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:53,243 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmppjrzby2g.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:53,243 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:53,243 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmprlh1smcp.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:53,243 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:53,244 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpk1nellsf.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:53,244 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:53,244 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmp7rvgg_yn.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:53,244 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,191 - reciter - WARNING - 配置文件加载失败，使用默认配置: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,192 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,192 - reciter - INFO - 为单词 'test' 添加了新例句
+2026-01-31 14:11:57,192 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,881 - reciter - WARNING - NLTK 获取例句失败: name 'nltk' is not defined
+2026-01-31 14:11:57,881 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,881 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:11:57,881 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:11:57,881 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:11:57,882 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,882 - reciter - INFO - 为单词 'save' 添加了新例句
+2026-01-31 14:11:57,882 - reciter - INFO - 例句库保存成功
+2026-01-31 14:11:57,882 - reciter - INFO - 成功加载本地例句库: 1 个单词
+2026-01-31 14:11:57,883 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpe_9k2z1l.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,883 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,883 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpgwz59acz.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,883 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,883 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpcc7zjo18.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,883 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,884 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpd8v1k0ic.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,884 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,884 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpu7azf8tj.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,884 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,884 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpn0_8cabm.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,884 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,884 - reciter - INFO - 更新了 1 个过期单词的复习日期
+2026-01-31 14:11:57,885 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpdkktbgz_.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,885 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,885 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpddeg1jyb.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,885 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,885 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpmlxtw9_f.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:11:57,885 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:11:57,886 - reciter - INFO - 加载成功: 总计 3 个 | 已掌握 1 个 | 平均复习次数 4.5
+2026-01-31 14:14:44,212 - reciter - WARNING - NLTK 获取例句失败: name 'nltk' is not defined
+2026-01-31 14:14:44,213 - reciter - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 14:14:44,213 - reciter - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 14:14:44,213 - reciter - INFO - 数据备份成功: backups/learning_data_backup_20260131_141444.json
+2026-01-31 14:15:08,747 - __main__ - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 14:15:08,748 - __main__ - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 14:15:08,748 - __main__ - INFO - 数据备份成功: backups/learning_data_backup_20260131_141508.json
