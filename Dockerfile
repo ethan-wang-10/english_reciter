@@ -9,18 +9,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
-COPY requirements.txt .
+COPY requirements-simple.txt .
 
 # 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-simple.txt
 
 # 复制应用代码
 COPY reciter.py .
-COPY web_app.py .
+COPY simple_web_app.py .
 COPY config.json .
 
 # 创建必要的目录
-RUN mkdir -p static user_data
+RUN mkdir -p static user_data_simple
 
 # 复制静态文件
 COPY static/ ./static/
@@ -33,4 +33,4 @@ ENV SECRET_KEY=${SECRET_KEY:-default-secret-key-change-in-production}
 EXPOSE 8000
 
 # 启动命令
-CMD ["uvicorn", "web_app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python3", "simple_web_app.py"]

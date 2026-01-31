@@ -25,28 +25,24 @@ docker-compose down
 
 ```bash
 # 安装依赖
-pip3 install -r requirements.txt
+pip3 install -r requirements-simple.txt
 
 # 启动服务
-python3 web_app.py
+python3 simple_web_app.py
 ```
 
 ### 选项 3：使用安装脚本
 
 ```bash
-# 运行安装脚本
-bash install_web.sh
-
-# 启动服务
-python3 web_app.py
+# 运行启动脚本
+bash start_simple_web.sh
 ```
 
 ## 访问应用
 
 启动成功后，访问：
 - **主页**：http://localhost:8000
-- **API 文档**：http://localhost:8000/api/docs
-- **ReDoc**：http://localhost:8000/api/redoc
+- **健康检查**：http://localhost:8000/api/health
 
 ## 使用流程
 

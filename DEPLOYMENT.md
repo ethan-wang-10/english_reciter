@@ -1,14 +1,15 @@
-# Web 版部署文档
+# Web 版部署文档 (简化版)
 
 ## 概述
 
-智能英语背诵系统的 Web 版本支持：
+智能英语背诵系统的简化版 Web 版本支持：
 - ✅ 多用户系统
-- ✅ JWT 身份认证
+- ✅ Token 身份认证
 - ✅ 跨平台访问
 - ✅ 可部署到腾讯云
 - ✅ Docker 容器化部署
 - ✅ 响应式 Web 界面
+- ✅ 简化依赖 (Flask 替代 FastAPI)
 
 ## 快速开始
 
@@ -16,12 +17,12 @@
 
 1. **安装依赖**
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-simple.txt
 ```
 
 2. **运行应用**
 ```bash
-python3 web_app.py
+python3 simple_web_app.py
 ```
 
 3. **访问应用**
@@ -33,12 +34,12 @@ http://localhost:8000
 
 1. **构建镜像**
 ```bash
-docker build -t english-reciter .
+docker build -t english-reciter-simple .
 ```
 
 2. **运行容器**
 ```bash
-docker run -d -p 8000:8000 -v $(pwd)/user_data:/app/user_data english-reciter
+docker run -d -p 8000:8000 -v $(pwd)/user_data_simple:/app/user_data_simple english-reciter-simple
 ```
 
 3. **访问应用**
@@ -232,25 +233,23 @@ kubectl apply -f deployment.yaml
 
 | 变量名 | 说明 | 默认值 | 是否必需 |
 |--------|------|--------|----------|
-| SECRET_KEY | JWT 密钥 | 自动生成 | 否 |
+| SECRET_KEY | Token 密钥 | 自动生成 | 否 |
 | TZ | 时区 | Asia/Shanghai | 否 |
 
 ### 端口配置
 
 - **应用端口**: 8000
-- **API 文档**: http://localhost:8000/api/docs
-- **ReDoc 文档**: http://localhost:8000/api/redoc
+- **健康检查**: http://localhost:8000/api/health
 
 ### 数据持久化
 
-用户数据存储在 `user_data/` 目录：
+用户数据存储在 `user_data_simple/` 目录：
 ```
-user_data/
+user_data_simple/
 ├── users.json              # 用户数据
 ├── username1/              # 用户1的数据
 │   ├── learning_data.json  # 学习进度
-│   ├── config.json        # 用户配置
-│   └── word_examples.json # 例句库
+│   └── word_examples.json  # 例句库
 └── username2/              # 用户2的数据
     └── ...
 ```
@@ -350,7 +349,7 @@ sudo ufw deny 8000
 4. **定期备份**
 ```bash
 # 备份用户数据
-tar czf backup_$(date +%Y%m%d).tar.gz user_data/
+tar czf backup_$(date +%Y%m%d).tar.gz user_data_simple/
 ```
 
 ## 监控和维护
@@ -369,7 +368,7 @@ docker-compose exec web tail -f /app/user_data/reciter.log
 
 ```bash
 # 检查服务状态
-curl http://localhost:8000/api/docs
+curl http://localhost:8000/api/health
 
 # Docker 健康检查
 docker-compose ps
