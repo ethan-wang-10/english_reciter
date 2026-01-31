@@ -1,122 +1,182 @@
 import os
 import json
 import random
+import shutil
+from typing import Dict, List, Optional
 from datetime import date, timedelta
 from pathlib import Path
 from gtts import gTTS
-from playsound import playsound
 from prettytable import PrettyTable
-from tencentcloud.hunyuan.v20230901 import hunyuan_client, models
-from tencentcloud.common import credential
-import re
 import readchar
+import logging
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('reciter.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
-# 配置项
 class Config:
-    WORD_FILE = "words.txt"
-    DATA_FILE = "learning_data.json"
-    EXAMPLE_DB = "word_examples.json"
-    MAX_SUCCESS_COUNT = 8  # 成功8次即掌握（基于艾宾浩斯遗忘曲线）
-    TTS_ENABLED = True      # 是否启用语音功能
-    MAX_REVIEW_ROUND = 8    # 最大复习轮次（基于艾宾浩斯遗忘曲线）
-    # 艾宾浩斯遗忘曲线复习间隔：5分钟、30分钟、12小时、1天、2天、4天、7天、15天、30天
-    # 这里简化为：1天、2天、4天、7天、15天、30天、60天、90天（更符合长期记忆规律）
-    REVIEW_INTERVAL_DAYS = [1, 2, 4, 7, 15, 30, 60, 90]  # 基于艾宾浩斯遗忘曲线的复习间隔
-
-# 腾讯混元大模型集成（需自行实现）
-class HunyuanGenerator:
-    def __init__(self, secret_id="", secret_key=""):
-        # 本地基础例句库
-        self.local_db = {
-            "apple": ["An apple a day keeps the doctor away.", 
-                        "The apple pie smells delicious."],
-            "book": ["This book is a masterpiece.",
-                    "I borrowed the book from the library."]
-        }
-        # 初始化腾讯混元大模型（仅在提供了有效的secret_id和secret_key时）
-        if secret_id and secret_key:
-            try:
-                cred = credential.Credential(secret_id, secret_key)
-                self.client = hunyuan_client.HunyuanClient(cred, "ap-beijing")
-            except Exception as e:
-                print(f"⚠️ 腾讯混元大模型初始化失败: {str(e)}")
-                self.client = None
-        else:
-            self.client = None
-    def split_ch_en(text):
-        # 匹配中文字符及常见中文标点（范围包含大部分常用汉字和中文符号）
-        ch_pattern = re.compile(r'[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+')
-        
-        # 查找第一个中文字符的位置
-        match = ch_pattern.search(text)
-        if not match:
-            return text.strip(), ''
-        
-        split_pos = match.start()
-        english = text[:split_pos].strip()
-        chinese = text[split_pos:].strip()
-        return english, chinese
+    """配置管理类"""
+    def __init__(self, config_file: str = "config.json"):
+        self.config_file = config_file
+        self._load_config()
     
-    def get_example(self, word):
-        """获取包含指定单词的例句"""
-        try:
-            # 验证输入
-            if not word or not isinstance(word, str):
-                print("⚠️ 无效的单词输入")
-                return None
-            
-            # 如果腾讯混元大模型可用，优先使用
-            if self.client:
-                # 准备请求
-                req = models.ChatCompletionsRequest()
-                req.Model = "hunyuan-lite"
-                req.Messages = [
-                    {
-                        "Role": "user",
-                        "Content": f"请生成一包含英文单词'{word}'的例句，全部小写字母, 带中文翻译。输出格式为英文例句_中文翻译, 不要其他多余的输出"
-                    }
-                ]
-            
-                # 设置超时时间
-                self.client.set_timeout(10)  # 10秒超时
-            
-                # 发送请求
-                resp = self.client.ChatCompletions(req)
-                
-                # 处理响应
-                if not resp or not resp.Choices:
-                    print("⚠️ 未获取到有效响应")
-                else:
-                    # 解析响应
-                    raw_list = resp.Choices[0].Message.Content.split('\n')
-                    if raw_list:
-                        # 返回随机例句
-                        return random.choice(raw_list)
+    def _load_config(self):
+        """加载配置文件"""
+        default_config = {
+            "word_file": "words.txt",
+            "data_file": "learning_data.json",
+            "example_db": "word_examples.json",
+            "max_success_count": 8,
+            "tts_enabled": True,
+            "max_review_round": 8,
+            "review_interval_days": [1, 2, 4, 7, 15, 30, 60, 90],
+            "backup_enabled": True,
+            "backup_interval_days": 7,
+            "max_backups": 10,
+            "language": "zh",
+            "log_level": "INFO"
+        }
         
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    user_config = json.load(f)
+                    default_config.update(user_config)
+            except Exception as e:
+                logger.warning(f"配置文件加载失败，使用默认配置: {e}")
+        
+        self.WORD_FILE = default_config["word_file"]
+        self.DATA_FILE = default_config["data_file"]
+        self.EXAMPLE_DB = default_config["example_db"]
+        self.MAX_SUCCESS_COUNT = default_config["max_success_count"]
+        self.TTS_ENABLED = default_config["tts_enabled"]
+        self.MAX_REVIEW_ROUND = default_config["max_review_round"]
+        self.REVIEW_INTERVAL_DAYS = default_config["review_interval_days"]
+        self.BACKUP_ENABLED = default_config["backup_enabled"]
+        self.BACKUP_INTERVAL_DAYS = default_config["backup_interval_days"]
+        self.MAX_BACKUPS = default_config["max_backups"]
+        self.LANGUAGE = default_config["language"]
+        
+        log_level = getattr(logging, default_config.get("log_level", "INFO"))
+        logger.setLevel(log_level)
+
+
+class ExampleGenerator:
+    """离线例句生成器（完全本地，无需网络）"""
+    
+    def __init__(self, example_db_file: str):
+        self.example_db_file = example_db_file
+        self.local_db: Dict[str, List[str]] = {}
+        self._load_local_db()
+    
+    def _load_local_db(self) -> None:
+        """加载本地例句库"""
+        try:
+            if os.path.exists(self.example_db_file):
+                with open(self.example_db_file, 'r', encoding='utf-8') as f:
+                    self.local_db = json.load(f)
+                logger.info(f"成功加载本地例句库: {len(self.local_db)} 个单词")
         except Exception as e:
-            print(f"⚠️ 获取例句失败: {str(e)}")
+            logger.error(f"加载例句库失败: {e}")
+            self.local_db = {}
+    
+    def save_local_db(self) -> None:
+        """保存本地例句库"""
+        try:
+            with open(self.example_db_file, 'w', encoding='utf-8') as f:
+                json.dump(self.local_db, f, ensure_ascii=False, indent=2)
+            logger.info("例句库保存成功")
+        except Exception as e:
+            logger.error(f"保存例句库失败: {e}")
+    
+    def get_example(self, word: str, chinese: str) -> str:
+        """
+        获取包含指定单词的例句（完全离线）
+        
+        Args:
+            word: 英文单词
+            chinese: 中文释义
             
-        # 返回本地例句库中的例句
-        if word.lower() in self.local_db:
-            return random.choice(self.local_db[word.lower()])
+        Returns:
+            例句（格式：英文_中文）
+        """
+        word_lower = word.lower()
+        
+        if word_lower in self.local_db:
+            return random.choice(self.local_db[word_lower])
+        
+        # 尝试使用 NLTK WordNet
+        try:
+            import nltk
+            from nltk.corpus import wordnet as wn
+            nltk.data.path.append(str(Path.home() / 'nltk_data'))
+            
+            synsets = wn.synsets(word)
+            if synsets:
+                examples = synsets[0].examples()
+                if examples:
+                    example = examples[0].lower()
+                    if word_lower not in example.lower():
+                        example = f"This is a {word} example."
+                    return f"{example}_这是一个包含{chinese}的例句"
+        except ImportError:
+            logger.debug("NLTK 未安装，跳过 WordNet 查询")
+        except Exception as e:
+            logger.warning(f"NLTK 获取例句失败: {e}")
         
         # 生成默认例句
-        return f"This is an example sentence with {word}_这是一个包含{word}的例句"
+        templates = [
+            f"This is a {word}.",
+            f"I have a {word}.",
+            f"The {word} is here.",
+            f"This {word} is very good.",
+            f"This is an example of {word}."
+        ]
+        example = random.choice(templates)
+        
+        return f"{example}_这是一个包含{chinese}的例句"
+    
+    def add_example(self, word: str, example: str) -> None:
+        """添加例句到本地库"""
+        word_lower = word.lower()
+        if word_lower not in self.local_db:
+            self.local_db[word_lower] = []
+        if example not in self.local_db[word_lower]:
+            self.local_db[word_lower].append(example)
+            logger.info(f"为单词 '{word}' 添加了新例句")
 
-# 单词类
+
 class Word:
-    def __init__(self, english, chinese, success_count=0, next_review_date=None, example=None, 
-                 review_round=0, review_count=0):
+    """单词数据模型"""
+    
+    def __init__(
+        self,
+        english: str,
+        chinese: str,
+        success_count: int = 0,
+        next_review_date: Optional[date] = None,
+        example: Optional[str] = None,
+        review_round: int = 0,
+        review_count: int = 0
+    ):
         self.english = english
         self.chinese = chinese
         self.success_count = success_count
         self.next_review_date = next_review_date or date.today()
         self.example = example
-        self.review_round = review_round  # 当前复习轮次
-        self.review_count = review_count  # 总复习次数
-
-    def to_dict(self):
+        self.review_round = review_round
+        self.review_count = review_count
+    
+    def to_dict(self) -> dict:
+        """转换为字典"""
         return {
             'english': self.english,
             'chinese': self.chinese,
@@ -126,36 +186,172 @@ class Word:
             'review_round': self.review_round,
             'review_count': self.review_count
         }
-
+    
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: dict) -> 'Word':
+        """从字典创建对象"""
         data['next_review_date'] = date.fromisoformat(data['next_review_date'])
-        # 兼容旧版本数据
         data.setdefault('review_round', 0)
         data.setdefault('review_count', 0)
         return cls(**data)
 
-# 核心背诵系统
-class WordReciter:
-    def __init__(self):
-        self.hunyuan = HunyuanGenerator("", "")
-        self.all_words = []        # 待复习单词
-        self.mastered_words = []   # 已掌握单词
-        self.today = date.today()
-        self.current_review_round = 0  # 当前复习轮次
+
+class WordRepository:
+    """单词数据访问层"""
+    
+    def __init__(self, config: Config):
+        self.config = config
+    
+    def load_data(self) -> tuple[list[Word], list[Word]]:
+        """
+        加载学习数据
         
-        # 初始化数据
-        self.example_db = self._load_example_db()
+        Returns:
+            (all_words, mastered_words)
+        """
+        try:
+            with open(self.config.DATA_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                all_words = [Word.from_dict(w) for w in data['all_words']]
+                mastered_words = [Word.from_dict(w) for w in data['mastered_words']]
+                
+                for word in all_words + mastered_words:
+                    if not hasattr(word, 'review_round'):
+                        word.review_round = 0
+                    if not hasattr(word, 'review_count'):
+                        word.review_count = 0
+                
+                total_words = len(all_words) + len(mastered_words)
+                mastered_count = len(mastered_words)
+                avg_review_count = (
+                    sum(w.review_count for w in all_words) / len(all_words)
+                    if all_words else 0
+                )
+                
+                logger.info(
+                    f"加载成功: 总计 {total_words} 个 | "
+                    f"已掌握 {mastered_count} 个 | "
+                    f"平均复习次数 {avg_review_count:.1f}"
+                )
+                return all_words, mastered_words
+                
+        except FileNotFoundError:
+            logger.warning(f"数据文件 {self.config.DATA_FILE} 不存在，将创建新文件")
+            return [], []
+        except json.JSONDecodeError as e:
+            logger.error(f"数据文件 {self.config.DATA_FILE} 格式错误: {e}")
+            logger.warning("将重置为初始状态")
+            return [], []
+        except Exception as e:
+            logger.error(f"加载数据时发生未知错误: {e}")
+            return [], []
+    
+    def save_data(self, all_words: List[Word], mastered_words: List[Word]) -> None:
+        """保存学习数据"""
+        try:
+            data = {
+                'all_words': [w.to_dict() for w in all_words],
+                'mastered_words': [w.to_dict() for w in mastered_words]
+            }
+            with open(self.config.DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            logger.debug("数据保存成功")
+        except Exception as e:
+            logger.error(f"保存数据失败: {e}")
+    
+    def backup_data(self) -> Optional[str]:
+        """备份数据文件"""
+        if not self.config.BACKUP_ENABLED:
+            return None
+        
+        try:
+            today = date.today()
+            backup_dir = Path("backups")
+            backup_dir.mkdir(exist_ok=True)
+            
+            backup_file = backup_dir / f"learning_data_backup_{today.isoformat()}.json"
+            
+            shutil.copy2(self.config.DATA_FILE, backup_file)
+            
+            self._cleanup_old_backups(backup_dir)
+            
+            logger.info(f"数据备份成功: {backup_file}")
+            return str(backup_file)
+        except FileNotFoundError:
+            logger.warning("数据文件不存在，跳过备份")
+            return None
+        except Exception as e:
+            logger.error(f"备份数据失败: {e}")
+            return None
+    
+    def _cleanup_old_backups(self, backup_dir: Path) -> None:
+        """清理旧备份文件"""
+        try:
+            backups = sorted(
+                backup_dir.glob("learning_data_backup_*.json"),
+                key=lambda x: x.stat().st_mtime,
+                reverse=True
+            )
+            
+            for old_backup in backups[self.config.MAX_BACKUPS:]:
+                old_backup.unlink()
+                logger.info(f"删除旧备份: {old_backup}")
+        except Exception as e:
+            logger.warning(f"清理旧备份时出错: {e}")
+
+
+class WordReciter:
+    """核心背诵系统（完全离线）"""
+    
+    def __init__(self, config: Optional[Config] = None):
+        self.config = config or Config()
+        self.example_generator = ExampleGenerator(self.config.EXAMPLE_DB)
+        self.repository = WordRepository(self.config)
+        
+        self.all_words: List[Word] = []
+        self.mastered_words: List[Word] = []
+        self.today = date.today()
+        self.current_review_round = 0
+        
         self._load_data()
         self._process_overdue_words()
-        self._update_review_round()  # 更新复习轮次
-
-    def show_mastered_words(self):
+        self._update_review_round()
+        self._check_and_create_backup()
+    
+    def _check_and_create_backup(self) -> None:
+        """检查并创建备份"""
+        if not self.config.BACKUP_ENABLED:
+            return
+        
+        backup_dir = Path("backups")
+        if backup_dir.exists():
+            backups = list(backup_dir.glob("learning_data_backup_*.json"))
+            if backups:
+                latest_backup = max(backups, key=lambda x: x.stat().st_mtime)
+                last_backup_date = date.fromtimestamp(latest_backup.stat().st_mtime)
+                days_since_backup = (self.today - last_backup_date).days
+                if days_since_backup < self.config.BACKUP_INTERVAL_DAYS:
+                    logger.debug(f"距离上次备份仅 {days_since_backup} 天，跳过备份")
+                    return
+        
+        self.repository.backup_data()
+    
+    def _load_data(self) -> None:
+        """加载学习数据"""
+        self.all_words, self.mastered_words = self.repository.load_data()
+    
+    def _save_data(self, backup: bool = True) -> None:
+        """保存学习数据"""
+        self.repository.save_data(self.all_words, self.mastered_words)
+        if backup:
+            self.repository.backup_data()
+    
+    def show_mastered_words(self) -> None:
         """显示已掌握词汇"""
         if not self.mastered_words:
             print("\n📚 您还没有掌握任何单词")
             return
-            
+        
         table = PrettyTable()
         table.title = "🎓 已掌握词汇"
         table.field_names = ["英文", "中文", "掌握日期", "复习次数"]
@@ -170,97 +366,79 @@ class WordReciter:
         
         print(table)
         print(f"\n📊 总计已掌握单词: {len(self.mastered_words)}")
-
-    def review_mastered_words(self):
-        """复习已掌握词汇：优先选择复习次数最少的单词，确保不遗漏"""
+    
+    def review_mastered_words(self) -> None:
+        """复习已掌握词汇"""
         if not self.mastered_words:
             print("\n📚 您还没有掌握任何单词")
             return
-            
-        # 按复习次数排序，优先选择复习次数最少的单词
-        sorted_words = sorted(self.mastered_words, key=lambda w: w.review_count)
         
-        # 选择前10个单词（复习次数最少的）
+        sorted_words = sorted(self.mastered_words, key=lambda w: w.review_count)
         selected_words = sorted_words[:10]
         
-        print(f"\n📚 开始复习 {len(selected_words)} 个已掌握单词（按复习次数排序）")
+        print(f"\n📚 开始复习 {len(selected_words)} 个已掌握单词")
         
         for word in selected_words:
             self._practice_word(word)
-            # 更新复习次数
             word.review_count += 1
-            self._save_data()  # 每次复习后立即保存
-            
-        print("\n📊 本次复习完成！")
+            self._save_data(backup=False)
         
-        # 检查是否所有单词都已复习过至少一次
-        if all(word.review_count > 0 for word in self.mastered_words):
-            print("🎉 所有已掌握单词已完成第一轮复习！")
-            print("📈 下一轮复习将按复习次数排序，确保公平复习")
-
-    def _load_example_db(self):
-        """加载本地例句库"""
-        try:
-            with open(Config.EXAMPLE_DB) as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
-
-    def _process_overdue_words(self):
+        print("\n📊 本次复习完成！")
+    
+    def _process_overdue_words(self) -> None:
         """处理过期单词"""
+        overdue_count = 0
         for word in self.all_words:
             if word.next_review_date < self.today:
                 word.next_review_date = self.today
-
-    def _update_review_round(self):
+                overdue_count += 1
+        
+        if overdue_count > 0:
+            logger.info(f"更新了 {overdue_count} 个过期单词的复习日期")
+    
+    def _update_review_round(self) -> None:
         """更新复习轮次"""
-        # 计算当前复习轮次
         if self.all_words:
             min_review_round = min(word.review_round for word in self.all_words)
             self.current_review_round = min_review_round
         else:
             self.current_review_round = 0
-            
+        
         print(f"📊 当前复习轮次: 第{self.current_review_round + 1}轮")
-
-    def _get_today_review_list(self):
-        """获取今日复习列表（轮次复习逻辑）"""
-        # 首先获取所有到期的单词
+    
+    def _get_today_review_list(self) -> List[Word]:
+        """获取今日复习列表"""
         overdue_words = [w for w in self.all_words if w.next_review_date <= self.today]
         
         if not overdue_words:
             return []
-            
-        # 按复习轮次分组
-        words_by_round = {}
+        
+        words_by_round: dict[int, List[Word]] = {}
         for word in overdue_words:
             if word.review_round not in words_by_round:
                 words_by_round[word.review_round] = []
             words_by_round[word.review_round].append(word)
         
-        # 优先选择当前轮次的单词
         if self.current_review_round in words_by_round:
             current_round_words = words_by_round[self.current_review_round]
-            # 按复习次数排序，优先复习次数少的单词
             current_round_words.sort(key=lambda w: w.review_count)
             return current_round_words
         
-        # 如果没有当前轮次的单词，选择最小轮次的单词
         min_round = min(words_by_round.keys())
         min_round_words = words_by_round[min_round]
         min_round_words.sort(key=lambda w: w.review_count)
         return min_round_words
-
-    def show_status(self):
-        """显示复习状态看板（包含轮次信息）"""
+    
+    def show_status(self) -> None:
+        """显示复习状态看板"""
         table = PrettyTable()
         table.title = f"📅 单词复习看板（第{self.current_review_round + 1}轮）"
         table.field_names = ["英文", "中文", "掌握进度", "复习轮次", "复习次数", "下次复习", "剩余天数"]
         
         for word in sorted(self.all_words, key=lambda x: (x.review_round, x.review_count, x.next_review_date)):
             remaining_days = (word.next_review_date - self.today).days
-            progress_bar = f"{word.success_count}/{Config.MAX_SUCCESS_COUNT} " + \
-                          "★"*word.success_count + "☆"*(Config.MAX_SUCCESS_COUNT-word.success_count)
+            progress_bar = f"{word.success_count}/{self.config.MAX_SUCCESS_COUNT} " + \
+                          "★"*word.success_count + "☆"*(self.config.MAX_SUCCESS_COUNT-word.success_count)
             
             table.add_row([
                 word.english,
@@ -274,7 +452,6 @@ class WordReciter:
         
         print(table)
         
-        # 显示统计信息
         stats = PrettyTable()
         stats.title = "📊 学习统计"
         stats.field_names = ["统计项", "数量"]
@@ -283,83 +460,59 @@ class WordReciter:
         stats.add_row(["已掌握单词", len(self.mastered_words)])
         stats.add_row(["总单词数", len(self.all_words) + len(self.mastered_words)])
         
-        # 计算平均复习次数
         if self.all_words:
             avg_review_count = sum(w.review_count for w in self.all_words) / len(self.all_words)
             stats.add_row(["平均复习次数", f"{avg_review_count:.1f}"])
         
         print(stats)
-
-    def _get_example(self, word):
+    
+    def _get_example(self, word: Word) -> str:
         """获取最佳例句"""
         if word.example:
             return word.example
-            
-        # 优先使用NLTK获取例句
-        try:
-            import nltk
-            from nltk.corpus import wordnet as wn
-            nltk.download('wordnet', quiet=True)
-            synsets = wn.synsets(word.english)
-            if synsets:
-                examples = synsets[0].examples()
-                if examples:
-                    return f"{examples[0]}_这是一个包含{word.chinese}的例句"
-        except Exception as e:
-            print(f"⚠️ NLTK获取例句失败: {str(e)}")
-            
-        # 尝试通过Hunyuan获取例句
-        example = self.hunyuan.get_example(word.english)
-        if example:
-            return example
-            
-        # 本地例句库
-        if word.english.lower() in self.example_db:
-            return random.choice(self.example_db[word.english.lower()])
-            
-        # 生成默认例句
-        return f"This is an example sentence with {word.english}_这是一个包含{word.chinese}的例句"
-
-    def _text_to_speech(self, text):
-        """文本转语音"""
-        if not Config.TTS_ENABLED:
+        
+        example = self.example_generator.get_example(word.english, word.chinese)
+        
+        if not word.example:
+            word.example = example
+        
+        return example
+    
+    def _text_to_speech(self, text: str) -> None:
+        """文本转语音（使用 macOS 系统命令）"""
+        if not self.config.TTS_ENABLED:
             return
-    
+        
         try:
-            # 确保文本有效
             if not text or not isinstance(text, str):
-                print("⚠️ 无效的文本输入")
+                logger.warning("无效的文本输入")
                 return
-    
-            # 提取英文部分
+            
             en_text = text.split('_')[0]
             if not en_text:
-                print("⚠️ 无法提取有效的英文文本")
+                logger.warning("无法提取有效的英文文本")
                 return
             
-            # 使用macOS自带的say命令
             os.system(f'say "{en_text}"')
         except Exception as e:
-            print(f"⚠️ 语音生成过程中发生错误: {str(e)}")
-
-    def _practice_word(self, word):
+            logger.error(f"语音生成失败: {e}")
+    
+    def _practice_word(self, word: Word) -> bool:
         """单个单词练习流程"""
         print(f"\n{'━'*30}")
-        print(f"🔔 当前进度: {word.success_count}/{Config.MAX_SUCCESS_COUNT}")
+        print(f"🔔 当前进度: {word.success_count}/{self.config.MAX_SUCCESS_COUNT}")
         
-        # 显示例句
         example = self._get_example(word)
+        
         if '_' in example:
             first_occurrence = example.index('_')
-            # 保留第一个下划线，后续所有下划线删除
             example = example[:first_occurrence+1] + example[first_occurrence+1:].replace('_', '')
-
-        if not word.example: 
+        
+        if not word.example:
             word.example = example
         
         en_example, zh_example = example.split('_') if '_' in example else (example, "")
         
-        # 忽略大小写进行替换
         lower_en_example = en_example.lower()
         lower_word = word.english.lower()
         start_index = lower_en_example.find(lower_word)
@@ -374,33 +527,37 @@ class WordReciter:
         print(f"📝 例句: {blanked_example}")
         if zh_example:
             print(f"🌏 例句翻译: {zh_example}")
-
-        # 拼写测试
+        
         attempt = 0
         while attempt < 3:
             answer = ""
             print("请输入英文单词（h=显示答案，s=播放语音）: ", end='', flush=True)
+            
             while True:
-                char = readchar.readchar()
-                if char == '\n':  # 回车提交答案
+                try:
+                    char = readchar.readchar()
+                    if char == '\n':
+                        break
+                    elif char == '\x7f':
+                        if answer:
+                            answer = answer[:-1]
+                            print('\b \b', end='', flush=True)
+                    else:
+                        answer += char
+                        print(char, end='', flush=True)
+                    
+                    print(f"\r已输入 {len(answer)} 个字母。请输入英文单词（h=显示答案，s=播放语音）: {answer}", end='', flush=True)
+                except Exception as e:
+                    logger.error(f"读取输入时出错: {e}")
                     break
-                elif char == '\x7f':  # 退格键
-                    if answer: 
-                        answer = answer[:-1]
-                        print(' ', end='', flush=True)  # 清除显示的字符
-                else: 
-                    answer += char
-                    print(char, end='', flush=True)
-                # 在同一行更新输入提示和字母计数
-                print(f"\r已输入 {len(answer)} 个字母。请输入英文单词（h=显示答案，s=播放语音）: {answer}", end='', flush=True)
-
+            
             answer = answer.strip().lower()
             if answer == "h":
                 print(f"\n📢 正确答案: {word.english}")
                 return False
             if answer == "s":
                 self._text_to_speech(example)
-                print("\n")  # 新增换行
+                print("\n")
                 continue
             if answer == word.english.lower():
                 print("\n✅ 正确！")
@@ -408,71 +565,63 @@ class WordReciter:
                 return True
             attempt += 1
             print(f"\n❌ 错误（剩余尝试次数 {3 - attempt}）")
-
+        
         print(f"\n📢 正确答案: {word.english}")
         return False
-
-    def daily_review(self):
-        """执行每日复习（轮次复习逻辑）"""
+    
+    def daily_review(self) -> None:
+        """执行每日复习"""
         review_list = self._get_today_review_list()
         if not review_list:
             print("\n🎉 今日没有需要复习的单词！")
             return
-
+        
         print(f"\n📚 今日需要复习 {len(review_list)} 个单词（第{self.current_review_round + 1}轮）")
         
-        # 初始化统计变量
         mastered_today = 0
         correct_count = 0
         wrong_count = 0
         total_words = len(review_list)
         
-        # 按复习次数排序，确保复习次数少的单词优先被复习
         review_list.sort(key=lambda w: w.review_count)
         
         for index, word in enumerate(review_list.copy(), start=1):
             print(f"\n⏳ 剩余 {total_words - index + 1} 个单词需要复习")
             success = self._practice_word(word)
             
-            # 更新统计
             if success:
                 correct_count += 1
                 word.success_count += 1
-                word.review_count += 1  # 增加复习次数
+                word.review_count += 1
                 
-                if word.success_count >= Config.MAX_SUCCESS_COUNT:
+                if word.success_count >= self.config.MAX_SUCCESS_COUNT:
                     self.mastered_words.append(word)
                     self.all_words.remove(word)
                     mastered_today += 1
                     print(f"🎉 已掌握单词: {word.english}")
                 else:
-                    # 根据success_count设置间隔天数（艾宾浩斯遗忘曲线）
-                    # 处理边界情况：新单词(success_count=0)应该立即复习
                     if word.success_count == 0:
-                        delta_days = 0  # 新单词立即复习
+                        delta_days = 0
                     else:
                         success_index = word.success_count - 1
-                        if success_index < len(Config.REVIEW_INTERVAL_DAYS):
-                            delta_days = Config.REVIEW_INTERVAL_DAYS[success_index]
+                        if success_index < len(self.config.REVIEW_INTERVAL_DAYS):
+                            delta_days = self.config.REVIEW_INTERVAL_DAYS[success_index]
                         else:
-                            delta_days = Config.REVIEW_INTERVAL_DAYS[-1]  # 使用最大间隔
+                            delta_days = self.config.REVIEW_INTERVAL_DAYS[-1]
                     
                     word.next_review_date = self.today + timedelta(days=delta_days)
                     print(f"⏱ 下次复习: {word.next_review_date} (+{delta_days}天，第{word.success_count}次成功)")
             else:
                 wrong_count += 1
-                word.review_count += 1  # 即使失败也记录复习次数
+                word.review_count += 1
                 print("⏳ 保持原复习计划")
             
-            # 检查是否需要进入下一轮复习
             self._check_and_advance_round()
-
-        # 计算正确率
+        
         accuracy = 0
         if total_words > 0:
             accuracy = correct_count / total_words * 100
-
-        # 显示日报
+        
         print("\n📊 今日复习报告:")
         report = PrettyTable()
         report.field_names = ["统计项", "数量"]
@@ -485,37 +634,33 @@ class WordReciter:
         report.add_row(["当前进度", f"{len(self.mastered_words)} 已掌握 / {len(self.all_words)} 待复习"])
         print(report)
         
-        # 保存进度
         self._save_data()
-
-    def _check_and_advance_round(self):
+    
+    def _check_and_advance_round(self) -> None:
         """检查并推进复习轮次"""
-        # 检查当前轮次的所有单词是否都已复习过
         current_round_words = [w for w in self.all_words if w.review_round == self.current_review_round]
         
         if not current_round_words:
-            # 当前轮次没有单词，进入下一轮
-            if self.current_review_round < Config.MAX_REVIEW_ROUND:
+            if self.current_review_round < self.config.MAX_REVIEW_ROUND:
                 self.current_review_round += 1
                 print(f"\n🎯 进入第{self.current_review_round + 1}轮复习！")
                 
-                # 更新所有单词的复习轮次
                 for word in self.all_words:
                     if word.review_round < self.current_review_round:
                         word.review_round = self.current_review_round
-                        # 根据success_count设置复习间隔（艾宾浩斯遗忘曲线）
-                        # 处理边界情况：新单词(success_count=0)应该立即复习
+                        
                         if word.success_count == 0:
-                            delta_days = 0  # 新单词立即复习
+                            delta_days = 0
                         else:
                             success_index = word.success_count - 1
-                            if success_index < len(Config.REVIEW_INTERVAL_DAYS):
-                                delta_days = Config.REVIEW_INTERVAL_DAYS[success_index]
+                            if success_index < len(self.config.REVIEW_INTERVAL_DAYS):
+                                delta_days = self.config.REVIEW_INTERVAL_DAYS[success_index]
                             else:
-                                delta_days = Config.REVIEW_INTERVAL_DAYS[-1]
+                                delta_days = self.config.REVIEW_INTERVAL_DAYS[-1]
+                        
                         word.next_review_date = self.today + timedelta(days=delta_days)
-
-    def add_words(self, words):
+    
+    def add_words(self, words: list) -> None:
         """批量添加单词"""
         existing_words = {w.english.lower() for w in self.all_words + self.mastered_words}
         new_words = []
@@ -529,62 +674,18 @@ class WordReciter:
         self._save_data()
         print(f"✅ 成功添加 {len(new_words)} 个新单词")
 
-    def _load_data(self):
-        """加载学习数据（兼容新数据结构）"""
-        try:
-            with open(Config.DATA_FILE) as f:
-                data = json.load(f)
-                self.all_words = [Word.from_dict(w) for w in data['all_words']]
-                self.mastered_words = [Word.from_dict(w) for w in data['mastered_words']]
-                
-                # 兼容旧版本数据：为旧数据添加复习轮次和复习次数
-                for word in self.all_words + self.mastered_words:
-                    if not hasattr(word, 'review_round'):
-                        word.review_round = 0
-                    if not hasattr(word, 'review_count'):
-                        word.review_count = 0
-                
-                # 新增统计信息
-                total_words = len(self.all_words) + len(self.mastered_words)
-                mastered_count = len(self.mastered_words)
-                
-                # 计算平均复习次数
-                if self.all_words:
-                    avg_review_count = sum(w.review_count for w in self.all_words) / len(self.all_words)
-                else:
-                    avg_review_count = 0
-                    
-                print(f"📊 单词统计: 总计 {total_words} 个 | 已掌握 {mastered_count} 个 | 平均复习次数 {avg_review_count:.1f}")
-        except FileNotFoundError:
-            print(f"⚠️ 数据文件 {Config.DATA_FILE} 不存在，将创建新文件")
-            self.all_words = []
-            self.mastered_words = []
-            print("📊 单词统计: 总计 0 个 | 已掌握 0 个 | 平均复习次数 0.0")
-        except json.JSONDecodeError as e:
-            print(f"⚠️ 数据文件 {Config.DATA_FILE} 格式错误: {str(e)}")
-            print("⚠️ 可能是文件损坏，将重置为初始状态")
-            self.all_words = []
-            self.mastered_words = []
-            print("📊 单词统计: 总计 0 个 | 已掌握 0 个 | 平均复习次数 0.0")
 
-    def _save_data(self):
-        """保存学习数据"""
-        data = {
-            'all_words': [w.to_dict() for w in self.all_words],
-            'mastered_words': [w.to_dict() for w in self.mastered_words]
-        }
-        with open(Config.DATA_FILE, 'w') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-# 用户界面
 class ReciterCLI:
+    """用户界面"""
+    
     def __init__(self):
         self.reciter = WordReciter()
-        
-    def main_menu(self):
+    
+    def main_menu(self) -> None:
+        """主菜单"""
         while True:
             print("\n"+ "="*30)
-            print("  智能单词背诵系统")
+            print("  智能单词背诵系统（离线版）")
             print("="*30)
             print("1. 开始今日复习")
             print("2. 查看学习进度")
@@ -593,32 +694,42 @@ class ReciterCLI:
             print("5. 复习已掌握词汇")
             print("6. 退出系统")
             
-            choice = input("请选择操作: ").strip()
-            
-            if choice == '1':
-                self.reciter.daily_review()
-            elif choice == '2':
-                self.reciter.show_status()
-            elif choice == '3':
-                self._import_file()
-            elif choice == '4':
-                self.reciter.show_mastered_words()
-            elif choice == '5':
-                self.reciter.review_mastered_words()
-            elif choice == '6':
-                print("👋 再见！")
+            try:
+                choice = input("请选择操作: ").strip()
+                
+                if choice == '1':
+                    self.reciter.daily_review()
+                elif choice == '2':
+                    self.reciter.show_status()
+                elif choice == '3':
+                    self._import_file()
+                elif choice == '4':
+                    self.reciter.show_mastered_words()
+                elif choice == '5':
+                    self.reciter.review_mastered_words()
+                elif choice == '6':
+                    print("👋 再见！")
+                    break
+                else:
+                    print("⚠️ 无效的选项")
+            except KeyboardInterrupt:
+                print("\n\n👋 已退出")
                 break
-            else:
-                print("⚠️ 无效的选项")
-
-    def _import_file(self):
-        path = input(f"输入文件路径（默认{Config.WORD_FILE}）: ").strip() or Config.WORD_FILE
+            except Exception as e:
+                print(f"⚠️ 发生错误: {e}")
+    
+    def _import_file(self) -> None:
+        """导入单词文件"""
+        path = input(f"输入文件路径（默认{self.reciter.config.WORD_FILE}）: ").strip() or self.reciter.config.WORD_FILE
         try:
             with open(path, encoding='utf-8') as f:
                 words = [line.strip().split(',', 1) for line in f if ',' in line]
                 self.reciter.add_words(words)
+        except FileNotFoundError:
+            print(f"⚠️ 文件不存在: {path}")
         except Exception as e:
             print(f"⚠️ 导入失败: {str(e)}")
+
 
 if __name__ == "__main__":
     cli = ReciterCLI()

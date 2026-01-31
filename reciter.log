@@ -1,0 +1,35 @@
+2026-01-31 14:05:03,199 - reciter - WARNING - 配置文件加载失败，使用默认配置: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:03,199 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:03,199 - reciter - INFO - 为单词 'test' 添加了新例句
+2026-01-31 14:05:03,200 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,558 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,558 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:05:07,558 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:05:07,558 - reciter - INFO - 为单词 'multi' 添加了新例句
+2026-01-31 14:05:07,558 - reciter - ERROR - 加载例句库失败: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,558 - reciter - INFO - 为单词 'save' 添加了新例句
+2026-01-31 14:05:07,558 - reciter - INFO - 例句库保存成功
+2026-01-31 14:05:07,558 - reciter - INFO - 成功加载本地例句库: 1 个单词
+2026-01-31 14:05:07,559 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmp6rqs1lyz.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,559 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,559 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpqyojm7hr.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,559 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,560 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmp35ugpk2b.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,560 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,560 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmp9beg6_sj.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,560 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,560 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmp8fpyp78m.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,560 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,561 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmp1xf__3xs.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,561 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,561 - reciter - INFO - 更新了 1 个过期单词的复习日期
+2026-01-31 14:05:07,561 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmphq_09t70.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,561 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,561 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmpoa2lgff4.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,561 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,562 - reciter - ERROR - 数据文件 /var/folders/y6/kv67zgg53xg0960v_f5bympc0000gn/T/tmp6dvsakny.json 格式错误: Expecting value: line 1 column 1 (char 0)
+2026-01-31 14:05:07,562 - reciter - WARNING - 将重置为初始状态
+2026-01-31 14:05:07,562 - reciter - INFO - 加载成功: 总计 3 个 | 已掌握 1 个 | 平均复习次数 4.5
+2026-01-31 14:07:46,941 - __main__ - INFO - 加载成功: 总计 211 个 | 已掌握 92 个 | 平均复习次数 6.0
+2026-01-31 14:07:46,942 - __main__ - INFO - 更新了 63 个过期单词的复习日期
+2026-01-31 14:07:46,942 - __main__ - INFO - 数据备份成功: backups/learning_data_backup_2026-01-31.json
