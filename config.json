@@ -1,0 +1,14 @@
+{
+  "word_file": "words.txt",
+  "data_file": "learning_data.json",
+  "example_db": "word_examples.json",
+  "max_success_count": 8,
+  "tts_enabled": true,
+  "max_review_round": 8,
+  "review_interval_days": [1, 2, 4, 7, 15, 30, 60, 90],
+  "backup_enabled": true,
+  "backup_interval_days": 7,
+  "max_backups": 10,
+  "language": "zh",
+  "log_level": "INFO"
+}
