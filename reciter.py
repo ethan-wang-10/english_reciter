@@ -44,6 +44,7 @@ class HunyuanGenerator:
                 self.client = None
         else:
             self.client = None
+    @staticmethod
     def split_ch_en(text):
         # 匹配中文字符及常见中文标点（范围包含大部分常用汉字和中文符号）
         ch_pattern = re.compile(r'[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+')
