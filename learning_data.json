@@ -1,6 +1,51 @@
 {
   "all_words": [
     {
+      "english": "cabbage",
+      "chinese": "卷心菜；洋白菜",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "She is making a salad with fresh cabbage._她正在用新鲜的卷心菜做沙拉。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "goat",
+      "chinese": "山羊",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "The goat on the farm likes to climb on the rocks._农场里的山羊喜欢在岩石上攀爬。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "heavy",
+      "chinese": "重的；沉重的",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "This box is too heavy for me to carry alone._这个箱子太重了，我一个人搬不动。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "cotton",
+      "chinese": "棉花；棉布",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "I prefer to wear cotton clothes in summer because they are breathable._我夏天更喜欢穿棉质衣服，因为它们透气。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "fluffy",
+      "chinese": "蓬松的；毛茸茸的",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "The kitten has very fluffy fur._这只小猫的皮毛非常蓬松。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
       "english": "blow",
       "chinese": "吹；打击",
       "success_count": 4,

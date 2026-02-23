@@ -596,8 +596,7 @@ class WordReciter:
                         answer += char
                         print(char, end='', flush=True)
                     
-                    # 显示字母计数，不重复提示文字
-                    print(f" ({len(answer)})", end='', flush=True)
+
                 except Exception as e:
                     logger.error(f"读取输入时出错: {e}")
                     break
