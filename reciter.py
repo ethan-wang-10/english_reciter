@@ -580,23 +580,39 @@ class WordReciter:
         
         attempt = 0
         while attempt < MAX_ATTEMPTS:
+            import sys
             answer = ""
-            print("请输入英文单词（h=显示答案，s=播放语音）: ", end='', flush=True)
+            prompt = "请输入英文单词（h=显示答案，s=播放语音）: "
+            
+            # 初始显示
+            sys.stdout.write(prompt)
+            sys.stdout.flush()
             
             while True:
                 try:
                     char = readchar.readchar()
                     if char == '\n':
+                        # 输入完成，换行
+                        sys.stdout.write('\n')
+                        sys.stdout.flush()
                         break
                     elif char == '\x7f':
+                        # 退格键
                         if answer:
                             answer = answer[:-1]
-                            print('\b \b', end='', flush=True)
+                            # 使用ANSI转义序列清除整行
+                            sys.stdout.write('\033[2K\r')
+                            # 重新显示提示和当前输入
+                            sys.stdout.write(f"{prompt}{answer}")
+                            sys.stdout.flush()
                     else:
+                        # 普通字符输入
                         answer += char
-                        print(char, end='', flush=True)
-                    
-
+                        # 使用ANSI转义序列清除整行
+                        sys.stdout.write('\033[2K\r')
+                        # 重新显示提示、当前输入和计数
+                        sys.stdout.write(f"{prompt}{answer} ({len(answer)})")
+                        sys.stdout.flush()
                 except Exception as e:
                     logger.error(f"读取输入时出错: {e}")
                     break
