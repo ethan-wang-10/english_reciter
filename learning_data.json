@@ -1,49 +1,94 @@
 {
   "all_words": [
     {
+      "english": "stretch",
+      "chinese": "伸展；延伸",
+      "success_count": 1,
+      "next_review_date": "2026-02-27",
+      "example": "It's good to stretch your muscles before exercising._运动前伸展一下肌肉是很好的。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "area",
+      "chinese": "区域；面积",
+      "success_count": 1,
+      "next_review_date": "2026-02-27",
+      "example": "This area is known for its beautiful parks._这个区域以其美丽的公园而闻名。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "probably",
+      "chinese": "大概；很可能",
+      "success_count": 1,
+      "next_review_date": "2026-02-27",
+      "example": "It will probably rain tomorrow._明天很可能会下雨。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "section",
+      "chinese": "部分；章节；部门",
+      "success_count": 1,
+      "next_review_date": "2026-02-27",
+      "example": "Please read the first section of the report._请阅读报告的第一部分。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "exciting",
+      "chinese": "令人兴奋的；刺激的",
+      "success_count": 1,
+      "next_review_date": "2026-02-27",
+      "example": "They had an exciting adventure in the jungle._他们在丛林中有一次激动人心的冒险。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
       "english": "cabbage",
       "chinese": "卷心菜；洋白菜",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 3,
+      "next_review_date": "2026-03-02",
       "example": "She is making a salad with fresh cabbage._她正在用新鲜的卷心菜做沙拉。",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 3
     },
     {
       "english": "goat",
       "chinese": "山羊",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 3,
+      "next_review_date": "2026-03-02",
       "example": "The goat on the farm likes to climb on the rocks._农场里的山羊喜欢在岩石上攀爬。",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 3
     },
     {
       "english": "heavy",
       "chinese": "重的；沉重的",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 3,
+      "next_review_date": "2026-03-02",
       "example": "This box is too heavy for me to carry alone._这个箱子太重了，我一个人搬不动。",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 3
     },
     {
       "english": "cotton",
       "chinese": "棉花；棉布",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 3,
+      "next_review_date": "2026-03-02",
       "example": "I prefer to wear cotton clothes in summer because they are breathable._我夏天更喜欢穿棉质衣服，因为它们透气。",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 3
     },
     {
       "english": "fluffy",
       "chinese": "蓬松的；毛茸茸的",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 3,
+      "next_review_date": "2026-03-02",
       "example": "The kitten has very fluffy fur._这只小猫的皮毛非常蓬松。",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 3
     },
     {
       "english": "blow",
@@ -273,56 +318,56 @@
     {
       "english": "computer",
       "chinese": "计算机，电脑",
-      "success_count": 6,
-      "next_review_date": "2026-02-24",
+      "success_count": 7,
+      "next_review_date": "2026-04-25",
       "example": "I use my computer for work and studying every day. 我每天用电脑工作和学习。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 7
     },
     {
       "english": "laptop",
       "chinese": "笔记本电脑",
-      "success_count": 6,
-      "next_review_date": "2026-02-24",
+      "success_count": 7,
+      "next_review_date": "2026-04-25",
       "example": "She bought a new laptop for university classes. 她为大学课程买了一台新笔记本电脑。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 7
     },
     {
       "english": "camera",
       "chinese": "照相机，摄像头",
-      "success_count": 6,
-      "next_review_date": "2026-02-24",
+      "success_count": 7,
+      "next_review_date": "2026-04-25",
       "example": "The camera on this smartphone takes excellent photos in low light. 这款智能手机的摄像头在弱光下能拍出很棒的照片。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 7
     },
     {
       "english": "headphones",
       "chinese": "耳机",
-      "success_count": 6,
-      "next_review_date": "2026-02-24",
+      "success_count": 7,
+      "next_review_date": "2026-04-25",
       "example": "He always wears headphones when listening to music on the bus. 他在公交车上听音乐时总是戴着耳机。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 7
     },
     {
       "english": "tablet",
       "chinese": "平板电脑",
-      "success_count": 6,
-      "next_review_date": "2026-02-24",
+      "success_count": 7,
+      "next_review_date": "2026-04-25",
       "example": "The children use a tablet for their online learning activities. 孩子们用平板电脑进行在线学习活动。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 7
     },
     {
       "english": "cellphone",
       "chinese": "手机，移动电话",
-      "success_count": 6,
-      "next_review_date": "2026-02-24",
+      "success_count": 7,
+      "next_review_date": "2026-04-25",
       "example": "Please remember to charge your cellphone before going out. 出门前请记得给手机充电。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 7
     },
     {
       "english": "knock",
@@ -1287,7 +1332,7 @@
       "next_review_date": "2025-04-22",
       "example": "Short hair is easier to maintain_短发更容易打理",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 1
     },
     {
       "english": "rough",
@@ -1296,7 +1341,7 @@
       "next_review_date": "2025-04-22",
       "example": "The tree bark feels rough_树皮摸起来很粗糙",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 1
     },
     {
       "english": "skate",
