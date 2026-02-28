@@ -1,49 +1,193 @@
 {
   "all_words": [
     {
-      "english": "stretch",
-      "chinese": "伸展；延伸",
+      "english": "surround",
+      "chinese": "包围；围绕",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "The mountains surround the small village._群山环绕着小村庄。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "north",
+      "chinese": "北；北方",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "Canada is to the north of the United States._加拿大在美国的北方。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "south",
+      "chinese": "南；南方",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "They traveled south for the winter._他们南下过冬。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "west",
+      "chinese": "西；西方",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "The sun sets in the west._太阳在西方落下。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "local",
+      "chinese": "当地的；本地的",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "We bought some fruits from the local market._我们从当地市场买了一些水果。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "market",
+      "chinese": "市场；集市",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "There is a fresh food market every Sunday._每个星期天都有一个新鲜食品市场。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "favourite",
+      "chinese": "最喜欢的",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "Chocolate is my favourite dessert._巧克力是我最喜欢的甜点。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "village",
+      "chinese": "村庄；乡村",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "She grew up in a small village in the countryside._她在乡村的一个小村庄长大。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "enjoy",
+      "chinese": "享受；喜爱",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "I enjoy reading books in my free time._我喜欢在空闲时间读书。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "storm",
+      "chinese": "风暴；暴风雨",
       "success_count": 1,
-      "next_review_date": "2026-02-27",
-      "example": "It's good to stretch your muscles before exercising._运动前伸展一下肌肉是很好的。",
+      "next_review_date": "2026-02-28",
+      "example": "The storm last night caused some power outages._昨晚的风暴导致了一些停电。",
       "review_round": 0,
       "review_count": 1
+    },
+    {
+      "english": "report",
+      "chinese": "报告；报道",
+      "success_count": 1,
+      "next_review_date": "2026-02-28",
+      "example": "He will report the findings to the manager._他将向经理报告调查结果。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "need",
+      "chinese": "需要",
+      "success_count": 1,
+      "next_review_date": "2026-02-28",
+      "example": "I need to finish this project by Friday._我需要在周五前完成这个项目。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "weather",
+      "chinese": "天气",
+      "success_count": 1,
+      "next_review_date": "2026-02-28",
+      "example": "The weather forecast says it will be sunny tomorrow._天气预报说明天会是晴天。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "lightning",
+      "chinese": "闪电",
+      "success_count": 1,
+      "next_review_date": "2026-02-28",
+      "example": "The lightning was striking frequently during the storm._风暴期间闪电频繁出现。",
+      "review_round": 0,
+      "review_count": 2
+    },
+    {
+      "english": "thunder",
+      "chinese": "雷；雷声",
+      "success_count": 1,
+      "next_review_date": "2026-02-28",
+      "example": "The thunder was so loud that it woke me up._雷声太大了，把我吵醒了。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "dark",
+      "chinese": "黑暗的；暗的",
+      "success_count": 1,
+      "next_review_date": "2026-02-28",
+      "example": "It's too dark to see anything without a light._太暗了，没有灯什么都看不见。",
+      "review_round": 0,
+      "review_count": 1
+    },
+    {
+      "english": "stretch",
+      "chinese": "伸展；延伸",
+      "success_count": 2,
+      "next_review_date": "2026-03-01",
+      "example": "It's good to stretch your muscles before exercising._运动前伸展一下肌肉是很好的。",
+      "review_round": 0,
+      "review_count": 2
     },
     {
       "english": "area",
       "chinese": "区域；面积",
-      "success_count": 1,
-      "next_review_date": "2026-02-27",
+      "success_count": 2,
+      "next_review_date": "2026-03-01",
       "example": "This area is known for its beautiful parks._这个区域以其美丽的公园而闻名。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "probably",
       "chinese": "大概；很可能",
-      "success_count": 1,
-      "next_review_date": "2026-02-27",
+      "success_count": 2,
+      "next_review_date": "2026-03-01",
       "example": "It will probably rain tomorrow._明天很可能会下雨。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "section",
       "chinese": "部分；章节；部门",
-      "success_count": 1,
-      "next_review_date": "2026-02-27",
+      "success_count": 2,
+      "next_review_date": "2026-03-01",
       "example": "Please read the first section of the report._请阅读报告的第一部分。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "exciting",
       "chinese": "令人兴奋的；刺激的",
-      "success_count": 1,
-      "next_review_date": "2026-02-27",
+      "success_count": 2,
+      "next_review_date": "2026-03-01",
       "example": "They had an exciting adventure in the jungle._他们在丛林中有一次激动人心的冒险。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "cabbage",
