@@ -1,148 +1,202 @@
 {
   "all_words": [
     {
-      "english": "surround",
-      "chinese": "包围；围绕",
+      "english": "shine",
+      "chinese": "发光；照耀",
       "success_count": 0,
       "next_review_date": "2026-01-17",
-      "example": "The mountains surround the small village._群山环绕着小村庄。",
+      "example": "The sun will shine brightly tomorrow._明天阳光将会很灿烂。",
       "review_round": 0,
       "review_count": 0
+    },
+    {
+      "english": "astronaut",
+      "chinese": "宇航员",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "The astronaut conducted experiments on the space station._那位宇航员在空间站进行了实验。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "imagine",
+      "chinese": "想象",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "Can you imagine what life will be like in the future?_你能想象未来的生活会是什么样子吗？",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "vast",
+      "chinese": "广阔的；巨大的",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "They traveled across the vast desert._他们穿越了广阔的沙漠。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "universe",
+      "chinese": "宇宙",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "There are countless stars in the universe._宇宙中有无数的星星。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "wonder",
+      "chinese": "想知道；感到惊奇",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "I wonder what the weather will be like this weekend._我想知道这周末的天气会怎么样。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "surround",
+      "chinese": "包围；围绕",
+      "success_count": 1,
+      "next_review_date": "2026-03-01",
+      "example": "The mountains surround the small village._群山环绕着小村庄。",
+      "review_round": 0,
+      "review_count": 1
     },
     {
       "english": "north",
       "chinese": "北；北方",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 1,
+      "next_review_date": "2026-03-01",
       "example": "Canada is to the north of the United States._加拿大在美国的北方。",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 1
     },
     {
       "english": "south",
       "chinese": "南；南方",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 1,
+      "next_review_date": "2026-03-01",
       "example": "They traveled south for the winter._他们南下过冬。",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 1
     },
     {
       "english": "west",
       "chinese": "西；西方",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 1,
+      "next_review_date": "2026-03-01",
       "example": "The sun sets in the west._太阳在西方落下。",
       "review_round": 0,
-      "review_count": 0
+      "review_count": 1
     },
     {
       "english": "local",
       "chinese": "当地的；本地的",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
+      "success_count": 1,
+      "next_review_date": "2026-03-01",
       "example": "We bought some fruits from the local market._我们从当地市场买了一些水果。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "market",
-      "chinese": "市场；集市",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "There is a fresh food market every Sunday._每个星期天都有一个新鲜食品市场。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "favourite",
-      "chinese": "最喜欢的",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "Chocolate is my favourite dessert._巧克力是我最喜欢的甜点。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "village",
-      "chinese": "村庄；乡村",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "She grew up in a small village in the countryside._她在乡村的一个小村庄长大。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "enjoy",
-      "chinese": "享受；喜爱",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "I enjoy reading books in my free time._我喜欢在空闲时间读书。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "storm",
-      "chinese": "风暴；暴风雨",
-      "success_count": 1,
-      "next_review_date": "2026-02-28",
-      "example": "The storm last night caused some power outages._昨晚的风暴导致了一些停电。",
-      "review_round": 0,
-      "review_count": 1
-    },
-    {
-      "english": "report",
-      "chinese": "报告；报道",
-      "success_count": 1,
-      "next_review_date": "2026-02-28",
-      "example": "He will report the findings to the manager._他将向经理报告调查结果。",
-      "review_round": 0,
-      "review_count": 1
-    },
-    {
-      "english": "need",
-      "chinese": "需要",
-      "success_count": 1,
-      "next_review_date": "2026-02-28",
-      "example": "I need to finish this project by Friday._我需要在周五前完成这个项目。",
-      "review_round": 0,
-      "review_count": 1
-    },
-    {
-      "english": "weather",
-      "chinese": "天气",
-      "success_count": 1,
-      "next_review_date": "2026-02-28",
-      "example": "The weather forecast says it will be sunny tomorrow._天气预报说明天会是晴天。",
-      "review_round": 0,
-      "review_count": 1
-    },
-    {
-      "english": "lightning",
-      "chinese": "闪电",
-      "success_count": 1,
-      "next_review_date": "2026-02-28",
-      "example": "The lightning was striking frequently during the storm._风暴期间闪电频繁出现。",
       "review_round": 0,
       "review_count": 2
     },
     {
-      "english": "thunder",
-      "chinese": "雷；雷声",
+      "english": "market",
+      "chinese": "市场；集市",
       "success_count": 1,
-      "next_review_date": "2026-02-28",
-      "example": "The thunder was so loud that it woke me up._雷声太大了，把我吵醒了。",
+      "next_review_date": "2026-03-01",
+      "example": "There is a fresh food market every Sunday._每个星期天都有一个新鲜食品市场。",
       "review_round": 0,
       "review_count": 1
     },
     {
+      "english": "favourite",
+      "chinese": "最喜欢的",
+      "success_count": 1,
+      "next_review_date": "2026-03-01",
+      "example": "Chocolate is my favourite dessert._巧克力是我最喜欢的甜点。",
+      "review_round": 0,
+      "review_count": 2
+    },
+    {
+      "english": "village",
+      "chinese": "村庄；乡村",
+      "success_count": 1,
+      "next_review_date": "2026-03-01",
+      "example": "She grew up in a small village in the countryside._她在乡村的一个小村庄长大。",
+      "review_round": 0,
+      "review_count": 2
+    },
+    {
+      "english": "enjoy",
+      "chinese": "享受；喜爱",
+      "success_count": 1,
+      "next_review_date": "2026-03-01",
+      "example": "I enjoy reading books in my free time._我喜欢在空闲时间读书。",
+      "review_round": 0,
+      "review_count": 2
+    },
+    {
+      "english": "storm",
+      "chinese": "风暴；暴风雨",
+      "success_count": 2,
+      "next_review_date": "2026-03-02",
+      "example": "The storm last night caused some power outages._昨晚的风暴导致了一些停电。",
+      "review_round": 0,
+      "review_count": 2
+    },
+    {
+      "english": "report",
+      "chinese": "报告；报道",
+      "success_count": 2,
+      "next_review_date": "2026-03-02",
+      "example": "He will report the findings to the manager._他将向经理报告调查结果。",
+      "review_round": 0,
+      "review_count": 2
+    },
+    {
+      "english": "need",
+      "chinese": "需要",
+      "success_count": 2,
+      "next_review_date": "2026-03-02",
+      "example": "I need to finish this project by Friday._我需要在周五前完成这个项目。",
+      "review_round": 0,
+      "review_count": 2
+    },
+    {
+      "english": "weather",
+      "chinese": "天气",
+      "success_count": 2,
+      "next_review_date": "2026-03-02",
+      "example": "The weather forecast says it will be sunny tomorrow._天气预报说明天会是晴天。",
+      "review_round": 0,
+      "review_count": 3
+    },
+    {
+      "english": "lightning",
+      "chinese": "闪电",
+      "success_count": 2,
+      "next_review_date": "2026-03-02",
+      "example": "The lightning was striking frequently during the storm._风暴期间闪电频繁出现。",
+      "review_round": 0,
+      "review_count": 3
+    },
+    {
+      "english": "thunder",
+      "chinese": "雷；雷声",
+      "success_count": 2,
+      "next_review_date": "2026-03-02",
+      "example": "The thunder was so loud that it woke me up._雷声太大了，把我吵醒了。",
+      "review_round": 0,
+      "review_count": 3
+    },
+    {
       "english": "dark",
       "chinese": "黑暗的；暗的",
-      "success_count": 1,
-      "next_review_date": "2026-02-28",
+      "success_count": 2,
+      "next_review_date": "2026-03-02",
       "example": "It's too dark to see anything without a light._太暗了，没有灯什么都看不见。",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 2
     },
     {
       "english": "stretch",
