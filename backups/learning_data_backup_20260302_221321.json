@@ -12,11 +12,11 @@
     {
       "english": "astronaut",
       "chinese": "宇航员",
-      "success_count": 2,
-      "next_review_date": "2026-03-04",
+      "success_count": 1,
+      "next_review_date": "2026-03-02",
       "example": "The astronaut conducted experiments on the space station._那位宇航员在空间站进行了实验。",
       "review_round": 0,
-      "review_count": 3
+      "review_count": 2
     },
     {
       "english": "imagine",
