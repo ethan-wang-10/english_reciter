@@ -3,6 +3,7 @@ import json
 import random
 import shutil
 import platform
+import subprocess
 from collections import defaultdict
 from typing import Dict, List, Optional
 from datetime import date, timedelta, datetime
@@ -526,7 +527,6 @@ class WordReciter:
         if not self.config.TTS_ENABLED:
             return
         
-        # 检查 say 命令是否可用
         if shutil.which('say') is None:
             logger.debug("say 命令不可用，跳过语音播放")
             return
@@ -541,11 +541,17 @@ class WordReciter:
                 logger.warning("无法提取有效的英文文本")
                 return
             
-            # 使用 say 命令，跨平台忽略输出和错误
-            if platform.system() == 'Windows':
-                os.system(f'say "{en_text}" > NUL 2>&1')
-            else:
-                os.system(f'say "{en_text}" > /dev/null 2>&1')
+            try:
+                subprocess.run(
+                    ['say', en_text],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            except subprocess.TimeoutExpired:
+                logger.warning("语音朗读超时")
+            except Exception as e:
+                logger.error(f"语音生成失败: {e}")
         except Exception as e:
             logger.error(f"语音生成失败: {e}")
     

@@ -11,6 +11,7 @@ import hashlib
 import secrets
 import shutil
 import platform
+import subprocess
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from functools import wraps
@@ -403,21 +404,43 @@ def speak_text(username):
         if not text:
             return jsonify({'error': '文本不能为空'}), 400
         
-        # 直接使用传入的文本（前端已提取英文部分）
         en_text = text
         if not en_text:
             return jsonify({'error': '无法提取有效的英文文本'}), 400
         
-        # 检查 say 命令是否可用
         if shutil.which('say') is None:
             logger.debug(f"用户 {username} 尝试朗读但 say 命令不可用")
             return jsonify({'message': '语音播放不可用，已跳过'}), 200
         
-        # 使用 say 命令，跨平台忽略输出和错误
-        if platform.system() == 'Windows':
-            os.system(f'say "{en_text}" > NUL 2>&1')
-        else:
-            os.system(f'say "{en_text}" > /dev/null 2>&1')
+        try:
+            if platform.system() == 'Darwin':
+                subprocess.run(
+                    ['say', en_text],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            elif platform.system() == 'Windows':
+                subprocess.run(
+                    ['say', en_text],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    shell=True
+                )
+            else:
+                subprocess.run(
+                    ['say', en_text],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+        except subprocess.TimeoutExpired:
+            logger.warning(f"用户 {username} 的朗读超时")
+            return jsonify({'message': '朗读超时，音频过长'}), 200
+        except Exception as e:
+            logger.error(f"朗读执行失败: {e}")
+            return jsonify({'message': '朗读执行失败'}), 200
         
         return jsonify({'message': '朗读完成'}), 200
     except Exception as e:
