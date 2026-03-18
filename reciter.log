@@ -366,3 +366,9 @@
 2026-03-16 21:16:05,547 - __main__ - INFO - 数据备份成功: backups/learning_data_backup_20260316_211605.json
 2026-03-16 21:17:46,033 - __main__ - INFO - 删除旧备份: backups/learning_data_backup_20260304_213906.json
 2026-03-16 21:17:46,034 - __main__ - INFO - 数据备份成功: backups/learning_data_backup_20260316_211746.json
+2026-03-17 19:37:09,687 - __main__ - INFO - 加载成功: 总计 298 个 | 已掌握 123 个 | 平均复习次数 5.4
+2026-03-17 19:37:09,688 - __main__ - INFO - 更新了 72 个过期单词的复习日期
+2026-03-18 21:25:00,935 - __main__ - INFO - 删除旧备份: backups/learning_data_backup_20260305_195659.json
+2026-03-18 21:25:00,935 - __main__ - INFO - 数据备份成功: backups/learning_data_backup_20260318_212500.json
+2026-03-18 21:25:09,244 - __main__ - INFO - 删除旧备份: backups/learning_data_backup_20260305_195724.json
+2026-03-18 21:25:09,244 - __main__ - INFO - 数据备份成功: backups/learning_data_backup_20260318_212509.json
