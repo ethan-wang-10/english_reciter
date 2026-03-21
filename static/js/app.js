@@ -6,7 +6,7 @@ let currentReviewIndex = 0;
 let currentErrorCount = 0; // 当前单词错误次数
 let currentRevealedCount = 0; // 当前单词已揭示字母数
 
-/** 本轮曾答错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
+/** 本轮 3 次尝试均错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
 let wrongWordsInThisPass = new Set();
 let wrongWordsOrder = [];
 /** 当前会话中见过的单词对象，供错题轮从内存取词 */
@@ -425,7 +425,7 @@ function updateWrongRoundLabel() {
     const el = document.getElementById('wrong-round-label');
     if (!el) return;
     if (wrongRoundNumber === 0) {
-        el.textContent = '答错或多次尝试的单词会出现在这里';
+        el.textContent = '同一单词 3 次尝试均错后会出现在这里';
     } else {
         el.textContent = `错题复习 · 第 ${wrongRoundNumber} 轮`;
     }
@@ -440,7 +440,7 @@ function onPassComplete() {
     wrongRoundNumber += 1;
     const n = wrongWordsOrder.length;
     const msg = wrongRoundNumber === 1
-        ? `本轮有 ${n} 个单词曾答错，即将开始错题复习`
+        ? `本轮有 ${n} 个单词 3 次均未答对，即将开始错题复习`
         : `进入第 ${wrongRoundNumber} 轮错题复习（${n} 个单词）`;
     showMainBanner(msg);
 
@@ -595,9 +595,6 @@ async function submitAnswer() {
             Object.assign(word, result.word);
             wordMap.set(word.english, word);
         }
-        if (!result.correct) {
-            recordWrongAttempt(word);
-        }
 
         const messageDiv = document.getElementById('word-message');
         messageDiv.textContent = result.message;
@@ -622,6 +619,8 @@ async function submitAnswer() {
             }
             
             if (currentErrorCount >= 3) {
+                // 3 次尝试均错：记入本轮错题栏，并进入下一轮错题复习候选
+                recordWrongAttempt(word);
                 // 错误次数达到3次，显示完整单词，然后进入下一个单词
                 document.getElementById('current-word-english').textContent = word.english;
                 setTimeout(() => {
