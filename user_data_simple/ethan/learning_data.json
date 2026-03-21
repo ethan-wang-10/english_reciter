@@ -1,919 +1,64 @@
 {
   "all_words": [
     {
-      "english": "tent",
-      "chinese": "帐篷",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "We pitched our tent near the lake._我们在湖边搭起了帐篷。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "cucumber",
-      "chinese": "黄瓜",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "I like to eat cucumber in salads._我喜欢在沙拉里吃黄瓜。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "fruit",
-      "chinese": "水果",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "Eating fruit every day is good for your health._每天吃水果对健康有益。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "usually",
-      "chinese": "通常；一般",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "I usually go to bed at 10 p.m._我通常晚上10点睡觉。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "pick",
-      "chinese": "采摘；挑选",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "Let's pick some apples from the tree._我们从树上摘些苹果吧。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "farmer",
-      "chinese": "农民；农场主",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "The farmer grows vegetables and fruits on his farm._农民在他的农场种植蔬菜和水果。",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "certainly",
-      "chinese": "当然；肯定",
-      "success_count": 0,
-      "next_review_date": "2026-01-17",
-      "example": "Can you help me with this problem? Certainly!_你能帮我解决这个问题吗？当然！",
-      "review_round": 0,
-      "review_count": 0
-    },
-    {
-      "english": "form",
-      "chinese": "形式；表格；形成",
-      "success_count": 2,
-      "next_review_date": "2026-03-19",
-      "example": "Please fill out this application form._请填写这张申请表。",
-      "review_round": 0,
-      "review_count": 2
-    },
-    {
-      "english": "resolution",
-      "chinese": "决心；决议；解决",
-      "success_count": 2,
-      "next_review_date": "2026-03-19",
-      "example": "His New Year's resolution is to exercise more._他的新年决心是加强锻炼。",
-      "review_round": 0,
-      "review_count": 2
-    },
-    {
-      "english": "habit",
-      "chinese": "习惯",
-      "success_count": 2,
-      "next_review_date": "2026-03-19",
-      "example": "Reading before bed is a good habit._睡前阅读是一个好习惯。",
-      "review_round": 0,
-      "review_count": 2
-    },
-    {
-      "english": "improve",
-      "chinese": "改善；提高",
-      "success_count": 2,
-      "next_review_date": "2026-03-19",
-      "example": "Practicing every day can improve your skills._每天练习可以提高你的技能。",
-      "review_round": 0,
-      "review_count": 2
-    },
-    {
-      "english": "improvement",
-      "chinese": "改进；改善",
-      "success_count": 2,
-      "next_review_date": "2026-03-19",
-      "example": "There has been a noticeable improvement in his health._他的健康状况有了明显改善。",
-      "review_round": 0,
-      "review_count": 2
-    },
-    {
-      "english": "jog",
-      "chinese": "慢跑；轻推",
-      "success_count": 2,
-      "next_review_date": "2026-03-19",
-      "example": "He goes for a jog in the park every morning._他每天早上都去公园慢跑。",
-      "review_round": 0,
-      "review_count": 2
-    },
-    {
-      "english": "several",
-      "chinese": "几个；数个",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "I have read this book several times._这本书我已经读过好几遍了。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "arrived",
-      "chinese": "到达（arrive的过去式）",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "They arrived at the airport just in time for their flight._他们刚好准时到达机场赶上了航班。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "temper",
-      "chinese": "脾气；情绪",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "He has a quick temper, so it's best not to argue with him._他脾气急躁，所以最好不要和他争论。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "seem",
-      "chinese": "似乎；好像",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "You seem very happy today._你今天看起来很高兴。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "mad",
-      "chinese": "生气的；疯狂的",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "He was mad at his brother for breaking the toy._他因为弟弟弄坏了玩具而生气。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "each",
-      "chinese": "每个；各自",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "Each student received a certificate._每个学生都收到了一张证书。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "other",
-      "chinese": "其他的；另一个",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "Do you have any other questions?_你还有其他问题吗？",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "mean",
-      "chinese": "意思是；意味着；小气的",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "What does this word mean?_这个单词是什么意思？",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "agreement",
-      "chinese": "协议；同意",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "They finally reached an agreement after long discussions._经过长时间讨论，他们终于达成了协议。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "disagreement",
-      "chinese": "分歧；不同意",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "They had a disagreement about where to go for dinner._他们在去哪里吃晚饭的问题上产生了分歧。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "louder",
-      "chinese": "更大声的",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "Can you speak louder? I can't hear you clearly._你能说大声点吗？我听不清楚。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "repeat",
-      "chinese": "重复",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "Could you repeat that sentence, please?_请你重复一下那句话好吗？",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "surprise",
-      "chinese": "惊讶；惊喜",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "The birthday party was a complete surprise to her._那个生日派对对她来说完全是个惊喜。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "starving",
-      "chinese": "非常饿的；饥饿的",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "After the long hike, we were all starving._长途徒步之后，我们都饿坏了。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "island",
-      "chinese": "岛屿",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "They spent their holiday on a tropical island._他们在一个热带岛屿上度假。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "knife",
-      "chinese": "刀",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "Be careful with that sharp knife._小心那把锋利的刀。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "meat",
-      "chinese": "肉",
-      "success_count": 3,
-      "next_review_date": "2026-03-21",
-      "example": "She doesn't eat red meat._她不吃红肉。",
-      "review_round": 0,
-      "review_count": 3
-    },
-    {
-      "english": "whale",
-      "chinese": "鲸鱼",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "The blue whale is the largest animal on Earth._蓝鲸是地球上最大的动物。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "largest",
-      "chinese": "最大的",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "China has the largest population in the world._中国拥有世界上最多的人口。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "heaviest",
-      "chinese": "最重的",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "This suitcase is the heaviest one of all._这个行李箱是所有里面最重的。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "animal",
-      "chinese": "动物",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "The panda is a protected animal in China._熊猫是中国的保护动物。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "ton",
-      "chinese": "吨",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "The truck can carry up to five tons of goods._这辆卡车最多能载五吨货物。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "except",
-      "chinese": "除了",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "Everyone passed the exam except Tom._除了汤姆，大家都通过了考试。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "tiniest",
-      "chinese": "最微小的",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "Even the tiniest insect plays a role in the ecosystem._即使最微小的昆虫在生态系统中也扮演着角色。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "ecosystem",
-      "chinese": "生态系统",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "Pollution can damage the marine ecosystem._污染会破坏海洋生态系统。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "important",
-      "chinese": "重要的",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "It is important to drink enough water every day._每天喝足够的水很重要。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "role",
-      "chinese": "角色；作用",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "Parents play a key role in a child's development._父母在孩子的成长中扮演着关键角色。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "protect",
-      "chinese": "保护",
-      "success_count": 4,
-      "next_review_date": "2026-03-24",
-      "example": "We should protect endangered animals from extinction._我们应该保护濒危动物免于灭绝。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "curiosity",
-      "chinese": "好奇心",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "Children have a natural curiosity about the world._孩子们对世界有着天然的好奇心。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "around",
-      "chinese": "在周围；大约",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "We took a walk around the park._我们在公园周围散了散步。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "notice",
-      "chinese": "注意到；察觉",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "Did you notice the change in the weather?_你注意到天气的变化了吗？",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "alone",
-      "chinese": "独自地；单独地",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "She prefers to work alone in the library._她更喜欢独自在图书馆工作。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "table",
-      "chinese": "桌子；表格",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "Please put the keys on the table._请把钥匙放在桌子上。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "side",
-      "chinese": "边；侧面；一方",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "He sat on the other side of the room._他坐在房间的另一边。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "scholar",
-      "chinese": "学者",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "The old scholar has published many books on history._那位老学者出版了许多历史方面的书。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "wisdom",
-      "chinese": "智慧",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "With age comes wisdom._智慧随年龄增长。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "smallest",
-      "chinese": "最小的",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "This is the smallest room in the house._这是房子里最小的房间。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "curious",
-      "chinese": "好奇的",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "The child was curious about how the machine worked._那个孩子对机器是如何工作的感到好奇。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "politeness",
-      "chinese": "礼貌；彬彬有礼",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "Politeness is important in all social situations._在所有社交场合中，礼貌都很重要。",
-      "review_round": 0,
-      "review_count": 4
-    },
-    {
-      "english": "famous",
-      "chinese": "著名的；出名的",
-      "success_count": 4,
-      "next_review_date": "2026-03-19",
-      "example": "This city is famous for its delicious food._这座城市以其美食而闻名。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "shine",
-      "chinese": "发光；照耀",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "The sun will shine brightly tomorrow._明天阳光将会很灿烂。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "astronaut",
-      "chinese": "宇航员",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "The astronaut conducted experiments on the space station._那位宇航员在空间站进行了实验。",
-      "review_round": 0,
-      "review_count": 7
-    },
-    {
-      "english": "imagine",
-      "chinese": "想象",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "Can you imagine what life will be like in the future?_你能想象未来的生活会是什么样子吗？",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "vast",
-      "chinese": "广阔的；巨大的",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "They traveled across the vast desert._他们穿越了广阔的沙漠。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "universe",
-      "chinese": "宇宙",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "There are countless stars in the universe._宇宙中有无数的星星。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "wonder",
-      "chinese": "想知道；感到惊奇",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "I wonder what the weather will be like this weekend._我想知道这周末的天气会怎么样。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "surround",
-      "chinese": "包围；围绕",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "The mountains surround the small village._群山环绕着小村庄。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "north",
-      "chinese": "北；北方",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "Canada is to the north of the United States._加拿大在美国的北方。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "south",
-      "chinese": "南；南方",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "They traveled south for the winter._他们南下过冬。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "west",
-      "chinese": "西；西方",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "The sun sets in the west._太阳在西方落下。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "local",
-      "chinese": "当地的；本地的",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "We bought some fruits from the local market._我们从当地市场买了一些水果。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "market",
-      "chinese": "市场；集市",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "There is a fresh food market every Sunday._每个星期天都有一个新鲜食品市场。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "favourite",
-      "chinese": "最喜欢的",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "Chocolate is my favourite dessert._巧克力是我最喜欢的甜点。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "village",
-      "chinese": "村庄；乡村",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "She grew up in a small village in the countryside._她在乡村的一个小村庄长大。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "enjoy",
-      "chinese": "享受；喜爱",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "I enjoy reading books in my free time._我喜欢在空闲时间读书。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "storm",
-      "chinese": "风暴；暴风雨",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "The storm last night caused some power outages._昨晚的风暴导致了一些停电。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "report",
-      "chinese": "报告；报道",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "He will report the findings to the manager._他将向经理报告调查结果。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "need",
-      "chinese": "需要",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "I need to finish this project by Friday._我需要在周五前完成这个项目。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "weather",
-      "chinese": "天气",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "The weather forecast says it will be sunny tomorrow._天气预报说明天会是晴天。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "lightning",
-      "chinese": "闪电",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "The lightning was striking frequently during the storm._风暴期间闪电频繁出现。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "thunder",
-      "chinese": "雷；雷声",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "The thunder was so loud that it woke me up._雷声太大了，把我吵醒了。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "dark",
-      "chinese": "黑暗的；暗的",
-      "success_count": 5,
-      "next_review_date": "2026-04-01",
-      "example": "It's too dark to see anything without a light._太暗了，没有灯什么都看不见。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "stretch",
-      "chinese": "伸展；延伸",
-      "success_count": 5,
-      "next_review_date": "2026-03-27",
-      "example": "It's good to stretch your muscles before exercising._运动前伸展一下肌肉是很好的。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "area",
-      "chinese": "区域；面积",
-      "success_count": 5,
-      "next_review_date": "2026-03-27",
-      "example": "This area is known for its beautiful parks._这个区域以其美丽的公园而闻名。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "probably",
-      "chinese": "大概；很可能",
-      "success_count": 5,
-      "next_review_date": "2026-03-27",
-      "example": "It will probably rain tomorrow._明天很可能会下雨。",
-      "review_round": 0,
-      "review_count": 7
-    },
-    {
-      "english": "section",
-      "chinese": "部分；章节；部门",
-      "success_count": 5,
-      "next_review_date": "2026-03-27",
-      "example": "Please read the first section of the report._请阅读报告的第一部分。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "exciting",
-      "chinese": "令人兴奋的；刺激的",
-      "success_count": 5,
-      "next_review_date": "2026-03-27",
-      "example": "They had an exciting adventure in the jungle._他们在丛林中有一次激动人心的冒险。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "cabbage",
-      "chinese": "卷心菜；洋白菜",
-      "success_count": 5,
-      "next_review_date": "2026-03-25",
-      "example": "She is making a salad with fresh cabbage._她正在用新鲜的卷心菜做沙拉。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "goat",
-      "chinese": "山羊",
-      "success_count": 5,
-      "next_review_date": "2026-03-25",
-      "example": "The goat on the farm likes to climb on the rocks._农场里的山羊喜欢在岩石上攀爬。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "heavy",
-      "chinese": "重的；沉重的",
-      "success_count": 5,
-      "next_review_date": "2026-03-25",
-      "example": "This box is too heavy for me to carry alone._这个箱子太重了，我一个人搬不动。",
-      "review_round": 0,
-      "review_count": 5
-    },
-    {
-      "english": "cotton",
-      "chinese": "棉花；棉布",
-      "success_count": 5,
-      "next_review_date": "2026-03-25",
-      "example": "I prefer to wear cotton clothes in summer because they are breathable._我夏天更喜欢穿棉质衣服，因为它们透气。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "fluffy",
-      "chinese": "蓬松的；毛茸茸的",
-      "success_count": 5,
-      "next_review_date": "2026-03-25",
-      "example": "The kitten has very fluffy fur._这只小猫的皮毛非常蓬松。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "blow",
-      "chinese": "吹；打击",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "The wind will blow away these fallen leaves._风会把落叶吹走。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "carton",
-      "chinese": "纸板箱；纸盒",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "He drank a carton of milk for breakfast._他早餐喝了一盒牛奶。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "paper",
-      "chinese": "纸；纸张；论文",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "She wrote her phone number on a piece of paper._她把电话号码写在了一张纸上。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "diary",
-      "chinese": "日记；日记本",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "She keeps a diary to record her daily life._她通过写日记来记录日常生活。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "machine",
-      "chinese": "机器；机械装置",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "This washing machine is very energy-efficient._这台洗衣机非常省水省电。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "rescue",
-      "chinese": "营救；救援",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "The firefighters rescued the cat from the tree._消防员把猫从树上救了下来。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "plant",
-      "chinese": "植物；工厂；种植",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "This plant needs plenty of sunlight._这种植物需要充足的阳光。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "shelf",
-      "chinese": "架子；搁板",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "Please put the book back on the shelf._请把书放回架子上。",
-      "review_round": 0,
-      "review_count": 6
-    },
-    {
-      "english": "stationery",
-      "chinese": "文具",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "I need to buy some stationery for the new semester._我需要为新学期买些文具。",
-      "review_round": 0,
-      "review_count": 7
-    },
-    {
-      "english": "recycling",
-      "chinese": "回收利用",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
-      "example": "Recycling helps to protect our environment._回收利用有助于保护环境。",
-      "review_round": 0,
-      "review_count": 7
-    },
-    {
       "english": "camp",
       "chinese": "露营；营地",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "After the hike to the river the soldiers camped for the night. 士兵们步行到达那条河后露营过夜。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 2
     },
     {
       "english": "hike",
       "chinese": "徒步旅行；提高",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "They went on a ten-mile hike through the forest. 他们做了一次穿越森林的十英里徒步旅行。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 2
     },
     {
       "english": "ride a horse",
       "chinese": "骑马",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "I love to ride horses on the beach. 我喜欢在海滩上骑马。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 3
     },
     {
       "english": "surf",
       "chinese": "冲浪；海浪",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "If you wish to avoid becoming shark bait yourself, take particular care if you surf. 如果你不想被鲨鱼攻击，那么你在冲浪时要特别小心。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 2
     },
     {
       "english": "fish",
       "chinese": "钓鱼；鱼",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "We often fish at the lake on weekends. 我们经常周末在湖边钓鱼。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 2
     },
     {
       "english": "ski",
       "chinese": "滑雪",
-      "success_count": 6,
-      "next_review_date": "2026-04-16",
+      "success_count": 2,
+      "next_review_date": "2026-02-02",
       "example": "They go to the Alps to ski every winter. 他们每年冬天都去阿尔卑斯山滑雪。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 2
     },
     {
       "english": "land",
       "chinese": "陆地；土地",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "This crop is widely grown on sandy land. 这种作物广泛种植在沙质土地上。",
       "review_round": 0,
       "review_count": 6
@@ -921,377 +66,377 @@
     {
       "english": "landfill",
       "chinese": "垃圾填埋；垃圾填埋场",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 4,
+      "next_review_date": "2026-01-31",
       "example": "A large amount of waste is buried in the landfill each year. 每年有大量垃圾被埋在这个垃圾填埋场。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 7
     },
     {
       "english": "reduce",
       "chinese": "减少；降低",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 4,
+      "next_review_date": "2026-01-31",
       "example": "We should find ways to reduce pollution. 我们应设法减少污染。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 8
     },
     {
       "english": "resource",
       "chinese": "资源",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "Water is a precious natural resource. 水是宝贵的自然资源。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 7
     },
     {
       "english": "reuse",
       "chinese": "再利用",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "We encourage people to reuse shopping bags. 我们鼓励人们重复使用购物袋。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 5
     },
     {
       "english": "smoke",
       "chinese": "烟；吸烟",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "Long-term exposure to smoke can harm the respiratory tract. 长期暴露在烟雾环境中可能损害呼吸道。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 5
     },
     {
       "english": "sunlight",
       "chinese": "阳光",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "Plants need sufficient sunlight to grow well. 植物需要充足的阳光才能生长良好。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 5
     },
     {
       "english": "trash",
       "chinese": "垃圾",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "Please remember to take out the trash. 请记得把垃圾拿出去。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 5
     },
     {
       "english": "wood",
       "chinese": "木材；木头",
-      "success_count": 6,
-      "next_review_date": "2026-03-24",
+      "success_count": 5,
+      "next_review_date": "2026-02-15",
       "example": "This table is made of solid wood. 这张桌子是用实木制成的。",
       "review_round": 0,
-      "review_count": 6
+      "review_count": 5
     },
     {
       "english": "computer",
       "chinese": "计算机，电脑",
-      "success_count": 7,
-      "next_review_date": "2026-04-25",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "I use my computer for work and studying every day. 我每天用电脑工作和学习。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "laptop",
       "chinese": "笔记本电脑",
-      "success_count": 7,
-      "next_review_date": "2026-04-25",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "She bought a new laptop for university classes. 她为大学课程买了一台新笔记本电脑。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "camera",
       "chinese": "照相机，摄像头",
-      "success_count": 7,
-      "next_review_date": "2026-04-25",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "The camera on this smartphone takes excellent photos in low light. 这款智能手机的摄像头在弱光下能拍出很棒的照片。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "headphones",
       "chinese": "耳机",
-      "success_count": 7,
-      "next_review_date": "2026-04-25",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "He always wears headphones when listening to music on the bus. 他在公交车上听音乐时总是戴着耳机。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 8
     },
     {
       "english": "tablet",
       "chinese": "平板电脑",
-      "success_count": 7,
-      "next_review_date": "2026-04-25",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "The children use a tablet for their online learning activities. 孩子们用平板电脑进行在线学习活动。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 8
     },
     {
       "english": "cellphone",
       "chinese": "手机，移动电话",
-      "success_count": 7,
-      "next_review_date": "2026-04-25",
+      "success_count": 6,
+      "next_review_date": "2026-03-02",
       "example": "Please remember to charge your cellphone before going out. 出门前请记得给手机充电。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "knock",
       "chinese": "敲击/碰撞/批评",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Please knock on the door before entering the room_进入房间前请先敲门",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "thoughtful",
       "chinese": "体贴的/深思熟虑的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "It was very thoughtful of you to bring me a cup of hot tea when I was working late_你在我加班时给我带了杯热茶，真是太体贴了",
       "review_round": 0,
-      "review_count": 8
+      "review_count": 7
     },
     {
       "english": "rude",
       "chinese": "粗鲁的/无礼的/突然的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "It is considered rude to talk with your mouth full of food_满嘴食物说话被认为是不礼貌的",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "grab",
       "chinese": "抓住/攫取/匆忙获取",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "I need to grab a quick lunch before the meeting starts_我需要在会议开始前赶紧吃个午饭",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "pass",
       "chinese": "传递/通过/经过",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Could you please pass me the salt_你能把盐递给我吗",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "put away",
       "chinese": "收拾好/放回原处/储存",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Children should learn to put away their toys after playing_孩子们应该学会玩完后把玩具收好",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "invite",
       "chinese": "邀请/请求/招致",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "We would like to invite you to our anniversary celebration next Saturday_我们想邀请您参加下周六的周年庆典",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "wash",
       "chinese": "洗涤/冲洗/耐洗",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Remember to wash your hands before having meals_记得饭前要洗手",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "share",
       "chinese": "分享/分担/共用",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Good friends are always willing to share their happiness and sorrow_好朋友总是愿意分享快乐和悲伤",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "my",
       "chinese": "我的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "This is my backpack. 这是我的背包。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "your",
       "chinese": "你的；你们的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Is this your pencil? 这是你的铅笔吗？",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "his",
       "chinese": "他的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "That is his new bicycle. 那是他的新自行车。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "her",
       "chinese": "她的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Her sister is a doctor. 她的姐姐是一名医生。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "its",
       "chinese": "它的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "The cat is licking its paw. 猫咪正在舔它的爪子。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "our",
       "chinese": "我们的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "We love our school. 我们热爱我们的学校。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "their",
       "chinese": "他/她/它们的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "The children are playing with their toys. 孩子们正在玩他们的玩具。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "mine",
       "chinese": "我的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "This pen is mine. 这支笔是我的。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "yours",
       "chinese": "你的；你们的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "That seat over there is yours. 那边的那个座位是你的。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "hers",
       "chinese": "她的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "The red umbrella is hers. 那把红色的雨伞是她的。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "ours",
       "chinese": "我们的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "This classroom is ours. 这间教室是我们的。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "theirs",
       "chinese": "他/她/它们的",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Our house is smaller than theirs. 我们的房子比他们的小。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "kitchen",
       "chinese": "厨房",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "She is cooking dinner in the kitchen. 她正在厨房做晚饭。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "living room",
       "chinese": "客厅，起居室",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Our family often watches TV together in the living room. 我们一家人经常在客厅一起看电视。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "cafeteria",
       "chinese": "自助餐厅，食堂",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "The students are having lunch in the school cafeteria. 学生们正在学校食堂吃午餐。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "classroom",
       "chinese": "教室",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "The students are listening to the teacher in the classroom. 学生们正在教室里听老师讲课。",
       "review_round": 0,
-      "review_count": 8
+      "review_count": 7
     },
     {
       "english": "swimming pool",
       "chinese": "游泳池",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Children are not allowed to swim in the deep end of the pool without supervision. 儿童在没有监护的情况下不得在游泳池的深水区游泳。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "crosswalk",
       "chinese": "人行横道，斑马线",
-      "success_count": 7,
-      "next_review_date": "2026-04-23",
+      "success_count": 6,
+      "next_review_date": "2026-02-06",
       "example": "Please remember to look both ways before walking on the crosswalk. 在过人行横道前请记住左右看看。",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "worm",
       "chinese": "蠕虫/虫",
       "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "next_review_date": "2026-04-01",
       "example": "The early bird catches the worm_早起的鸟儿有虫吃",
       "review_round": 0,
       "review_count": 7
@@ -1299,342 +444,630 @@
     {
       "english": "berry",
       "chinese": "浆果/莓果",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "She picked some fresh berries from the bush_她从灌木丛中摘了一些新鲜浆果",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "hunt",
       "chinese": "狩猎/搜寻",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "Lions hunt together in groups to catch their prey_狮子成群结队地狩猎以捕捉猎物",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "escape",
       "chinese": "逃跑/逃脱",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The rabbit managed to escape from the fox_兔子成功从狐狸那里逃脱了",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "creep",
       "chinese": "爬行/悄悄移动",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The cat began to creep slowly toward the mouse_猫开始慢慢地向老鼠爬去",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "fight",
       "chinese": "打架/战斗",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The two boys were told not to fight on the playground_两个男孩被告知不要在操场上打架",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "peck",
       "chinese": "啄/啄食",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The chicken pecks at the grains on the ground_鸡啄食地上的谷粒",
       "review_round": 0,
-      "review_count": 9
+      "review_count": 7
     },
     {
       "english": "pinecone",
       "chinese": "松果",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "Squirrels like to collect pinecones for the seeds inside_松鼠喜欢收集松果以获取里面的种子",
       "review_round": 0,
-      "review_count": 13
+      "review_count": 11
     },
     {
       "english": "squawk",
       "chinese": "咯咯叫/刺耳叫声",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The hen gave a loud squawk when it saw the cat_母鸡看到猫时发出了响亮的咯咯叫声",
       "review_round": 0,
-      "review_count": 14
+      "review_count": 11
     },
     {
       "english": "traffic light",
       "chinese": "交通信号灯/红绿灯",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "We must stop when the traffic light turns red_当交通信号灯变红时我们必须停车",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "take turns",
       "chinese": "轮流/依次",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The children learned to take turns on the slide_孩子们学会了在滑梯上轮流玩耍",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "polite",
       "chinese": "有礼貌的/文雅的",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "It is polite to say 'please' and 'thank you'_说'请'和'谢谢'是有礼貌的",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "clean up",
       "chinese": "清理/打扫",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "We need to clean up the classroom after the party_派对后我们需要打扫教室",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "litter",
       "chinese": "垃圾/废弃物",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "Please don't drop litter on the ground_请不要在地上扔垃圾",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "crossing guard",
       "chinese": "交通协管员/过路指挥员",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The crossing guard helps children cross the street safely_交通协管员帮助孩子们安全过马路",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "principal",
       "chinese": "校长/负责人",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "Our school principal announced a holiday tomorrow_我们学校校长宣布明天放假",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "lifeguard",
       "chinese": "救生员",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The lifeguard rescued the swimmer who was in trouble_救生员救了遇到麻烦的游泳者",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "librarian",
       "chinese": "图书管理员",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The librarian helped me find the book I needed_图书管理员帮我找到了我需要的书",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "steal",
       "chinese": "偷窃/窃取/偷偷移动",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "Someone stole my wallet on the train when I wasn't paying attention_当我不注意时，有人在火车上偷了我的钱包",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "face",
       "chinese": "脸/面部/面对/面临",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "She had a big smile on her face when she received the good news_当她收到好消息时，脸上露出了灿烂的笑容",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "nose",
       "chinese": "鼻子/嗅觉/嗅出",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The dog used its sensitive nose to find the hidden treats_狗用它敏感的鼻子找到了藏起来的零食",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "dig",
       "chinese": "挖掘/掘土/探究",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The archaeologists will dig carefully to uncover ancient artifacts_考古学家将仔细挖掘以 uncover 古代文物",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "hand",
       "chinese": "手/传递/协助",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "She reached out her hand to help the elderly man cross the street_她伸出手帮助老人过马路",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "hide",
       "chinese": "隐藏/隐瞒/兽皮",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The children decided to hide behind the big tree during the game_孩子们决定在游戏过程中躲在大树后面",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "knee",
       "chinese": "膝盖/膝部",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "He fell down and scraped his knee while playing basketball_他在打篮球时摔倒擦伤了膝盖",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "jar",
       "chinese": "罐子/广口瓶/震动",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "She stored the homemade cookies in a large glass jar_她把自制饼干存放在一个大玻璃罐里",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "foot",
       "chinese": "脚/英尺/底部",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "After walking all day, his feet were tired and sore_走了一整天后，他的脚又累又痛",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "greedy",
       "chinese": "贪婪的/贪心的",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The greedy child took all the candies without sharing with others_这个贪婪的孩子拿走了所有的糖果，没有与别人分享",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "arm",
       "chinese": "手臂/胳膊/武器",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "She lifted the heavy box with both arms_她用双臂提起了沉重的箱子",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "bored",
       "chinese": "无聊的/厌烦的",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The students looked bored during the long and difficult lecture_在漫长而困难的讲座中，学生们看起来很无聊",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "baker",
       "chinese": "面包师/烘焙师",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The baker wakes up early every morning to prepare fresh bread_面包师每天早起准备新鲜面包",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "cook",
       "chinese": "烹饪/厨师/做饭",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "My father likes to cook delicious meals for our family on weekends_我父亲喜欢在周末为家人烹饪美味佳肴",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "monitor",
       "chinese": "显示器/监控器；监视/监控",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The system administrator uses specialized software to monitor the server's performance in real-time_系统管理员使用专业软件实时监控服务器的性能",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "since",
       "chinese": "自从/因为",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "She has been learning English since she was ten years old_她从十岁起就开始学习英语了",
       "review_round": 0,
-      "review_count": 7
+      "review_count": 6
     },
     {
       "english": "mark",
       "chinese": "标记/分数/痕迹",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "Please mark the important points in the document with a highlighter_请用荧光笔标记出文档中的重要点",
       "review_round": 0,
-      "review_count": 8
+      "review_count": 7
     },
     {
       "english": "route",
       "chinese": "路线/路径",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "The delivery driver planned the most efficient route to save time and fuel_送货司机规划了最有效的路线以节省时间和燃料[1](@ref)",
       "review_round": 0,
-      "review_count": 8
+      "review_count": 7
     },
     {
       "english": "remind",
       "chinese": "提醒/使想起",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "Could you please remind me to call my mother after the meeting_你能提醒我在会议结束后给我妈妈打电话吗",
       "review_round": 0,
-      "review_count": 8
+      "review_count": 7
     },
     {
       "english": "journey",
       "chinese": "旅程/旅行",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "Their journey across the continent took them through many different landscapes and cultures_他们穿越大陆的旅程经历了许多不同的景观和文化[6](@ref)",
       "review_round": 0,
-      "review_count": 9
+      "review_count": 8
     },
     {
       "english": "without",
       "chinese": "没有/无",
-      "success_count": 7,
-      "next_review_date": "2026-03-26",
+      "success_count": 6,
+      "next_review_date": "2026-01-31",
       "example": "He completed the entire project without any help from his colleagues_他在没有任何同事帮助的情况下完成了整个项目",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "science",
+      "chinese": "科学/自然科学",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "The science museum offers interactive exhibits for children to learn about physics and biology_科学博物馆为儿童提供了互动展品来学习物理和生物学",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "tech",
+      "chinese": "技术/科技",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "Silicon Valley is known for its concentration of tech companies and startups_硅谷以其聚集的科技公司和初创企业而闻名",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "section",
+      "chinese": "部分/区域/章节",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "Please read the first section of the textbook before tomorrow's class_请在明天上课前阅读教科书的第一章",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "experiment",
+      "chinese": "实验/试验",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "The chemistry students conducted an experiment to test the reaction between acids and bases_化学系的学生进行了一项实验来测试酸和碱之间的反应",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "despite",
+      "chinese": "尽管/即使",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "Their catering business remained strong despite the recession_尽管出现经济衰退，他们的酒席承办业仍然景气",
+      "review_round": 0,
+      "review_count": 9
+    },
+    {
+      "english": "chat",
+      "chinese": "聊天/闲聊",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "My kids spend hours chatting on the phone to their friends_我的几个孩子在电话上和朋友聊天一聊就是几个小时",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "distance",
+      "chinese": "距离/远方/疏远",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "He approached the door, maintaining a safe distance_他向门口走去，保持着安全的距离",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "glad",
+      "chinese": "高兴的/乐意的",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "I'm glad to hear that you passed the examination_我很高兴听到你通过了考试",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "experience",
+      "chinese": "经验/经历/体验",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "She has years of experience in teaching children_她在儿童教育方面有多年的经验",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "a",
+      "chinese": "一个/一种",
+      "success_count": 7,
+      "next_review_date": "2026-03-08",
+      "example": "She bought a book and a pen at the store_她在商店买了一本书和一支笔",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "topic",
+      "chinese": "主题/话题",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "The main topic of today's meeting is artificial intelligence technology_今天会议的主要主题是人工智能技术",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "technology",
+      "chinese": "技术/科技",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "Modern technology has greatly changed the way we communicate_现代科技极大地改变了我们的交流方式",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "explore",
+      "chinese": "探索/探究",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "Scientists continue to explore new possibilities in robot development_科学家们继续探索机器人发展的新可能性",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "connect",
+      "chinese": "连接/联系",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "You can connect your phone to the robot via Bluetooth_你可以通过蓝牙将手机连接到机器人",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "machine",
+      "chinese": "机器/机械",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "This washing machine can be controlled remotely through a smartphone_这台洗衣机可以通过智能手机远程控制",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "robot",
+      "chinese": "机器人",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "The household robot can be controlled by a mobile app_这个家用机器人可以通过手机应用控制",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "phone",
+      "chinese": "电话/手机",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "Smart phones have become essential tools for controlling modern devices_智能手机已成为控制现代设备的重要工具",
+      "review_round": 0,
+      "review_count": 8
+    },
+    {
+      "english": "internet",
+      "chinese": "互联网/因特网",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "We use the internet to search for information and communicate with people worldwide_我们使用互联网来搜索信息并与世界各地的人交流",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "spaceship",
+      "chinese": "宇宙飞船/太空飞船",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "The astronauts piloted the spaceship down to the lunar surface_宇航员驾驶宇宙飞船在月球表面降落[10](@ref)",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "camera",
+      "chinese": "照相机/摄像机",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "The spacecraft's camera captured stunning images of Earth from a million miles away_航天器相机从一百万英里外拍摄了令人惊叹的地球图像[3](@ref)",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "planet",
+      "chinese": "行星/星球",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "Earth is the planet we live on, and scientists are studying other planets in distant star systems_地球是我们居住的行星，科学家正在研究遥远恒星系中的其他行星[6,7](@ref)",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "feast",
+      "chinese": "宴会/盛宴/宗教节日",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "The king held a feast for all his loyal subjects_国王为他所有忠诚的臣民举行了一场盛宴",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "album",
+      "chinese": "专辑/相册/集邮册",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "This music album contains all the artist's greatest hits_这张音乐专辑包含了这位艺术家的所有热门歌曲",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "tradition",
+      "chinese": "传统/惯例",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "The company has a long tradition of fine design_这家公司的优秀设计历史悠久",
+      "review_round": 0,
+      "review_count": 8
+    },
+    {
+      "english": "ancient",
+      "chinese": "古老的/古代的",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "We visited an ancient temple full of treasures and saintly relics_我们参观了一座充满宝藏和神圣遗物的古老寺庙",
+      "review_round": 0,
+      "review_count": 8
+    },
+    {
+      "english": "wrap",
+      "chinese": "包裹/缠绕",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "She spent the morning wrapping up the birthday gifts_她花了一个早上的时间把生日礼物都包了起来",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "town",
+      "chinese": "城镇/市镇",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "We chose to live out of town and commute to work every day_我们选择住在郊外，每天通勤上班",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "stick",
+      "chinese": "棍棒/粘贴/坚持",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "The children used a stick to draw pictures in the sand_孩子们用棍子在沙地上画画",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "grateful",
+      "chinese": "感激的/感谢的",
+      "success_count": 7,
+      "next_review_date": "2026-02-19",
+      "example": "I am extremely grateful to you for your selfless assistance_我非常感谢你无私的帮助",
+      "review_round": 0,
+      "review_count": 8
+    },
+    {
+      "english": "laughter",
+      "chinese": "笑声",
+      "success_count": 7,
+      "next_review_date": "2026-01-31",
+      "example": "The sound of laughter echoed through the hall_笑声在整个大厅里回荡",
+      "review_round": 0,
+      "review_count": 8
+    },
+    {
+      "english": "fill",
+      "chinese": "填充/装满",
+      "success_count": 7,
+      "next_review_date": "2026-01-31",
+      "example": "Please fill the glass with water_请把杯子装满水",
+      "review_round": 0,
+      "review_count": 7
+    },
+    {
+      "english": "packet",
+      "chinese": "包/数据包",
+      "success_count": 7,
+      "next_review_date": "2026-01-31",
+      "example": "She received a packet of seeds from the garden center_她从园艺中心收到了一包种子",
       "review_round": 0,
       "review_count": 8
     }
@@ -1917,7 +1350,7 @@
       "next_review_date": "2025-04-22",
       "example": "Short hair is easier to maintain_短发更容易打理",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 0
     },
     {
       "english": "rough",
@@ -1926,7 +1359,7 @@
       "next_review_date": "2025-04-22",
       "example": "The tree bark feels rough_树皮摸起来很粗糙",
       "review_round": 0,
-      "review_count": 1
+      "review_count": 0
     },
     {
       "english": "skate",
@@ -2467,285 +1900,6 @@
       "example": "Could you tell me the story about how this tradition started_你能告诉我这个传统是怎么开始的吗",
       "review_round": 0,
       "review_count": 4
-    },
-    {
-      "english": "fill",
-      "chinese": "填充/装满",
-      "success_count": 8,
-      "next_review_date": "2026-01-25",
-      "example": "Please fill the glass with water_请把杯子装满水",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "laughter",
-      "chinese": "笑声",
-      "success_count": 8,
-      "next_review_date": "2026-01-25",
-      "example": "The sound of laughter echoed through the hall_笑声在整个大厅里回荡",
-      "review_round": 0,
-      "review_count": 9
-    },
-    {
-      "english": "packet",
-      "chinese": "包/数据包",
-      "success_count": 8,
-      "next_review_date": "2026-01-25",
-      "example": "She received a packet of seeds from the garden center_她从园艺中心收到了一包种子",
-      "review_round": 0,
-      "review_count": 9
-    },
-    {
-      "english": "topic",
-      "chinese": "主题/话题",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "The main topic of today's meeting is artificial intelligence technology_今天会议的主要主题是人工智能技术",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "technology",
-      "chinese": "技术/科技",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "Modern technology has greatly changed the way we communicate_现代科技极大地改变了我们的交流方式",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "explore",
-      "chinese": "探索/探究",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "Scientists continue to explore new possibilities in robot development_科学家们继续探索机器人发展的新可能性",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "connect",
-      "chinese": "连接/联系",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "You can connect your phone to the robot via Bluetooth_你可以通过蓝牙将手机连接到机器人",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "machine",
-      "chinese": "机器/机械",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "This washing machine can be controlled remotely through a smartphone_这台洗衣机可以通过智能手机远程控制",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "robot",
-      "chinese": "机器人",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "The household robot can be controlled by a mobile app_这个家用机器人可以通过手机应用控制",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "internet",
-      "chinese": "互联网/因特网",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "We use the internet to search for information and communicate with people worldwide_我们使用互联网来搜索信息并与世界各地的人交流",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "spaceship",
-      "chinese": "宇宙飞船/太空飞船",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "The astronauts piloted the spaceship down to the lunar surface_宇航员驾驶宇宙飞船在月球表面降落[10](@ref)",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "camera",
-      "chinese": "照相机/摄像机",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "The spacecraft's camera captured stunning images of Earth from a million miles away_航天器相机从一百万英里外拍摄了令人惊叹的地球图像[3](@ref)",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "planet",
-      "chinese": "行星/星球",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "Earth is the planet we live on, and scientists are studying other planets in distant star systems_地球是我们居住的行星，科学家正在研究遥远恒星系中的其他行星[6,7](@ref)",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "feast",
-      "chinese": "宴会/盛宴/宗教节日",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "The king held a feast for all his loyal subjects_国王为他所有忠诚的臣民举行了一场盛宴",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "album",
-      "chinese": "专辑/相册/集邮册",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "This music album contains all the artist's greatest hits_这张音乐专辑包含了这位艺术家的所有热门歌曲",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "wrap",
-      "chinese": "包裹/缠绕",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "She spent the morning wrapping up the birthday gifts_她花了一个早上的时间把生日礼物都包了起来",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "town",
-      "chinese": "城镇/市镇",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "We chose to live out of town and commute to work every day_我们选择住在郊外，每天通勤上班",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "stick",
-      "chinese": "棍棒/粘贴/坚持",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "The children used a stick to draw pictures in the sand_孩子们用棍子在沙地上画画",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "phone",
-      "chinese": "电话/手机",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "Smart phones have become essential tools for controlling modern devices_智能手机已成为控制现代设备的重要工具",
-      "review_round": 0,
-      "review_count": 9
-    },
-    {
-      "english": "tradition",
-      "chinese": "传统/惯例",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "The company has a long tradition of fine design_这家公司的优秀设计历史悠久",
-      "review_round": 0,
-      "review_count": 9
-    },
-    {
-      "english": "ancient",
-      "chinese": "古老的/古代的",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "We visited an ancient temple full of treasures and saintly relics_我们参观了一座充满宝藏和神圣遗物的古老寺庙",
-      "review_round": 0,
-      "review_count": 9
-    },
-    {
-      "english": "grateful",
-      "chinese": "感激的/感谢的",
-      "success_count": 8,
-      "next_review_date": "2026-02-22",
-      "example": "I am extremely grateful to you for your selfless assistance_我非常感谢你无私的帮助",
-      "review_round": 0,
-      "review_count": 9
-    },
-    {
-      "english": "science",
-      "chinese": "科学/自然科学",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "The science museum offers interactive exhibits for children to learn about physics and biology_科学博物馆为儿童提供了互动展品来学习物理和生物学",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "tech",
-      "chinese": "技术/科技",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "Silicon Valley is known for its concentration of tech companies and startups_硅谷以其聚集的科技公司和初创企业而闻名",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "experiment",
-      "chinese": "实验/试验",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "The chemistry students conducted an experiment to test the reaction between acids and bases_化学系的学生进行了一项实验来测试酸和碱之间的反应",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "chat",
-      "chinese": "聊天/闲聊",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "My kids spend hours chatting on the phone to their friends_我的几个孩子在电话上和朋友聊天一聊就是几个小时",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "distance",
-      "chinese": "距离/远方/疏远",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "He approached the door, maintaining a safe distance_他向门口走去，保持着安全的距离",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "glad",
-      "chinese": "高兴的/乐意的",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "I'm glad to hear that you passed the examination_我很高兴听到你通过了考试",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "experience",
-      "chinese": "经验/经历/体验",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "She has years of experience in teaching children_她在儿童教育方面有多年的经验",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "a",
-      "chinese": "一个/一种",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "She bought a book and a pen at the store_她在商店买了一本书和一支笔",
-      "review_round": 0,
-      "review_count": 8
-    },
-    {
-      "english": "despite",
-      "chinese": "尽管/即使",
-      "success_count": 8,
-      "next_review_date": "2026-03-08",
-      "example": "Their catering business remained strong despite the recession_尽管出现经济衰退，他们的酒席承办业仍然景气",
-      "review_round": 0,
-      "review_count": 10
     }
   ]
 }
