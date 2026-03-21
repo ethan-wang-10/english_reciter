@@ -28,6 +28,23 @@ function escapeRegExp(str) {
     return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** 学习进度：展示下次复习日期与距今天数（API 已提供 ISO 日期与 remaining_days） */
+function formatNextReviewLine(word) {
+    const iso = word.next_review_date;
+    if (!iso) return '—';
+    const datePart = String(iso).slice(0, 10);
+    const rd = typeof word.remaining_days === 'number' ? word.remaining_days : 0;
+    let hint = '';
+    if (rd === 0) {
+        hint = '今天';
+    } else if (rd < 0) {
+        hint = `已逾期 ${Math.abs(rd)} 天`;
+    } else {
+        hint = `还有 ${rd} 天`;
+    }
+    return `${datePart} · ${hint}`;
+}
+
 function showMainBanner(message) {
     const el = document.getElementById('main-error-banner');
     if (!el) return;
@@ -569,7 +586,8 @@ async function submitAnswer() {
             method: 'POST',
             body: JSON.stringify({
                 word_id: word.english,
-                answer: answer
+                answer: answer,
+                remedial: wrongRoundNumber > 0
             })
         });
 
@@ -674,11 +692,14 @@ async function loadProgress() {
         document.getElementById('progress-stats').innerHTML = statsHtml;
         
         // 显示单词列表
-        const listHtml = data.words.map(word => `
+        const listHtml = data.words.map((word) => {
+            const nextLine = escapeHtml(formatNextReviewLine(word));
+            return `
             <div class="word-item">
                 <div class="word-item-info">
                     <div class="word-item-english">${escapeHtml(word.english)}</div>
                     <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
+                    <div class="word-item-next-review">下次复习：${nextLine}</div>
                 </div>
                 <div class="word-item-stats">
                     <div class="word-stat">
@@ -691,7 +712,8 @@ async function loadProgress() {
                     </div>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
         
         document.getElementById('word-list').innerHTML = listHtml || '<p style="padding: 20px; text-align: center; color: #999;">暂无单词</p>';
     } catch (error) {

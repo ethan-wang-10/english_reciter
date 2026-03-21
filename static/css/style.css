@@ -695,6 +695,13 @@ body {
     color: var(--text-secondary);
 }
 
+.word-item-next-review {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--secondary-dark);
+    margin-top: 6px;
+}
+
 .word-item-stats {
     display: flex;
     gap: 16px;
