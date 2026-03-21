@@ -216,9 +216,16 @@ class Word:
     def from_dict(cls, data: dict) -> 'Word':
         """从字典创建对象（不修改传入的 dict）"""
         d = dict(data)
-        d['next_review_date'] = date.fromisoformat(d['next_review_date'])
+        nr = d.get('next_review_date')
+        if nr:
+            d['next_review_date'] = date.fromisoformat(str(nr)[:10])
+        else:
+            d['next_review_date'] = date.today()
+        d.setdefault('success_count', 0)
         d.setdefault('review_round', 0)
         d.setdefault('review_count', 0)
+        if 'example' not in d or d.get('example') in (None, ''):
+            d['example'] = None
         return cls(**d)
 
 
@@ -766,6 +773,56 @@ class WordReciter:
         self.all_words.extend(new_words)
         self._save_data()
         logger.info(f"成功添加 {len(new_words)} 个新单词")
+
+    def add_words_from_dicts(self, items: List[dict]) -> dict:
+        """从学习数据格式的字典列表加入待复习词（与已有英文去重，大小写不敏感）。"""
+        existing = {w.english.lower() for w in self.all_words + self.mastered_words}
+        added: List[Word] = []
+        skipped_duplicate = 0
+        skipped_invalid = 0
+
+        for raw in items:
+            if not isinstance(raw, dict):
+                skipped_invalid += 1
+                continue
+            en = str(raw.get('english', '')).strip()[:500]
+            zh = str(raw.get('chinese', '')).strip()[:500]
+            if not en or not zh:
+                skipped_invalid += 1
+                continue
+            key = en.lower()
+            if key in existing:
+                skipped_duplicate += 1
+                continue
+            try:
+                payload = dict(raw)
+                payload['english'] = en
+                payload['chinese'] = zh
+                ex = payload.get('example')
+                if isinstance(ex, str) and len(ex) > 4000:
+                    payload['example'] = ex[:4000]
+                word = Word.from_dict(payload)
+            except (TypeError, ValueError, KeyError):
+                skipped_invalid += 1
+                continue
+            added.append(word)
+            existing.add(key)
+
+        if added:
+            self.all_words.extend(added)
+            self._save_data()
+            logger.info(
+                "成功从 JSON 添加 %s 个新单词（跳过重复 %s，无效 %s）",
+                len(added),
+                skipped_duplicate,
+                skipped_invalid,
+            )
+
+        return {
+            'added': len(added),
+            'skipped_duplicate': skipped_duplicate,
+            'skipped_invalid': skipped_invalid,
+        }
 
 
 class ReciterCLI:

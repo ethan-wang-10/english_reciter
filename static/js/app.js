@@ -654,6 +654,34 @@ async function importWords() {
     }
 }
 
+async function importWordsJson() {
+    const ta = document.getElementById('import-json-textarea');
+    if (!ta) return;
+    const raw = ta.value.trim();
+    if (!raw) {
+        showMessage('请先粘贴 JSON', 'error');
+        return;
+    }
+    let payload;
+    try {
+        payload = JSON.parse(raw);
+    } catch (e) {
+        showMessage('JSON 解析失败，请检查括号与逗号', 'error');
+        return;
+    }
+    try {
+        const data = await apiRequest('/words/import-json', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        showMessage(data.message || '导入成功', 'success');
+        ta.value = '';
+        loadStats();
+    } catch (error) {
+        showMessage(error.message, 'error');
+    }
+}
+
 // ==================== 事件监听与初始化 ====================
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -725,6 +753,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const importBtn = document.getElementById('import-btn');
     if (importBtn) {
         importBtn.addEventListener('click', importWords);
+    }
+
+    const importJsonBtn = document.getElementById('import-json-btn');
+    if (importJsonBtn) {
+        importJsonBtn.addEventListener('click', importWordsJson);
     }
     
     // 继续学习

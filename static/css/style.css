@@ -486,6 +486,48 @@ body {
     display: none;
 }
 
+.import-json-panel {
+    max-width: 600px;
+    margin: 40px auto 0;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+}
+
+.import-json-title {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.import-json-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+
+.import-json-textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    line-height: 1.45;
+    resize: vertical;
+    min-height: 180px;
+    margin-bottom: 14px;
+}
+
+.import-json-textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.import-json-btn {
+    width: 100%;
+}
+
 .message {
     margin-top: 20px;
     padding: 15px;

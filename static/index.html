@@ -165,6 +165,13 @@
                         </div>
                         <button id="import-btn" class="btn btn-primary">导入</button>
                     </div>
+                    <div class="import-json-panel">
+                        <h3 class="import-json-title">家长：粘贴 JSON 导入</h3>
+                        <p class="import-json-desc">将学习数据 JSON 粘贴到下方，导入后会加入「待复习」词库（与已有单词英文重复则跳过）。</p>
+                        <textarea id="import-json-textarea" class="import-json-textarea" rows="12"
+                            spellcheck="false" placeholder='[ { "english": "apple", "chinese": "苹果", ... } ]'></textarea>
+                        <button type="button" id="import-json-btn" class="btn btn-primary import-json-btn">导入 JSON</button>
+                    </div>
                     <div id="import-message" class="message"></div>
                 </div>
             </div>

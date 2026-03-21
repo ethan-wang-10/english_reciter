@@ -562,6 +562,56 @@ def import_words(username):
         logger.error(f"导入单词失败: {e}")
         return jsonify({'error': '导入失败，请检查文件格式'}), 500
 
+
+def _parse_import_json_body(request):
+    """解析 JSON 导入：根为数组，或 {\"words\": [...]}。"""
+    data = request.get_json(silent=True)
+    if data is None:
+        return None, 'JSON 格式无效或 Content-Type 不是 application/json'
+    if isinstance(data, list):
+        return data, None
+    if isinstance(data, dict) and 'words' in data:
+        w = data['words']
+        if isinstance(w, list):
+            return w, None
+    return None, '请提供 JSON 数组，或包含 words 数组的对象'
+
+
+@app.route('/api/words/import-json', methods=['POST'])
+@token_required
+def import_words_json(username):
+    """家长粘贴学习数据格式的 JSON，合并到当前用户的待复习词库。"""
+    items, err = _parse_import_json_body(request)
+    if err:
+        return jsonify({'error': err}), 400
+    if not items:
+        return jsonify({'error': '单词列表为空'}), 400
+    if len(items) > 5000:
+        return jsonify({'error': '单次最多导入 5000 条'}), 400
+    try:
+        with user_reciter_session(username) as reciter:
+            result = reciter.add_words_from_dicts(items)
+        n = result['added']
+        skipped = result['skipped_duplicate']
+        invalid = result['skipped_invalid']
+        msg = f'成功加入 {n} 个新单词'
+        if skipped:
+            msg += f'，已跳过 {skipped} 个重复'
+        if invalid:
+            msg += f'，{invalid} 条无效已忽略'
+        logger.info(
+            "用户 %s JSON 导入: added=%s dup=%s invalid=%s",
+            username,
+            n,
+            skipped,
+            invalid,
+        )
+        return jsonify({'message': msg, **result}), 200
+    except Exception as e:
+        logger.error(f"JSON 导入失败: {e}")
+        return jsonify({'error': '导入失败，请检查 JSON 格式'}), 500
+
+
 @app.route('/api/words/mastered', methods=['GET'])
 @token_required
 def get_mastered_words(username):
