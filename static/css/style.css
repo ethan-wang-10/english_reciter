@@ -55,8 +55,8 @@ body {
     padding: 20px;
 }
 
-/* 登录页 */
-#login-page {
+/* 登录页：仅 .active 时用 flex，避免 #id 覆盖 .page { display:none } 导致登录后仍占位 */
+#login-page.page.active {
     min-height: 100vh;
     display: flex;
     align-items: center;
