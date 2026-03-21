@@ -151,6 +151,33 @@ function clearUnderlineInput() {
     updateUnderlineDisplay();
 }
 
+// 浏览器端朗读（远程访问时服务端 say 只在服务器出声，用户听不到）
+function speakEnglishInBrowser(text) {
+    const raw = String(text || '').trim().slice(0, 500);
+    if (!raw) return false;
+    if (typeof window.speechSynthesis === 'undefined') {
+        return false;
+    }
+    const safe = [...raw]
+        .filter((c) => {
+            const cp = c.codePointAt(0);
+            return (cp >= 32 && cp !== 127) || c === '\n' || c === '\t';
+        })
+        .join('')
+        .trim()
+        .slice(0, 500);
+    if (!safe) return false;
+
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(safe);
+    u.lang = 'en-US';
+    const voices = window.speechSynthesis.getVoices();
+    const en = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('en'));
+    if (en) u.voice = en;
+    window.speechSynthesis.speak(u);
+    return true;
+}
+
 // 朗读例句
 async function speakExample() {
     const word = currentReviewList[currentReviewIndex];
@@ -167,7 +194,13 @@ async function speakExample() {
     if (!enText) {
         enText = exampleText;
     }
-    
+    enText = enText.trim();
+    if (!enText) return;
+
+    if (speakEnglishInBrowser(enText)) {
+        return;
+    }
+
     try {
         await apiRequest('/words/speak', {
             method: 'POST',
