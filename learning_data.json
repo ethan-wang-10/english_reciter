@@ -1,6 +1,69 @@
 {
   "all_words": [
     {
+      "english": "tent",
+      "chinese": "帐篷",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "We pitched our tent near the lake._我们在湖边搭起了帐篷。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "cucumber",
+      "chinese": "黄瓜",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "I like to eat cucumber in salads._我喜欢在沙拉里吃黄瓜。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "fruit",
+      "chinese": "水果",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "Eating fruit every day is good for your health._每天吃水果对健康有益。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "usually",
+      "chinese": "通常；一般",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "I usually go to bed at 10 p.m._我通常晚上10点睡觉。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "pick",
+      "chinese": "采摘；挑选",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "Let's pick some apples from the tree._我们从树上摘些苹果吧。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "farmer",
+      "chinese": "农民；农场主",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "The farmer grows vegetables and fruits on his farm._农民在他的农场种植蔬菜和水果。",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
+      "english": "certainly",
+      "chinese": "当然；肯定",
+      "success_count": 0,
+      "next_review_date": "2026-01-17",
+      "example": "Can you help me with this problem? Certainly!_你能帮我解决这个问题吗？当然！",
+      "review_round": 0,
+      "review_count": 0
+    },
+    {
       "english": "form",
       "chinese": "形式；表格；形成",
       "success_count": 2,
