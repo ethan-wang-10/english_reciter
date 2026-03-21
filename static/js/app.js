@@ -326,6 +326,8 @@ function showMainPage() {
     document.getElementById('username-display').textContent = username;
     
     loadStats();
+    // 默认展示「今日复习」区块；须拉取列表，否则会一直显示 index.html 里的占位词（如 apple）
+    showSection('review');
 }
 
 function showSection(sectionId) {
