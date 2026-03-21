@@ -115,6 +115,8 @@
                         </div>
                     </div>
                     
+                    <div class="review-layout">
+                    <div class="review-main-wrap">
                     <div id="review-container" class="review-container">
                         <div id="review-box" class="review-box">
                             <div class="review-header">
@@ -142,10 +144,20 @@
                         
                         <div id="review-complete" class="review-complete" style="display: none;">
                             <div class="complete-icon">🎉</div>
-                            <h2>今日复习完成！</h2>
-                            <p>你已经完成了今天的复习任务</p>
+                            <h2 id="review-complete-title">今日复习完成！</h2>
+                            <p id="review-complete-desc">你已经完成了今天的复习任务</p>
                             <button id="review-more" class="btn btn-secondary">继续学习</button>
                         </div>
+                    </div>
+                    </div>
+                    <aside class="wrong-words-aside" id="wrong-words-aside" aria-label="本轮错题">
+                        <div class="wrong-words-card">
+                            <h3 class="wrong-words-title">本轮错题</h3>
+                            <p class="wrong-words-sub" id="wrong-round-label">答错或多次尝试的单词会出现在这里</p>
+                            <ul class="wrong-words-list" id="wrong-words-list"></ul>
+                            <p class="wrong-words-empty" id="wrong-words-empty">暂无错题，继续加油！</p>
+                        </div>
+                    </aside>
                     </div>
                 </div>
             </div>

@@ -6,6 +6,14 @@ let currentReviewIndex = 0;
 let currentErrorCount = 0; // 当前单词错误次数
 let currentRevealedCount = 0; // 当前单词已揭示字母数
 
+/** 本轮曾答错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
+let wrongWordsInThisPass = new Set();
+let wrongWordsOrder = [];
+/** 当前会话中见过的单词对象，供错题轮从内存取词 */
+let wordMap = new Map();
+/** 0=今日待复习；≥1 表示第几轮错题复习 */
+let wrongRoundNumber = 0;
+
 // API 基础 URL
 const API_BASE = '/api';
 
@@ -371,18 +379,120 @@ async function loadStats() {
 
 // ==================== 复习功能 ====================
 
+function recordWrongAttempt(word) {
+    const en = word.english;
+    if (!wrongWordsInThisPass.has(en)) {
+        wrongWordsInThisPass.add(en);
+        wrongWordsOrder.push(en);
+    }
+    wordMap.set(en, word);
+    renderWrongPanel();
+}
+
+function renderWrongPanel() {
+    const ul = document.getElementById('wrong-words-list');
+    const empty = document.getElementById('wrong-words-empty');
+    if (!ul || !empty) return;
+    ul.innerHTML = '';
+    for (const en of wrongWordsOrder) {
+        const w = wordMap.get(en);
+        if (!w) continue;
+        const li = document.createElement('li');
+        li.innerHTML = `<span class="ww-en">${escapeHtml(w.english)}</span><span class="ww-zh">${escapeHtml(w.chinese)}</span>`;
+        ul.appendChild(li);
+    }
+    empty.style.display = wrongWordsOrder.length === 0 ? 'block' : 'none';
+}
+
+function updateWrongRoundLabel() {
+    const el = document.getElementById('wrong-round-label');
+    if (!el) return;
+    if (wrongRoundNumber === 0) {
+        el.textContent = '答错或多次尝试的单词会出现在这里';
+    } else {
+        el.textContent = `错题复习 · 第 ${wrongRoundNumber} 轮`;
+    }
+}
+
+/** 一轮题目做完：无错题则结束；有错题则自动进入下一轮错题复习，直到本轮零错题 */
+function onPassComplete() {
+    if (wrongWordsOrder.length === 0) {
+        showFinalComplete();
+        return;
+    }
+    wrongRoundNumber += 1;
+    const n = wrongWordsOrder.length;
+    const msg = wrongRoundNumber === 1
+        ? `本轮有 ${n} 个单词曾答错，即将开始错题复习`
+        : `进入第 ${wrongRoundNumber} 轮错题复习（${n} 个单词）`;
+    showMainBanner(msg);
+
+    currentReviewList = wrongWordsOrder.map((en) => wordMap.get(en)).filter(Boolean);
+    wrongWordsOrder = [];
+    wrongWordsInThisPass = new Set();
+
+    if (currentReviewList.length === 0) {
+        showFinalComplete();
+        return;
+    }
+
+    currentReviewIndex = 0;
+    document.getElementById('review-box').style.display = 'block';
+    document.getElementById('review-complete').style.display = 'none';
+    renderWrongPanel();
+    updateWrongRoundLabel();
+    setTimeout(() => showCurrentWord(), 400);
+}
+
+function showFinalComplete() {
+    document.getElementById('review-box').style.display = 'none';
+    document.getElementById('review-complete').style.display = 'block';
+    const titleEl = document.getElementById('review-complete-title');
+    const descEl = document.getElementById('review-complete-desc');
+    if (titleEl) titleEl.textContent = '今日复习完成！';
+    if (descEl) descEl.textContent = '恭喜！今日待复习已全部完成（含错题巩固）。';
+    wrongWordsOrder = [];
+    wrongWordsInThisPass = new Set();
+    wrongRoundNumber = 0;
+    renderWrongPanel();
+    updateWrongRoundLabel();
+    loadStats();
+}
+
+function showInitialEmptyReview() {
+    document.getElementById('review-box').style.display = 'none';
+    document.getElementById('review-complete').style.display = 'block';
+    const titleEl = document.getElementById('review-complete-title');
+    const descEl = document.getElementById('review-complete-desc');
+    if (titleEl) titleEl.textContent = '今日暂无待复习';
+    if (descEl) descEl.textContent = '目前没有需要复习的单词，去导入一些吧！';
+    wrongWordsOrder = [];
+    wrongWordsInThisPass = new Set();
+    wrongRoundNumber = 0;
+    wordMap = new Map();
+    renderWrongPanel();
+    updateWrongRoundLabel();
+}
+
 async function loadReviewList() {
     try {
+        wrongWordsInThisPass = new Set();
+        wrongWordsOrder = [];
+        wrongRoundNumber = 0;
+        wordMap = new Map();
+
         const data = await apiRequest('/words/review');
         currentReviewList = data.words;
         currentReviewIndex = 0;
-        
+        currentReviewList.forEach((w) => wordMap.set(w.english, w));
+
         if (currentReviewList.length === 0) {
-            document.getElementById('review-box').style.display = 'none';
-            document.getElementById('review-complete').style.display = 'block';
+            showInitialEmptyReview();
         } else {
             document.getElementById('review-box').style.display = 'block';
             document.getElementById('review-complete').style.display = 'none';
+            renderWrongPanel();
+            updateWrongRoundLabel();
             showCurrentWord();
         }
     } catch (error) {
@@ -392,8 +502,7 @@ async function loadReviewList() {
 
 async function showCurrentWord() {
     if (currentReviewIndex >= currentReviewList.length) {
-        document.getElementById('review-box').style.display = 'none';
-        document.getElementById('review-complete').style.display = 'block';
+        onPassComplete();
         return;
     }
     
@@ -463,7 +572,15 @@ async function submitAnswer() {
                 answer: answer
             })
         });
-        
+
+        if (result.word) {
+            Object.assign(word, result.word);
+            wordMap.set(word.english, word);
+        }
+        if (!result.correct) {
+            recordWrongAttempt(word);
+        }
+
         const messageDiv = document.getElementById('word-message');
         messageDiv.textContent = result.message;
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
@@ -764,7 +881,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const reviewMoreBtn = document.getElementById('review-more');
     if (reviewMoreBtn) {
         reviewMoreBtn.addEventListener('click', () => {
-            showSection('progress');
+            loadReviewList();
         });
     }
 

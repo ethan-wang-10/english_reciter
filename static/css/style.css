@@ -397,10 +397,100 @@ body {
     letter-spacing: 0.04em;
 }
 
-/* 复习区 */
+/* 复习区：主栏 + 右侧错题 */
+.review-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 20px;
+    align-items: start;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.review-main-wrap {
+    min-width: 0;
+}
+
 .review-container {
-    max-width: 700px;
-    margin: 24px auto 40px;
+    max-width: 100%;
+    margin: 24px 0 40px;
+}
+
+.wrong-words-aside {
+    position: sticky;
+    top: 88px;
+}
+
+.wrong-words-card {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 3px solid var(--error-color);
+    box-shadow: 0 6px 0 #e53935;
+    padding: 18px 16px 20px;
+}
+
+.wrong-words-title {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--error-dark);
+    margin-bottom: 6px;
+}
+
+.wrong-words-sub {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-bottom: 12px;
+}
+
+.wrong-words-list {
+    list-style: none;
+    max-height: min(50vh, 360px);
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+}
+
+.wrong-words-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 10px;
+    margin-bottom: 8px;
+    background: #fff5f5;
+    border-radius: var(--radius-md);
+    border: 2px solid #ffcdd2;
+}
+
+.wrong-words-list .ww-en {
+    font-weight: 800;
+    color: var(--primary-dark);
+    font-size: 1rem;
+}
+
+.wrong-words-list .ww-zh {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.wrong-words-empty {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--primary-dark);
+    text-align: center;
+    padding: 16px 8px;
+}
+
+@media (max-width: 900px) {
+    .review-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .wrong-words-aside {
+        position: static;
+    }
 }
 
 .review-box {
