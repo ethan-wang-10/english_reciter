@@ -261,6 +261,28 @@ class TestWordReciter(unittest.TestCase):
         reciter.add_words(words)
         
         self.assertEqual(len(reciter.all_words), 1)
+
+    def test_add_words_skips_whitespace_duplicate(self):
+        """去重时忽略英文首尾空格"""
+        reciter = WordReciter(self.config)
+        words = [
+            ("apple", "苹果"),
+            ("  Apple ", "苹果2"),
+        ]
+        r = reciter.add_words(words)
+        self.assertEqual(len(reciter.all_words), 1)
+        self.assertEqual(reciter.all_words[0].english, "apple")
+        self.assertEqual(r['added'], 1)
+        self.assertEqual(r['skipped_duplicate'], 1)
+
+    def test_add_words_skips_existing_in_mastered(self):
+        """已掌握列表中的词不再加入待复习"""
+        reciter = WordReciter(self.config)
+        reciter.mastered_words.append(Word("done", "完成"))
+        r = reciter.add_words([("Done", "完成2")])
+        self.assertEqual(len(reciter.all_words), 0)
+        self.assertEqual(r['skipped_duplicate'], 1)
+        self.assertEqual(r['added'], 0)
     
     def test_process_overdue_words(self):
         """测试处理过期单词"""

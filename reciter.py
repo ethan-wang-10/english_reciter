@@ -760,19 +760,50 @@ class WordReciter:
                         delta_days = self._calculate_review_days(word.success_count)
                         word.next_review_date = self.today + timedelta(days=delta_days)
     
-    def add_words(self, words: list) -> None:
-        """批量添加单词"""
+    def add_words(self, words: list) -> dict:
+        """批量添加单词（与已有词库去重，英文不区分大小写；同批重复只保留第一条）。"""
         existing_words = {w.english.lower() for w in self.all_words + self.mastered_words}
-        new_words = []
-        
-        for en, zh in words:
-            if en.lower() not in existing_words:
-                new_words.append(Word(en, zh))
-                existing_words.add(en.lower())
-        
-        self.all_words.extend(new_words)
-        self._save_data()
-        logger.info(f"成功添加 {len(new_words)} 个新单词")
+        new_words: List[Word] = []
+        skipped_duplicate = 0
+        skipped_invalid = 0
+
+        for pair in words:
+            if not isinstance(pair, (tuple, list)) or len(pair) < 2:
+                skipped_invalid += 1
+                continue
+            en = str(pair[0]).strip()[:500]
+            zh = str(pair[1]).strip()[:500]
+            if not en or not zh:
+                skipped_invalid += 1
+                continue
+            key = en.lower()
+            if key in existing_words:
+                skipped_duplicate += 1
+                continue
+            new_words.append(Word(en, zh))
+            existing_words.add(key)
+
+        if new_words:
+            self.all_words.extend(new_words)
+            self._save_data()
+            logger.info(
+                "成功添加 %s 个新单词（跳过重复 %s，无效 %s）",
+                len(new_words),
+                skipped_duplicate,
+                skipped_invalid,
+            )
+        elif skipped_duplicate or skipped_invalid:
+            logger.info(
+                "未添加新词：跳过重复 %s，无效 %s",
+                skipped_duplicate,
+                skipped_invalid,
+            )
+
+        return {
+            'added': len(new_words),
+            'skipped_duplicate': skipped_duplicate,
+            'skipped_invalid': skipped_invalid,
+        }
 
     def add_words_from_dicts(self, items: List[dict]) -> dict:
         """从学习数据格式的字典列表加入待复习词（与已有英文去重，大小写不敏感）。"""

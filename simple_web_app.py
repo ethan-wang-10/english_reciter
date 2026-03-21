@@ -550,13 +550,34 @@ def import_words(username):
                         words.append((en, zh))
         
         with user_reciter_session(username) as reciter:
-            reciter.add_words(words)
+            result = reciter.add_words(words)
 
-        logger.info(f"用户 {username} 导入了 {len(words)} 个单词")
-        
+        added = result['added']
+        skipped = result['skipped_duplicate']
+        invalid = result['skipped_invalid']
+        logger.info(
+            "用户 %s 文件导入: 解析 %s 行, 新增 %s, 重复 %s, 无效 %s",
+            username,
+            len(words),
+            added,
+            skipped,
+            invalid,
+        )
+        if added == 0 and not words:
+            return jsonify({'error': '文件中没有有效的 英文,中文 行'}), 400
+        msg = f'成功加入 {added} 个新单词'
+        if skipped:
+            msg += f'，已跳过 {skipped} 个重复'
+        if invalid:
+            msg += f'，{invalid} 行无效已忽略'
+        if added == 0 and words:
+            msg = f'没有新单词：{skipped} 个与已有词重复' + (f'，{invalid} 行无效' if invalid else '')
+
         return jsonify({
-            'message': f'成功导入 {len(words)} 个单词',
-            'count': len(words)
+            'message': msg,
+            'count': added,
+            'skipped_duplicate': skipped,
+            'skipped_invalid': invalid,
         }), 200
     except Exception as e:
         logger.error(f"导入单词失败: {e}")
