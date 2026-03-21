@@ -28,6 +28,37 @@ function escapeRegExp(str) {
     return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** 将焦点放回透明输入层（真正可输入的元素），便于连打与重试 */
+function focusWordCapture(delayMs = 0) {
+    const run = () => {
+        const rb = document.getElementById('review-box');
+        if (!rb || rb.style.display === 'none') return;
+        const sec = document.getElementById('review-section');
+        if (!sec || !sec.classList.contains('active')) return;
+        const el = document.getElementById('mobile-word-capture');
+        if (!el) return;
+        try {
+            el.focus({ preventScroll: true });
+        } catch (_) {
+            el.focus();
+        }
+        requestAnimationFrame(() => {
+            if (document.activeElement !== el) {
+                try {
+                    el.focus({ preventScroll: true });
+                } catch (_) {
+                    el.focus();
+                }
+            }
+        });
+    };
+    if (delayMs > 0) {
+        setTimeout(run, delayMs);
+    } else {
+        requestAnimationFrame(run);
+    }
+}
+
 /** 学习进度：展示下次复习日期与距今天数（API 已提供 ISO 日期与 remaining_days） */
 function formatNextReviewLine(word) {
     const iso = word.next_review_date;
@@ -132,7 +163,8 @@ function initializeUnderlineInput(word) {
         }
     };
 
-    setTimeout(() => capture.focus(), 50);
+    focusWordCapture(50);
+    focusWordCapture(200);
 }
 
 // 更新下划线显示
@@ -199,6 +231,8 @@ function speakEnglishInBrowser(text) {
     const voices = window.speechSynthesis.getVoices();
     const en = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('en'));
     if (en) u.voice = en;
+    u.onend = () => focusWordCapture(0);
+    u.onerror = () => focusWordCapture(0);
     window.speechSynthesis.speak(u);
     return true;
 }
@@ -233,8 +267,9 @@ async function speakExample() {
                 text: enText
             })
         });
+        focusWordCapture(0);
     } catch (error) {
-        /* 朗读失败时静默 */
+        focusWordCapture(0);
     }
 }
 
@@ -568,7 +603,8 @@ async function showCurrentWord() {
     
     // 初始化下划线输入框
     initializeUnderlineInput(word);
-    
+    focusWordCapture(0);
+
     // 清空消息
     document.getElementById('word-message').style.display = 'none';
 }
@@ -578,6 +614,7 @@ async function submitAnswer() {
     const word = currentReviewList[currentReviewIndex];
     
     if (!answer) {
+        focusWordCapture(0);
         return;
     }
     
@@ -637,11 +674,8 @@ async function submitAnswer() {
                 messageDiv.textContent = `${result.message} (还剩 ${3 - currentErrorCount} 次尝试机会)`;
                 // 清空下划线输入框，让用户重新输入
                 clearUnderlineInput();
-                // 聚焦下划线输入框
-                const underlineInput = document.getElementById('underline-input');
-                if (underlineInput) {
-                    underlineInput.focus();
-                }
+                focusWordCapture(0);
+                focusWordCapture(100);
             }
         }
     } catch (error) {
@@ -652,6 +686,7 @@ async function submitAnswer() {
             messageDiv.textContent = msg;
             messageDiv.className = 'word-message error';
             messageDiv.style.display = 'block';
+            focusWordCapture(0);
         } else {
             showError(msg);
         }
@@ -879,10 +914,21 @@ document.addEventListener('DOMContentLoaded', function() {
         logoutBtn.addEventListener('click', () => { logout(); });
     }
     
-    // 提交答案
+    // 提交答案（mousedown 阻止按钮抢走焦点，便于连续输入）
     const submitBtn = document.getElementById('submit-answer');
     if (submitBtn) {
+        submitBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+        });
         submitBtn.addEventListener('click', submitAnswer);
+    }
+
+    const reviewBox = document.getElementById('review-box');
+    if (reviewBox) {
+        reviewBox.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            focusWordCapture(0);
+        });
     }
     
     // 下划线输入框的Enter键已经在initializeUnderlineInput中处理
