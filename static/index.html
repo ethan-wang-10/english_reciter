@@ -37,7 +37,9 @@
                     <form id="register-form" class="auth-form" style="display: none;">
                         <div class="form-group">
                             <label>用户名</label>
-                            <input type="text" id="reg-username" required minlength="3">
+                            <input type="text" id="reg-username" required minlength="3" maxlength="32"
+                                pattern="[a-zA-Z0-9_]{3,32}"
+                                title="3-32位字母、数字或下划线">
                         </div>
                         <div class="form-group">
                             <label>邮箱（可选）</label>
@@ -77,6 +79,7 @@
                     <button id="logout-btn" class="btn btn-secondary">退出</button>
                 </div>
             </nav>
+            <div id="main-error-banner" class="main-error-banner" role="alert" style="display: none;"></div>
             
             <!-- 今日复习页面 -->
             <div id="review-section" class="section active">
@@ -118,7 +121,12 @@
                                     <button id="speak-example-btn" class="btn-speak" title="朗读例句">🔊</button>
                                 </div>
                                 <div class="word-input">
-                                    <div id="underline-input" class="underline-input" tabindex="0"></div>
+                                    <div class="underline-input-wrapper">
+                                        <input type="text" id="mobile-word-capture" class="mobile-word-capture"
+                                            inputmode="text" autocomplete="off" autocorrect="off"
+                                            autocapitalize="off" spellcheck="false" aria-label="输入英文单词">
+                                        <div id="underline-input" class="underline-input" tabindex="-1" aria-hidden="true"></div>
+                                    </div>
                                     <button id="submit-answer" class="btn btn-primary">提交</button>
                                 </div>
                                 <div class="word-message" id="word-message"></div>

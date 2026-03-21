@@ -1,9 +1,11 @@
 import os
+import sys
 import json
 import random
 import shutil
 import platform
 import subprocess
+import tempfile
 from collections import defaultdict
 from typing import Dict, List, Optional
 from datetime import date, timedelta, datetime
@@ -138,6 +140,7 @@ class ExampleGenerator:
         
         # 尝试使用 NLTK WordNet
         try:
+            import nltk
             from nltk.corpus import wordnet as wn
             nltk.data.path.append(str(Path.home() / 'nltk_data'))
             
@@ -211,11 +214,12 @@ class Word:
     
     @classmethod
     def from_dict(cls, data: dict) -> 'Word':
-        """从字典创建对象"""
-        data['next_review_date'] = date.fromisoformat(data['next_review_date'])
-        data.setdefault('review_round', 0)
-        data.setdefault('review_count', 0)
-        return cls(**data)
+        """从字典创建对象（不修改传入的 dict）"""
+        d = dict(data)
+        d['next_review_date'] = date.fromisoformat(d['next_review_date'])
+        d.setdefault('review_round', 0)
+        d.setdefault('review_count', 0)
+        return cls(**d)
 
 
 class WordRepository:
@@ -269,14 +273,29 @@ class WordRepository:
             return [], []
     
     def save_data(self, all_words: list[Word], mastered_words: list[Word]) -> None:
-        """保存学习数据"""
+        """保存学习数据（原子写入，降低并发下文件损坏风险）"""
         try:
             data = {
                 'all_words': [w.to_dict() for w in all_words],
                 'mastered_words': [w.to_dict() for w in mastered_words]
             }
-            with open(self.config.DATA_FILE, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            path = Path(self.config.DATA_FILE)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_name = tempfile.mkstemp(
+                suffix=".json",
+                dir=str(path.parent),
+                text=True,
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp_name, path)
+            except Exception:
+                try:
+                    os.unlink(tmp_name)
+                except OSError:
+                    pass
+                raise
             logger.debug("数据保存成功")
         except Exception as e:
             logger.error(f"保存数据失败: {e}")
@@ -433,7 +452,27 @@ class WordReciter:
         else:
             self.current_review_round = 0
         
-        print(f"📊 当前复习轮次: 第{self.current_review_round + 1}轮")
+        logger.info(f"当前复习轮次: 第{self.current_review_round + 1}轮")
+    
+    def refresh_for_new_day(self) -> None:
+        """服务器常驻时若跨日，更新日期并重新处理过期词与轮次。"""
+        today = date.today()
+        if today != self.today:
+            self.today = today
+            self._process_overdue_words()
+            self._update_review_round()
+    
+    def get_today_review_list(self) -> List[Word]:
+        """获取今日待复习列表（供 Web / 外部调用）。"""
+        return self._get_today_review_list()
+    
+    def save_learning_data(self, backup: bool = True) -> None:
+        """持久化学习数据（供 Web / 外部调用）。"""
+        self._save_data(backup=backup)
+    
+    def calculate_review_days(self, success_count: int) -> int:
+        """根据成功次数计算下次复习间隔天数。"""
+        return self._calculate_review_days(success_count)
     
     def _get_today_review_list(self) -> List[Word]:
         """获取今日复习列表"""
@@ -586,7 +625,6 @@ class WordReciter:
         
         attempt = 0
         while attempt < MAX_ATTEMPTS:
-            import sys
             answer = ""
             prompt = "请输入英文单词（h=显示答案，s=播放语音）: "
             
@@ -727,7 +765,7 @@ class WordReciter:
         
         self.all_words.extend(new_words)
         self._save_data()
-        print(f"✅ 成功添加 {len(new_words)} 个新单词")
+        logger.info(f"成功添加 {len(new_words)} 个新单词")
 
 
 class ReciterCLI:

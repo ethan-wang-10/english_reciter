@@ -9,6 +9,30 @@ let currentRevealedCount = 0; // 当前单词已揭示字母数
 // API 基础 URL
 const API_BASE = '/api';
 
+function escapeHtml(text) {
+    if (text == null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+}
+
+function escapeRegExp(str) {
+    return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function showMainBanner(message) {
+    const el = document.getElementById('main-error-banner');
+    if (!el) return;
+    el.textContent = message || '';
+    el.style.display = message ? 'block' : 'none';
+    if (message) {
+        setTimeout(() => {
+            el.style.display = 'none';
+            el.textContent = '';
+        }, 5000);
+    }
+}
+
 // ==================== 工具函数 ====================
 
 function showError(message) {
@@ -22,9 +46,12 @@ function showError(message) {
 
 function showMessage(message, type = 'success') {
     const messageDiv = document.getElementById('import-message');
+    if (!messageDiv) return;
     messageDiv.textContent = message;
     messageDiv.className = `message ${type}`;
+    messageDiv.style.display = '';
     setTimeout(() => {
+        messageDiv.className = 'message';
         messageDiv.style.display = 'none';
     }, 3000);
 }
@@ -41,88 +68,46 @@ function getHintString(word, revealedCount) {
     return revealedPart + hiddenPart;
 }
 
-// 初始化下划线输入框
+// 初始化下划线显示 + 透明输入层（桌面/移动端统一，可唤起软键盘）
 function initializeUnderlineInput(word) {
     const container = document.getElementById('underline-input');
-    if (!container) return;
-    
-    // 清空容器
+    const capture = document.getElementById('mobile-word-capture');
+    if (!container || !capture) return;
+
     container.innerHTML = '';
-    
+
     const wordLength = word.english.length;
-    container.dataset.wordLength = wordLength;
+    container.dataset.wordLength = String(wordLength);
     container.dataset.currentInput = '';
-    
-    // 创建下划线字符元素
+
     for (let i = 0; i < wordLength; i++) {
         const charSpan = document.createElement('span');
         charSpan.className = 'underline-char empty';
-        charSpan.dataset.index = i;
+        charSpan.dataset.index = String(i);
         container.appendChild(charSpan);
     }
-    
-    // 聚焦容器
-    container.focus();
-    
-    // 添加键盘事件监听器
-    container.onkeydown = function(e) {
-        // 防止默认行为，但允许退格键和删除键
-        if (e.key.length === 1 && /^[a-zA-Z]$/.test(e.key)) {
-            e.preventDefault();
-            handleCharacterInput(e.key.toLowerCase());
-        } else if (e.key === 'Backspace') {
-            e.preventDefault();
-            handleBackspace();
-        } else if (e.key === 'Enter') {
+
+    capture.value = '';
+
+    const syncFromCapture = () => {
+        let v = capture.value.replace(/[^a-zA-Z]/g, '').toLowerCase();
+        if (v.length > wordLength) {
+            v = v.slice(0, wordLength);
+        }
+        capture.value = v;
+        container.dataset.currentInput = v;
+        updateUnderlineDisplay();
+    };
+
+    capture.oninput = syncFromCapture;
+    capture.onkeydown = (e) => {
+        if (e.key === 'Enter') {
             e.preventDefault();
             submitAnswer();
         }
-        // 其他键忽略
     };
-    
-    // 点击容器聚焦
-    container.onclick = function() {
-        container.focus();
-    };
-}
 
-// 处理字符输入
-function handleCharacterInput(char) {
-    const container = document.getElementById('underline-input');
-    if (!container) return;
-    
-    const wordLength = parseInt(container.dataset.wordLength);
-    let currentInput = container.dataset.currentInput || '';
-    
-    // 如果已输入长度等于单词长度，忽略新字符
-    if (currentInput.length >= wordLength) {
-        return;
-    }
-    
-    // 添加字符
-    currentInput += char;
-    container.dataset.currentInput = currentInput;
-    
-    // 更新显示
-    updateUnderlineDisplay();
-    
-    // 自动聚焦下一个位置（可选）
-}
-
-// 处理退格键
-function handleBackspace() {
-    const container = document.getElementById('underline-input');
-    if (!container) return;
-    
-    let currentInput = container.dataset.currentInput || '';
-    if (currentInput.length === 0) return;
-    
-    // 移除最后一个字符
-    currentInput = currentInput.slice(0, -1);
-    container.dataset.currentInput = currentInput;
-    
-    // 更新显示
-    updateUnderlineDisplay();
+    setTimeout(() => capture.focus(), 50);
 }
 
 // 更新下划线显示
@@ -157,8 +142,12 @@ function getCurrentInput() {
 // 清空下划线输入
 function clearUnderlineInput() {
     const container = document.getElementById('underline-input');
+    const capture = document.getElementById('mobile-word-capture');
     if (!container) return;
     container.dataset.currentInput = '';
+    if (capture) {
+        capture.value = '';
+    }
     updateUnderlineDisplay();
 }
 
@@ -187,7 +176,7 @@ async function speakExample() {
             })
         });
     } catch (error) {
-        console.error('朗读失败:', error);
+        /* 朗读失败时静默 */
     }
 }
 
@@ -209,11 +198,8 @@ async function apiRequest(endpoint, options = {}) {
     
     if (!response.ok) {
         const error = await response.json();
-        console.error('API Error:', error);
-        
-        // 处理认证错误
+
         if (response.status === 401) {
-            console.log('认证失败，清除本地存储并重定向到登录页面');
             token = null;
             username = null;
             localStorage.removeItem('token');
@@ -229,10 +215,10 @@ async function apiRequest(endpoint, options = {}) {
 
 // ==================== 认证功能 ====================
 
-async function login(username, password) {
+async function login(loginUsername, password) {
     try {
         const formData = new FormData();
-        formData.append('username', username);
+        formData.append('username', loginUsername);
         formData.append('password', password);
         
         const response = await fetch(`${API_BASE}/auth/login`, {
@@ -241,7 +227,6 @@ async function login(username, password) {
         });
         
         const data = await response.json();
-        console.log('Login response:', data);
         
         if (!response.ok) {
             throw new Error(data.error || data.detail || '登录失败');
@@ -255,7 +240,6 @@ async function login(username, password) {
         
         showMainPage();
     } catch (error) {
-        console.error('Login error:', error);
         showError(error.message);
     }
 }
@@ -274,12 +258,25 @@ async function register(username, password, email) {
     }
 }
 
-function logout() {
+async function logout() {
+    try {
+        if (token) {
+            await fetch(`${API_BASE}/auth/logout`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+    } catch (e) {
+        /* 网络错误仍清除本地会话 */
+    }
     token = null;
     username = null;
     localStorage.removeItem('token');
     localStorage.removeItem('username');
-    
+
     showLoginPage();
 }
 
@@ -303,8 +300,6 @@ function showSection(sectionId) {
     const sectionElement = document.getElementById(sectionId + '-section');
     if (sectionElement) {
         sectionElement.classList.add('active');
-    } else {
-        console.error('Section not found:', sectionId + '-section');
     }
     
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
@@ -335,7 +330,7 @@ async function loadStats() {
         document.getElementById('mastered-count').textContent = data.stats.mastered_words;
         document.getElementById('round-count').textContent = data.stats.current_round + 1;
     } catch (error) {
-        console.error('加载统计失败:', error);
+        showMainBanner('加载统计失败，请稍后重试');
     }
 }
 
@@ -356,7 +351,7 @@ async function loadReviewList() {
             showCurrentWord();
         }
     } catch (error) {
-        console.error('加载复习列表失败:', error);
+        showMainBanner('加载复习列表失败，请稍后重试');
     }
 }
 
@@ -375,7 +370,8 @@ async function showCurrentWord() {
     
     // 显示中文意思
     document.getElementById('current-word-chinese').textContent = word.chinese;
-    document.getElementById('current-word-progress').textContent = `${word.success_count}/8`;
+    const maxSucc = word.max_success_count != null ? word.max_success_count : 8;
+    document.getElementById('current-word-progress').textContent = `${word.success_count}/${maxSucc}`;
     
     // 处理例句：隐藏目标单词
     let exampleText = word.example || '暂无例句';
@@ -386,13 +382,13 @@ async function showCurrentWord() {
             // 有下划线分隔，英文部分是parts[0]
             let englishPart = parts[0];
             // 替换目标单词为下划线（忽略大小写）
-            const regex = new RegExp(`\\b${word.english}\\b`, 'gi');
+            const regex = new RegExp(`\\b${escapeRegExp(word.english)}\\b`, 'gi');
             englishPart = englishPart.replace(regex, '_'.repeat(word.english.length));
             // 重新组合
             exampleText = englishPart + '_' + parts.slice(1).join('_');
         } else {
             // 单语例句，直接替换
-            const regex = new RegExp(`\\b${word.english}\\b`, 'gi');
+            const regex = new RegExp(`\\b${escapeRegExp(word.english)}\\b`, 'gi');
             exampleText = exampleText.replace(regex, '_'.repeat(word.english.length));
         }
     }
@@ -480,8 +476,16 @@ async function submitAnswer() {
             }
         }
     } catch (error) {
-        console.error('提交答案失败:', error);
-        showError(error.message);
+        const msg = error.message || '提交失败，请重试';
+        const reviewSection = document.getElementById('review-section');
+        const messageDiv = document.getElementById('word-message');
+        if (reviewSection && reviewSection.classList.contains('active') && messageDiv) {
+            messageDiv.textContent = msg;
+            messageDiv.className = 'word-message error';
+            messageDiv.style.display = 'block';
+        } else {
+            showError(msg);
+        }
     }
 }
 
@@ -521,16 +525,16 @@ async function loadProgress() {
         const listHtml = data.words.map(word => `
             <div class="word-item">
                 <div class="word-item-info">
-                    <div class="word-item-english">${word.english}</div>
-                    <div class="word-item-chinese">${word.chinese}</div>
+                    <div class="word-item-english">${escapeHtml(word.english)}</div>
+                    <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
                 </div>
                 <div class="word-item-stats">
                     <div class="word-stat">
-                        <div class="word-stat-value">${word.success_count}/${word.max_success_count}</div>
+                        <div class="word-stat-value">${escapeHtml(word.success_count)}/${escapeHtml(word.max_success_count)}</div>
                         <div class="word-stat-label">掌握进度</div>
                     </div>
                     <div class="word-stat">
-                        <div class="word-stat-value">${word.review_count}</div>
+                        <div class="word-stat-value">${escapeHtml(word.review_count)}</div>
                         <div class="word-stat-label">复习次数</div>
                     </div>
                 </div>
@@ -539,7 +543,7 @@ async function loadProgress() {
         
         document.getElementById('word-list').innerHTML = listHtml || '<p style="padding: 20px; text-align: center; color: #999;">暂无单词</p>';
     } catch (error) {
-        console.error('加载进度失败:', error);
+        showMainBanner('加载进度失败，请稍后重试');
     }
 }
 
@@ -552,12 +556,12 @@ async function loadMastered() {
         const listHtml = data.words.map(word => `
             <div class="word-item">
                 <div class="word-item-info">
-                    <div class="word-item-english">${word.english}</div>
-                    <div class="word-item-chinese">${word.chinese}</div>
+                    <div class="word-item-english">${escapeHtml(word.english)}</div>
+                    <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
                 </div>
                 <div class="word-item-stats">
                     <div class="word-stat">
-                        <div class="word-stat-value">${word.review_count}</div>
+                        <div class="word-stat-value">${escapeHtml(word.review_count)}</div>
                         <div class="word-stat-label">复习次数</div>
                     </div>
                 </div>
@@ -566,19 +570,11 @@ async function loadMastered() {
         
         document.getElementById('mastered-list').innerHTML = listHtml || '<p style="padding: 20px; text-align: center; color: #999;">暂无已掌握单词</p>';
     } catch (error) {
-        console.error('加载已掌握单词失败:', error);
+        showMainBanner('加载已掌握列表失败，请稍后重试');
     }
 }
 
 // ==================== 导入功能 ====================
-
-document.getElementById('file-input').addEventListener('change', function(e) {
-    const fileName = e.target.files[0]?.name;
-    if (fileName) {
-        document.querySelector('.upload-icon').textContent = '✅';
-        document.querySelector('.upload-area p').textContent = fileName;
-    }
-});
 
 async function importWords() {
     const fileInput = document.getElementById('file-input');
@@ -602,7 +598,6 @@ async function importWords() {
         });
         
         const data = await response.json();
-        console.log('Import response:', data);
         
         if (!response.ok) {
             throw new Error(data.error || data.detail || '导入失败');
@@ -610,15 +605,16 @@ async function importWords() {
         
         showMessage(data.message, 'success');
         
-        // 重置上传区域
-        document.querySelector('.upload-icon').textContent = '📄';
-        document.querySelector('.upload-area p').textContent = '点击或拖拽文件到此处';
+        const uploadArea = document.querySelector('.upload-area');
+        const icon = uploadArea && uploadArea.querySelector('.upload-icon');
+        const firstP = uploadArea && uploadArea.querySelector('p');
+        if (icon) icon.textContent = '📄';
+        if (firstP) firstP.textContent = '点击或拖拽文件到此处';
         fileInput.value = '';
         
         // 刷新统计
         loadStats();
     } catch (error) {
-        console.error('Import error:', error);
         showMessage(error.message, 'error');
     }
 }
@@ -626,8 +622,6 @@ async function importWords() {
 // ==================== 事件监听与初始化 ====================
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, setting up event listeners');
-    
     // 登录表单
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -637,7 +631,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const password = document.getElementById('login-password').value;
             await login(username, password);
         });
-        console.log('Login form event listener added');
     }
     
     // 注册表单
@@ -657,7 +650,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             await register(username, password, email);
         });
-        console.log('Register form event listener added');
     }
     
     // Tab 切换
@@ -671,7 +663,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('register-form').style.display = tabName === 'register' ? 'block' : 'none';
         });
     });
-    console.log('Tab listeners added');
     
     // 导航切换
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -680,20 +671,17 @@ document.addEventListener('DOMContentLoaded', function() {
             showSection(page);
         });
     });
-    console.log('Nav listeners added');
     
     // 退出登录
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', logout);
-        console.log('Logout button listener added');
+        logoutBtn.addEventListener('click', () => { logout(); });
     }
     
     // 提交答案
     const submitBtn = document.getElementById('submit-answer');
     if (submitBtn) {
         submitBtn.addEventListener('click', submitAnswer);
-        console.log('Submit answer button listener added');
     }
     
     // 下划线输入框的Enter键已经在initializeUnderlineInput中处理
@@ -702,7 +690,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const importBtn = document.getElementById('import-btn');
     if (importBtn) {
         importBtn.addEventListener('click', importWords);
-        console.log('Import button listener added');
     }
     
     // 继续学习
@@ -711,16 +698,55 @@ document.addEventListener('DOMContentLoaded', function() {
         reviewMoreBtn.addEventListener('click', () => {
             showSection('progress');
         });
-        console.log('Review more button listener added');
+    }
+
+    // 上传区域：点击与拖拽
+    const uploadArea = document.querySelector('.upload-area');
+    const fileInput = document.getElementById('file-input');
+    if (uploadArea && fileInput) {
+        fileInput.addEventListener('change', function (e) {
+            const fileName = e.target.files[0]?.name;
+            if (fileName) {
+                const icon = uploadArea.querySelector('.upload-icon');
+                const firstP = uploadArea.querySelector('p');
+                if (icon) icon.textContent = '✅';
+                if (firstP) firstP.textContent = fileName;
+            }
+        });
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((ev) => {
+            uploadArea.addEventListener(ev, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+        uploadArea.addEventListener('dragover', () => {
+            uploadArea.style.borderColor = 'var(--primary-color)';
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = '';
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            uploadArea.style.borderColor = '';
+            const files = e.dataTransfer && e.dataTransfer.files;
+            if (files && files.length > 0) {
+                try {
+                    const dt = new DataTransfer();
+                    dt.items.add(files[0]);
+                    fileInput.files = dt.files;
+                } catch (err) {
+                    /* 部分环境不可写 files，忽略 */
+                }
+                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
     }
     
     // 初始化页面
-    console.log('Token exists:', !!token, 'Username:', username);
     if (token && username) {
         showMainPage();
     } else {
         showLoginPage();
     }
-    
-    console.log('Initialization complete');
 });

@@ -14,7 +14,7 @@ if ! python3 -c "import flask" 2>/dev/null; then
     pip3 install -r requirements-simple.txt || {
         echo "❌ 依赖安装失败"
         echo "请尝试手动安装:"
-        echo "  pip3 install Flask Flask-CORS gtts playsound prettytable readchar nltk requests python-dateutil"
+        echo "  pip3 install -r requirements-simple.txt"
         exit 1
     }
     echo "✅ 依赖安装完成"

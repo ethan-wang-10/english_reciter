@@ -25,12 +25,12 @@ RUN mkdir -p static user_data_simple
 # 复制静态文件
 COPY static/ ./static/
 
-# 设置环境变量
+# 设置环境变量（生产环境请务必通过 compose / k8s 注入强随机 SECRET_KEY）
 ENV PYTHONUNBUFFERED=1
-ENV SECRET_KEY=${SECRET_KEY:-default-secret-key-change-in-production}
+ENV FLASK_ENV=production
 
 # 暴露端口
 EXPOSE 8000
 
-# 启动命令
-CMD ["python3", "simple_web_app.py"]
+# 使用 Gunicorn，避免 Flask 开发服务器与 debug 风险
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "simple_web_app:app"]

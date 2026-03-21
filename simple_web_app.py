@@ -7,23 +7,29 @@
 
 import os
 import json
+import re
 import hashlib
 import secrets
 import shutil
-import platform
 import subprocess
+import threading
+from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from functools import wraps
-from typing import Optional, Dict
+from typing import Dict, Generator, List, Optional
+from time import time
 
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
+from werkzeug.security import check_password_hash, generate_password_hash
 
 # 导入核心功能
 from reciter import (
-    WordReciter, Word, Config,
-    get_logger, MAX_ATTEMPTS
+    WordReciter,
+    Config,
+    get_logger,
 )
 
 # 日志配置
@@ -31,9 +37,17 @@ logger = get_logger(__name__)
 
 # Flask应用
 app = Flask(__name__, static_folder='static')
-app.secret_key = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+_secret = os.getenv("SECRET_KEY")
+if os.getenv("FLASK_ENV", "").lower() == "production" and not _secret:
+    raise RuntimeError(
+        "生产环境必须设置环境变量 SECRET_KEY（例如在 docker-compose 或 systemd 中配置）"
+    )
+app.secret_key = _secret or secrets.token_urlsafe(32)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB上传限制
 CORS(app, supports_credentials=True)
+
+# 用户名：防止路径穿越与非法目录名，仅允许字母数字下划线
+USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
 
 # 数据目录
 DATA_DIR = Path("user_data_simple")
@@ -44,15 +58,60 @@ DATA_DIR.mkdir(exist_ok=True)
 user_tokens: Dict[str, str] = {}  # token -> username
 token_expiry: Dict[str, datetime] = {}  # token -> expiry time
 
+# 登录/注册简单限流（按 IP，内存存储）
+_rate_buckets: Dict[str, List[float]] = defaultdict(list)
+_RATE_WINDOW_SEC = 60
+_RATE_MAX_LOGIN = 20
+_RATE_MAX_REGISTER = 10
+
+# 每用户背诵器缓存 + 互斥锁（避免并发写 JSON 与重复初始化）
+_reciter_registry_lock = threading.Lock()
+_user_reciter_locks: Dict[str, threading.Lock] = {}
+_user_reciter_cache: Dict[str, WordReciter] = {}
+
+
+def _client_ip() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def _rate_allow(bucket_key: str, max_events: int) -> bool:
+    now = time()
+    window: List[float] = _rate_buckets[bucket_key]
+    window[:] = [t for t in window if now - t < _RATE_WINDOW_SEC]
+    if len(window) >= max_events:
+        return False
+    window.append(now)
+    return True
+
+
+def is_valid_username(username: str) -> bool:
+    return bool(username and USERNAME_PATTERN.fullmatch(username))
+
+
+def _is_legacy_sha256_hex(stored: str) -> bool:
+    return len(stored) == 64 and all(c in "0123456789abcdefABCDEF" for c in stored)
+
+
 # ==================== 工具函数 ====================
 
 def hash_password(password: str) -> str:
-    """哈希密码"""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """使用 Werkzeug 安全哈希（含盐）。"""
+    return generate_password_hash(password)
+
 
 def verify_password(password: str, password_hash: str) -> bool:
-    """验证密码"""
-    return hash_password(password) == password_hash
+    """验证密码；兼容旧版 SHA256 无盐哈希。"""
+    try:
+        if check_password_hash(password_hash, password):
+            return True
+    except (ValueError, TypeError):
+        pass
+    if _is_legacy_sha256_hex(password_hash):
+        return hashlib.sha256(password.encode()).hexdigest() == password_hash.lower()
+    return False
 
 def load_users() -> dict:
     """加载所有用户数据"""
@@ -78,8 +137,11 @@ def save_users(users: dict) -> None:
 
 def create_user(username: str, password: str, email: str = None) -> bool:
     """创建用户"""
+    if not is_valid_username(username):
+        return False
+
     users = load_users()
-    
+
     if username in users:
         return False
     
@@ -100,14 +162,22 @@ def create_user(username: str, password: str, email: str = None) -> bool:
     return True
 
 def verify_user(username: str, password: str) -> bool:
-    """验证用户"""
+    """验证用户；若仍为旧版哈希则自动升级为 Werkzeug 哈希。"""
     users = load_users()
-    
+
     if username not in users:
         return False
-    
-    password_hash = users[username]["password_hash"]
-    return verify_password(password, password_hash)
+
+    stored = users[username]["password_hash"]
+    if not verify_password(password, stored):
+        return False
+
+    if _is_legacy_sha256_hex(stored):
+        users[username]["password_hash"] = hash_password(password)
+        save_users(users)
+        logger.info("用户 %s 的密码哈希已升级为安全格式", username)
+
+    return True
 
 def create_token(username: str) -> str:
     """创建访问令牌"""
@@ -165,18 +235,38 @@ def token_required(f):
 
 # ==================== 用户数据管理 ====================
 
-def get_user_reciter(username: str) -> WordReciter:
-    """获取用户的背诵器实例"""
+def _user_mutex(username: str) -> threading.Lock:
+    with _reciter_registry_lock:
+        if username not in _user_reciter_locks:
+            _user_reciter_locks[username] = threading.Lock()
+        return _user_reciter_locks[username]
+
+
+def _build_user_reciter(username: str) -> WordReciter:
     user_dir = DATA_DIR / username
-    
     config_file = user_dir / "config.json"
     config = Config(str(config_file)) if config_file.exists() else Config()
-    
-    # 设置用户专属数据文件
     config.DATA_FILE = str(user_dir / "learning_data.json")
     config.EXAMPLE_DB = str(user_dir / "word_examples.json")
-    
     return WordReciter(config)
+
+
+@contextmanager
+def user_reciter_session(username: str) -> Generator[WordReciter, None, None]:
+    """在同用户请求间复用 WordReciter，并以互斥锁序列化读写。"""
+    lock = _user_mutex(username)
+    with lock:
+        if username not in _user_reciter_cache:
+            _user_reciter_cache[username] = _build_user_reciter(username)
+        reciter = _user_reciter_cache[username]
+        reciter.refresh_for_new_day()
+        yield reciter
+
+
+def sanitize_tts_text(text: str, max_len: int = 500) -> str:
+    """去除控制字符并限制长度，避免异常输入与命令注入面。"""
+    text = (text or "").strip()[:max_len]
+    return "".join(ch for ch in text if ch.isprintable() or ch.isspace()).strip()[:max_len]
 
 # ==================== 路由 ====================
 
@@ -194,6 +284,9 @@ def send_static(path):
 def register():
     """用户注册"""
     try:
+        if not _rate_allow(f"reg:{_client_ip()}", _RATE_MAX_REGISTER):
+            return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
+
         data = request.get_json()
         if not data:
             return jsonify({'error': '无效的JSON数据'}), 400
@@ -205,8 +298,8 @@ def register():
         if not username or not password:
             return jsonify({'error': '用户名和密码不能为空'}), 400
         
-        if len(username) < 3:
-            return jsonify({'error': '用户名至少3个字符'}), 400
+        if not is_valid_username(username):
+            return jsonify({'error': '用户名须为3-32位字母、数字或下划线'}), 400
         
         if len(password) < 6:
             return jsonify({'error': '密码至少6个字符'}), 400
@@ -231,6 +324,9 @@ def register():
 def login():
     """用户登录"""
     try:
+        if not _rate_allow(f"login:{_client_ip()}", _RATE_MAX_LOGIN):
+            return jsonify({'error': '登录尝试过多，请稍后再试'}), 429
+
         # 支持表单数据和JSON数据
         if request.content_type == 'application/json':
             data = request.get_json()
@@ -273,30 +369,29 @@ def logout(username):
 def get_status(username):
     """获取学习状态"""
     try:
-        reciter = get_user_reciter(username)
-        
-        all_words = [
-            {
-                'english': w.english,
-                'chinese': w.chinese,
-                'success_count': w.success_count,
-                'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
-                'review_round': w.review_round,
-                'review_count': w.review_count,
-                'next_review_date': w.next_review_date.isoformat(),
-                'remaining_days': (w.next_review_date - date.today()).days
+        with user_reciter_session(username) as reciter:
+            all_words = [
+                {
+                    'english': w.english,
+                    'chinese': w.chinese,
+                    'success_count': w.success_count,
+                    'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
+                    'review_round': w.review_round,
+                    'review_count': w.review_count,
+                    'next_review_date': w.next_review_date.isoformat(),
+                    'remaining_days': (w.next_review_date - date.today()).days
+                }
+                for w in reciter.all_words
+            ]
+
+            stats = {
+                'total_words': len(all_words),
+                'mastered_words': len(reciter.mastered_words),
+                'current_round': reciter.current_review_round,
+                'avg_review_count': sum(w['review_count'] for w in all_words) / len(all_words) if all_words else 0
             }
-            for w in reciter.all_words
-        ]
-        
-        stats = {
-            'total_words': len(all_words),
-            'mastered_words': len(reciter.mastered_words),
-            'current_round': reciter.current_review_round,
-            'avg_review_count': sum(w['review_count'] for w in all_words) / len(all_words) if all_words else 0
-        }
-        
-        return jsonify({'words': all_words, 'stats': stats}), 200
+
+            return jsonify({'words': all_words, 'stats': stats}), 200
     except Exception as e:
         logger.error(f"获取状态失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -306,21 +401,22 @@ def get_status(username):
 def get_review_list(username):
     """获取今日复习列表"""
     try:
-        reciter = get_user_reciter(username)
-        review_list = reciter._get_today_review_list()
-        
-        words = [
-            {
-                'english': w.english,
-                'chinese': w.chinese,
-                'success_count': w.success_count,
-                'review_count': w.review_count,
-                'example': w.example
-            }
-            for w in review_list
-        ]
-        
-        return jsonify({'words': words, 'count': len(words)}), 200
+        with user_reciter_session(username) as reciter:
+            review_list = reciter.get_today_review_list()
+
+            words = [
+                {
+                    'english': w.english,
+                    'chinese': w.chinese,
+                    'success_count': w.success_count,
+                    'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
+                    'review_count': w.review_count,
+                    'example': w.example
+                }
+                for w in review_list
+            ]
+
+            return jsonify({'words': words, 'count': len(words)}), 200
     except Exception as e:
         logger.error(f"获取复习列表失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -339,50 +435,47 @@ def practice_word(username):
         
         if not word_id or not answer:
             return jsonify({'error': '单词ID和答案不能为空'}), 400
-        
-        reciter = get_user_reciter(username)
-        
-        # 查找单词
-        word = None
-        for w in reciter.all_words:
-            if w.english.lower() == word_id.lower():
-                word = w
-                break
-        
-        if not word:
-            return jsonify({'error': '单词未找到'}), 404
-        
-        # 检查答案
-        is_correct = answer.strip().lower() == word.english.lower()
-        
-        if is_correct:
-            word.success_count += 1
-            word.review_count += 1
-            
-            if word.success_count >= reciter.config.MAX_SUCCESS_COUNT:
-                reciter.mastered_words.append(word)
-                reciter.all_words.remove(word)
-                message = '🎉 已掌握单词！'
+
+        with user_reciter_session(username) as reciter:
+            word = None
+            for w in reciter.all_words:
+                if w.english.lower() == word_id.lower():
+                    word = w
+                    break
+
+            if not word:
+                return jsonify({'error': '单词未找到'}), 404
+
+            is_correct = answer.strip().lower() == word.english.lower()
+
+            if is_correct:
+                word.success_count += 1
+                word.review_count += 1
+
+                if word.success_count >= reciter.config.MAX_SUCCESS_COUNT:
+                    reciter.mastered_words.append(word)
+                    reciter.all_words.remove(word)
+                    message = '🎉 已掌握单词！'
+                else:
+                    delta_days = reciter.calculate_review_days(word.success_count)
+                    word.next_review_date = date.today() + timedelta(days=delta_days)
+                    message = f'✅ 正确！下次复习: +{delta_days}天'
             else:
-                delta_days = reciter._calculate_review_days(word.success_count)
-                word.next_review_date = date.today() + timedelta(days=delta_days)
-                message = f'✅ 正确！下次复习: +{delta_days}天'
-        else:
-            word.review_count += 1
-            message = '❌ 错误，请继续努力！'
-        
-        # 保存数据
-        reciter._save_data()
-        
-        return jsonify({
-            'correct': is_correct,
-            'message': message,
-            'word': {
-                'english': word.english,
-                'chinese': word.chinese,
-                'success_count': word.success_count
-            }
-        }), 200
+                word.review_count += 1
+                message = '❌ 错误，请继续努力！'
+
+            # Web 端每次答题不必全量备份，降低 IO
+            reciter.save_learning_data(backup=False)
+
+            return jsonify({
+                'correct': is_correct,
+                'message': message,
+                'word': {
+                    'english': word.english,
+                    'chinese': word.chinese,
+                    'success_count': word.success_count
+                }
+            }), 200
     except Exception as e:
         logger.error(f"练习单词失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -403,38 +496,23 @@ def speak_text(username):
         text = data.get('text', '').strip()
         if not text:
             return jsonify({'error': '文本不能为空'}), 400
-        
-        en_text = text
-        if not en_text:
-            return jsonify({'error': '无法提取有效的英文文本'}), 400
+
+        safe_text = sanitize_tts_text(text)
+        if not safe_text:
+            return jsonify({'error': '文本无效或过长'}), 400
         
         if shutil.which('say') is None:
             logger.debug(f"用户 {username} 尝试朗读但 say 命令不可用")
             return jsonify({'message': '语音播放不可用，已跳过'}), 200
         
         try:
-            if platform.system() == 'Darwin':
-                subprocess.run(
-                    ['say', en_text],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-            elif platform.system() == 'Windows':
-                subprocess.run(
-                    ['say', en_text],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    shell=True
-                )
-            else:
-                subprocess.run(
-                    ['say', en_text],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+            # 始终使用参数列表传递，禁止 shell=True，避免命令注入
+            subprocess.run(
+                ['say', safe_text],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
         except subprocess.TimeoutExpired:
             logger.warning(f"用户 {username} 的朗读超时")
             return jsonify({'message': '朗读超时，音频过长'}), 200
@@ -459,21 +537,21 @@ def import_words(username):
         if file.filename == '':
             return jsonify({'error': '没有选择文件'}), 400
         
-        # 读取文件内容
-        content = file.read().decode('utf-8')
+        content = file.read().decode('utf-8', errors='replace')
         
-        # 解析单词
         words = []
         for line in content.split('\n'):
             if ',' in line:
                 parts = line.strip().split(',', 1)
                 if len(parts) == 2:
-                    words.append((parts[0], parts[1]))
+                    en = parts[0].strip()[:500]
+                    zh = parts[1].strip()[:500]
+                    if en and zh:
+                        words.append((en, zh))
         
-        # 添加单词
-        reciter = get_user_reciter(username)
-        reciter.add_words(words)
-        
+        with user_reciter_session(username) as reciter:
+            reciter.add_words(words)
+
         logger.info(f"用户 {username} 导入了 {len(words)} 个单词")
         
         return jsonify({
@@ -482,26 +560,25 @@ def import_words(username):
         }), 200
     except Exception as e:
         logger.error(f"导入单词失败: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '导入失败，请检查文件格式'}), 500
 
 @app.route('/api/words/mastered', methods=['GET'])
 @token_required
 def get_mastered_words(username):
     """获取已掌握单词"""
     try:
-        reciter = get_user_reciter(username)
-        
-        words = [
-            {
-                'english': w.english,
-                'chinese': w.chinese,
-                'review_count': w.review_count,
-                'mastered_date': w.next_review_date.isoformat()
-            }
-            for w in reciter.mastered_words
-        ]
-        
-        return jsonify({'words': words, 'count': len(words)}), 200
+        with user_reciter_session(username) as reciter:
+            words = [
+                {
+                    'english': w.english,
+                    'chinese': w.chinese,
+                    'review_count': w.review_count,
+                    'mastered_date': w.next_review_date.isoformat()
+                }
+                for w in reciter.mastered_words
+            ]
+
+            return jsonify({'words': words, 'count': len(words)}), 200
     except Exception as e:
         logger.error(f"获取已掌握单词失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -516,10 +593,10 @@ def health():
 # ==================== 启动配置 ====================
 
 if __name__ == '__main__':
-    # 开发环境
+    _debug = os.getenv("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
     app.run(
-        host='0.0.0.0',
-        port=8000,
-        debug=True,
-        threaded=True
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "8000")),
+        debug=_debug,
+        threaded=True,
     )

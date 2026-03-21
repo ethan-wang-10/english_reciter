@@ -14,10 +14,11 @@ services:
       # - ./simple_web_app.py:/app/simple_web_app.py
     environment:
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+      - FLASK_ENV=production
       - TZ=Asia/Shanghai
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).read()"]
       interval: 30s
       timeout: 10s
       retries: 3
