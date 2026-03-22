@@ -203,6 +203,27 @@
                         </div>
                         <button id="import-btn" class="btn btn-primary">导入</button>
                     </div>
+
+                    <div class="wordbank-panel" id="wordbank-panel">
+                        <h3 class="import-json-title">家长：从系统词库添加</h3>
+                        <p class="import-json-desc">选择学段后搜索、勾选单词，一键加入「待复习」（与已有英文重复则跳过）。</p>
+                        <div class="wordbank-toolbar">
+                            <div class="wordbank-phases" id="wordbank-phases" role="tablist" aria-label="学段"></div>
+                            <input type="search" id="wordbank-search" class="wordbank-search" placeholder="搜索英文或中文…" autocomplete="off" />
+                        </div>
+                        <p class="wordbank-meta" id="wordbank-meta">加载中…</p>
+                        <div class="wordbank-actions">
+                            <button type="button" id="wordbank-select-filtered" class="btn btn-secondary">全选当前筛选</button>
+                            <button type="button" id="wordbank-clear" class="btn btn-secondary">清除选择</button>
+                            <span class="wordbank-selected-count" id="wordbank-selected-count">已选 0 词</span>
+                        </div>
+                        <div class="wordbank-list-wrap">
+                            <div id="wordbank-list" class="wordbank-list" role="list"></div>
+                            <button type="button" id="wordbank-load-more" class="btn btn-secondary wordbank-load-more" style="display: none;">加载更多</button>
+                        </div>
+                        <button type="button" id="wordbank-import-btn" class="btn btn-primary wordbank-import-btn">将选中的词加入待复习</button>
+                    </div>
+
                     <div class="import-json-panel">
                         <h3 class="import-json-title">家长：粘贴 JSON 导入</h3>
                         <p class="import-json-desc">将学习数据 JSON 粘贴到下方，导入后会加入「待复习」词库（与已有单词英文重复则跳过）。</p>

@@ -838,6 +838,152 @@ body {
     display: none;
 }
 
+/* 系统词库（家长勾选导入） */
+.wordbank-panel {
+    max-width: 640px;
+    margin: 32px auto 0;
+    padding: 28px 0 8px;
+    border-top: 3px dashed var(--border);
+}
+
+.wordbank-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.wordbank-phases {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wordbank-phase-btn {
+    padding: 10px 16px;
+    border-radius: var(--radius-pill);
+    border: 2px solid var(--border);
+    background: var(--surface);
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.wordbank-phase-btn:hover {
+    border-color: var(--secondary-color);
+    color: var(--text-primary);
+}
+
+.wordbank-phase-btn.active {
+    border-color: var(--primary-color);
+    background: var(--primary-light);
+    color: var(--primary-dark);
+}
+
+.wordbank-search {
+    flex: 1;
+    min-width: 180px;
+    padding: 10px 14px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.wordbank-search:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 3px rgba(28, 176, 246, 0.2);
+}
+
+.wordbank-meta {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.wordbank-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.wordbank-selected-count {
+    font-weight: 800;
+    color: var(--primary-dark);
+    font-size: 0.9rem;
+}
+
+.wordbank-list-wrap {
+    margin-bottom: 16px;
+}
+
+.wordbank-list {
+    max-height: 320px;
+    overflow: auto;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    background: #fafcff;
+    padding: 8px 10px;
+}
+
+.wordbank-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 6px;
+    border-radius: 10px;
+    font-size: 0.92rem;
+    line-height: 1.4;
+}
+
+.wordbank-row:nth-child(even) {
+    background: rgba(28, 176, 246, 0.06);
+}
+
+.wordbank-row label {
+    display: flex;
+    flex: 1;
+    gap: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.wordbank-row .wb-en {
+    font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+    font-weight: 800;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.wordbank-row .wb-zh {
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+.wordbank-empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.wordbank-load-more {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.wordbank-import-btn {
+    width: 100%;
+}
+
 .import-json-panel {
     max-width: 600px;
     margin: 32px auto 0;

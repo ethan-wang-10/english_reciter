@@ -1,0 +1,4250 @@
+{
+  "schema": "english_reciter.wordbank/v1",
+  "phase": "junior",
+  "label": "初中",
+  "description": "初中英语词汇（含例句简写）",
+  "version": 1,
+  "count": 848,
+  "words": [
+    {
+      "english": "a",
+      "chinese": "一个（用于辅音音素前）",
+      "example": "I have a book. 我有一本书。"
+    },
+    {
+      "english": "ability",
+      "chinese": "能力",
+      "example": "Learning a foreign language requires ability. 学习外语需要能力。"
+    },
+    {
+      "english": "able",
+      "chinese": "能够的",
+      "example": "I am able to swim. 我能够游泳。"
+    },
+    {
+      "english": "about",
+      "chinese": "关于；大约",
+      "example": "Tell me about yourself. 告诉我关于你的情况。"
+    },
+    {
+      "english": "above",
+      "chinese": "在...上方",
+      "example": "The picture is above the sofa. 图画在沙发上方。"
+    },
+    {
+      "english": "abroad",
+      "chinese": "在国外",
+      "example": "He studies abroad. 他在国外学习。"
+    },
+    {
+      "english": "absent",
+      "chinese": "缺席的",
+      "example": "Tom was absent from school yesterday. 汤姆昨天没来上学。"
+    },
+    {
+      "english": "accept",
+      "chinese": "接受",
+      "example": "I accept your invitation. 我接受你的邀请。"
+    },
+    {
+      "english": "accident",
+      "chinese": "事故",
+      "example": "There was a car accident. 发生了一起车祸。"
+    },
+    {
+      "english": "account",
+      "chinese": "账户；解释",
+      "example": "Please check your bank account. 请检查你的银行账户。"
+    },
+    {
+      "english": "ache",
+      "chinese": "疼痛",
+      "example": "I have a headache. 我头痛。"
+    },
+    {
+      "english": "across",
+      "chinese": "穿过",
+      "example": "Walk across the bridge. 走过这座桥。"
+    },
+    {
+      "english": "act",
+      "chinese": "行动；表演",
+      "example": "Act quickly!_快点行动！"
+    },
+    {
+      "english": "action",
+      "chinese": "行动",
+      "example": "Take action now. 现在就采取行动。"
+    },
+    {
+      "english": "active",
+      "chinese": "积极的",
+      "example": "He is active in class. 他在课堂上很积极。"
+    },
+    {
+      "english": "activity",
+      "chinese": "活动",
+      "example": "School activities are fun. 学校活动很有趣。"
+    },
+    {
+      "english": "add",
+      "chinese": "添加",
+      "example": "Add some sugar to the tea. 在茶里加点糖。"
+    },
+    {
+      "english": "address",
+      "chinese": "地址",
+      "example": "What's your address?_你的地址是什么？"
+    },
+    {
+      "english": "admire",
+      "chinese": "钦佩",
+      "example": "I admire your courage. 我钦佩你的勇气。"
+    },
+    {
+      "english": "admit",
+      "chinese": "承认",
+      "example": "He admitted his mistake. 他承认了自己的错误。"
+    },
+    {
+      "english": "adult",
+      "chinese": "成年人",
+      "example": "Adults should set good examples. 成年人应该树立好榜样。"
+    },
+    {
+      "english": "advance",
+      "chinese": "前进",
+      "example": "The army advanced toward the enemy. 军队向敌人前进。"
+    },
+    {
+      "english": "advice",
+      "chinese": "建议",
+      "example": "Can you give me some advice?_你能给我一些建议吗？"
+    },
+    {
+      "english": "advise",
+      "chinese": "建议",
+      "example": "I advise you to study harder. 我建议你更加努力学习。"
+    },
+    {
+      "english": "afford",
+      "chinese": "负担得起",
+      "example": "I can't afford a new car. 我买不起新车。"
+    },
+    {
+      "english": "afraid",
+      "chinese": "害怕的",
+      "example": "I'm afraid of snakes. 我害怕蛇。"
+    },
+    {
+      "english": "after",
+      "chinese": "在...之后",
+      "example": "After lunch, we went shopping. 午饭后，我们去购物了。"
+    },
+    {
+      "english": "afternoon",
+      "chinese": "下午",
+      "example": "See you this afternoon. 今天下午见。"
+    },
+    {
+      "english": "again",
+      "chinese": "再次",
+      "example": "Please say it again. 请再说一遍。"
+    },
+    {
+      "english": "against",
+      "chinese": "反对",
+      "example": "We are against smoking. 我们反对吸烟。"
+    },
+    {
+      "english": "age",
+      "chinese": "年龄",
+      "example": "What's your age?_你多大了？"
+    },
+    {
+      "english": "ago",
+      "chinese": "以前",
+      "example": "I met him three days ago. 我三天前见过他。"
+    },
+    {
+      "english": "agree",
+      "chinese": "同意",
+      "example": "I agree with you. 我同意你的观点。"
+    },
+    {
+      "english": "agreement",
+      "chinese": "协议",
+      "example": "Both sides signed the agreement. 双方签署了协议。"
+    },
+    {
+      "english": "air",
+      "chinese": "空气",
+      "example": "Fresh air is good for health. 新鲜空气有益健康。"
+    },
+    {
+      "english": "airport",
+      "chinese": "机场",
+      "example": "Let's meet at the airport. 我们在机场见面吧。"
+    },
+    {
+      "english": "alive",
+      "chinese": "活着的",
+      "example": "The fish is still alive. 鱼还活着。"
+    },
+    {
+      "english": "all",
+      "chinese": "所有的",
+      "example": "All students must attend. 所有学生都必须参加。"
+    },
+    {
+      "english": "allow",
+      "chinese": "允许",
+      "example": "My parents allow me to stay out late. 我父母允许我晚归。"
+    },
+    {
+      "english": "almost",
+      "chinese": "几乎",
+      "example": "I almost forgot. 我差点忘了。"
+    },
+    {
+      "english": "alone",
+      "chinese": "独自",
+      "example": "He lives alone. 他独自生活。"
+    },
+    {
+      "english": "along",
+      "chinese": "沿着",
+      "example": "Walk along this street. 沿着这条街走。"
+    },
+    {
+      "english": "aloud",
+      "chinese": "大声地",
+      "example": "Read aloud, please. 请大声朗读。"
+    },
+    {
+      "english": "already",
+      "chinese": "已经",
+      "example": "I have already finished. 我已经完成了。"
+    },
+    {
+      "english": "also",
+      "chinese": "也",
+      "example": "She is also coming. 她也要来。"
+    },
+    {
+      "english": "although",
+      "chinese": "尽管",
+      "example": "Although it's raining, we'll go. 尽管在下雨，我们还是要去。"
+    },
+    {
+      "english": "always",
+      "chinese": "总是",
+      "example": "He always arrives on time. 他总是准时到达。"
+    },
+    {
+      "english": "am",
+      "chinese": "是（be的第一人称单数形式）",
+      "example": "I am a student. 我是学生。"
+    },
+    {
+      "english": "amazing",
+      "chinese": "令人惊奇的",
+      "example": "The view is amazing. 景色令人惊叹。"
+    },
+    {
+      "english": "America",
+      "chinese": "美国",
+      "example": "America is a developed country. 美国是发达国家。"
+    },
+    {
+      "english": "American",
+      "chinese": "美国的；美国人",
+      "example": "He is American. 他是美国人。"
+    },
+    {
+      "english": "among",
+      "chinese": "在...中间",
+      "example": "He sat among his friends. 他坐在朋友们中间。"
+    },
+    {
+      "english": "amount",
+      "chinese": "数量",
+      "example": "A large amount of water evaporated. 大量水分蒸发了。"
+    },
+    {
+      "english": "an",
+      "chinese": "一个（用于元音音素前）",
+      "example": "She is an artist. 她是一名艺术家。"
+    },
+    {
+      "english": "and",
+      "chinese": "和",
+      "example": "Bread and butter is my breakfast. 面包和黄油是我的早餐。"
+    },
+    {
+      "english": "angry",
+      "chinese": "生气的",
+      "example": "Don't be angry. 别生气。"
+    },
+    {
+      "english": "animal",
+      "chinese": "动物",
+      "example": "Dogs are loyal animals. 狗是忠诚的动物。"
+    },
+    {
+      "english": "another",
+      "chinese": "另一个",
+      "example": "Would you like another cup of tea?_你想再来一杯茶吗？"
+    },
+    {
+      "english": "answer",
+      "chinese": "回答",
+      "example": "Can you answer this question?_你能回答这个问题吗？"
+    },
+    {
+      "english": "any",
+      "chinese": "任何",
+      "example": "Do you have any questions?_你有任何问题吗？"
+    },
+    {
+      "english": "anybody",
+      "chinese": "任何人",
+      "example": "Is anybody home?_有人在家吗？"
+    },
+    {
+      "english": "anyone",
+      "chinese": "任何人",
+      "example": "Anyone can join. 任何人都可以加入。"
+    },
+    {
+      "english": "anything",
+      "chinese": "任何事物",
+      "example": "I don't know anything. 我什么都不知道。"
+    },
+    {
+      "english": "anyway",
+      "chinese": "无论如何",
+      "example": "It's raining, but let's go anyway. 在下雨，但我们还是去吧。"
+    },
+    {
+      "english": "anywhere",
+      "chinese": "任何地方",
+      "example": "You can sit anywhere. 你可以坐在任何地方。"
+    },
+    {
+      "english": "appear",
+      "chinese": "出现",
+      "example": "The sun appeared from behind the clouds. 太阳从云层后面出现了。"
+    },
+    {
+      "english": "apple",
+      "chinese": "苹果",
+      "example": "An apple a day keeps the doctor away. 一天一苹果，医生远离我。"
+    },
+    {
+      "english": "April",
+      "chinese": "四月",
+      "example": "April is the fourth month. 四月是第四个月。"
+    },
+    {
+      "english": "area",
+      "chinese": "区域",
+      "example": "This area is famous for its scenery. 这个地区以其风景而闻名。"
+    },
+    {
+      "english": "arm",
+      "chinese": "胳膊",
+      "example": "Raise your arm. 举起你的胳膊。"
+    },
+    {
+      "english": "army",
+      "chinese": "军队",
+      "example": "The army defended the country. 军队保卫了国家。"
+    },
+    {
+      "english": "around",
+      "chinese": "围绕；大约",
+      "example": "We walked around the lake. 我们绕着湖走。"
+    },
+    {
+      "english": "arrive",
+      "chinese": "到达",
+      "example": "What time did you arrive?_你什么时候到的？"
+    },
+    {
+      "english": "art",
+      "chinese": "艺术",
+      "example": "Art enriches our lives. 艺术丰富了我们的生活。"
+    },
+    {
+      "english": "article",
+      "chinese": "文章",
+      "example": "I wrote an article for the newspaper. 我为报纸写了一篇文章。"
+    },
+    {
+      "english": "as",
+      "chinese": "作为；如同",
+      "example": "As a student, you should study hard. 作为一名学生，你应该努力学习。"
+    },
+    {
+      "english": "ask",
+      "chinese": "询问",
+      "example": "May I ask a question?_我可以问一个问题吗？"
+    },
+    {
+      "english": "asleep",
+      "chinese": "睡着的",
+      "example": "The baby is asleep. 婴儿在睡觉。"
+    },
+    {
+      "english": "at",
+      "chinese": "在",
+      "example": "I'll meet you at the station. 我在车站等你。"
+    },
+    {
+      "english": "attack",
+      "chinese": "攻击",
+      "example": "The dog attacked the stranger. 狗攻击了陌生人。"
+    },
+    {
+      "english": "attend",
+      "chinese": "参加",
+      "example": "I attend school every day. 我每天上学。"
+    },
+    {
+      "english": "attention",
+      "chinese": "注意力",
+      "example": "Pay attention to the teacher. 注意听老师讲课。"
+    },
+    {
+      "english": "August",
+      "chinese": "八月",
+      "example": "My birthday is in August. 我的生日在八月。"
+    },
+    {
+      "english": "aunt",
+      "chinese": "阿姨",
+      "example": "My aunt is a nurse. 我的阿姨是护士。"
+    },
+    {
+      "english": "autumn",
+      "chinese": "秋天",
+      "example": "Autumn is my favorite season. 秋天是我最喜欢的季节。"
+    },
+    {
+      "english": "avoid",
+      "chinese": "避免",
+      "example": "Try to avoid mistakes. 尽量避免错误。"
+    },
+    {
+      "english": "awake",
+      "chinese": "醒着的",
+      "example": "I was awake all night. 我整夜都没睡。"
+    },
+    {
+      "english": "away",
+      "chinese": "离开",
+      "example": "Go away!_走开！"
+    },
+    {
+      "english": "baby",
+      "chinese": "婴儿",
+      "example": "The baby is sleeping. 婴儿在睡觉。"
+    },
+    {
+      "english": "back",
+      "chinese": "背部；回来",
+      "example": "Turn back, please. 请转身回来。"
+    },
+    {
+      "english": "bad",
+      "chinese": "坏的",
+      "example": "This is bad news. 这是坏消息。"
+    },
+    {
+      "english": "bag",
+      "chinese": "包",
+      "example": "I bought a new bag. 我买了一个新包。"
+    },
+    {
+      "english": "ball",
+      "chinese": "球",
+      "example": "Let's play ball. 我们来打球吧。"
+    },
+    {
+      "english": "balloon",
+      "chinese": "气球",
+      "example": "The balloon floated away. 气球飘走了。"
+    },
+    {
+      "english": "banana",
+      "chinese": "香蕉",
+      "example": "Bananas are rich in potassium. 香蕉富含钾。"
+    },
+    {
+      "english": "bank",
+      "chinese": "银行；河岸",
+      "example": "I deposited money at the bank. 我在银行存了钱。"
+    },
+    {
+      "english": "base",
+      "chinese": "基础",
+      "example": "The base of the building is strong. 建筑物的基础很牢固。"
+    },
+    {
+      "english": "basic",
+      "chinese": "基本的",
+      "example": "These are basic rules. 这些是基本规则。"
+    },
+    {
+      "english": "basket",
+      "chinese": "篮子",
+      "example": "Put the fruit in the basket. 把水果放进篮子里。"
+    },
+    {
+      "english": "basketball",
+      "chinese": "篮球",
+      "example": "Basketball is popular in America. 篮球在美国很受欢迎。"
+    },
+    {
+      "english": "bath",
+      "chinese": "洗澡",
+      "example": "I take a bath every evening. 我每天晚上洗澡。"
+    },
+    {
+      "english": "be",
+      "chinese": "是",
+      "example": "I want to be a teacher. 我想成为一名教师。"
+    },
+    {
+      "english": "beach",
+      "chinese": "海滩",
+      "example": "Let's go to the beach. 我们去海滩吧。"
+    },
+    {
+      "english": "bear",
+      "chinese": "熊；忍受",
+      "example": "The bear is sleeping. 熊在睡觉。"
+    },
+    {
+      "english": "beautiful",
+      "chinese": "美丽的",
+      "example": "She is beautiful. 她很美丽。"
+    },
+    {
+      "english": "because",
+      "chinese": "因为",
+      "example": "I stayed home because it rained. 我待在家里因为下雨了。"
+    },
+    {
+      "english": "become",
+      "chinese": "变成",
+      "example": "She became a doctor. 她成为了一名医生。"
+    },
+    {
+      "english": "bed",
+      "chinese": "床",
+      "example": "I made my bed. 我铺好了床。"
+    },
+    {
+      "english": "bedroom",
+      "chinese": "卧室",
+      "example": "My bedroom faces south. 我的卧室朝南。"
+    },
+    {
+      "english": "before",
+      "chinese": "在...之前",
+      "example": "Finish your homework before dinner. 晚饭前完成作业。"
+    },
+    {
+      "english": "begin",
+      "chinese": "开始",
+      "example": "Let's begin. 让我们开始吧。"
+    },
+    {
+      "english": "behind",
+      "chinese": "在...后面",
+      "example": "The cat is behind the door. 猫在门后面。"
+    },
+    {
+      "english": "believe",
+      "chinese": "相信",
+      "example": "I believe you. 我相信你。"
+    },
+    {
+      "english": "bell",
+      "chinese": "铃",
+      "example": "The bell rang. 铃响了。"
+    },
+    {
+      "english": "below",
+      "chinese": "在...下面",
+      "example": "The temperature is below zero. 温度在零度以下。"
+    },
+    {
+      "english": "beside",
+      "chinese": "在...旁边",
+      "example": "Sit beside me. 坐在我旁边。"
+    },
+    {
+      "english": "best",
+      "chinese": "最好的",
+      "example": "Do your best. 尽力而为。"
+    },
+    {
+      "english": "better",
+      "chinese": "更好的",
+      "example": "You look better today. 你今天看起来好多了。"
+    },
+    {
+      "english": "between",
+      "chinese": "在...之间",
+      "example": "The school is between the bank and the post office. 学校在银行和邮局之间。"
+    },
+    {
+      "english": "big",
+      "chinese": "大的",
+      "example": "This is a big house. 这是一座大房子。"
+    },
+    {
+      "english": "bike",
+      "chinese": "自行车",
+      "example": "I ride my bike to school. 我骑自行车上学。"
+    },
+    {
+      "english": "bird",
+      "chinese": "鸟",
+      "example": "The bird is singing. 鸟儿在歌唱。"
+    },
+    {
+      "english": "birth",
+      "chinese": "出生",
+      "example": "His birth was celebrated. 他的出生受到了庆祝。"
+    },
+    {
+      "english": "birthday",
+      "chinese": "生日",
+      "example": "Happy birthday!_生日快乐！"
+    },
+    {
+      "english": "bit",
+      "chinese": "一点",
+      "example": "I'm a bit tired. 我有点累。"
+    },
+    {
+      "english": "black",
+      "chinese": "黑色的",
+      "example": "The board is black. 这块板是黑色的。"
+    },
+    {
+      "english": "blackboard",
+      "chinese": "黑板",
+      "example": "Write on the blackboard. 在黑板上写字。"
+    },
+    {
+      "english": "blind",
+      "chinese": "盲的",
+      "example": "The blind man uses a cane. 盲人使用拐杖。"
+    },
+    {
+      "english": "blue",
+      "chinese": "蓝色的",
+      "example": "The sky is blue. 天空是蓝色的。"
+    },
+    {
+      "english": "boat",
+      "chinese": "船",
+      "example": "We went boating. 我们去划船了。"
+    },
+    {
+      "english": "body",
+      "chinese": "身体",
+      "example": "Exercise is good for your body. 运动对身体有益。"
+    },
+    {
+      "english": "book",
+      "chinese": "书",
+      "example": "I borrowed a book from the library. 我从图书馆借了一本书。"
+    },
+    {
+      "english": "born",
+      "chinese": "出生",
+      "example": "I was born in 2000. 我出生于2000年。"
+    },
+    {
+      "english": "both",
+      "chinese": "两者都",
+      "example": "Both answers are correct. 两个答案都正确。"
+    },
+    {
+      "english": "bottle",
+      "chinese": "瓶子",
+      "example": "Drink water from the bottle. 从瓶子里喝水。"
+    },
+    {
+      "english": "box",
+      "chinese": "盒子",
+      "example": "Put the toys in the box. 把玩具放进盒子里。"
+    },
+    {
+      "english": "boy",
+      "chinese": "男孩",
+      "example": "The boy is playing. 男孩在玩耍。"
+    },
+    {
+      "english": "break",
+      "chinese": "打破",
+      "example": "Don't break the window. 别打破窗户。"
+    },
+    {
+      "english": "breakfast",
+      "chinese": "早餐",
+      "example": "I have breakfast at 7 AM. 我早上7点吃早餐。"
+    },
+    {
+      "english": "bring",
+      "chinese": "带来",
+      "example": "Bring your umbrella. 带上你的伞。"
+    },
+    {
+      "english": "brother",
+      "chinese": "兄弟",
+      "example": "My brother is older than me. 我的哥哥比我大。"
+    },
+    {
+      "english": "brown",
+      "chinese": "棕色的",
+      "example": "The bear is brown. 熊是棕色的。"
+    },
+    {
+      "english": "brush",
+      "chinese": "刷子；刷",
+      "example": "Brush your teeth. 刷牙。"
+    },
+    {
+      "english": "build",
+      "chinese": "建造",
+      "example": "They built a house. 他们建了一座房子。"
+    },
+    {
+      "english": "bus",
+      "chinese": "公交车",
+      "example": "Take the bus to school. 坐公交车去学校。"
+    },
+    {
+      "english": "business",
+      "chinese": "生意",
+      "example": "He is in business. 他做生意。"
+    },
+    {
+      "english": "but",
+      "chinese": "但是",
+      "example": "I like apples, but I don't like oranges. 我喜欢苹果，但不喜欢橙子。"
+    },
+    {
+      "english": "buy",
+      "chinese": "买",
+      "example": "I want to buy a new car. 我想买一辆新车。"
+    },
+    {
+      "english": "by",
+      "chinese": "通过；在...旁边",
+      "example": "I go to school by bus. 我坐公交车去学校。"
+    },
+    {
+      "english": "cake",
+      "chinese": "蛋糕",
+      "example": "She baked a cake. 她烤了一个蛋糕。"
+    },
+    {
+      "english": "call",
+      "chinese": "打电话；叫",
+      "example": "Please call me. 请给我打电话。"
+    },
+    {
+      "english": "can",
+      "chinese": "能够；罐头",
+      "example": "I can swim. 我会游泳。"
+    },
+    {
+      "english": "can't",
+      "chinese": "不能",
+      "example": "I can't speak French. 我不会说法语。"
+    },
+    {
+      "english": "cap",
+      "chinese": "帽子",
+      "example": "Put on your cap. 戴上你的帽子。"
+    },
+    {
+      "english": "capital",
+      "chinese": "首都",
+      "example": "Beijing is the capital of China. 北京是中国的首都。"
+    },
+    {
+      "english": "car",
+      "chinese": "汽车",
+      "example": "I drive a car. 我开车。"
+    },
+    {
+      "english": "card",
+      "chinese": "卡片",
+      "example": "I sent a card. 我寄了一张卡片。"
+    },
+    {
+      "english": "care",
+      "chinese": "关心",
+      "example": "Take care!_保重！"
+    },
+    {
+      "english": "careful",
+      "chinese": "小心的",
+      "example": "Be careful. 小心点。"
+    },
+    {
+      "english": "carry",
+      "chinese": "携带",
+      "example": "I carry a bag. 我携带一个包。"
+    },
+    {
+      "english": "case",
+      "chinese": "情况；箱子",
+      "example": "In this case, we should leave. 在这种情况下，我们应该离开。"
+    },
+    {
+      "english": "cat",
+      "chinese": "猫",
+      "example": "The cat is sleeping. 猫在睡觉。"
+    },
+    {
+      "english": "catch",
+      "chinese": "抓住",
+      "example": "Catch the ball. 接住球。"
+    },
+    {
+      "english": "cause",
+      "chinese": "原因",
+      "example": "What's the cause of the fire?_火灾的原因是什么？"
+    },
+    {
+      "english": "celebrate",
+      "chinese": "庆祝",
+      "example": "We celebrate Christmas. 我们庆祝圣诞节。"
+    },
+    {
+      "english": "centre",
+      "chinese": "中心",
+      "example": "The hotel is in the centre of the city. 酒店在市中心。"
+    },
+    {
+      "english": "century",
+      "chinese": "世纪",
+      "example": "We are in the 21st century. 我们在21世纪。"
+    },
+    {
+      "english": "chair",
+      "chinese": "椅子",
+      "example": "Sit on the chair. 坐在椅子上。"
+    },
+    {
+      "english": "change",
+      "chinese": "改变",
+      "example": "Things change. 事物会改变。"
+    },
+    {
+      "english": "child",
+      "chinese": "孩子",
+      "example": "The child is playing. 孩子在玩耍。"
+    },
+    {
+      "english": "children",
+      "chinese": "孩子们",
+      "example": "The children are happy. 孩子们很开心。"
+    },
+    {
+      "english": "China",
+      "chinese": "中国",
+      "example": "China is a great country. 中国是一个伟大的国家。"
+    },
+    {
+      "english": "Chinese",
+      "chinese": "中国的；中文",
+      "example": "I study Chinese. 我学习中文。"
+    },
+    {
+      "english": "chocolate",
+      "chinese": "巧克力",
+      "example": "I like chocolate. 我喜欢巧克力。"
+    },
+    {
+      "english": "choice",
+      "chinese": "选择",
+      "example": "It's your choice. 这是你的选择。"
+    },
+    {
+      "english": "choose",
+      "chinese": "选择",
+      "example": "Choose wisely. 明智地选择。"
+    },
+    {
+      "english": "city",
+      "chinese": "城市",
+      "example": "New York is a big city. 纽约是一个大城市。"
+    },
+    {
+      "english": "class",
+      "chinese": "班级",
+      "example": "I have English class. 我有英语课。"
+    },
+    {
+      "english": "classroom",
+      "chinese": "教室",
+      "example": "The classroom is clean. 教室很干净。"
+    },
+    {
+      "english": "clean",
+      "chinese": "干净的",
+      "example": "Clean your room. 打扫你的房间。"
+    },
+    {
+      "english": "clear",
+      "chinese": "清楚的",
+      "example": "The sky is clear. 天空很晴朗。"
+    },
+    {
+      "english": "close",
+      "chinese": "关闭",
+      "example": "Close the door. 关门。"
+    },
+    {
+      "english": "clothes",
+      "chinese": "衣服",
+      "example": "I bought new clothes. 我买了新衣服。"
+    },
+    {
+      "english": "cloud",
+      "chinese": "云",
+      "example": "The cloud is white. 云是白色的。"
+    },
+    {
+      "english": "cloudy",
+      "chinese": "多云的",
+      "example": "It's cloudy today. 今天多云。"
+    },
+    {
+      "english": "club",
+      "chinese": "俱乐部",
+      "example": "I joined a sports club. 我加入了一个体育俱乐部。"
+    },
+    {
+      "english": "coffee",
+      "chinese": "咖啡",
+      "example": "I drink coffee. 我喝咖啡。"
+    },
+    {
+      "english": "cold",
+      "chinese": "冷的",
+      "example": "It's cold today. 今天很冷。"
+    },
+    {
+      "english": "collect",
+      "chinese": "收集",
+      "example": "I collect stamps. 我收集邮票。"
+    },
+    {
+      "english": "colour",
+      "chinese": "颜色",
+      "example": "What's your favourite colour?_你最喜欢什么颜色？"
+    },
+    {
+      "english": "come",
+      "chinese": "来",
+      "example": "Come here. 过来。"
+    },
+    {
+      "english": "company",
+      "chinese": "公司",
+      "example": "He works for a big company. 他在一家大公司工作。"
+    },
+    {
+      "english": "computer",
+      "chinese": "电脑",
+      "example": "I use a computer. 我使用电脑。"
+    },
+    {
+      "english": "condition",
+      "chinese": "条件",
+      "example": "The car is in good condition. 这辆车状况良好。"
+    },
+    {
+      "english": "connect",
+      "chinese": "连接",
+      "example": "Connect the wires. 连接电线。"
+    },
+    {
+      "english": "continue",
+      "chinese": "继续",
+      "example": "Continue working. 继续工作。"
+    },
+    {
+      "english": "control",
+      "chinese": "控制",
+      "example": "You must control yourself. 你必须控制自己。"
+    },
+    {
+      "english": "cook",
+      "chinese": "烹饪",
+      "example": "I cook dinner. 我做晚饭。"
+    },
+    {
+      "english": "copy",
+      "chinese": "复制",
+      "example": "Copy this page. 复印这一页。"
+    },
+    {
+      "english": "correct",
+      "chinese": "正确的",
+      "example": "Your answer is correct. 你的答案是正确的。"
+    },
+    {
+      "english": "cost",
+      "chinese": "花费",
+      "example": "How much does it cost?_这要多少钱？"
+    },
+    {
+      "english": "could",
+      "chinese": "能够（过去式）",
+      "example": "I could swim when I was young. 我小时候会游泳。"
+    },
+    {
+      "english": "country",
+      "chinese": "国家",
+      "example": "China is my country. 中国是我的国家。"
+    },
+    {
+      "english": "cover",
+      "chinese": "覆盖",
+      "example": "Cover the pot. 盖上锅盖。"
+    },
+    {
+      "english": "cross",
+      "chinese": "穿过",
+      "example": "Cross the street. 穿过街道。"
+    },
+    {
+      "english": "cry",
+      "chinese": "哭",
+      "example": "The baby cries. 婴儿哭了。"
+    },
+    {
+      "english": "cup",
+      "chinese": "杯子",
+      "example": "Drink from the cup. 从杯子里喝水。"
+    },
+    {
+      "english": "cut",
+      "chinese": "切",
+      "example": "Cut the bread. 切面包。"
+    },
+    {
+      "english": "dance",
+      "chinese": "跳舞",
+      "example": "She dances beautifully. 她跳舞跳得很美。"
+    },
+    {
+      "english": "day",
+      "chinese": "天",
+      "example": "It's a beautiful day. 这是美好的一天。"
+    },
+    {
+      "english": "dead",
+      "chinese": "死的",
+      "example": "The flower is dead. 花死了。"
+    },
+    {
+      "english": "decide",
+      "chinese": "决定",
+      "example": "I decided to go. 我决定去。"
+    },
+    {
+      "english": "decision",
+      "chinese": "决定",
+      "example": "It's a difficult decision. 这是一个艰难的决定。"
+    },
+    {
+      "english": "deep",
+      "chinese": "深的",
+      "example": "The river is deep. 这条河很深。"
+    },
+    {
+      "english": "delicious",
+      "chinese": "美味的",
+      "example": "The food is delicious. 食物很美味。"
+    },
+    {
+      "english": "depend",
+      "chinese": "依赖",
+      "example": "It depends. 看情况。"
+    },
+    {
+      "english": "describe",
+      "chinese": "描述",
+      "example": "Describe yourself. 描述一下你自己。"
+    },
+    {
+      "english": "develop",
+      "chinese": "发展",
+      "example": "The city develops quickly. 城市发展很快。"
+    },
+    {
+      "english": "different",
+      "chinese": "不同的",
+      "example": "We have different opinions. 我们有不同的观点。"
+    },
+    {
+      "english": "difficult",
+      "chinese": "困难的",
+      "example": "This question is difficult. 这个问题很难。"
+    },
+    {
+      "english": "dinner",
+      "chinese": "晚餐",
+      "example": "I have dinner at 6 PM. 我晚上6点吃晚饭。"
+    },
+    {
+      "english": "do",
+      "chinese": "做",
+      "example": "Do your homework. 做你的作业。"
+    },
+    {
+      "english": "doctor",
+      "chinese": "医生",
+      "example": "The doctor is kind. 医生很和蔼。"
+    },
+    {
+      "english": "dog",
+      "chinese": "狗",
+      "example": "The dog barks. 狗在叫。"
+    },
+    {
+      "english": "door",
+      "chinese": "门",
+      "example": "Open the door. 开门。"
+    },
+    {
+      "english": "double",
+      "chinese": "双倍的",
+      "example": "I ordered a double coffee. 我要了一杯双份咖啡。"
+    },
+    {
+      "english": "down",
+      "chinese": "向下",
+      "example": "Sit down. 坐下。"
+    },
+    {
+      "english": "draw",
+      "chinese": "画",
+      "example": "I draw pictures. 我画画。"
+    },
+    {
+      "english": "dream",
+      "chinese": "梦想",
+      "example": "I have a dream. 我有一个梦想。"
+    },
+    {
+      "english": "dress",
+      "chinese": "连衣裙",
+      "example": "She wears a red dress. 她穿着红色连衣裙。"
+    },
+    {
+      "english": "drink",
+      "chinese": "喝",
+      "example": "I drink water. 我喝水。"
+    },
+    {
+      "english": "drive",
+      "chinese": "开车",
+      "example": "He drives carefully. 他开车很小心。"
+    },
+    {
+      "english": "driver",
+      "chinese": "司机",
+      "example": "The driver is experienced. 司机很有经验。"
+    },
+    {
+      "english": "drop",
+      "chinese": "掉落",
+      "example": "The ball dropped. 球掉了下来。"
+    },
+    {
+      "english": "dry",
+      "chinese": "干燥的",
+      "example": "The clothes are dry. 衣服干了。"
+    },
+    {
+      "english": "duck",
+      "chinese": "鸭子",
+      "example": "The duck swims. 鸭子在游泳。"
+    },
+    {
+      "english": "during",
+      "chinese": "在...期间",
+      "example": "I slept during the class. 我在课堂上睡着了。"
+    },
+    {
+      "english": "each",
+      "chinese": "每个",
+      "example": "Each student has a book. 每个学生都有一本书。"
+    },
+    {
+      "english": "early",
+      "chinese": "早的",
+      "example": "I wake up early. 我起得很早。"
+    },
+    {
+      "english": "earth",
+      "chinese": "地球",
+      "example": "The earth orbits the sun. 地球绕太阳运行。"
+    },
+    {
+      "english": "east",
+      "chinese": "东方",
+      "example": "The sun rises in the east. 太阳从东方升起。"
+    },
+    {
+      "english": "easy",
+      "chinese": "容易的",
+      "example": "This is easy. 这很容易。"
+    },
+    {
+      "english": "eat",
+      "chinese": "吃",
+      "example": "I eat breakfast. 我吃早餐。"
+    },
+    {
+      "english": "education",
+      "chinese": "教育",
+      "example": "Education is important. 教育很重要。"
+    },
+    {
+      "english": "effect",
+      "chinese": "效果",
+      "example": "The medicine has a good effect. 这药效果很好。"
+    },
+    {
+      "english": "egg",
+      "chinese": "鸡蛋",
+      "example": "I eat an egg. 我吃一个鸡蛋。"
+    },
+    {
+      "english": "eight",
+      "chinese": "八",
+      "example": "Eight plus two equals ten. 八加二等于十。"
+    },
+    {
+      "english": "either",
+      "chinese": "也（否定句中）",
+      "example": "I don't like coffee either. 我也不喜欢咖啡。"
+    },
+    {
+      "english": "elephant",
+      "chinese": "大象",
+      "example": "The elephant is big. 大象很大。"
+    },
+    {
+      "english": "eleven",
+      "chinese": "十一",
+      "example": "November is the eleventh month. 十一月是第十一个月。"
+    },
+    {
+      "english": "else",
+      "chinese": "别的",
+      "example": "What else do you want?_你还想要什么别的吗？"
+    },
+    {
+      "english": "empty",
+      "chinese": "空的",
+      "example": "The bottle is empty. 瓶子是空的。"
+    },
+    {
+      "english": "end",
+      "chinese": "结束",
+      "example": "The film has ended. 电影结束了。"
+    },
+    {
+      "english": "energy",
+      "chinese": "能量",
+      "example": "Solar energy is renewable. 太阳能是可再生的。"
+    },
+    {
+      "english": "engineer",
+      "chinese": "工程师",
+      "example": "He is an engineer. 他是工程师。"
+    },
+    {
+      "english": "English",
+      "chinese": "英语",
+      "example": "I study English. 我学英语。"
+    },
+    {
+      "english": "enjoy",
+      "chinese": "享受",
+      "example": "I enjoy music. 我喜欢音乐。"
+    },
+    {
+      "english": "enough",
+      "chinese": "足够的",
+      "example": "I have enough money. 我有足够的钱。"
+    },
+    {
+      "english": "enter",
+      "chinese": "进入",
+      "example": "Enter the room. 进入房间。"
+    },
+    {
+      "english": "environment",
+      "chinese": "环境",
+      "example": "Protect the environment. 保护环境。"
+    },
+    {
+      "english": "eraser",
+      "chinese": "橡皮擦",
+      "example": "Use an eraser. 使用橡皮擦。"
+    },
+    {
+      "english": "even",
+      "chinese": "甚至",
+      "example": "Even children can understand. 甚至连孩子都能理解。"
+    },
+    {
+      "english": "evening",
+      "chinese": "晚上",
+      "example": "Good evening!_晚上好！"
+    },
+    {
+      "english": "every",
+      "chinese": "每个",
+      "example": "Every day is a new beginning. 每一天都是新的开始。"
+    },
+    {
+      "english": "everyone",
+      "chinese": "每个人",
+      "example": "Everyone is here. 每个人都在这里。"
+    },
+    {
+      "english": "everything",
+      "chinese": "每件事",
+      "example": "Everything is ready. 一切都准备好了。"
+    },
+    {
+      "english": "everywhere",
+      "chinese": "到处",
+      "example": "Books are everywhere. 书到处都是。"
+    },
+    {
+      "english": "exam",
+      "chinese": "考试",
+      "example": "I have an exam. 我有考试。"
+    },
+    {
+      "english": "example",
+      "chinese": "例子",
+      "example": "For example,_例如，"
+    },
+    {
+      "english": "exercise",
+      "chinese": "锻炼",
+      "example": "Daily exercise is good. 每日锻炼有益健康。"
+    },
+    {
+      "english": "expect",
+      "chinese": "期待",
+      "example": "I expect good results. 我期待好结果。"
+    },
+    {
+      "english": "expensive",
+      "chinese": "昂贵的",
+      "example": "This car is expensive. 这辆车很贵。"
+    },
+    {
+      "english": "explain",
+      "chinese": "解释",
+      "example": "Please explain. 请解释一下。"
+    },
+    {
+      "english": "eye",
+      "chinese": "眼睛",
+      "example": "I see with my eyes. 我用眼睛看。"
+    },
+    {
+      "english": "face",
+      "chinese": "脸",
+      "example": "Wash your face. 洗脸。"
+    },
+    {
+      "english": "fact",
+      "chinese": "事实",
+      "example": "In fact,_事实上，"
+    },
+    {
+      "english": "fail",
+      "chinese": "失败",
+      "example": "Don't be afraid to fail. 不要害怕失败。"
+    },
+    {
+      "english": "fall",
+      "chinese": "秋天；跌倒",
+      "example": "Leaves fall in autumn. 叶子在秋天落下。"
+    },
+    {
+      "english": "family",
+      "chinese": "家庭",
+      "example": "My family is big. 我的家庭很大。"
+    },
+    {
+      "english": "famous",
+      "chinese": "著名的",
+      "example": "He is famous. 他很有名。"
+    },
+    {
+      "english": "fan",
+      "chinese": "风扇；粉丝",
+      "example": "Turn on the fan. 打开风扇。"
+    },
+    {
+      "english": "far",
+      "chinese": "远的",
+      "example": "The school is far. 学校很远。"
+    },
+    {
+      "english": "farm",
+      "chinese": "农场",
+      "example": "He works on a farm. 他在农场工作。"
+    },
+    {
+      "english": "farmer",
+      "chinese": "农民",
+      "example": "The farmer grows crops. 农民种植庄稼。"
+    },
+    {
+      "english": "fast",
+      "chinese": "快的",
+      "example": "He runs fast. 他跑得很快。"
+    },
+    {
+      "english": "father",
+      "chinese": "父亲",
+      "example": "My father is kind. 我的父亲很和蔼。"
+    },
+    {
+      "english": "fear",
+      "chinese": "害怕",
+      "example": "I fear heights. 我恐高。"
+    },
+    {
+      "english": "feel",
+      "chinese": "感觉",
+      "example": "I feel happy. 我感到快乐。"
+    },
+    {
+      "english": "feeling",
+      "chinese": "感觉",
+      "example": "I have a good feeling. 我有很好的感觉。"
+    },
+    {
+      "english": "few",
+      "chinese": "少数",
+      "example": "Few people know. 很少有人知道。"
+    },
+    {
+      "english": "field",
+      "chinese": "田地",
+      "example": "The field is green. 田地是绿色的。"
+    },
+    {
+      "english": "fight",
+      "chinese": "打架",
+      "example": "Don't fight. 别打架。"
+    },
+    {
+      "english": "fill",
+      "chinese": "填满",
+      "example": "Fill the glass. 装满杯子。"
+    },
+    {
+      "english": "find",
+      "chinese": "找到",
+      "example": "I find my keys. 我找到了钥匙。"
+    },
+    {
+      "english": "fire",
+      "chinese": "火",
+      "example": "Don't play with fire. 别玩火。"
+    },
+    {
+      "english": "first",
+      "chinese": "第一",
+      "example": "I finished first. 我第一个完成。"
+    },
+    {
+      "english": "fish",
+      "chinese": "鱼",
+      "example": "I like fish. 我喜欢鱼。"
+    },
+    {
+      "english": "fit",
+      "chinese": "健康的",
+      "example": "She is fit. 她很健康。"
+    },
+    {
+      "english": "five",
+      "chinese": "五",
+      "example": "Five minus two equals three. 五减二等于三。"
+    },
+    {
+      "english": "fix",
+      "chinese": "修理",
+      "example": "Fix the bike. 修理自行车。"
+    },
+    {
+      "english": "flight",
+      "chinese": "航班",
+      "example": "My flight is delayed. 我的航班延误了。"
+    },
+    {
+      "english": "floor",
+      "chinese": "地板",
+      "example": "Clean the floor. 打扫地板。"
+    },
+    {
+      "english": "flower",
+      "chinese": "花",
+      "example": "The flower is beautiful. 花很美丽。"
+    },
+    {
+      "english": "fly",
+      "chinese": "飞",
+      "example": "Birds fly. 鸟儿飞翔。"
+    },
+    {
+      "english": "food",
+      "chinese": "食物",
+      "example": "I like Chinese food. 我喜欢中餐。"
+    },
+    {
+      "english": "foot",
+      "chinese": "脚",
+      "example": "I hurt my foot. 我伤了脚。"
+    },
+    {
+      "english": "football",
+      "chinese": "足球",
+      "example": "I play football. 我踢足球。"
+    },
+    {
+      "english": "for",
+      "chinese": "为了",
+      "example": "This gift is for you. 这个礼物是给你的。"
+    },
+    {
+      "english": "foreign",
+      "chinese": "外国的",
+      "example": "He speaks a foreign language. 他说外语。"
+    },
+    {
+      "english": "forest",
+      "chinese": "森林",
+      "example": "The forest is quiet. 森林很安静。"
+    },
+    {
+      "english": "forget",
+      "chinese": "忘记",
+      "example": "Don't forget. 别忘了。"
+    },
+    {
+      "english": "form",
+      "chinese": "形式",
+      "example": "Fill in this form. 填写这张表格。"
+    },
+    {
+      "english": "four",
+      "chinese": "四",
+      "example": "Four plus four equals eight. 四加四等于八。"
+    },
+    {
+      "english": "free",
+      "chinese": "免费的",
+      "example": "The tickets are free. 票是免费的。"
+    },
+    {
+      "english": "friend",
+      "chinese": "朋友",
+      "example": "He is my friend. 他是我的朋友。"
+    },
+    {
+      "english": "from",
+      "chinese": "来自",
+      "example": "I'm from China. 我来自中国。"
+    },
+    {
+      "english": "front",
+      "chinese": "前面",
+      "example": "Stand in front. 站在前面。"
+    },
+    {
+      "english": "full",
+      "chinese": "满的",
+      "example": "The glass is full. 杯子是满的。"
+    },
+    {
+      "english": "fun",
+      "chinese": "有趣的",
+      "example": "Playing games is fun. 玩游戏很有趣。"
+    },
+    {
+      "english": "future",
+      "chinese": "未来",
+      "example": "Think about the future. 想想未来。"
+    },
+    {
+      "english": "game",
+      "chinese": "游戏",
+      "example": "Let's play a game. 我们来玩游戏吧。"
+    },
+    {
+      "english": "garden",
+      "chinese": "花园",
+      "example": "The garden is beautiful. 花园很美丽。"
+    },
+    {
+      "english": "gate",
+      "chinese": "大门",
+      "example": "Open the gate. 打开大门。"
+    },
+    {
+      "english": "get",
+      "chinese": "得到",
+      "example": "I get up early. 我起得早。"
+    },
+    {
+      "english": "girl",
+      "chinese": "女孩",
+      "example": "The girl is pretty. 女孩很漂亮。"
+    },
+    {
+      "english": "give",
+      "chinese": "给",
+      "example": "Give me the book. 把书给我。"
+    },
+    {
+      "english": "glass",
+      "chinese": "玻璃杯",
+      "example": "Drink from the glass. 从玻璃杯里喝水。"
+    },
+    {
+      "english": "go",
+      "chinese": "去",
+      "example": "Let's go. 我们走吧。"
+    },
+    {
+      "english": "good",
+      "chinese": "好的",
+      "example": "Good morning!_早上好！"
+    },
+    {
+      "english": "government",
+      "chinese": "政府",
+      "example": "The government helps people. 政府帮助人民。"
+    },
+    {
+      "english": "grade",
+      "chinese": "年级；成绩",
+      "example": "What grade are you in?_你在几年级？"
+    },
+    {
+      "english": "grandfather",
+      "chinese": "祖父",
+      "example": "My grandfather is old. 我的祖父年纪大了。"
+    },
+    {
+      "english": "grandmother",
+      "chinese": "祖母",
+      "example": "My grandmother cooks well. 我的祖母做饭很好吃。"
+    },
+    {
+      "english": "grass",
+      "chinese": "草",
+      "example": "The grass is green. 草是绿色的。"
+    },
+    {
+      "english": "great",
+      "chinese": "伟大的",
+      "example": "Shakespeare was great. 莎士比亚很伟大。"
+    },
+    {
+      "english": "green",
+      "chinese": "绿色的",
+      "example": "The leaf is green. 叶子是绿色的。"
+    },
+    {
+      "english": "ground",
+      "chinese": "地面",
+      "example": "Sit on the ground. 坐在地上。"
+    },
+    {
+      "english": "group",
+      "chinese": "小组",
+      "example": "Work in groups. 分组工作。"
+    },
+    {
+      "english": "grow",
+      "chinese": "成长",
+      "example": "Children grow fast. 孩子长得很快。"
+    },
+    {
+      "english": "hair",
+      "chinese": "头发",
+      "example": "I comb my hair. 我梳头发。"
+    },
+    {
+      "english": "half",
+      "chinese": "一半",
+      "example": "Half of the students passed. 一半学生通过了。"
+    },
+    {
+      "english": "hand",
+      "chinese": "手",
+      "example": "Raise your hand. 举手。"
+    },
+    {
+      "english": "happy",
+      "chinese": "快乐的",
+      "example": "I'm happy. 我很开心。"
+    },
+    {
+      "english": "hard",
+      "chinese": "努力地",
+      "example": "Work hard. 努力工作。"
+    },
+    {
+      "english": "have",
+      "chinese": "有",
+      "example": "I have a book. 我有一本书。"
+    },
+    {
+      "english": "he",
+      "chinese": "他",
+      "example": "He is tall. 他很高。"
+    },
+    {
+      "english": "head",
+      "chinese": "头",
+      "example": "I have a headache. 我头痛。"
+    },
+    {
+      "english": "health",
+      "chinese": "健康",
+      "example": "Health is important. 健康很重要。"
+    },
+    {
+      "english": "hear",
+      "chinese": "听到",
+      "example": "I hear music. 我听到音乐。"
+    },
+    {
+      "english": "help",
+      "chinese": "帮助",
+      "example": "Can you help me?_你能帮我吗？"
+    },
+    {
+      "english": "her",
+      "chinese": "她的",
+      "example": "This is her book. 这是她的书。"
+    },
+    {
+      "english": "here",
+      "chinese": "这里",
+      "example": "Come here. 到这里来。"
+    },
+    {
+      "english": "hide",
+      "chinese": "隐藏",
+      "example": "Hide and seek is fun. 捉迷藏很有趣。"
+    },
+    {
+      "english": "high",
+      "chinese": "高的",
+      "example": "The mountain is high. 山很高。"
+    },
+    {
+      "english": "hill",
+      "chinese": "小山",
+      "example": "We climbed the hill. 我们爬了小山。"
+    },
+    {
+      "english": "him",
+      "chinese": "他",
+      "example": "I saw him. 我看见他了。"
+    },
+    {
+      "english": "his",
+      "chinese": "他的",
+      "example": "This is his car. 这是他的车。"
+    },
+    {
+      "english": "history",
+      "chinese": "历史",
+      "example": "I study history. 我学历史。"
+    },
+    {
+      "english": "hit",
+      "chinese": "击打",
+      "example": "Don't hit. 别打人。"
+    },
+    {
+      "english": "home",
+      "chinese": "家",
+      "example": "I'm going home. 我要回家了。"
+    },
+    {
+      "english": "hope",
+      "chinese": "希望",
+      "example": "I hope so. 我希望如此。"
+    },
+    {
+      "english": "horse",
+      "chinese": "马",
+      "example": "The horse runs fast. 马跑得很快。"
+    },
+    {
+      "english": "hospital",
+      "chinese": "医院",
+      "example": "He is in the hospital. 他在医院。"
+    },
+    {
+      "english": "hot",
+      "chinese": "热的",
+      "example": "It's hot today. 今天很热。"
+    },
+    {
+      "english": "hotel",
+      "chinese": "酒店",
+      "example": "We stayed at a hotel. 我们住在酒店。"
+    },
+    {
+      "english": "hour",
+      "chinese": "小时",
+      "example": "I waited for an hour. 我等了一个小时。"
+    },
+    {
+      "english": "house",
+      "chinese": "房子",
+      "example": "My house is big. 我的房子很大。"
+    },
+    {
+      "english": "how",
+      "chinese": "如何",
+      "example": "How are you?_你好吗？"
+    },
+    {
+      "english": "hundred",
+      "chinese": "一百",
+      "example": "One hundred is a big number. 一百是个大数字。"
+    },
+    {
+      "english": "hungry",
+      "chinese": "饥饿的",
+      "example": "I'm hungry. 我饿了。"
+    },
+    {
+      "english": "I",
+      "chinese": "我",
+      "example": "I am a student. 我是学生。"
+    },
+    {
+      "english": "ice",
+      "chinese": "冰",
+      "example": "Ice is cold. 冰是冷的。"
+    },
+    {
+      "english": "idea",
+      "chinese": "想法",
+      "example": "I have an idea. 我有个想法。"
+    },
+    {
+      "english": "if",
+      "chinese": "如果",
+      "example": "If it rains, I'll stay home. 如果下雨，我就待在家里。"
+    },
+    {
+      "english": "ill",
+      "chinese": "生病的",
+      "example": "He is ill. 他生病了。"
+    },
+    {
+      "english": "important",
+      "chinese": "重要的",
+      "example": "Education is important. 教育很重要。"
+    },
+    {
+      "english": "in",
+      "chinese": "在...里面",
+      "example": "The book is in the bag. 书在包里。"
+    },
+    {
+      "english": "include",
+      "chinese": "包括",
+      "example": "The price includes tax. 价格含税。"
+    },
+    {
+      "english": "increase",
+      "chinese": "增加",
+      "example": "Prices increase. 价格上涨。"
+    },
+    {
+      "english": "information",
+      "chinese": "信息",
+      "example": "I need information. 我需要信息。"
+    },
+    {
+      "english": "inside",
+      "chinese": "在里面",
+      "example": "Stay inside. 待在里面。"
+    },
+    {
+      "english": "instead",
+      "chinese": "代替",
+      "example": "I'll go instead. 我去代替。"
+    },
+    {
+      "english": "into",
+      "chinese": "进入",
+      "example": "Walk into the room. 走进房间。"
+    },
+    {
+      "english": "is",
+      "chinese": "是",
+      "example": "He is tall. 他很高。"
+    },
+    {
+      "english": "it",
+      "chinese": "它",
+      "example": "It is raining. 在下雨。"
+    },
+    {
+      "english": "its",
+      "chinese": "它的",
+      "example": "The dog wagged its tail. 狗摇着尾巴。"
+    },
+    {
+      "english": "jacket",
+      "chinese": "夹克",
+      "example": "I wear a jacket. 我穿夹克。"
+    },
+    {
+      "english": "January",
+      "chinese": "一月",
+      "example": "January is the first month. 一月是第一个月。"
+    },
+    {
+      "english": "Japan",
+      "chinese": "日本",
+      "example": "Japan is in Asia. 日本在亚洲。"
+    },
+    {
+      "english": "Japanese",
+      "chinese": "日本的；日语",
+      "example": "I study Japanese. 我学日语。"
+    },
+    {
+      "english": "job",
+      "chinese": "工作",
+      "example": "I have a job. 我有工作。"
+    },
+    {
+      "english": "join",
+      "chinese": "加入",
+      "example": "Join us. 加入我们吧。"
+    },
+    {
+      "english": "jump",
+      "chinese": "跳跃",
+      "example": "Jump high. 跳得高。"
+    },
+    {
+      "english": "just",
+      "chinese": "刚刚",
+      "example": "I just arrived. 我刚到。"
+    },
+    {
+      "english": "keep",
+      "chinese": "保持",
+      "example": "Keep quiet. 保持安静。"
+    },
+    {
+      "english": "key",
+      "chinese": "钥匙",
+      "example": "I lost my key. 我丢了钥匙。"
+    },
+    {
+      "english": "kind",
+      "chinese": "善良的",
+      "example": "She is kind. 她很善良。"
+    },
+    {
+      "english": "king",
+      "chinese": "国王",
+      "example": "The king ruled. 国王统治着。"
+    },
+    {
+      "english": "kitchen",
+      "chinese": "厨房",
+      "example": "The kitchen is clean. 厨房很干净。"
+    },
+    {
+      "english": "know",
+      "chinese": "知道",
+      "example": "I know the answer. 我知道答案。"
+    },
+    {
+      "english": "lake",
+      "chinese": "湖泊",
+      "example": "The lake is beautiful. 湖很美丽。"
+    },
+    {
+      "english": "last",
+      "chinese": "最后的",
+      "example": "This is the last chance. 这是最后的机会。"
+    },
+    {
+      "english": "late",
+      "chinese": "晚的",
+      "example": "I'm late. 我迟到了。"
+    },
+    {
+      "english": "laugh",
+      "chinese": "笑",
+      "example": "Laugh loudly. 大声笑。"
+    },
+    {
+      "english": "law",
+      "chinese": "法律",
+      "example": "Obey the law. 遵守法律。"
+    },
+    {
+      "english": "lay",
+      "chinese": "放置",
+      "example": "Lay the book down. 放下书。"
+    },
+    {
+      "english": "learn",
+      "chinese": "学习",
+      "example": "I learn English. 我学英语。"
+    },
+    {
+      "english": "leave",
+      "chinese": "离开",
+      "example": "Leave now. 现在离开。"
+    },
+    {
+      "english": "left",
+      "chinese": "左边的",
+      "example": "Turn left. 向左转。"
+    },
+    {
+      "english": "leg",
+      "chinese": "腿",
+      "example": "I hurt my leg. 我伤了腿。"
+    },
+    {
+      "english": "letter",
+      "chinese": "信",
+      "example": "I wrote a letter. 我写了一封信。"
+    },
+    {
+      "english": "library",
+      "chinese": "图书馆",
+      "example": "I go to the library. 我去图书馆。"
+    },
+    {
+      "english": "lie",
+      "chinese": "躺",
+      "example": "Lie down. 躺下。"
+    },
+    {
+      "english": "life",
+      "chinese": "生活",
+      "example": "Life is beautiful. 生活是美好的。"
+    },
+    {
+      "english": "light",
+      "chinese": "光",
+      "example": "Turn on the light. 开灯。"
+    },
+    {
+      "english": "like",
+      "chinese": "喜欢",
+      "example": "I like music. 我喜欢音乐。"
+    },
+    {
+      "english": "line",
+      "chinese": "线",
+      "example": "Draw a line. 画一条线。"
+    },
+    {
+      "english": "list",
+      "chinese": "清单",
+      "example": "Make a list. 列个清单。"
+    },
+    {
+      "english": "listen",
+      "chinese": "听",
+      "example": "Listen carefully. 仔细听。"
+    },
+    {
+      "english": "little",
+      "chinese": "小的",
+      "example": "The little girl is cute. 小女孩很可爱。"
+    },
+    {
+      "english": "live",
+      "chinese": "居住",
+      "example": "I live in Beijing. 我住在北京。"
+    },
+    {
+      "english": "long",
+      "chinese": "长的",
+      "example": "The river is long. 这条河很长。"
+    },
+    {
+      "english": "look",
+      "chinese": "看",
+      "example": "Look at me. 看着我。"
+    },
+    {
+      "english": "lose",
+      "chinese": "丢失",
+      "example": "I lost my keys. 我丢了钥匙。"
+    },
+    {
+      "english": "lot",
+      "chinese": "许多",
+      "example": "A lot of people came. 很多人来了。"
+    },
+    {
+      "english": "love",
+      "chinese": "爱",
+      "example": "I love my family. 我爱我的家人。"
+    },
+    {
+      "english": "machine",
+      "chinese": "机器",
+      "example": "The machine works. 机器在运转。"
+    },
+    {
+      "english": "make",
+      "chinese": "制作",
+      "example": "I make cakes. 我做蛋糕。"
+    },
+    {
+      "english": "man",
+      "chinese": "男人",
+      "example": "The man is tall. 这个男人很高。"
+    },
+    {
+      "english": "many",
+      "chinese": "许多",
+      "example": "Many people came. 许多人来了。"
+    },
+    {
+      "english": "map",
+      "chinese": "地图",
+      "example": "Show me the map. 给我看地图。"
+    },
+    {
+      "english": "match",
+      "chinese": "火柴",
+      "example": "Light a match. 点燃一根火柴。"
+    },
+    {
+      "english": "maths",
+      "chinese": "数学",
+      "example": "I study maths. 我学数学。"
+    },
+    {
+      "english": "may",
+      "chinese": "可能",
+      "example": "It may rain. 可能会下雨。"
+    },
+    {
+      "english": "me",
+      "chinese": "我",
+      "example": "Give it to me. 给我。"
+    },
+    {
+      "english": "mean",
+      "chinese": "意思是",
+      "example": "What do you mean?_你什么意思？"
+    },
+    {
+      "english": "meet",
+      "chinese": "遇见",
+      "example": "I meet friends. 我遇见朋友。"
+    },
+    {
+      "english": "meeting",
+      "chinese": "会议",
+      "example": "I have a meeting. 我有个会议。"
+    },
+    {
+      "english": "member",
+      "chinese": "成员",
+      "example": "He is a member. 他是成员。"
+    },
+    {
+      "english": "middle",
+      "chinese": "中间",
+      "example": "Stand in the middle. 站在中间。"
+    },
+    {
+      "english": "might",
+      "chinese": "可能",
+      "example": "It might snow. 可能会下雪。"
+    },
+    {
+      "english": "milk",
+      "chinese": "牛奶",
+      "example": "I drink milk. 我喝牛奶。"
+    },
+    {
+      "english": "mind",
+      "chinese": "介意",
+      "example": "Do you mind?_你介意吗？"
+    },
+    {
+      "english": "minute",
+      "chinese": "分钟",
+      "example": "Wait a minute. 等一分钟。"
+    },
+    {
+      "english": "miss",
+      "chinese": "想念",
+      "example": "I miss you. 我想念你。"
+    },
+    {
+      "english": "moment",
+      "chinese": "时刻",
+      "example": "Wait a moment. 等一下。"
+    },
+    {
+      "english": "Monday",
+      "chinese": "星期一",
+      "example": "Today is Monday. 今天是星期一。"
+    },
+    {
+      "english": "money",
+      "chinese": "钱",
+      "example": "I have money. 我有钱。"
+    },
+    {
+      "english": "month",
+      "chinese": "月份",
+      "example": "January is a month. 一月是一个月份。"
+    },
+    {
+      "english": "moon",
+      "chinese": "月亮",
+      "example": "The moon is bright. 月亮很明亮。"
+    },
+    {
+      "english": "more",
+      "chinese": "更多的",
+      "example": "I want more. 我想要更多。"
+    },
+    {
+      "english": "morning",
+      "chinese": "早晨",
+      "example": "Good morning!_早上好！"
+    },
+    {
+      "english": "mother",
+      "chinese": "母亲",
+      "example": "My mother is kind. 我的母亲很和蔼。"
+    },
+    {
+      "english": "move",
+      "chinese": "移动",
+      "example": "Move the chair. 移动椅子。"
+    },
+    {
+      "english": "much",
+      "chinese": "许多",
+      "example": "I have much work. 我有很多工作。"
+    },
+    {
+      "english": "must",
+      "chinese": "必须",
+      "example": "You must go. 你必须去。"
+    },
+    {
+      "english": "my",
+      "chinese": "我的",
+      "example": "This is my book. 这是我的书。"
+    },
+    {
+      "english": "myself",
+      "chinese": "我自己",
+      "example": "I did it myself. 我自己做的。"
+    },
+    {
+      "english": "name",
+      "chinese": "名字",
+      "example": "What's your name?_你叫什么名字？"
+    },
+    {
+      "english": "national",
+      "chinese": "国家的",
+      "example": "National Day is coming. 国庆节快到了。"
+    },
+    {
+      "english": "nature",
+      "chinese": "自然",
+      "example": "Nature is beautiful. 大自然很美丽。"
+    },
+    {
+      "english": "near",
+      "chinese": "近的",
+      "example": "The school is near. 学校很近。"
+    },
+    {
+      "english": "necessary",
+      "chinese": "必要的",
+      "example": "Food is necessary. 食物是必要的。"
+    },
+    {
+      "english": "need",
+      "chinese": "需要",
+      "example": "I need help. 我需要帮助。"
+    },
+    {
+      "english": "never",
+      "chinese": "从不",
+      "example": "I never lie. 我从不说谎。"
+    },
+    {
+      "english": "new",
+      "chinese": "新的",
+      "example": "I have a new book. 我有一本新书。"
+    },
+    {
+      "english": "news",
+      "chinese": "新闻",
+      "example": "I read news. 我读新闻。"
+    },
+    {
+      "english": "next",
+      "chinese": "下一个",
+      "example": "Next week is busy. 下周很忙。"
+    },
+    {
+      "english": "night",
+      "chinese": "夜晚",
+      "example": "Good night!_晚安！"
+    },
+    {
+      "english": "no",
+      "chinese": "不",
+      "example": "No, I don't. 不，我不。"
+    },
+    {
+      "english": "nobody",
+      "chinese": "没有人",
+      "example": "Nobody knows. 没有人知道。"
+    },
+    {
+      "english": "noise",
+      "chinese": "噪音",
+      "example": "The noise is loud. 噪音很大。"
+    },
+    {
+      "english": "none",
+      "chinese": "没有一个",
+      "example": "None of them came. 他们都没有来。"
+    },
+    {
+      "english": "not",
+      "chinese": "不",
+      "example": "I am not tall. 我不高。"
+    },
+    {
+      "english": "note",
+      "chinese": "笔记",
+      "example": "Take notes. 做笔记。"
+    },
+    {
+      "english": "nothing",
+      "chinese": "没有什么",
+      "example": "I have nothing. 我什么都没有。"
+    },
+    {
+      "english": "now",
+      "chinese": "现在",
+      "example": "Now I understand. 现在我明白了。"
+    },
+    {
+      "english": "number",
+      "chinese": "数字",
+      "example": "What's your phone number?_你的电话号码是多少？"
+    },
+    {
+      "english": "of",
+      "chinese": "...的",
+      "example": "The color of the sky is blue. 天空的颜色是蓝色的。"
+    },
+    {
+      "english": "off",
+      "chinese": "关闭",
+      "example": "Turn off the light. 关灯。"
+    },
+    {
+      "english": "offer",
+      "chinese": "提供",
+      "example": "He offered help. 他提供了帮助。"
+    },
+    {
+      "english": "office",
+      "chinese": "办公室",
+      "example": "I work in an office. 我在办公室工作。"
+    },
+    {
+      "english": "often",
+      "chinese": "经常",
+      "example": "I often read books. 我经常读书。"
+    },
+    {
+      "english": "oh",
+      "chinese": "哦",
+      "example": "Oh, I see. 哦，我明白了。"
+    },
+    {
+      "english": "oil",
+      "chinese": "油",
+      "example": "Add some oil. 加点油。"
+    },
+    {
+      "english": "old",
+      "chinese": "老的",
+      "example": "The man is old. 这个人很老。"
+    },
+    {
+      "english": "on",
+      "chinese": "在...上",
+      "example": "The book is on the table. 书在桌子上。"
+    },
+    {
+      "english": "once",
+      "chinese": "一次",
+      "example": "I have been there once. 我去过那里一次。"
+    },
+    {
+      "english": "one",
+      "chinese": "一",
+      "example": "One, two, three. 一，二，三。"
+    },
+    {
+      "english": "only",
+      "chinese": "仅仅",
+      "example": "I only have one book. 我只有一本书。"
+    },
+    {
+      "english": "open",
+      "chinese": "打开",
+      "example": "Open the door. 开门。"
+    },
+    {
+      "english": "or",
+      "chinese": "或者",
+      "example": "Tea or coffee?_茶还是咖啡？"
+    },
+    {
+      "english": "orange",
+      "chinese": "橙色的；橙子",
+      "example": "I like orange juice. 我喜欢橙汁。"
+    },
+    {
+      "english": "order",
+      "chinese": "命令；点菜",
+      "example": "Order food. 点菜。"
+    },
+    {
+      "english": "other",
+      "chinese": "其他的",
+      "example": "Other people came. 其他人来了。"
+    },
+    {
+      "english": "our",
+      "chinese": "我们的",
+      "example": "Our house is big. 我们的房子很大。"
+    },
+    {
+      "english": "out",
+      "chinese": "在外面",
+      "example": "Go out. 出去。"
+    },
+    {
+      "english": "outside",
+      "chinese": "在外面",
+      "example": "Stay outside. 待在外面。"
+    },
+    {
+      "english": "over",
+      "chinese": "在...上方",
+      "example": "The lamp is over the table. 灯在桌子上方。"
+    },
+    {
+      "english": "own",
+      "chinese": "自己的",
+      "example": "I have my own room. 我有自己的房间。"
+    },
+    {
+      "english": "page",
+      "chinese": "页",
+      "example": "Turn to page 10. 翻到第10页。"
+    },
+    {
+      "english": "pain",
+      "chinese": "疼痛",
+      "example": "I have pain. 我感到疼痛。"
+    },
+    {
+      "english": "pair",
+      "chinese": "一双",
+      "example": "I have a pair of shoes. 我有一双鞋。"
+    },
+    {
+      "english": "paper",
+      "chinese": "纸",
+      "example": "Write on paper. 在纸上写字。"
+    },
+    {
+      "english": "parent",
+      "chinese": "父母",
+      "example": "My parents are kind. 我的父母很和蔼。"
+    },
+    {
+      "english": "park",
+      "chinese": "公园",
+      "example": "Let's go to the park. 我们去公园吧。"
+    },
+    {
+      "english": "part",
+      "chinese": "部分",
+      "example": "This is part of the plan. 这是计划的一部分。"
+    },
+    {
+      "english": "party",
+      "chinese": "聚会",
+      "example": "I went to a party. 我参加了聚会。"
+    },
+    {
+      "english": "pass",
+      "chinese": "通过",
+      "example": "Pass the ball. 传球。"
+    },
+    {
+      "english": "past",
+      "chinese": "过去",
+      "example": "In the past,_在过去，"
+    },
+    {
+      "english": "pay",
+      "chinese": "支付",
+      "example": "I pay for the book. 我为书付款。"
+    },
+    {
+      "english": "pen",
+      "chinese": "钢笔",
+      "example": "I write with a pen. 我用钢笔写字。"
+    },
+    {
+      "english": "pencil",
+      "chinese": "铅笔",
+      "example": "I draw with a pencil. 我用铅笔画画。"
+    },
+    {
+      "english": "people",
+      "chinese": "人们",
+      "example": "Many people came. 许多人来了。"
+    },
+    {
+      "english": "perfect",
+      "chinese": "完美的",
+      "example": "The plan is perfect. 这个计划很完美。"
+    },
+    {
+      "english": "person",
+      "chinese": "人",
+      "example": "That person is tall. 那个人很高。"
+    },
+    {
+      "english": "phone",
+      "chinese": "电话",
+      "example": "I use the phone. 我用电话。"
+    },
+    {
+      "english": "photo",
+      "chinese": "照片",
+      "example": "I took a photo. 我拍了照片。"
+    },
+    {
+      "english": "physics",
+      "chinese": "物理",
+      "example": "I study physics. 我学物理。"
+    },
+    {
+      "english": "picture",
+      "chinese": "图片",
+      "example": "The picture is beautiful. 这幅画很美。"
+    },
+    {
+      "english": "piece",
+      "chinese": "片",
+      "example": "I ate a piece of cake. 我吃了一块蛋糕。"
+    },
+    {
+      "english": "place",
+      "chinese": "地方",
+      "example": "This place is nice. 这个地方很好。"
+    },
+    {
+      "english": "plan",
+      "chinese": "计划",
+      "example": "I have a plan. 我有个计划。"
+    },
+    {
+      "english": "plant",
+      "chinese": "植物",
+      "example": "I planted a tree. 我种了一棵树。"
+    },
+    {
+      "english": "play",
+      "chinese": "玩",
+      "example": "I play games. 我玩游戏。"
+    },
+    {
+      "english": "player",
+      "chinese": "运动员",
+      "example": "He is a good player. 他是个好运动员。"
+    },
+    {
+      "english": "please",
+      "chinese": "请",
+      "example": "Please sit down. 请坐下。"
+    },
+    {
+      "english": "police",
+      "chinese": "警察",
+      "example": "The police came. 警察来了。"
+    },
+    {
+      "english": "policeman",
+      "chinese": "警察",
+      "example": "The policeman is kind. 警察很和蔼。"
+    },
+    {
+      "english": "popular",
+      "chinese": "受欢迎的",
+      "example": "Pop music is popular. 流行音乐很受欢迎。"
+    },
+    {
+      "english": "population",
+      "chinese": "人口",
+      "example": "China has a large population. 中国人口众多。"
+    },
+    {
+      "english": "post",
+      "chinese": "邮寄",
+      "example": "Post the letter. 寄信。"
+    },
+    {
+      "english": "potato",
+      "chinese": "土豆",
+      "example": "I like potatoes. 我喜欢土豆。"
+    },
+    {
+      "english": "practice",
+      "chinese": "练习",
+      "example": "Practice makes perfect. 熟能生巧。"
+    },
+    {
+      "english": "present",
+      "chinese": "礼物",
+      "example": "I have a present. 我有礼物。"
+    },
+    {
+      "english": "price",
+      "chinese": "价格",
+      "example": "What's the price?_价格是多少？"
+    },
+    {
+      "english": "problem",
+      "chinese": "问题",
+      "example": "I have a problem. 我有问题。"
+    },
+    {
+      "english": "produce",
+      "chinese": "生产",
+      "example": "The farm produces vegetables. 农场生产蔬菜。"
+    },
+    {
+      "english": "programme",
+      "chinese": "节目",
+      "example": "I watch TV programmes. 我看电视节目。"
+    },
+    {
+      "english": "project",
+      "chinese": "项目",
+      "example": "I work on a project. 我做一个项目。"
+    },
+    {
+      "english": "promise",
+      "chinese": "承诺",
+      "example": "I promise to help. 我承诺帮助。"
+    },
+    {
+      "english": "protect",
+      "chinese": "保护",
+      "example": "Protect the environment. 保护环境。"
+    },
+    {
+      "english": "put",
+      "chinese": "放置",
+      "example": "Put the book here. 把书放在这里。"
+    },
+    {
+      "english": "question",
+      "chinese": "问题",
+      "example": "Do you have a question?_你有问题吗？"
+    },
+    {
+      "english": "quick",
+      "chinese": "快的",
+      "example": "Quick! Run!_快！跑！"
+    },
+    {
+      "english": "quiet",
+      "chinese": "安静的",
+      "example": "Be quiet. 安静点。"
+    },
+    {
+      "english": "quite",
+      "chinese": "相当",
+      "example": "It's quite hot. 相当热。"
+    },
+    {
+      "english": "race",
+      "chinese": "种族；赛跑",
+      "example": "People of all races are equal. 所有种族的人都平等。"
+    },
+    {
+      "english": "radio",
+      "chinese": "收音机",
+      "example": "I listen to the radio. 我听收音机。"
+    },
+    {
+      "english": "rain",
+      "chinese": "雨",
+      "example": "It's raining. 在下雨。"
+    },
+    {
+      "english": "rainy",
+      "chinese": "下雨的",
+      "example": "It's rainy today. 今天下雨。"
+    },
+    {
+      "english": "raise",
+      "chinese": "举起",
+      "example": "Raise your hand. 举手。"
+    },
+    {
+      "english": "read",
+      "chinese": "读",
+      "example": "I read books. 我读书。"
+    },
+    {
+      "english": "ready",
+      "chinese": "准备好的",
+      "example": "I'm ready. 我准备好了。"
+    },
+    {
+      "english": "real",
+      "chinese": "真实的",
+      "example": "This is real gold. 这是真金。"
+    },
+    {
+      "english": "reason",
+      "chinese": "原因",
+      "example": "What's the reason?_原因是什么？"
+    },
+    {
+      "english": "receive",
+      "chinese": "收到",
+      "example": "I received a letter. 我收到了一封信。"
+    },
+    {
+      "english": "red",
+      "chinese": "红色的",
+      "example": "The apple is red. 苹果是红色的。"
+    },
+    {
+      "english": "remember",
+      "chinese": "记住",
+      "example": "Remember to call. 记得打电话。"
+    },
+    {
+      "english": "report",
+      "chinese": "报告",
+      "example": "I wrote a report. 我写了一份报告。"
+    },
+    {
+      "english": "rest",
+      "chinese": "休息",
+      "example": "Let's rest. 我们休息一下吧。"
+    },
+    {
+      "english": "result",
+      "chinese": "结果",
+      "example": "The result is good. 结果很好。"
+    },
+    {
+      "english": "return",
+      "chinese": "返回",
+      "example": "Return the book. 还书。"
+    },
+    {
+      "english": "right",
+      "chinese": "右边的",
+      "example": "Turn right. 向右转。"
+    },
+    {
+      "english": "river",
+      "chinese": "河流",
+      "example": "The river flows. 河流淌着。"
+    },
+    {
+      "english": "road",
+      "chinese": "道路",
+      "example": "The road is long. 这条路很长。"
+    },
+    {
+      "english": "room",
+      "chinese": "房间",
+      "example": "The room is clean. 房间很干净。"
+    },
+    {
+      "english": "run",
+      "chinese": "跑步",
+      "example": "I run every day. 我每天跑步。"
+    },
+    {
+      "english": "safe",
+      "chinese": "安全的",
+      "example": "The children are safe. 孩子们是安全的。"
+    },
+    {
+      "english": "salad",
+      "chinese": "沙拉",
+      "example": "I eat salad. 我吃沙拉。"
+    },
+    {
+      "english": "sale",
+      "chinese": "销售",
+      "example": "There is a sale. 有促销活动。"
+    },
+    {
+      "english": "salt",
+      "chinese": "盐",
+      "example": "Add some salt. 加点盐。"
+    },
+    {
+      "english": "same",
+      "chinese": "相同的",
+      "example": "We have the same book. 我们有相同的书。"
+    },
+    {
+      "english": "sandwich",
+      "chinese": "三明治",
+      "example": "I made a sandwich. 我做了个三明治。"
+    },
+    {
+      "english": "Saturday",
+      "chinese": "星期六",
+      "example": "Today is Saturday. 今天是星期六。"
+    },
+    {
+      "english": "save",
+      "chinese": "拯救；节省",
+      "example": "Save the planet. 拯救地球。"
+    },
+    {
+      "english": "say",
+      "chinese": "说",
+      "example": "Say hello. 说你好。"
+    },
+    {
+      "english": "school",
+      "chinese": "学校",
+      "example": "I go to school. 我去上学。"
+    },
+    {
+      "english": "science",
+      "chinese": "科学",
+      "example": "I study science. 我学科学。"
+    },
+    {
+      "english": "scientist",
+      "chinese": "科学家",
+      "example": "He is a scientist. 他是科学家。"
+    },
+    {
+      "english": "sea",
+      "chinese": "海洋",
+      "example": "The sea is blue. 海是蓝色的。"
+    },
+    {
+      "english": "season",
+      "chinese": "季节",
+      "example": "Spring is my favorite season. 春天是我最喜欢的季节。"
+    },
+    {
+      "english": "seat",
+      "chinese": "座位",
+      "example": "Take your seat. 坐你的座位。"
+    },
+    {
+      "english": "second",
+      "chinese": "第二",
+      "example": "This is my second attempt. 这是我第二次尝试。"
+    },
+    {
+      "english": "see",
+      "chinese": "看见",
+      "example": "I see a bird. 我看见一只鸟。"
+    },
+    {
+      "english": "seem",
+      "chinese": "似乎",
+      "example": "It seems fine. 似乎不错。"
+    },
+    {
+      "english": "sell",
+      "chinese": "卖",
+      "example": "I sell books. 我卖书。"
+    },
+    {
+      "english": "send",
+      "chinese": "发送",
+      "example": "Send a message. 发送消息。"
+    },
+    {
+      "english": "sentence",
+      "chinese": "句子",
+      "example": "This is a sentence. 这是一个句子。"
+    },
+    {
+      "english": "september",
+      "chinese": "九月",
+      "example": "September is the ninth month. 九月是第九个月。"
+    },
+    {
+      "english": "service",
+      "chinese": "服务",
+      "example": "Good service is important. 良好的服务很重要。"
+    },
+    {
+      "english": "set",
+      "chinese": "设置",
+      "example": "Set the table. 摆桌子。"
+    },
+    {
+      "english": "seven",
+      "chinese": "七",
+      "example": "Seven days a week. 一周七天。"
+    },
+    {
+      "english": "shake",
+      "chinese": "摇动",
+      "example": "Shake the bottle. 摇瓶子。"
+    },
+    {
+      "english": "shall",
+      "chinese": "将要",
+      "example": "Shall we go?_我们走吗？"
+    },
+    {
+      "english": "shape",
+      "chinese": "形状",
+      "example": "What shape is it?_它是什么形状？"
+    },
+    {
+      "english": "share",
+      "chinese": "分享",
+      "example": "Share your ideas. 分享你的想法。"
+    },
+    {
+      "english": "she",
+      "chinese": "她",
+      "example": "She is tall. 她很高。"
+    },
+    {
+      "english": "sheep",
+      "chinese": "羊",
+      "example": "The sheep are white. 羊是白色的。"
+    },
+    {
+      "english": "shelf",
+      "chinese": "架子",
+      "example": "Put the book on the shelf. 把书放在架子上。"
+    },
+    {
+      "english": "shine",
+      "chinese": "发光",
+      "example": "The sun shines. 太阳发光。"
+    },
+    {
+      "english": "ship",
+      "chinese": "船",
+      "example": "The ship sails. 船航行。"
+    },
+    {
+      "english": "shirt",
+      "chinese": "衬衫",
+      "example": "I wear a shirt. 我穿衬衫。"
+    },
+    {
+      "english": "shoe",
+      "chinese": "鞋子",
+      "example": "I bought new shoes. 我买了新鞋。"
+    },
+    {
+      "english": "shop",
+      "chinese": "商店",
+      "example": "Let's go shopping. 我们去购物吧。"
+    },
+    {
+      "english": "short",
+      "chinese": "短的",
+      "example": "The skirt is short. 裙子很短。"
+    },
+    {
+      "english": "should",
+      "chinese": "应该",
+      "example": "You should try. 你应该试试。"
+    },
+    {
+      "english": "shoulder",
+      "chinese": "肩膀",
+      "example": "I have pain in my shoulder. 我肩膀疼。"
+    },
+    {
+      "english": "show",
+      "chinese": "展示",
+      "example": "Show me. 给我看看。"
+    },
+    {
+      "english": "shower",
+      "chinese": "淋浴",
+      "example": "I take a shower. 我洗淋浴。"
+    },
+    {
+      "english": "shut",
+      "chinese": "关闭",
+      "example": "Shut the door. 关门。"
+    },
+    {
+      "english": "sick",
+      "chinese": "生病的",
+      "example": "I feel sick. 我觉得不舒服。"
+    },
+    {
+      "english": "side",
+      "chinese": "边",
+      "example": "Stand by my side. 站在我身边。"
+    },
+    {
+      "english": "sign",
+      "chinese": "标志",
+      "example": "Read the sign. 看标志。"
+    },
+    {
+      "english": "silence",
+      "chinese": "沉默",
+      "example": "There was silence. 一片寂静。"
+    },
+    {
+      "english": "silver",
+      "chinese": "银色的",
+      "example": "The ring is silver. 戒指是银色的。"
+    },
+    {
+      "english": "simple",
+      "chinese": "简单的",
+      "example": "The answer is simple. 答案很简单。"
+    },
+    {
+      "english": "since",
+      "chinese": "自从",
+      "example": "I have lived here since 2000. 我从2000年起就住在这里。"
+    },
+    {
+      "english": "sing",
+      "chinese": "唱歌",
+      "example": "I sing songs. 我唱歌。"
+    },
+    {
+      "english": "single",
+      "chinese": "单一的",
+      "example": "I have a single room. 我有一个单人间。"
+    },
+    {
+      "english": "sink",
+      "chinese": "下沉",
+      "example": "The boat sank. 船沉了。"
+    },
+    {
+      "english": "sir",
+      "chinese": "先生",
+      "example": "Yes, sir. 是的，先生。"
+    },
+    {
+      "english": "sister",
+      "chinese": "姐妹",
+      "example": "My sister is kind. 我的姐姐很和蔼。"
+    },
+    {
+      "english": "sit",
+      "chinese": "坐",
+      "example": "Sit down. 坐下。"
+    },
+    {
+      "english": "six",
+      "chinese": "六",
+      "example": "I have six books. 我有六本书。"
+    },
+    {
+      "english": "size",
+      "chinese": "尺寸",
+      "example": "What size do you wear?_你穿什么尺寸？"
+    },
+    {
+      "english": "skill",
+      "chinese": "技能",
+      "example": "I have computer skills. 我有计算机技能。"
+    },
+    {
+      "english": "skin",
+      "chinese": "皮肤",
+      "example": "Wash your skin. 洗你的皮肤。"
+    },
+    {
+      "english": "sky",
+      "chinese": "天空",
+      "example": "The sky is blue. 天空是蓝色的。"
+    },
+    {
+      "english": "sleep",
+      "chinese": "睡觉",
+      "example": "I sleep at night. 我晚上睡觉。"
+    },
+    {
+      "english": "slow",
+      "chinese": "慢的",
+      "example": "Drive slowly. 开车慢点。"
+    },
+    {
+      "english": "small",
+      "chinese": "小的",
+      "example": "The box is small. 盒子很小。"
+    },
+    {
+      "english": "smell",
+      "chinese": "闻起来",
+      "example": "The flower smells nice. 花闻起来很香。"
+    },
+    {
+      "english": "smile",
+      "chinese": "微笑",
+      "example": "She smiled. 她微笑了。"
+    },
+    {
+      "english": "smoke",
+      "chinese": "烟",
+      "example": "Don't smoke. 不要吸烟。"
+    },
+    {
+      "english": "snow",
+      "chinese": "雪",
+      "example": "It snows in winter. 冬天下雪。"
+    },
+    {
+      "english": "so",
+      "chinese": "如此",
+      "example": "It's so cold. 这么冷。"
+    },
+    {
+      "english": "soap",
+      "chinese": "肥皂",
+      "example": "Use soap. 用肥皂。"
+    },
+    {
+      "english": "social",
+      "chinese": "社会的",
+      "example": "Social media is popular. 社交媒体很受欢迎。"
+    },
+    {
+      "english": "sock",
+      "chinese": "袜子",
+      "example": "I wear socks. 我穿袜子。"
+    },
+    {
+      "english": "soft",
+      "chinese": "柔软的",
+      "example": "The pillow is soft. 枕头很软。"
+    },
+    {
+      "english": "some",
+      "chinese": "一些",
+      "example": "I have some books. 我有一些书。"
+    },
+    {
+      "english": "someone",
+      "chinese": "某人",
+      "example": "Someone called. 有人打电话。"
+    },
+    {
+      "english": "something",
+      "chinese": "某事",
+      "example": "I have something to tell you. 我有事要告诉你。"
+    },
+    {
+      "english": "sometimes",
+      "chinese": "有时",
+      "example": "Sometimes I read. 我有时读书。"
+    },
+    {
+      "english": "son",
+      "chinese": "儿子",
+      "example": "My son is clever. 我的儿子很聪明。"
+    },
+    {
+      "english": "song",
+      "chinese": "歌曲",
+      "example": "I sing a song. 我唱一首歌。"
+    },
+    {
+      "english": "soon",
+      "chinese": "很快",
+      "example": "I'll be back soon. 我很快就回来。"
+    },
+    {
+      "english": "sorry",
+      "chinese": "对不起",
+      "example": "Sorry for being late. 抱歉迟到。"
+    },
+    {
+      "english": "sound",
+      "chinese": "声音",
+      "example": "I heard a sound. 我听到一个声音。"
+    },
+    {
+      "english": "soup",
+      "chinese": "汤",
+      "example": "I like soup. 我喜欢汤。"
+    },
+    {
+      "english": "south",
+      "chinese": "南方",
+      "example": "Go south. 往南走。"
+    },
+    {
+      "english": "space",
+      "chinese": "空间",
+      "example": "There is space. 有空间。"
+    },
+    {
+      "english": "speak",
+      "chinese": "说话",
+      "example": "I speak English. 我说英语。"
+    },
+    {
+      "english": "special",
+      "chinese": "特别的",
+      "example": "This is special. 这很特别。"
+    },
+    {
+      "english": "speed",
+      "chinese": "速度",
+      "example": "The speed is fast. 速度很快。"
+    },
+    {
+      "english": "spell",
+      "chinese": "拼写",
+      "example": "How do you spell it?_你怎么拼写它？"
+    },
+    {
+      "english": "spend",
+      "chinese": "花费",
+      "example": "I spend time reading. 我花时间阅读。"
+    },
+    {
+      "english": "sport",
+      "chinese": "运动",
+      "example": "I play sports. 我做运动。"
+    },
+    {
+      "english": "spring",
+      "chinese": "春天",
+      "example": "Spring is warm. 春天很温暖。"
+    },
+    {
+      "english": "square",
+      "chinese": "广场",
+      "example": "The square is crowded. 广场很拥挤。"
+    },
+    {
+      "english": "stairs",
+      "chinese": "楼梯",
+      "example": "Go up the stairs. 上楼梯。"
+    },
+    {
+      "english": "stand",
+      "chinese": "站立",
+      "example": "Stand up. 站起来。"
+    },
+    {
+      "english": "standard",
+      "chinese": "标准",
+      "example": "High standards are expected. 期望高标准。"
+    },
+    {
+      "english": "star",
+      "chinese": "星星",
+      "example": "The stars shine. 星星闪烁。"
+    },
+    {
+      "english": "start",
+      "chinese": "开始",
+      "example": "Start now. 现在开始。"
+    },
+    {
+      "english": "station",
+      "chinese": "车站",
+      "example": "The bus station is crowded. 公交车站很拥挤。"
+    },
+    {
+      "english": "stay",
+      "chinese": "停留",
+      "example": "Stay here. 待在这里。"
+    },
+    {
+      "english": "steal",
+      "chinese": "偷",
+      "example": "Don't steal. 不要偷东西。"
+    },
+    {
+      "english": "still",
+      "chinese": "仍然",
+      "example": "I am still here. 我仍然在这里。"
+    },
+    {
+      "english": "stone",
+      "chinese": "石头",
+      "example": "The stone is heavy. 石头很重。"
+    },
+    {
+      "english": "stop",
+      "chinese": "停止",
+      "example": "Stop talking. 停止说话。"
+    },
+    {
+      "english": "store",
+      "chinese": "商店",
+      "example": "I went to the store. 我去了商店。"
+    },
+    {
+      "english": "storm",
+      "chinese": "暴风雨",
+      "example": "The storm is strong. 暴风雨很强。"
+    },
+    {
+      "english": "story",
+      "chinese": "故事",
+      "example": "Tell me a story. 给我讲个故事。"
+    },
+    {
+      "english": "straight",
+      "chinese": "直的",
+      "example": "Go straight. 直走。"
+    },
+    {
+      "english": "strange",
+      "chinese": "奇怪的",
+      "example": "That's strange. 那很奇怪。"
+    },
+    {
+      "english": "street",
+      "chinese": "街道",
+      "example": "The street is busy. 街道很繁忙。"
+    },
+    {
+      "english": "strong",
+      "chinese": "强壮的",
+      "example": "He is strong. 他很强壮。"
+    },
+    {
+      "english": "student",
+      "chinese": "学生",
+      "example": "I am a student. 我是学生。"
+    },
+    {
+      "english": "study",
+      "chinese": "学习",
+      "example": "I study hard. 我努力学习。"
+    },
+    {
+      "english": "subject",
+      "chinese": "科目",
+      "example": "Math is my favorite subject. 数学是我最喜欢的科目。"
+    },
+    {
+      "english": "success",
+      "chinese": "成功",
+      "example": "Hard work leads to success. 努力工作带来成功。"
+    },
+    {
+      "english": "such",
+      "chinese": "这样的",
+      "example": "Such a beautiful day. 如此美好的一天。"
+    },
+    {
+      "english": "sugar",
+      "chinese": "糖",
+      "example": "Add sugar. 加糖。"
+    },
+    {
+      "english": "summer",
+      "chinese": "夏天",
+      "example": "Summer is hot. 夏天很热。"
+    },
+    {
+      "english": "sun",
+      "chinese": "太阳",
+      "example": "The sun shines. 太阳照耀。"
+    },
+    {
+      "english": "Sunday",
+      "chinese": "星期日",
+      "example": "Today is Sunday. 今天是星期日。"
+    },
+    {
+      "english": "support",
+      "chinese": "支持",
+      "example": "I support you. 我支持你。"
+    },
+    {
+      "english": "sure",
+      "chinese": "确定的",
+      "example": "Are you sure?_你确定吗？"
+    },
+    {
+      "english": "surface",
+      "chinese": "表面",
+      "example": "The surface is smooth. 表面很光滑。"
+    },
+    {
+      "english": "surprise",
+      "chinese": "惊喜",
+      "example": "What a surprise!_真是惊喜！"
+    },
+    {
+      "english": "sweet",
+      "chinese": "甜的",
+      "example": "The cake is sweet. 蛋糕很甜。"
+    },
+    {
+      "english": "swim",
+      "chinese": "游泳",
+      "example": "I swim in the pool. 我在游泳池里游泳。"
+    },
+    {
+      "english": "table",
+      "chinese": "桌子",
+      "example": "The book is on the table. 书在桌子上。"
+    },
+    {
+      "english": "take",
+      "chinese": "拿",
+      "example": "Take this book. 拿这本书。"
+    },
+    {
+      "english": "talk",
+      "chinese": "谈话",
+      "example": "Let's talk. 我们谈谈吧。"
+    },
+    {
+      "english": "tall",
+      "chinese": "高的",
+      "example": "The building is tall. 建筑物很高。"
+    },
+    {
+      "english": "tape",
+      "chinese": "胶带",
+      "example": "Use tape. 用胶带。"
+    },
+    {
+      "english": "task",
+      "chinese": "任务",
+      "example": "I have a task. 我有个任务。"
+    },
+    {
+      "english": "taste",
+      "chinese": "味道",
+      "example": "The food tastes good. 食物味道很好。"
+    },
+    {
+      "english": "taxi",
+      "chinese": "出租车",
+      "example": "Call a taxi. 叫出租车。"
+    },
+    {
+      "english": "tea",
+      "chinese": "茶",
+      "example": "I drink tea. 我喝茶。"
+    },
+    {
+      "english": "teach",
+      "chinese": "教",
+      "example": "I teach English. 我教英语。"
+    },
+    {
+      "english": "teacher",
+      "chinese": "老师",
+      "example": "My teacher is kind. 我的老师很和蔼。"
+    },
+    {
+      "english": "team",
+      "chinese": "团队",
+      "example": "Our team won. 我们的团队赢了。"
+    },
+    {
+      "english": "telephone",
+      "chinese": "电话",
+      "example": "I use the telephone. 我用电话。"
+    },
+    {
+      "english": "television",
+      "chinese": "电视",
+      "example": "I watch television. 我看电视。"
+    },
+    {
+      "english": "tell",
+      "chinese": "告诉",
+      "example": "Tell me. 告诉我。"
+    },
+    {
+      "english": "temperature",
+      "chinese": "温度",
+      "example": "The temperature is high. 温度很高。"
+    },
+    {
+      "english": "ten",
+      "chinese": "十",
+      "example": "I have ten fingers. 我有十根手指。"
+    },
+    {
+      "english": "tennis",
+      "chinese": "网球",
+      "example": "I play tennis. 我打网球。"
+    },
+    {
+      "english": "test",
+      "chinese": "测试",
+      "example": "I have a test. 我有个测试。"
+    },
+    {
+      "english": "textbook",
+      "chinese": "教科书",
+      "example": "I read the textbook. 我读教科书。"
+    },
+    {
+      "english": "than",
+      "chinese": "比",
+      "example": "I am taller than you. 我比你高。"
+    },
+    {
+      "english": "thank",
+      "chinese": "感谢",
+      "example": "Thank you. 谢谢你。"
+    },
+    {
+      "english": "that",
+      "chinese": "那个",
+      "example": "That is my book. 那是我的书。"
+    },
+    {
+      "english": "the",
+      "chinese": "这个/那个",
+      "example": "The book is good. 这本书很好。"
+    },
+    {
+      "english": "their",
+      "chinese": "他们的",
+      "example": "Their house is big. 他们的房子很大。"
+    },
+    {
+      "english": "them",
+      "chinese": "他们",
+      "example": "I gave it to them. 我给了他们。"
+    },
+    {
+      "english": "then",
+      "chinese": "然后",
+      "example": "First do this, then that. 先做这个，然后做那个。"
+    },
+    {
+      "english": "there",
+      "chinese": "那里",
+      "example": "Put it there. 把它放在那里。"
+    },
+    {
+      "english": "these",
+      "chinese": "这些",
+      "example": "These are my books. 这些是我的书。"
+    },
+    {
+      "english": "they",
+      "chinese": "他们",
+      "example": "They are students. 他们是学生。"
+    },
+    {
+      "english": "thick",
+      "chinese": "厚的",
+      "example": "The book is thick. 书很厚。"
+    },
+    {
+      "english": "thin",
+      "chinese": "薄的",
+      "example": "The paper is thin. 纸很薄。"
+    },
+    {
+      "english": "thing",
+      "chinese": "事情",
+      "example": "What's the thing?_那是什么东西？"
+    },
+    {
+      "english": "think",
+      "chinese": "想",
+      "example": "I think so. 我认为如此。"
+    },
+    {
+      "english": "third",
+      "chinese": "第三",
+      "example": "This is my third time. 这是我第三次。"
+    },
+    {
+      "english": "this",
+      "chinese": "这个",
+      "example": "This is good. 这个很好。"
+    },
+    {
+      "english": "those",
+      "chinese": "那些",
+      "example": "Those are books. 那些是书。"
+    },
+    {
+      "english": "though",
+      "chinese": "虽然",
+      "example": "Though it's late, I'll go. 虽然晚了，我还是去。"
+    },
+    {
+      "english": "thought",
+      "chinese": "想法",
+      "example": "I had a thought. 我有个想法。"
+    },
+    {
+      "english": "three",
+      "chinese": "三",
+      "example": "Three cats. 三只猫。"
+    },
+    {
+      "english": "through",
+      "chinese": "通过",
+      "example": "Walk through the door. 穿过门。"
+    },
+    {
+      "english": "throw",
+      "chinese": "扔",
+      "example": "Throw the ball. 扔球。"
+    },
+    {
+      "english": "Thursday",
+      "chinese": "星期四",
+      "example": "Today is Thursday. 今天是星期四。"
+    },
+    {
+      "english": "ticket",
+      "chinese": "票",
+      "example": "I bought a ticket. 我买了票。"
+    },
+    {
+      "english": "tidy",
+      "chinese": "整洁的",
+      "example": "Keep tidy. 保持整洁。"
+    },
+    {
+      "english": "time",
+      "chinese": "时间",
+      "example": "What time is it?_几点了？"
+    },
+    {
+      "english": "tired",
+      "chinese": "累的",
+      "example": "I am tired. 我很累。"
+    },
+    {
+      "english": "to",
+      "chinese": "到",
+      "example": "Go to school. 去上学。"
+    },
+    {
+      "english": "today",
+      "chinese": "今天",
+      "example": "Today is sunny. 今天晴朗。"
+    },
+    {
+      "english": "together",
+      "chinese": "一起",
+      "example": "Let's work together. 我们一起工作吧。"
+    },
+    {
+      "english": "tomorrow",
+      "chinese": "明天",
+      "example": "See you tomorrow. 明天见。"
+    },
+    {
+      "english": "tonight",
+      "chinese": "今晚",
+      "example": "See you tonight. 今晚见。"
+    },
+    {
+      "english": "too",
+      "chinese": "也",
+      "example": "I am hungry too. 我也饿了。"
+    },
+    {
+      "english": "tool",
+      "chinese": "工具",
+      "example": "I need a tool. 我需要工具。"
+    },
+    {
+      "english": "tooth",
+      "chinese": "牙齿",
+      "example": "Brush your teeth. 刷牙。"
+    },
+    {
+      "english": "top",
+      "chinese": "顶部",
+      "example": "The book is on top. 书在顶部。"
+    },
+    {
+      "english": "total",
+      "chinese": "总的",
+      "example": "The total is 100. 总数是100。"
+    },
+    {
+      "english": "touch",
+      "chinese": "触摸",
+      "example": "Don't touch. 不要碰。"
+    },
+    {
+      "english": "town",
+      "chinese": "城镇",
+      "example": "The town is small. 城镇很小。"
+    },
+    {
+      "english": "traffic",
+      "chinese": "交通",
+      "example": "Traffic is heavy. 交通拥堵。"
+    },
+    {
+      "english": "train",
+      "chinese": "火车",
+      "example": "I take the train. 我坐火车。"
+    },
+    {
+      "english": "travel",
+      "chinese": "旅行",
+      "example": "I travel a lot. 我经常旅行。"
+    },
+    {
+      "english": "tree",
+      "chinese": "树",
+      "example": "The tree is tall. 树很高。"
+    },
+    {
+      "english": "trouble",
+      "chinese": "麻烦",
+      "example": "I have trouble. 我有麻烦。"
+    },
+    {
+      "english": "true",
+      "chinese": "真的",
+      "example": "It's true. 这是真的。"
+    },
+    {
+      "english": "trust",
+      "chinese": "信任",
+      "example": "Trust me. 相信我。"
+    },
+    {
+      "english": "try",
+      "chinese": "尝试",
+      "example": "Try again. 再试一次。"
+    },
+    {
+      "english": "Tuesday",
+      "chinese": "星期二",
+      "example": "Today is Tuesday. 今天是星期二。"
+    },
+    {
+      "english": "turn",
+      "chinese": "转弯",
+      "example": "Turn left. 左转。"
+    },
+    {
+      "english": "twelve",
+      "chinese": "十二",
+      "example": "Twelve months. 十二个月。"
+    },
+    {
+      "english": "twenty",
+      "chinese": "二十",
+      "example": "Twenty students. 二十个学生。"
+    },
+    {
+      "english": "two",
+      "chinese": "二",
+      "example": "Two apples. 两个苹果。"
+    },
+    {
+      "english": "type",
+      "chinese": "类型",
+      "example": "What type is it?_它是什么类型？"
+    },
+    {
+      "english": "umbrella",
+      "chinese": "雨伞",
+      "example": "I have an umbrella. 我有雨伞。"
+    },
+    {
+      "english": "uncle",
+      "chinese": "叔叔",
+      "example": "My uncle is kind. 我的叔叔很和蔼。"
+    },
+    {
+      "english": "under",
+      "chinese": "在...下面",
+      "example": "The cat is under the table. 猫在桌子下面。"
+    },
+    {
+      "english": "understand",
+      "chinese": "理解",
+      "example": "I understand. 我理解。"
+    },
+    {
+      "english": "unit",
+      "chinese": "单元",
+      "example": "Unit 1 is easy. 第一单元很简单。"
+    },
+    {
+      "english": "until",
+      "chinese": "直到",
+      "example": "Wait until tomorrow. 等到明天。"
+    },
+    {
+      "english": "up",
+      "chinese": "向上",
+      "example": "Look up. 向上看。"
+    },
+    {
+      "english": "upon",
+      "chinese": "在...上",
+      "example": "Upon the table. 在桌子上。"
+    },
+    {
+      "english": "us",
+      "chinese": "我们",
+      "example": "Give it to us. 给我们。"
+    },
+    {
+      "english": "use",
+      "chinese": "使用",
+      "example": "I use a pen. 我用钢笔。"
+    },
+    {
+      "english": "usual",
+      "chinese": "通常的",
+      "example": "As usual. 像往常一样。"
+    },
+    {
+      "english": "usually",
+      "chinese": "通常",
+      "example": "I usually wake up early. 我通常早起。"
+    },
+    {
+      "english": "vegetable",
+      "chinese": "蔬菜",
+      "example": "I eat vegetables. 我吃蔬菜。"
+    },
+    {
+      "english": "very",
+      "chinese": "非常",
+      "example": "Very good. 非常好。"
+    },
+    {
+      "english": "video",
+      "chinese": "视频",
+      "example": "I watch videos. 我看视频。"
+    },
+    {
+      "english": "village",
+      "chinese": "村庄",
+      "example": "The village is quiet. 村庄很安静。"
+    },
+    {
+      "english": "visit",
+      "chinese": "访问",
+      "example": "I visit my grandparents. 我拜访祖父母。"
+    },
+    {
+      "english": "voice",
+      "chinese": "声音",
+      "example": "I recognize your voice. 我认出你的声音。"
+    },
+    {
+      "english": "wait",
+      "chinese": "等待",
+      "example": "Wait for me. 等等我。"
+    },
+    {
+      "english": "wake",
+      "chinese": "醒来",
+      "example": "I wake up. 我醒来。"
+    },
+    {
+      "english": "walk",
+      "chinese": "走路",
+      "example": "I walk to school. 我走路去学校。"
+    },
+    {
+      "english": "wall",
+      "chinese": "墙",
+      "example": "The wall is white. 墙是白色的。"
+    },
+    {
+      "english": "want",
+      "chinese": "想要",
+      "example": "I want water. 我想要水。"
+    },
+    {
+      "english": "war",
+      "chinese": "战争",
+      "example": "War is terrible. 战争是可怕的。"
+    },
+    {
+      "english": "warm",
+      "chinese": "温暖的",
+      "example": "The weather is warm. 天气很温暖。"
+    },
+    {
+      "english": "wash",
+      "chinese": "洗",
+      "example": "Wash your hands. 洗手。"
+    },
+    {
+      "english": "watch",
+      "chinese": "观看",
+      "example": "I watch TV. 我看电视。"
+    },
+    {
+      "english": "water",
+      "chinese": "水",
+      "example": "Drink water. 喝水。"
+    },
+    {
+      "english": "way",
+      "chinese": "方式",
+      "example": "This way. 这边。"
+    },
+    {
+      "english": "we",
+      "chinese": "我们",
+      "example": "We are friends. 我们是朋友。"
+    },
+    {
+      "english": "weak",
+      "chinese": "虚弱的",
+      "example": "I feel weak. 我觉得虚弱。"
+    },
+    {
+      "english": "wear",
+      "chinese": "穿着",
+      "example": "I wear glasses. 我戴眼镜。"
+    },
+    {
+      "english": "weather",
+      "chinese": "天气",
+      "example": "The weather is nice. 天气很好。"
+    },
+    {
+      "english": "Wednesday",
+      "chinese": "星期三",
+      "example": "Today is Wednesday. 今天是星期三。"
+    },
+    {
+      "english": "week",
+      "chinese": "周",
+      "example": "A week has seven days. 一周有七天。"
+    },
+    {
+      "english": "weekend",
+      "chinese": "周末",
+      "example": "I relax on weekends. 我周末放松。"
+    },
+    {
+      "english": "welcome",
+      "chinese": "欢迎",
+      "example": "Welcome home. 欢迎回家。"
+    },
+    {
+      "english": "well",
+      "chinese": "好地",
+      "example": "I feel well. 我感觉很好。"
+    },
+    {
+      "english": "west",
+      "chinese": "西方",
+      "example": "The sun sets in the west. 太阳在西方落下。"
+    },
+    {
+      "english": "wet",
+      "chinese": "湿的",
+      "example": "The ground is wet. 地面是湿的。"
+    },
+    {
+      "english": "what",
+      "chinese": "什么",
+      "example": "What is this?_这是什么？"
+    },
+    {
+      "english": "when",
+      "chinese": "什么时候",
+      "example": "When do you go?_你什么时候去？"
+    },
+    {
+      "english": "where",
+      "chinese": "哪里",
+      "example": "Where are you?_你在哪？"
+    },
+    {
+      "english": "which",
+      "chinese": "哪个",
+      "example": "Which book?_哪本书？"
+    },
+    {
+      "english": "while",
+      "chinese": "当...时候",
+      "example": "While I was reading,_当我读书时，"
+    },
+    {
+      "english": "white",
+      "chinese": "白色的",
+      "example": "The paper is white. 纸是白色的。"
+    },
+    {
+      "english": "who",
+      "chinese": "谁",
+      "example": "Who is he?_他是谁？"
+    },
+    {
+      "english": "whole",
+      "chinese": "整个的",
+      "example": "The whole class. 全班。"
+    },
+    {
+      "english": "why",
+      "chinese": "为什么",
+      "example": "Why are you late?_你为什么迟到？"
+    },
+    {
+      "english": "wide",
+      "chinese": "宽的",
+      "example": "The river is wide. 河很宽。"
+    },
+    {
+      "english": "wife",
+      "chinese": "妻子",
+      "example": "My wife is kind. 我的妻子很和蔼。"
+    },
+    {
+      "english": "will",
+      "chinese": "将要",
+      "example": "I will go. 我将要去。"
+    },
+    {
+      "english": "win",
+      "chinese": "赢得",
+      "example": "We win. 我们赢了。"
+    },
+    {
+      "english": "wind",
+      "chinese": "风",
+      "example": "The wind blows. 风吹着。"
+    },
+    {
+      "english": "window",
+      "chinese": "窗户",
+      "example": "The window is open. 窗户开着。"
+    },
+    {
+      "english": "wine",
+      "chinese": "酒",
+      "example": "I drink wine. 我喝酒。"
+    },
+    {
+      "english": "winter",
+      "chinese": "冬天",
+      "example": "Winter is cold. 冬天很冷。"
+    },
+    {
+      "english": "wish",
+      "chinese": "希望",
+      "example": "I wish you success. 祝你成功。"
+    },
+    {
+      "english": "with",
+      "chinese": "和...一起",
+      "example": "Come with me. 跟我来。"
+    },
+    {
+      "english": "woman",
+      "chinese": "女人",
+      "example": "The woman is kind. 这个女人很和蔼。"
+    },
+    {
+      "english": "wonder",
+      "chinese": "想知道",
+      "example": "I wonder why. 我想知道为什么。"
+    },
+    {
+      "english": "wood",
+      "chinese": "木头",
+      "example": "The table is wood. 桌子是木头的。"
+    },
+    {
+      "english": "word",
+      "chinese": "单词",
+      "example": "Learn new words. 学新单词。"
+    },
+    {
+      "english": "work",
+      "chinese": "工作",
+      "example": "I work hard. 我努力工作。"
+    },
+    {
+      "english": "world",
+      "chinese": "世界",
+      "example": "The world is big. 世界很大。"
+    },
+    {
+      "english": "worry",
+      "chinese": "担心",
+      "example": "Don't worry. 别担心。"
+    },
+    {
+      "english": "would",
+      "chinese": "将",
+      "example": "Would you like tea?_你要茶吗？"
+    },
+    {
+      "english": "write",
+      "chinese": "写",
+      "example": "I write letters. 我写信。"
+    },
+    {
+      "english": "wrong",
+      "chinese": "错误的",
+      "example": "That's wrong. 那是错误的。"
+    },
+    {
+      "english": "yard",
+      "chinese": "院子",
+      "example": "The yard is green. 院子是绿色的。"
+    },
+    {
+      "english": "year",
+      "chinese": "年",
+      "example": "A year has twelve months. 一年有十二个月。"
+    },
+    {
+      "english": "yellow",
+      "chinese": "黄色的",
+      "example": "The banana is yellow. 香蕉是黄色的。"
+    },
+    {
+      "english": "yes",
+      "chinese": "是的",
+      "example": "Yes, I agree. 是的，我同意。"
+    },
+    {
+      "english": "yesterday",
+      "chinese": "昨天",
+      "example": "I saw him yesterday. 我昨天看见他。"
+    },
+    {
+      "english": "yet",
+      "chinese": "还",
+      "example": "Have you finished yet?_你完成了吗？"
+    },
+    {
+      "english": "you",
+      "chinese": "你",
+      "example": "How are you?_你好吗？"
+    },
+    {
+      "english": "young",
+      "chinese": "年轻的",
+      "example": "The child is young. 孩子很年轻。"
+    },
+    {
+      "english": "your",
+      "chinese": "你的",
+      "example": "Is this your book?_这是你的书吗？"
+    },
+    {
+      "english": "yours",
+      "chinese": "你的",
+      "example": "Yours is better. 你的更好。"
+    },
+    {
+      "english": "zero",
+      "chinese": "零",
+      "example": "The temperature is zero. 温度是零度。"
+    },
+    {
+      "english": "zoo",
+      "chinese": "动物园",
+      "example": "Let's go to the zoo. 我们去动物园吧。"
+    }
+  ]
+}

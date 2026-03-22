@@ -1356,6 +1356,250 @@ async function loadMastered() {
     }
 }
 
+// ==================== 系统词库（家长勾选） ====================
+
+const WB_PHASES = [
+    { id: 'primary', label: '小学' },
+    { id: 'junior', label: '初中' },
+    { id: 'senior', label: '高中' }
+];
+
+const wbCache = {};
+let wbWordByKey = new Map();
+
+const wbState = {
+    phase: 'primary',
+    phaseLabel: '小学',
+    words: [],
+    filtered: [],
+    filter: '',
+    displayN: 200,
+    selected: new Set(),
+    searchTimer: null,
+    loading: false
+};
+
+function wordbankKey(en) {
+    return String(en || '').trim().toLowerCase();
+}
+
+async function ensureWordbankLoaded(phaseId) {
+    if (wbCache[phaseId]) return wbCache[phaseId];
+    const res = await fetch(`/static/wordbanks/${phaseId}.json`);
+    if (!res.ok) throw new Error('词库加载失败');
+    const data = await res.json();
+    const words = Array.isArray(data.words) ? data.words : [];
+    wbCache[phaseId] = words;
+    return words;
+}
+
+function rebuildWordLookup(words) {
+    wbWordByKey = new Map();
+    for (const w of words) {
+        wbWordByKey.set(wordbankKey(w.english), w);
+    }
+}
+
+function applyWordbankFilter() {
+    const qRaw = (wbState.filter || '').trim();
+    if (!qRaw) {
+        wbState.filtered = wbState.words.slice();
+        return;
+    }
+    const q = qRaw.toLowerCase();
+    wbState.filtered = wbState.words.filter((w) => {
+        const en = (w.english || '').toLowerCase();
+        const zh = w.chinese || '';
+        return en.includes(q) || zh.includes(qRaw);
+    });
+}
+
+function updateWordbankSelectedCount() {
+    const el = document.getElementById('wordbank-selected-count');
+    if (el) el.textContent = `已选 ${wbState.selected.size} 词`;
+}
+
+function renderWordbankMeta() {
+    const el = document.getElementById('wordbank-meta');
+    if (!el) return;
+    const total = wbState.words.length;
+    const shown = wbState.filtered.length;
+    const q = (wbState.filter || '').trim();
+    if (wbState.loading) {
+        el.textContent = '加载中…';
+        return;
+    }
+    el.textContent = q
+        ? `「${wbState.phaseLabel}」共 ${total} 词，当前筛选 ${shown} 条`
+        : `「${wbState.phaseLabel}」共 ${total} 词`;
+}
+
+function renderWordbankList() {
+    const container = document.getElementById('wordbank-list');
+    const loadMore = document.getElementById('wordbank-load-more');
+    if (!container) return;
+    const slice = wbState.filtered.slice(0, wbState.displayN);
+    const html = slice
+        .map((w, i) => {
+            const fi = i;
+            const k = wordbankKey(w.english);
+            const checked = wbState.selected.has(k) ? 'checked' : '';
+            return (
+                `<div class="wordbank-row" role="listitem">` +
+                `<label>` +
+                `<input type="checkbox" class="wordbank-cb" data-fi="${fi}" ${checked} />` +
+                `<span class="wb-en">${escapeHtml(w.english)}</span>` +
+                `<span class="wb-zh">${escapeHtml(w.chinese)}</span>` +
+                `</label></div>`
+            );
+        })
+        .join('');
+    container.innerHTML = html || '<p class="wordbank-empty">无匹配词条</p>';
+    container.querySelectorAll('.wordbank-cb').forEach((cb) => {
+        cb.addEventListener('change', () => {
+            const fi = parseInt(cb.dataset.fi, 10);
+            const w = wbState.filtered[fi];
+            if (!w) return;
+            const k = wordbankKey(w.english);
+            if (cb.checked) wbState.selected.add(k);
+            else wbState.selected.delete(k);
+            updateWordbankSelectedCount();
+        });
+    });
+    if (loadMore) {
+        loadMore.style.display = wbState.filtered.length > wbState.displayN ? '' : 'none';
+    }
+}
+
+async function wordbankSwitchPhase(phaseId, label) {
+    wbState.phase = phaseId;
+    wbState.phaseLabel = label;
+    wbState.filter = '';
+    wbState.displayN = 200;
+    wbState.selected.clear();
+    const search = document.getElementById('wordbank-search');
+    if (search) search.value = '';
+    wbState.loading = true;
+    renderWordbankMeta();
+    const list = document.getElementById('wordbank-list');
+    if (list) list.innerHTML = '<p class="wordbank-empty">加载中…</p>';
+    updateWordbankSelectedCount();
+    try {
+        wbState.words = await ensureWordbankLoaded(phaseId);
+        rebuildWordLookup(wbState.words);
+    } catch (e) {
+        wbState.words = [];
+        wbWordByKey = new Map();
+        if (list) list.innerHTML = `<p class="wordbank-empty">${escapeHtml(e.message || '加载失败')}</p>`;
+    } finally {
+        wbState.loading = false;
+    }
+    applyWordbankFilter();
+    renderWordbankMeta();
+    renderWordbankList();
+
+    document.querySelectorAll('.wordbank-phase-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.phase === phaseId);
+    });
+}
+
+function initWordbankPanel() {
+    const phasesEl = document.getElementById('wordbank-phases');
+    if (!phasesEl) return;
+
+    phasesEl.innerHTML = WB_PHASES.map(
+        (p) =>
+            `<button type="button" class="wordbank-phase-btn${p.id === wbState.phase ? ' active' : ''}" data-phase="${p.id}" data-label="${escapeHtml(p.label)}">${escapeHtml(p.label)}</button>`
+    ).join('');
+
+    phasesEl.querySelectorAll('.wordbank-phase-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.phase;
+            const label = btn.dataset.label || id;
+            wordbankSwitchPhase(id, label);
+        });
+    });
+
+    const search = document.getElementById('wordbank-search');
+    if (search) {
+        search.addEventListener('input', () => {
+            wbState.filter = search.value;
+            wbState.displayN = 200;
+            if (wbState.searchTimer) clearTimeout(wbState.searchTimer);
+            wbState.searchTimer = setTimeout(() => {
+                applyWordbankFilter();
+                renderWordbankMeta();
+                renderWordbankList();
+            }, 280);
+        });
+    }
+
+    document.getElementById('wordbank-select-filtered')?.addEventListener('click', () => {
+        for (const w of wbState.filtered) {
+            wbState.selected.add(wordbankKey(w.english));
+        }
+        updateWordbankSelectedCount();
+        renderWordbankList();
+    });
+
+    document.getElementById('wordbank-clear')?.addEventListener('click', () => {
+        wbState.selected.clear();
+        updateWordbankSelectedCount();
+        renderWordbankList();
+    });
+
+    document.getElementById('wordbank-load-more')?.addEventListener('click', () => {
+        wbState.displayN += 200;
+        renderWordbankList();
+    });
+
+    document.getElementById('wordbank-import-btn')?.addEventListener('click', wordbankImportSelected);
+
+    wordbankSwitchPhase('primary', '小学');
+}
+
+async function wordbankImportSelected() {
+    if (!wbState.selected.size) {
+        showMessage('请先勾选单词', 'error');
+        return;
+    }
+    const items = [];
+    for (const k of wbState.selected) {
+        const w = wbWordByKey.get(k);
+        if (!w) continue;
+        const o = { english: w.english, chinese: w.chinese };
+        if (w.example) o.example = w.example;
+        items.push(o);
+    }
+    if (!items.length) {
+        showMessage('没有可导入的词条', 'error');
+        return;
+    }
+    const chunk = 500;
+    let added = 0;
+    let skipped = 0;
+    let invalid = 0;
+    try {
+        for (let i = 0; i < items.length; i += chunk) {
+            const part = items.slice(i, i + chunk);
+            const data = await apiRequest('/words/import-json', {
+                method: 'POST',
+                body: JSON.stringify(part)
+            });
+            added += data.added || 0;
+            skipped += data.skipped_duplicate || 0;
+            invalid += data.skipped_invalid || 0;
+        }
+        let msg = `成功加入 ${added} 个新单词`;
+        if (skipped) msg += `，已跳过 ${skipped} 个重复`;
+        if (invalid) msg += `，${invalid} 条无效已忽略`;
+        showMessage(msg, 'success');
+        loadStats();
+    } catch (error) {
+        showMessage(error.message, 'error');
+    }
+}
+
 // ==================== 导入功能 ====================
 
 async function importWords() {
@@ -1553,6 +1797,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (importJsonBtn) {
         importJsonBtn.addEventListener('click', importWordsJson);
     }
+
+    initWordbankPanel();
     
     // 继续学习
     const reviewMoreBtn = document.getElementById('review-more');

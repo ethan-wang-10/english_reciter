@@ -24,6 +24,9 @@ htmlcov/
 # --- Logs ---
 *.log
 
+# --- Local runtime backups (CLI / 旧版) ---
+backups/
+
 # --- Local secrets / env ---
 .env
 .env.*

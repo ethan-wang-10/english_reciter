@@ -19,10 +19,6 @@ env/
 htmlcov/
 *.log
 backups/
-reciter_backup.py
-CODEBUDDY.md
-CODE_IMPROVEMENTS.md
-UPGRADE_NOTES.md
 USAGE.md
 test_reciter.py
 test_stats.py
