@@ -12,6 +12,7 @@
 </head>
 <body>
     <div id="app">
+        <button type="button" id="admin-gear-login" class="btn-gear btn-gear-fixed" title="管理员">⚙</button>
         <!-- 登录页面 -->
         <div id="login-page" class="page active">
             <div class="container">
@@ -61,6 +62,11 @@
                             <label>确认密码</label>
                             <input type="password" id="reg-password-confirm" required>
                         </div>
+                        <div class="form-group">
+                            <label>邀请码</label>
+                            <input type="text" id="reg-invite" required autocomplete="off"
+                                placeholder="由管理员生成的一次性邀请码">
+                        </div>
                         <button type="submit" class="btn btn-primary">注册</button>
                     </form>
                     
@@ -83,6 +89,7 @@
                     <button class="nav-item" data-page="mastered">已掌握</button>
                 </div>
                 <div class="nav-user">
+                    <button type="button" id="admin-gear-main" class="btn-gear" title="管理员">⚙</button>
                     <span id="username-display"></span>
                     <button id="logout-btn" class="btn btn-secondary">退出</button>
                 </div>
@@ -201,6 +208,68 @@
                 <div class="container">
                     <h2>已掌握单词</h2>
                     <div id="mastered-list" class="word-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 管理员面板（覆盖层） -->
+        <div id="admin-overlay" class="admin-overlay" style="display: none;" aria-hidden="true">
+            <div class="admin-panel">
+                <div class="admin-panel-head">
+                    <h2 id="admin-panel-title">管理后台</h2>
+                    <button type="button" class="admin-close" id="admin-close" aria-label="关闭">&times;</button>
+                </div>
+                <div id="admin-notice" class="admin-notice" style="display: none;"></div>
+
+                <div id="admin-login-panel" class="admin-section">
+                    <p class="admin-hint">使用环境变量中配置的管理员账号登录。</p>
+                    <div class="form-group">
+                        <label>管理员用户名</label>
+                        <input type="text" id="admin-username" autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="admin-password" autocomplete="current-password">
+                    </div>
+                    <button type="button" id="admin-login-submit" class="btn btn-primary">登录</button>
+                </div>
+
+                <div id="admin-dashboard" class="admin-section" style="display: none;">
+                    <div class="admin-toolbar">
+                        <button type="button" id="admin-gen-invite" class="btn btn-primary">生成邀请码</button>
+                        <button type="button" id="admin-logout" class="btn btn-secondary">退出管理</button>
+                    </div>
+                    <div id="admin-invite-once" class="admin-invite-once" style="display: none;"></div>
+
+                    <h3 class="admin-subtitle">用户</h3>
+                    <div class="admin-table-wrap">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>用户</th>
+                                    <th>待复习</th>
+                                    <th>已掌握</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <h3 class="admin-subtitle">邀请码</h3>
+                    <div class="admin-table-wrap">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>创建时间</th>
+                                    <th>状态</th>
+                                    <th>使用者</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-invites-tbody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>

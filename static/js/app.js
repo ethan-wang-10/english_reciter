@@ -348,14 +348,14 @@ async function apiRequest(endpoint, options = {}) {
     if (!response.ok) {
         const error = await response.json();
 
-        if (response.status === 401) {
+        if (response.status === 401 || response.status === 403) {
             token = null;
             username = null;
             localStorage.removeItem('token');
             localStorage.removeItem('username');
             showLoginPage();
         }
-        
+
         throw new Error(error.error || error.detail || '请求失败');
     }
     
@@ -380,7 +380,7 @@ async function login(loginUsername, password) {
         if (!response.ok) {
             throw new Error(data.error || data.detail || '登录失败');
         }
-        
+
         token = data.access_token;
         username = data.username;
         
@@ -393,15 +393,22 @@ async function login(loginUsername, password) {
     }
 }
 
-async function register(username, password, email) {
+async function register(username, password, email, inviteCode) {
     try {
-        await apiRequest('/auth/register', {
+        const data = await apiRequest('/auth/register', {
             method: 'POST',
-            body: JSON.stringify({ username, password, email })
+            body: JSON.stringify({
+                username,
+                password,
+                email,
+                invite_code: inviteCode
+            })
         });
-        
-        // 注册成功后自动登录
-        await login(username, password);
+        token = data.access_token;
+        username = data.username;
+        localStorage.setItem('token', token);
+        localStorage.setItem('username', username);
+        showMainPage();
     } catch (error) {
         showError(error.message);
     }
@@ -429,16 +436,192 @@ async function logout() {
     showLoginPage();
 }
 
+// ==================== 管理员 ====================
+
+function getAdminToken() {
+    return sessionStorage.getItem('adminToken');
+}
+
+function setAdminToken(t) {
+    if (t) {
+        sessionStorage.setItem('adminToken', t);
+    } else {
+        sessionStorage.removeItem('adminToken');
+    }
+}
+
+async function apiAdminRequest(endpoint, options = {}) {
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers
+    };
+    const at = getAdminToken();
+    if (at) {
+        headers.Authorization = `Bearer ${at}`;
+    }
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers
+    });
+    let data = {};
+    try {
+        data = await response.json();
+    } catch (_) {
+        /* ignore */
+    }
+    if (!response.ok) {
+        if (response.status === 401) {
+            setAdminToken(null);
+        }
+        throw new Error(data.error || data.detail || '请求失败');
+    }
+    return data;
+}
+
+function showAdminNotice(msg) {
+    const el = document.getElementById('admin-notice');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.style.display = msg ? 'block' : 'none';
+}
+
+function showAdminLoginPanel() {
+    const lp = document.getElementById('admin-login-panel');
+    const db = document.getElementById('admin-dashboard');
+    if (lp) lp.style.display = 'block';
+    if (db) db.style.display = 'none';
+}
+
+function showAdminDashboardPanel() {
+    const lp = document.getElementById('admin-login-panel');
+    const db = document.getElementById('admin-dashboard');
+    if (lp) lp.style.display = 'none';
+    if (db) db.style.display = 'block';
+}
+
+function renderAdminUsers(users) {
+    const tbody = document.getElementById('admin-users-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = (users || []).map((u) => {
+        const en = u.enabled !== false;
+        const chk = en ? 'checked' : '';
+        return `
+            <tr>
+                <td>${escapeHtml(u.username)}</td>
+                <td>${escapeHtml(u.pending_words)}</td>
+                <td>${escapeHtml(u.mastered_words)}</td>
+                <td>${en ? '正常' : '已禁用'}</td>
+                <td>
+                    <label class="admin-toggle">
+                        <input type="checkbox" data-admin-user="${escapeHtml(u.username)}" ${chk} />
+                        启用
+                    </label>
+                </td>
+            </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('input[data-admin-user]').forEach((inp) => {
+        inp.addEventListener('change', async () => {
+            const un = inp.getAttribute('data-admin-user');
+            const want = inp.checked;
+            try {
+                await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/enabled`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ enabled: want })
+                });
+                await loadAdminDashboard();
+            } catch (e) {
+                showAdminNotice(e.message || '操作失败');
+                inp.checked = !want;
+            }
+        });
+    });
+}
+
+function renderAdminInvites(invites) {
+    const tbody = document.getElementById('admin-invites-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = (invites || []).map((inv) => {
+        const st = inv.status === 'used' ? '已使用' : '未使用';
+        return `
+            <tr>
+                <td>${escapeHtml(inv.created_at || '—')}</td>
+                <td>${escapeHtml(st)}</td>
+                <td>${escapeHtml(inv.used_by || '—')}</td>
+            </tr>`;
+    }).join('');
+}
+
+async function loadAdminDashboard() {
+    const [usersRes, invRes] = await Promise.all([
+        apiAdminRequest('/admin/users'),
+        apiAdminRequest('/admin/invites')
+    ]);
+    renderAdminUsers(usersRes.users);
+    renderAdminInvites(invRes.invites);
+    showAdminDashboardPanel();
+}
+
+async function openAdminOverlay() {
+    const ov = document.getElementById('admin-overlay');
+    if (!ov) return;
+    ov.style.display = 'flex';
+    ov.setAttribute('aria-hidden', 'false');
+    showAdminNotice('');
+    const once = document.getElementById('admin-invite-once');
+    if (once) {
+        once.style.display = 'none';
+        once.textContent = '';
+    }
+
+    try {
+        const st = await fetch(`${API_BASE}/admin/status`).then((r) => r.json());
+        if (!st.admin_configured) {
+            showAdminNotice('服务器未配置管理员：请设置环境变量 ADMIN_USERNAME 与 ADMIN_PASSWORD，或 ADMIN_PASSWORD_HASH。');
+            showAdminLoginPanel();
+            const lp = document.getElementById('admin-login-panel');
+            if (lp) lp.style.display = 'none';
+            const db = document.getElementById('admin-dashboard');
+            if (db) db.style.display = 'none';
+            return;
+        }
+    } catch (_) {
+        /* 忽略 */
+    }
+
+    const at = getAdminToken();
+    if (at) {
+        try {
+            await loadAdminDashboard();
+            return;
+        } catch (_) {
+            setAdminToken(null);
+        }
+    }
+    showAdminLoginPanel();
+}
+
+function closeAdminOverlay() {
+    const ov = document.getElementById('admin-overlay');
+    if (!ov) return;
+    ov.style.display = 'none';
+    ov.setAttribute('aria-hidden', 'true');
+}
+
 // ==================== 页面切换 ====================
 
 function showLoginPage() {
     document.getElementById('login-page').classList.add('active');
     document.getElementById('main-page').classList.remove('active');
+    const gl = document.getElementById('admin-gear-login');
+    if (gl) gl.style.display = '';
 }
 
 function showMainPage() {
     document.getElementById('login-page').classList.remove('active');
     document.getElementById('main-page').classList.add('active');
+    const gl = document.getElementById('admin-gear-login');
+    if (gl) gl.style.display = 'none';
     document.getElementById('username-display').textContent = username;
     
     loadStats();
@@ -947,13 +1130,18 @@ document.addEventListener('DOMContentLoaded', function() {
             const password = document.getElementById('reg-password').value;
             const passwordConfirm = document.getElementById('reg-password-confirm').value;
             const email = document.getElementById('reg-email').value || null;
-            
+            const inviteCode = (document.getElementById('reg-invite') || {}).value || '';
+
             if (password !== passwordConfirm) {
                 showError('两次密码输入不一致');
                 return;
             }
-            
-            await register(username, password, email);
+            if (!inviteCode.trim()) {
+                showError('请填写邀请码');
+                return;
+            }
+
+            await register(username, password, email, inviteCode.trim());
         });
     }
     
@@ -1063,6 +1251,76 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // 管理员入口
+    const adminGearLogin = document.getElementById('admin-gear-login');
+    const adminGearMain = document.getElementById('admin-gear-main');
+    if (adminGearLogin) {
+        adminGearLogin.addEventListener('click', () => openAdminOverlay());
+    }
+    if (adminGearMain) {
+        adminGearMain.addEventListener('click', () => openAdminOverlay());
+    }
+    document.getElementById('admin-close')?.addEventListener('click', () => closeAdminOverlay());
+    document.getElementById('admin-overlay')?.addEventListener('click', (e) => {
+        if (e.target.id === 'admin-overlay') {
+            closeAdminOverlay();
+        }
+    });
+    document.getElementById('admin-login-submit')?.addEventListener('click', async () => {
+        const u = document.getElementById('admin-username')?.value?.trim() || '';
+        const p = document.getElementById('admin-password')?.value || '';
+        showAdminNotice('');
+        try {
+            const res = await fetch(`${API_BASE}/admin/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.error || (res.status === 503 ? '未配置管理员' : '登录失败'));
+            }
+            setAdminToken(data.access_token);
+            await loadAdminDashboard();
+        } catch (e) {
+            showAdminNotice(e.message || '登录失败');
+        }
+    });
+    document.getElementById('admin-gen-invite')?.addEventListener('click', async () => {
+        showAdminNotice('');
+        try {
+            const data = await apiAdminRequest('/admin/invites', { method: 'POST' });
+            const box = document.getElementById('admin-invite-once');
+            if (box) {
+                box.style.display = 'block';
+                box.innerHTML = `<p><strong>新邀请码（仅显示一次）：</strong></p><p class="admin-code-display">${escapeHtml(data.invite_code)}</p><p class="admin-hint">${escapeHtml(data.hint || '')}</p>`;
+            }
+            const inv = await apiAdminRequest('/admin/invites');
+            renderAdminInvites(inv.invites);
+        } catch (e) {
+            showAdminNotice(e.message || '生成失败');
+        }
+    });
+    document.getElementById('admin-logout')?.addEventListener('click', async () => {
+        try {
+            const at = getAdminToken();
+            if (at) {
+                await fetch(`${API_BASE}/admin/logout`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${at}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+            }
+        } catch (_) {
+            /* ignore */
+        }
+        setAdminToken(null);
+        showAdminLoginPanel();
+        showAdminNotice('');
+    });
     
     // 初始化页面
     if (token && username) {

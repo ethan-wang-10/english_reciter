@@ -18,8 +18,9 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from functools import wraps
-from typing import Dict, Generator, List, Optional
+from typing import Dict, Generator, List, Optional, Tuple
 from time import time
+import uuid
 
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
@@ -58,11 +59,19 @@ DATA_DIR.mkdir(exist_ok=True)
 user_tokens: Dict[str, str] = {}  # token -> username
 token_expiry: Dict[str, datetime] = {}  # token -> expiry time
 
+# 管理员会话（与学生 token 隔离）
+admin_tokens: Dict[str, str] = {}  # token -> admin 用户名
+admin_token_expiry: Dict[str, datetime] = {}
+
 # 登录/注册简单限流（按 IP，内存存储）
 _rate_buckets: Dict[str, List[float]] = defaultdict(list)
 _RATE_WINDOW_SEC = 60
 _RATE_MAX_LOGIN = 20
 _RATE_MAX_REGISTER = 10
+_RATE_MAX_ADMIN_LOGIN = 10
+
+INVITES_FILE = DATA_DIR / "invites.json"
+_invites_lock = threading.Lock()
 
 # 每用户背诵器缓存 + 互斥锁（避免并发写 JSON 与重复初始化）
 _reciter_registry_lock = threading.Lock()
@@ -113,18 +122,33 @@ def verify_password(password: str, password_hash: str) -> bool:
         return hashlib.sha256(password.encode()).hexdigest() == password_hash.lower()
     return False
 
+
+def _hash_invite_code(plain: str) -> str:
+    return hashlib.sha256(plain.strip().encode('utf-8')).hexdigest()
+
+
 def load_users() -> dict:
-    """加载所有用户数据"""
+    """加载所有用户数据；为旧数据补充 enabled 字段。"""
     users_file = DATA_DIR / "users.json"
     if not users_file.exists():
         return {}
-    
+
     try:
         with open(users_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            users = json.load(f)
     except Exception as e:
         logger.error(f"加载用户数据失败: {e}")
         return {}
+
+    changed = False
+    for _uname, u in users.items():
+        if isinstance(u, dict) and 'enabled' not in u:
+            u['enabled'] = True
+            changed = True
+    if changed:
+        save_users(users)
+    return users
+
 
 def save_users(users: dict) -> None:
     """保存用户数据"""
@@ -135,31 +159,94 @@ def save_users(users: dict) -> None:
     except Exception as e:
         logger.error(f"保存用户数据失败: {e}")
 
-def create_user(username: str, password: str, email: str = None) -> bool:
-    """创建用户"""
+def load_invites() -> dict:
+    """加载邀请码列表。"""
+    if not INVITES_FILE.exists():
+        return {"invites": []}
+    try:
+        with open(INVITES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"加载邀请码失败: {e}")
+        return {"invites": []}
+
+
+def save_invites(data: dict) -> None:
+    """保存邀请码文件。"""
+    try:
+        with open(INVITES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"保存邀请码失败: {e}")
+
+
+def register_user_with_invite(
+    username: str,
+    password: str,
+    email: Optional[str],
+    invite_code: str,
+) -> Tuple[bool, str]:
+    """
+    使用一次性邀请码注册用户。
+    返回 (是否成功, 错误信息)。
+    """
     if not is_valid_username(username):
-        return False
+        return False, '用户名须为3-32位字母、数字或下划线'
 
+    code_hash = _hash_invite_code(invite_code)
+    with _invites_lock:
+        users = load_users()
+        if username in users:
+            return False, '用户名已存在'
+
+        data = load_invites()
+        invites = data.get('invites', [])
+        matched = None
+        for inv in invites:
+            if inv.get('code_hash') == code_hash and inv.get('used_at') is None:
+                matched = inv
+                break
+        if not matched:
+            return False, '邀请码无效或已使用'
+
+        password_hash = hash_password(password)
+        users[username] = {
+            'password_hash': password_hash,
+            'email': email,
+            'created_at': datetime.now().isoformat(),
+            'enabled': True,
+        }
+        matched['used_at'] = datetime.now().isoformat()
+        matched['used_by'] = username
+
+        user_dir = DATA_DIR / username
+        user_dir.mkdir(exist_ok=True)
+
+        save_users(users)
+        save_invites(data)
+        logger.info("新用户注册: %s (invite_id=%s)", username, matched.get('id'))
+        return True, ''
+
+
+def is_user_enabled(username: str) -> bool:
     users = load_users()
-
-    if username in users:
+    u = users.get(username)
+    if not u or not isinstance(u, dict):
         return False
-    
-    password_hash = hash_password(password)
-    
-    users[username] = {
-        "password_hash": password_hash,
-        "email": email,
-        "created_at": datetime.now().isoformat()
-    }
-    
-    # 为用户创建数据目录
-    user_dir = DATA_DIR / username
-    user_dir.mkdir(exist_ok=True)
-    
-    save_users(users)
-    logger.info(f"新用户注册: {username}")
-    return True
+    return u.get('enabled', True) is not False
+
+
+def _revoke_user_tokens(username: str) -> None:
+    to_remove = [t for t, u in user_tokens.items() if u == username]
+    for t in to_remove:
+        user_tokens.pop(t, None)
+        token_expiry.pop(t, None)
+
+
+def _invalidate_user_reciter_cache(username: str) -> None:
+    with _reciter_registry_lock:
+        _user_reciter_cache.pop(username, None)
+
 
 def verify_user(username: str, password: str) -> bool:
     """验证用户；若仍为旧版哈希则自动升级为 Werkzeug 哈希。"""
@@ -212,6 +299,79 @@ def verify_token(token: str) -> Optional[str]:
     
     return None
 
+
+def _cleanup_admin_tokens() -> None:
+    now = datetime.now()
+    expired = [t for t, exp in admin_token_expiry.items() if exp < now]
+    for t in expired:
+        admin_tokens.pop(t, None)
+        admin_token_expiry.pop(t, None)
+
+
+def create_admin_token() -> str:
+    """签发管理员会话 token（与学生 token 隔离）。"""
+    _cleanup_admin_tokens()
+    now = datetime.now()
+    token = secrets.token_urlsafe(32)
+    admin_name = os.getenv('ADMIN_USERNAME', '').strip() or 'admin'
+    admin_tokens[token] = admin_name
+    admin_token_expiry[token] = now + timedelta(hours=8)
+    return token
+
+
+def verify_admin_token(token: str) -> bool:
+    if not token:
+        return False
+    _cleanup_admin_tokens()
+    if token not in admin_tokens:
+        return False
+    exp = admin_token_expiry.get(token)
+    if not exp or exp < datetime.now():
+        admin_tokens.pop(token, None)
+        admin_token_expiry.pop(token, None)
+        return False
+    return True
+
+
+def admin_configured() -> bool:
+    """是否已配置管理员账号（环境变量）。"""
+    au = os.getenv('ADMIN_USERNAME', '').strip()
+    if not au:
+        return False
+    if os.getenv('ADMIN_PASSWORD_HASH', '').strip():
+        return True
+    return bool(os.getenv('ADMIN_PASSWORD', ''))
+
+
+def verify_admin_credentials(username: str, password: str) -> bool:
+    if not admin_configured():
+        return False
+    if username != os.getenv('ADMIN_USERNAME', '').strip():
+        return False
+    pwd_hash = os.getenv('ADMIN_PASSWORD_HASH', '').strip()
+    if pwd_hash:
+        return verify_password(password, pwd_hash)
+    plain = os.getenv('ADMIN_PASSWORD', '')
+    if not plain:
+        return False
+    return secrets.compare_digest(password.encode('utf-8'), plain.encode('utf-8'))
+
+
+def _learning_data_summary(username: str) -> Dict[str, int]:
+    path = DATA_DIR / username / 'learning_data.json'
+    if not path.exists():
+        return {'pending': 0, 'mastered': 0}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        return {
+            'pending': len(d.get('all_words', [])),
+            'mastered': len(d.get('mastered_words', [])),
+        }
+    except Exception:
+        return {'pending': 0, 'mastered': 0}
+
+
 # ==================== 认证装饰器 ====================
 
 def token_required(f):
@@ -222,15 +382,33 @@ def token_required(f):
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': '需要认证'}), 401
-        
+
         token = auth_header[7:].strip()
         username = verify_token(token)
-        
+
         if not username:
             return jsonify({'error': '无效或过期的token'}), 401
-        
+
+        if not is_user_enabled(username):
+            _revoke_user_tokens(username)
+            return jsonify({'error': '账号已停用'}), 403
+
         # 将用户名传递给路由函数
         return f(username, *args, **kwargs)
+    return decorated_function
+
+
+def admin_required(f):
+    """管理员 token。"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': '需要管理员认证'}), 401
+        tok = auth_header[7:].strip()
+        if not verify_admin_token(tok):
+            return jsonify({'error': '无效或过期的管理员会话'}), 401
+        return f(*args, **kwargs)
     return decorated_function
 
 # ==================== 用户数据管理 ====================
@@ -303,9 +481,13 @@ def register():
         
         if len(password) < 6:
             return jsonify({'error': '密码至少6个字符'}), 400
-        
-        if create_user(username, password, email):
-            # 创建token并返回
+
+        invite_code = (data.get('invite_code') or '').strip()
+        if not invite_code:
+            return jsonify({'error': '请填写邀请码'}), 400
+
+        ok, err = register_user_with_invite(username, password, email, invite_code)
+        if ok:
             token = create_token(username)
             return jsonify({
                 'username': username,
@@ -314,8 +496,7 @@ def register():
                 'access_token': token,
                 'token_type': 'bearer'
             }), 201
-        else:
-            return jsonify({'error': '用户名已存在'}), 400
+        return jsonify({'error': err or '注册失败'}), 400
     except Exception as e:
         logger.error(f"注册失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -338,16 +519,17 @@ def login():
         
         if not username or not password:
             return jsonify({'error': '用户名和密码不能为空'}), 400
-        
+
         if verify_user(username, password):
+            if not is_user_enabled(username):
+                return jsonify({'error': '账号已停用，请联系管理员'}), 403
             token = create_token(username)
             return jsonify({
                 'access_token': token,
                 'token_type': 'bearer',
                 'username': username
             }), 200
-        else:
-            return jsonify({'error': '用户名或密码错误'}), 401
+        return jsonify({'error': '用户名或密码错误'}), 401
     except Exception as e:
         logger.error(f"登录失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -643,6 +825,147 @@ def get_mastered_words(username):
     except Exception as e:
         logger.error(f"获取已掌握单词失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
+
+# ==================== 管理员 API ====================
+
+@app.route('/api/admin/status', methods=['GET'])
+def admin_status():
+    """前端用于判断是否已配置管理员（不泄露账号名）。"""
+    return jsonify({'admin_configured': admin_configured()}), 200
+
+
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    """管理员登录，签发独立 admin token。"""
+    try:
+        if not _rate_allow(f"admin_login:{_client_ip()}", _RATE_MAX_ADMIN_LOGIN):
+            return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
+        if not admin_configured():
+            return jsonify({'error': '服务端未配置管理员（请设置 ADMIN_USERNAME 与 ADMIN_PASSWORD 或 ADMIN_PASSWORD_HASH）'}), 503
+
+        data = request.get_json(silent=True) or {}
+        auser = (data.get('username') or '').strip()
+        pwd = (data.get('password') or '').strip()
+        if not auser or not pwd:
+            return jsonify({'error': '用户名和密码不能为空'}), 400
+
+        if not verify_admin_credentials(auser, pwd):
+            logger.warning("管理员登录失败: user=%s ip=%s", auser, _client_ip())
+            return jsonify({'error': '用户名或密码错误'}), 401
+
+        tok = create_admin_token()
+        logger.info("管理员登录成功 ip=%s", _client_ip())
+        return jsonify({'access_token': tok, 'token_type': 'bearer'}), 200
+    except Exception as e:
+        logger.error(f"管理员登录异常: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/admin/logout', methods=['POST'])
+@admin_required
+def admin_logout():
+    """注销管理员会话。"""
+    auth = request.headers.get('Authorization', '')
+    tok = auth[7:].strip() if auth.startswith('Bearer ') else ''
+    admin_tokens.pop(tok, None)
+    admin_token_expiry.pop(tok, None)
+    return jsonify({'message': '已退出'}), 200
+
+
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required
+def admin_list_users():
+    """所有学生用户及学习概况。"""
+    users = load_users()
+    out = []
+    for uname in sorted(users.keys()):
+        u = users[uname]
+        if not isinstance(u, dict):
+            continue
+        summ = _learning_data_summary(uname)
+        out.append({
+            'username': uname,
+            'email': u.get('email'),
+            'created_at': u.get('created_at'),
+            'enabled': u.get('enabled', True),
+            'pending_words': summ['pending'],
+            'mastered_words': summ['mastered'],
+        })
+    return jsonify({'users': out}), 200
+
+
+@app.route('/api/admin/users/<username>/enabled', methods=['PATCH'])
+@admin_required
+def admin_set_user_enabled(username):
+    """启用或禁用学生账号。"""
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+    data = request.get_json(silent=True) or {}
+    if 'enabled' not in data:
+        return jsonify({'error': '缺少 enabled 字段'}), 400
+    enabled = bool(data['enabled'])
+
+    users = load_users()
+    if username not in users:
+        return jsonify({'error': '用户不存在'}), 404
+
+    users[username]['enabled'] = enabled
+    save_users(users)
+    if not enabled:
+        _revoke_user_tokens(username)
+        _invalidate_user_reciter_cache(username)
+        logger.info("管理员禁用用户: %s", username)
+    else:
+        logger.info("管理员启用用户: %s", username)
+
+    return jsonify({'username': username, 'enabled': enabled}), 200
+
+
+@app.route('/api/admin/invites', methods=['POST'])
+@admin_required
+def admin_create_invite():
+    """生成一次性邀请码（仅响应中明文展示一次）。"""
+    plain = secrets.token_urlsafe(18)
+    inv_id = str(uuid.uuid4())
+    entry = {
+        'id': inv_id,
+        'code_hash': _hash_invite_code(plain),
+        'created_at': datetime.now().isoformat(),
+        'created_by': os.getenv('ADMIN_USERNAME', 'admin'),
+        'used_at': None,
+        'used_by': None,
+    }
+    with _invites_lock:
+        data = load_invites()
+        data.setdefault('invites', []).append(entry)
+        save_invites(data)
+
+    logger.info("管理员生成邀请码 id=%s", inv_id)
+    return jsonify({
+        'id': inv_id,
+        'invite_code': plain,
+        'hint': '请复制保存，关闭后无法再次查看明文',
+    }), 201
+
+
+@app.route('/api/admin/invites', methods=['GET'])
+@admin_required
+def admin_list_invites():
+    """邀请码列表（不含明文）。"""
+    data = load_invites()
+    rows = []
+    for inv in data.get('invites', []):
+        rows.append({
+            'id': inv.get('id'),
+            'created_at': inv.get('created_at'),
+            'created_by': inv.get('created_by'),
+            'used_at': inv.get('used_at'),
+            'used_by': inv.get('used_by'),
+            'status': 'used' if inv.get('used_at') else 'unused',
+        })
+    rows.sort(key=lambda x: x.get('created_at') or '', reverse=True)
+    return jsonify({'invites': rows}), 200
+
 
 # ==================== 健康检查 ====================
 
