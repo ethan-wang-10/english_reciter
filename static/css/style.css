@@ -47,6 +47,8 @@ body {
     background-attachment: fixed;
     color: var(--text-primary);
     line-height: 1.55;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
 }
 
 .container {
@@ -258,6 +260,7 @@ body {
     background: var(--surface);
     border-bottom: 3px solid var(--border);
     padding: 12px 24px;
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -838,30 +841,115 @@ body {
 }
 
 @media (max-width: 768px) {
+    .container {
+        padding: 12px;
+        padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    }
+
+    /* 单行顶栏：横向滑动标签，避免纵向堆叠占满首屏 */
     .navbar {
-        flex-direction: column;
-        align-items: stretch;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        padding-top: max(6px, env(safe-area-inset-top, 0px));
+    }
+
+    .nav-brand {
+        flex-shrink: 0;
+        max-width: 36%;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .logo {
+        font-size: 22px;
+    }
+
+    .brand-name {
+        font-size: 0.95rem;
+        max-width: 7em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .nav-menu {
-        width: 100%;
-        justify-content: stretch;
+        flex: 1;
+        min-width: 0;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        gap: 6px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .nav-menu::-webkit-scrollbar {
+        display: none;
     }
 
     .nav-item {
-        flex: 1;
-        text-align: center;
-        padding: 10px 8px;
-        font-size: 0.85rem;
+        flex: 0 0 auto;
+        padding: 7px 11px;
+        font-size: 0.78rem;
     }
 
     .nav-user {
-        width: 100%;
-        justify-content: space-between;
+        flex-shrink: 0;
+        width: auto;
+        gap: 6px;
     }
 
+    .nav-user #username-display {
+        max-width: 4.5rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: 5px 8px;
+        font-size: 0.72rem;
+    }
+
+    .nav-user .btn-secondary {
+        padding: 6px 10px;
+        font-size: 0.78rem;
+    }
+
+    /* 三列一排，减少纵向占用 */
     .stats-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin: 10px 0 12px;
+    }
+
+    .stat-card {
+        padding: 10px 6px;
+        gap: 6px;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .stat-icon {
+        font-size: 1.35rem;
+    }
+
+    .stat-value {
+        font-size: 1.15rem;
+    }
+
+    .stat-label {
+        font-size: 0.6rem;
+        line-height: 1.15;
+    }
+
+    .review-container {
+        margin: 10px 0 28px;
+    }
+
+    .review-box {
+        padding: 18px 14px 22px;
     }
 
     .word-input {

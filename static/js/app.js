@@ -209,6 +209,7 @@ function clearUnderlineInput() {
 }
 
 // 浏览器端朗读（远程访问时服务端 say 只在服务器出声，用户听不到）
+// Android Chrome：语音列表异步加载、合成队列常处于 paused，需 resume + voiceschanged 后再 speak
 function speakEnglishInBrowser(text) {
     const raw = String(text || '').trim().slice(0, 500);
     if (!raw) return false;
@@ -225,15 +226,70 @@ function speakEnglishInBrowser(text) {
         .slice(0, 500);
     if (!safe) return false;
 
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(safe);
-    u.lang = 'en-US';
-    const voices = window.speechSynthesis.getVoices();
-    const en = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('en'));
-    if (en) u.voice = en;
-    u.onend = () => focusWordCapture(0);
-    u.onerror = () => focusWordCapture(0);
-    window.speechSynthesis.speak(u);
+    const synth = window.speechSynthesis;
+
+    const pickEnglishVoice = () => {
+        const voices = synth.getVoices();
+        return (
+            voices.find((v) => v.lang && /^en-us\b/i.test(String(v.lang))) ||
+            voices.find((v) => v.lang && /^en\b/i.test(String(v.lang))) ||
+            voices.find((v) => v.lang && String(v.lang).toLowerCase().startsWith('en'))
+        );
+    };
+
+    const doSpeak = () => {
+        try {
+            synth.cancel();
+        } catch (_) {
+            /* ignore */
+        }
+        try {
+            synth.resume();
+        } catch (_) {
+            /* ignore */
+        }
+
+        const u = new SpeechSynthesisUtterance(safe);
+        u.lang = 'en-US';
+        const en = pickEnglishVoice();
+        if (en) u.voice = en;
+        u.rate = 0.95;
+        u.onend = () => focusWordCapture(0);
+        u.onerror = () => focusWordCapture(0);
+        u.onstart = () => {
+            try {
+                synth.resume();
+            } catch (_) {
+                /* ignore */
+            }
+        };
+        synth.speak(u);
+        [50, 200].forEach((ms) => {
+            setTimeout(() => {
+                try {
+                    synth.resume();
+                } catch (_) {
+                    /* ignore */
+                }
+            }, ms);
+        });
+    };
+
+    let voices = synth.getVoices();
+    if (voices.length === 0) {
+        let settled = false;
+        const runOnce = () => {
+            if (settled) return;
+            settled = true;
+            synth.removeEventListener('voiceschanged', runOnce);
+            setTimeout(doSpeak, 0);
+        };
+        synth.addEventListener('voiceschanged', runOnce);
+        setTimeout(runOnce, 600);
+        return true;
+    }
+
+    setTimeout(doSpeak, 0);
     return true;
 }
 
@@ -858,6 +914,19 @@ async function importWordsJson() {
 // ==================== 事件监听与初始化 ====================
 
 document.addEventListener('DOMContentLoaded', function() {
+    // 预加载语音列表（Android 等环境首次 getVoices() 可能为空）
+    if (typeof window.speechSynthesis !== 'undefined') {
+        const prime = () => {
+            try {
+                window.speechSynthesis.getVoices();
+            } catch (_) {
+                /* ignore */
+            }
+        };
+        prime();
+        window.speechSynthesis.addEventListener('voiceschanged', prime);
+    }
+
     // 登录表单
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
