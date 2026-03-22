@@ -32,6 +32,7 @@ from reciter import (
     Config,
     get_logger,
 )
+import gamification as gamification_mod
 
 # 日志配置
 logger = get_logger(__name__)
@@ -546,6 +547,62 @@ def logout(username):
     
     return jsonify({'message': '已退出登录'}), 200
 
+
+@app.route('/api/gamification', methods=['GET'])
+@token_required
+def get_gamification(username):
+    """XP、等级、连续打卡、成就列表"""
+    try:
+        with user_reciter_session(username) as reciter:
+            mastered_n = len(reciter.mastered_words)
+        profile = gamification_mod.public_profile(
+            DATA_DIR, username, mastered_words=mastered_n
+        )
+        return jsonify(profile), 200
+    except Exception as e:
+        logger.error(f"获取游戏化数据失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/gamification', methods=['PATCH'])
+@token_required
+def patch_gamification_settings(username):
+    """更新排行榜展示等设置"""
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({'error': '无效的JSON数据'}), 400
+        opt_in = data.get('leaderboard_opt_in')
+        if opt_in is not None and not isinstance(opt_in, bool):
+            return jsonify({'error': 'leaderboard_opt_in 须为布尔值'}), 400
+        out = gamification_mod.patch_settings(
+            DATA_DIR, username, leaderboard_opt_in=opt_in
+        )
+        return jsonify(out), 200
+    except Exception as e:
+        logger.error(f"更新游戏化设置失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/leaderboard', methods=['GET'])
+@token_required
+def get_leaderboard(username):
+    """按总 XP 排序的小伙伴排行榜（仅含开启展示的用户）"""
+    try:
+        users = load_users()
+        enabled = [
+            u for u in users
+            if isinstance(users.get(u), dict) and is_user_enabled(u)
+        ]
+        rows = gamification_mod.build_leaderboard(
+            DATA_DIR, enabled, viewer=username
+        )
+        return jsonify({'leaderboard': rows}), 200
+    except Exception as e:
+        logger.error(f"获取排行榜失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
 @app.route('/api/words/status', methods=['GET'])
 @token_required
 def get_status(username):
@@ -661,6 +718,8 @@ def practice_word(username):
                 return jsonify({'error': '单词未找到'}), 404
 
             is_correct = answer.strip().lower() == word.english.lower()
+            old_success_count = word.success_count
+            old_mastered_count = len(reciter.mastered_words)
 
             if bonus_practice:
                 if is_correct:
@@ -675,7 +734,22 @@ def practice_word(username):
                 message = '❌ 错误，请继续努力！'
             reciter.save_learning_data(backup=False)
 
-            return jsonify({
+            new_success_count = word.success_count
+            mastered_now = len(reciter.mastered_words) > old_mastered_count
+            gam_payload = None
+            if is_correct:
+                gam_payload = gamification_mod.award_correct_answer(
+                    DATA_DIR,
+                    username,
+                    bonus_practice=bonus_practice,
+                    remedial=remedial,
+                    old_success_count=old_success_count,
+                    new_success_count=new_success_count,
+                    mastered_now=mastered_now,
+                    mastered_words=len(reciter.mastered_words),
+                )
+
+            body = {
                 'correct': is_correct,
                 'message': message,
                 'word': {
@@ -683,7 +757,10 @@ def practice_word(username):
                     'chinese': word.chinese,
                     'success_count': word.success_count
                 }
-            }), 200
+            }
+            if gam_payload is not None:
+                body['gamification'] = gam_payload
+            return jsonify(body), 200
     except Exception as e:
         logger.error(f"练习单词失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500

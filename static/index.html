@@ -87,6 +87,12 @@
                     <button class="nav-item" data-page="progress">学习进度</button>
                     <button class="nav-item" data-page="import">导入单词</button>
                     <button class="nav-item" data-page="mastered">已掌握</button>
+                    <button class="nav-item" data-page="leaderboard">排行榜</button>
+                </div>
+                <div class="nav-gamification" id="nav-gamification" title="学习积分与连续打卡">
+                    <span class="ng-level" id="ng-level">Lv.1</span>
+                    <span class="ng-xp" id="ng-xp">0 XP</span>
+                    <span class="ng-streak" id="ng-streak" title="连续打卡天数">🔥 0</span>
                 </div>
                 <div class="nav-user">
                     <button type="button" id="admin-gear-main" class="btn-gear" title="管理员">⚙</button>
@@ -213,6 +219,23 @@
                 <div class="container">
                     <h2>已掌握单词</h2>
                     <div id="mastered-list" class="word-list"></div>
+                </div>
+            </div>
+
+            <!-- 排行榜与成就 -->
+            <div id="leaderboard-section" class="section">
+                <div class="container leaderboard-page">
+                    <h2>学习排行榜</h2>
+                    <p class="leaderboard-intro">按累计 XP 排名，看看小伙伴们谁最坚持。继续复习即可涨分、解锁成就。</p>
+                    <label class="leaderboard-opt-in-label">
+                        <input type="checkbox" id="leaderboard-opt-in" checked />
+                        <span>在排行榜中展示我的学习数据</span>
+                    </label>
+                    <div id="leaderboard-loading" class="leaderboard-loading" style="display: none;">加载中…</div>
+                    <div id="leaderboard-table-wrap" class="leaderboard-table-wrap"></div>
+
+                    <h3 class="achievements-section-title">我的成就</h3>
+                    <div id="achievements-grid" class="achievements-grid"></div>
                 </div>
             </div>
         </div>

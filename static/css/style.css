@@ -1334,3 +1334,189 @@ body {
     font-weight: 700;
     color: var(--primary-dark);
 }
+
+/* 导航条：等级 / XP / 连续打卡 */
+.nav-gamification {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.nav-gamification .ng-level {
+    padding: 6px 12px;
+    background: linear-gradient(145deg, #fff4d6, #ffe8a8);
+    border: 2px solid var(--accent-yellow);
+    border-radius: var(--radius-pill);
+    color: #6d4c00;
+}
+
+.nav-gamification .ng-xp {
+    padding: 6px 12px;
+    background: #eef7ff;
+    border: 2px solid var(--secondary-color);
+    border-radius: var(--radius-pill);
+    color: var(--secondary-dark);
+}
+
+.nav-gamification .ng-streak {
+    padding: 6px 12px;
+    background: #fff0e8;
+    border: 2px solid var(--accent-orange);
+    border-radius: var(--radius-pill);
+    color: #b35c00;
+}
+
+/* 排行榜页 */
+.leaderboard-page h2 {
+    margin-bottom: 8px;
+}
+
+.leaderboard-intro {
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    font-size: 0.95rem;
+}
+
+.leaderboard-opt-in-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+}
+
+.leaderboard-opt-in-label input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color);
+}
+
+.leaderboard-loading {
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.leaderboard-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 28px;
+}
+
+.leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 2px solid var(--border);
+    box-shadow: var(--shadow);
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.leaderboard-table th {
+    background: #f3f6f9;
+    font-weight: 800;
+    font-size: 0.88rem;
+}
+
+.leaderboard-table tr:last-child td {
+    border-bottom: none;
+}
+
+.leaderboard-row-me {
+    background: var(--primary-light);
+}
+
+.leaderboard-row-me td {
+    font-weight: 800;
+}
+
+.lb-you {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: var(--radius-pill);
+    vertical-align: middle;
+}
+
+.leaderboard-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.achievements-section-title {
+    margin-bottom: 12px;
+    font-size: 1.15rem;
+}
+
+.achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.achievement-card {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.04);
+}
+
+.achievement-card.locked {
+    opacity: 0.55;
+    filter: grayscale(0.35);
+}
+
+.achievement-card .ach-icon {
+    font-size: 1.75rem;
+    line-height: 1;
+}
+
+.achievement-card .ach-title {
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+
+.achievement-card .ach-desc {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+
+.achievement-card .ach-when {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.achievements-empty {
+    color: var(--text-secondary);
+    padding: 12px 0;
+}
+
+@media (max-width: 640px) {
+    .nav-gamification {
+        width: 100%;
+        justify-content: center;
+    }
+}

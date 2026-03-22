@@ -25,6 +25,9 @@ let sessionNewMastered = [];
 /** daily=今日待复习；bonus=无待复习时的随机加练 */
 let reviewSessionMode = 'daily';
 
+/** 最近一次 GET /api/gamification 结果，用于成就展示 */
+let lastGamificationProfile = null;
+
 // API 基础 URL
 const API_BASE = '/api';
 
@@ -85,6 +88,108 @@ function formatNextReviewLine(word) {
         hint = `还有 ${rd} 天`;
     }
     return `${datePart} · ${hint}`;
+}
+
+function formatNumber(n) {
+    const x = Number(n);
+    if (Number.isNaN(x)) return '0';
+    return x.toLocaleString('zh-CN');
+}
+
+function updateGamificationNav(g) {
+    if (!g) return;
+    const lv = document.getElementById('ng-level');
+    const xp = document.getElementById('ng-xp');
+    const st = document.getElementById('ng-streak');
+    if (!lv || !xp || !st) return;
+    lv.textContent = `Lv.${g.level}`;
+    xp.textContent = `${formatNumber(g.total_xp)} XP`;
+    st.textContent = `🔥 ${g.streak}`;
+}
+
+async function refreshGamification() {
+    try {
+        const g = await apiRequest('/gamification');
+        lastGamificationProfile = g;
+        updateGamificationNav(g);
+        const opt = document.getElementById('leaderboard-opt-in');
+        if (opt && typeof g.leaderboard_opt_in === 'boolean') {
+            opt.checked = g.leaderboard_opt_in;
+        }
+        return g;
+    } catch (_) {
+        return null;
+    }
+}
+
+function renderLeaderboardTable(rows) {
+    const wrap = document.getElementById('leaderboard-table-wrap');
+    if (!wrap) return;
+    if (!rows || rows.length === 0) {
+        wrap.innerHTML =
+            '<p class="leaderboard-empty">暂无排行数据。开启「在排行榜中展示」并学习后即可上榜。</p>';
+        return;
+    }
+    const head =
+        '<table class="leaderboard-table"><thead><tr>' +
+        '<th>排名</th><th>用户</th><th>等级</th><th>XP</th><th>连续</th><th>成就</th>' +
+        '</tr></thead><tbody>';
+    const body = rows
+        .map((r) => {
+            const me = r.is_viewer ? 'leaderboard-row-me' : '';
+            return `<tr class="${me}">
+                <td>${escapeHtml(r.rank)}</td>
+                <td>${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</td>
+                <td>Lv.${escapeHtml(r.level)}</td>
+                <td>${escapeHtml(formatNumber(r.total_xp))}</td>
+                <td>🔥 ${escapeHtml(r.streak)}</td>
+                <td>${escapeHtml(r.achievements_count)}</td>
+            </tr>`;
+        })
+        .join('');
+    wrap.innerHTML = head + body + '</tbody></table>';
+}
+
+function renderAchievementsGrid(g) {
+    const grid = document.getElementById('achievements-grid');
+    if (!grid) return;
+    if (!g || !Array.isArray(g.achievements_all)) {
+        grid.innerHTML = '<p class="achievements-empty">暂无成就数据</p>';
+        return;
+    }
+    grid.innerHTML = g.achievements_all.map((a) => {
+        const locked = !a.unlocked;
+        const cls = locked ? 'achievement-card locked' : 'achievement-card';
+        const when = a.unlocked_at
+            ? `<span class="ach-when">${escapeHtml(String(a.unlocked_at).slice(0, 10))}</span>`
+            : '';
+        return `<div class="${cls}">
+            <div class="ach-icon">${escapeHtml(a.icon || '🏅')}</div>
+            <div class="ach-body">
+                <div class="ach-title">${escapeHtml(a.title)}</div>
+                <div class="ach-desc">${escapeHtml(a.desc)}</div>
+                ${when}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function loadLeaderboardSection() {
+    const loading = document.getElementById('leaderboard-loading');
+    if (loading) loading.style.display = 'block';
+    try {
+        await refreshGamification();
+        const data = await apiRequest('/leaderboard');
+        renderLeaderboardTable(data.leaderboard);
+        renderAchievementsGrid(lastGamificationProfile);
+    } catch (e) {
+        const wrap = document.getElementById('leaderboard-table-wrap');
+        if (wrap) {
+            wrap.innerHTML = `<p class="leaderboard-empty">${escapeHtml(e.message || '加载失败')}</p>`;
+        }
+    } finally {
+        if (loading) loading.style.display = 'none';
+    }
 }
 
 function showMainBanner(message) {
@@ -690,6 +795,8 @@ function showSection(sectionId) {
         loadProgress();
     } else if (sectionId === 'mastered') {
         loadMastered();
+    } else if (sectionId === 'leaderboard') {
+        loadLeaderboardSection();
     }
 }
 
@@ -698,15 +805,20 @@ function showSection(sectionId) {
 async function loadStats() {
     try {
         const data = await apiRequest('/words/status');
-        
+
         document.getElementById('review-count').textContent = data.words.filter(w => 
             new Date(w.next_review_date) <= new Date()
         ).length;
-        
+
         document.getElementById('mastered-count').textContent = data.stats.mastered_words;
         document.getElementById('round-count').textContent = data.stats.current_round + 1;
     } catch (error) {
         showMainBanner('加载统计失败，请稍后重试');
+    }
+    try {
+        await refreshGamification();
+    } catch (_) {
+        /* 积分接口失败不影响复习 */
     }
 }
 
@@ -1078,7 +1190,22 @@ async function submitAnswer() {
         }
 
         const messageDiv = document.getElementById('word-message');
-        messageDiv.textContent = result.message;
+        let msgText = result.message;
+        if (result.correct && result.gamification) {
+            const gm = result.gamification;
+            if (gm.xp_gained > 0) {
+                msgText += ` +${gm.xp_gained} XP（累计 ${formatNumber(gm.total_xp)} · Lv.${gm.level} · 连续 ${gm.streak} 天）`;
+            }
+            if (gm.new_achievements && gm.new_achievements.length) {
+                msgText += ` · 新成就：${gm.new_achievements.map((x) => x.title).join('、')}`;
+            }
+            updateGamificationNav({
+                level: gm.level,
+                total_xp: gm.total_xp,
+                streak: gm.streak
+            });
+        }
+        messageDiv.textContent = msgText;
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
         messageDiv.style.display = 'block';
         
@@ -1372,6 +1499,24 @@ document.addEventListener('DOMContentLoaded', function() {
             showSection(page);
         });
     });
+
+    const lbOptIn = document.getElementById('leaderboard-opt-in');
+    if (lbOptIn) {
+        lbOptIn.addEventListener('change', async (e) => {
+            const checked = e.target.checked;
+            try {
+                await apiRequest('/gamification', {
+                    method: 'PATCH',
+                    body: JSON.stringify({ leaderboard_opt_in: checked })
+                });
+                showMainBanner(checked ? '已参与排行榜展示' : '已隐藏，排行榜中不再展示你的数据');
+                await loadLeaderboardSection();
+            } catch (err) {
+                e.target.checked = !checked;
+                showMainBanner(err.message || '更新失败');
+            }
+        });
+    }
     
     // 退出登录
     const logoutBtn = document.getElementById('logout-btn');
