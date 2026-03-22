@@ -485,6 +485,29 @@ class WordReciter:
         """记录一次答错（与 Web 端每次提交错误一致）。"""
         word.review_count += 1
 
+    def record_bonus_answer_correct(self, word: Word) -> str:
+        """加练答对：仅增加复习次数，不改变掌握进度与排期。"""
+        word.review_count += 1
+        return '✅ 正确！（加练仅计复习次数）'
+
+    def get_extra_review_words(self, count: int = 5) -> List[Word]:
+        """
+        从待复习与已掌握词库中选词：复习次数最少优先，同次数内随机打乱，
+        保证长期覆盖（低次数词优先被抽到）。
+        """
+        pool: List[Word] = list(self.all_words) + list(self.mastered_words)
+        if not pool:
+            return []
+        by_rc: dict[int, List[Word]] = defaultdict(list)
+        for w in pool:
+            by_rc[w.review_count].append(w)
+        ordered: List[Word] = []
+        for rc in sorted(by_rc.keys()):
+            tier = by_rc[rc]
+            random.shuffle(tier)
+            ordered.extend(tier)
+        return ordered[:count]
+
     def record_answer_correct(self, word: Word, *, remedial: bool = False) -> str:
         """
         答对后的持久化更新（Web / CLI 共用）。

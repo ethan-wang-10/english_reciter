@@ -22,6 +22,9 @@ let sessionRemedialCorrect = 0;
 let sessionTotalWrongAttempts = 0;
 let sessionNewMastered = [];
 
+/** daily=今日待复习；bonus=无待复习时的随机加练 */
+let reviewSessionMode = 'daily';
+
 // API 基础 URL
 const API_BASE = '/api';
 
@@ -760,11 +763,18 @@ function hideReviewSessionSummary() {
     box.hidden = true;
 }
 
+function showReviewEmptyActions(show) {
+    const el = document.getElementById('review-empty-actions');
+    if (!el) return;
+    el.hidden = !show;
+}
+
 /**
  * 当次复习结束时的文字总结（主轮 / 错题巩固 / 新掌握 / 命中率等）
  * @param {number} remedialRoundsDone 结束时处于第几轮错题复习（0 表示未进入错题轮）
+ * @param {boolean} isBonus 是否为无待复习时的随机加练
  */
-function buildReviewSessionSummaryHtml(remedialRoundsDone) {
+function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
     const n = sessionInitialMainWords;
     const mainOk = sessionMainCorrect;
     const mainFailed = sessionMainFailedThree;
@@ -775,10 +785,17 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone) {
     const accPct = totalTries > 0 ? Math.round((correctTries / totalTries) * 1000) / 10 : 0;
 
     const parts = [];
-    parts.push(
-        `<div class="review-summary-section"><strong>主轮</strong>：今日待复习共 ${n} 个词；` +
-        `在本轮流程中答对 ${mainOk} 个；${mainFailed} 个曾 3 次均未答对并进入错题巩固。</div>`
-    );
+    if (isBonus) {
+        parts.push(
+            `<div class="review-summary-section"><strong>加练主轮</strong>：本轮共 ${n} 个词；` +
+            `答对 ${mainOk} 个；${mainFailed} 个曾 3 次均未答对并进入错题巩固。（答对仅计复习次数）</div>`
+        );
+    } else {
+        parts.push(
+            `<div class="review-summary-section"><strong>主轮</strong>：今日待复习共 ${n} 个词；` +
+            `在本轮流程中答对 ${mainOk} 个；${mainFailed} 个曾 3 次均未答对并进入错题巩固。</div>`
+        );
+    }
 
     if (remedialRoundsDone > 0) {
         parts.push(
@@ -803,7 +820,13 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone) {
     );
 
     let tip = '';
-    if (wrongTries === 0 && mainFailed === 0) {
+    if (isBonus) {
+        if (wrongTries === 0 && mainFailed === 0) {
+            tip = '加练全对，词汇保持活跃。';
+        } else {
+            tip = '加练不影响正常排期；需要时可随时再点「随机加练」。';
+        }
+    } else if (wrongTries === 0 && mainFailed === 0) {
         tip = '全对通过，保持节奏即可。';
     } else if (mainFailed > 0 || remedialRoundsDone > 1) {
         tip = '错题已巩固完成；不熟悉的词可在「学习进度」里查看下次复习时间。';
@@ -854,11 +877,19 @@ function showFinalComplete() {
     const titleEl = document.getElementById('review-complete-title');
     const descEl = document.getElementById('review-complete-desc');
     const summaryEl = document.getElementById('review-session-summary');
-    if (titleEl) titleEl.textContent = '今日复习完成！';
-    if (descEl) descEl.textContent = '恭喜！今日待复习已全部完成（含错题巩固）。';
+    const isBonus = reviewSessionMode === 'bonus';
+    if (titleEl) {
+        titleEl.textContent = isBonus ? '加练完成！' : '今日复习完成！';
+    }
+    if (descEl) {
+        descEl.textContent = isBonus
+            ? '本次随机加练已完成（含错题巩固）。'
+            : '恭喜！今日待复习已全部完成（含错题巩固）。';
+    }
     const remedialRoundsDone = wrongRoundNumber;
+    showReviewEmptyActions(false);
     if (summaryEl) {
-        summaryEl.innerHTML = buildReviewSessionSummaryHtml(remedialRoundsDone);
+        summaryEl.innerHTML = buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus);
         summaryEl.hidden = false;
     }
     wrongWordsOrder = [];
@@ -875,8 +906,12 @@ function showInitialEmptyReview() {
     const titleEl = document.getElementById('review-complete-title');
     const descEl = document.getElementById('review-complete-desc');
     if (titleEl) titleEl.textContent = '今日暂无待复习';
-    if (descEl) descEl.textContent = '目前没有需要复习的单词，去导入一些吧！';
+    if (descEl) {
+        descEl.textContent = '目前没有到期的复习任务。你可以随机加练 5 个词保持手感，或去导入新词。';
+    }
     hideReviewSessionSummary();
+    reviewSessionMode = 'daily';
+    showReviewEmptyActions(true);
     wrongWordsOrder = [];
     wrongWordsInThisPass = new Set();
     wrongRoundNumber = 0;
@@ -893,6 +928,7 @@ async function loadReviewList() {
         wordMap = new Map();
         resetSessionReviewStats();
         hideReviewSessionSummary();
+        reviewSessionMode = 'daily';
 
         const data = await apiRequest('/words/review');
         currentReviewList = data.words;
@@ -903,6 +939,7 @@ async function loadReviewList() {
         if (currentReviewList.length === 0) {
             showInitialEmptyReview();
         } else {
+            showReviewEmptyActions(false);
             document.getElementById('review-box').style.display = 'block';
             document.getElementById('review-complete').style.display = 'none';
             renderWrongPanel();
@@ -911,6 +948,37 @@ async function loadReviewList() {
         }
     } catch (error) {
         showMainBanner('加载复习列表失败，请稍后重试');
+    }
+}
+
+async function startBonusReview() {
+    try {
+        const data = await apiRequest('/words/extra-review');
+        if (!data.words || data.words.length === 0) {
+            showMainBanner('词库为空，请先导入单词');
+            return;
+        }
+        wrongWordsInThisPass = new Set();
+        wrongWordsOrder = [];
+        wrongRoundNumber = 0;
+        wordMap = new Map();
+        resetSessionReviewStats();
+        hideReviewSessionSummary();
+        reviewSessionMode = 'bonus';
+
+        currentReviewList = data.words;
+        currentReviewIndex = 0;
+        currentReviewList.forEach((w) => wordMap.set(w.english, w));
+        sessionInitialMainWords = currentReviewList.length;
+
+        showReviewEmptyActions(false);
+        document.getElementById('review-box').style.display = 'block';
+        document.getElementById('review-complete').style.display = 'none';
+        renderWrongPanel();
+        updateWrongRoundLabel();
+        showCurrentWord();
+    } catch (error) {
+        showMainBanner('加载加练列表失败，请稍后重试');
     }
 }
 
@@ -986,7 +1054,8 @@ async function submitAnswer() {
             body: JSON.stringify({
                 word_id: word.english,
                 answer: answer,
-                remedial: wrongRoundNumber > 0
+                remedial: wrongRoundNumber > 0 && reviewSessionMode !== 'bonus',
+                bonus_practice: reviewSessionMode === 'bonus'
             })
         });
 
@@ -1345,6 +1414,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (reviewMoreBtn) {
         reviewMoreBtn.addEventListener('click', () => {
             loadReviewList();
+        });
+    }
+
+    const bonusReviewBtn = document.getElementById('bonus-review-btn');
+    if (bonusReviewBtn) {
+        bonusReviewBtn.addEventListener('click', () => {
+            startBonusReview();
         });
     }
 

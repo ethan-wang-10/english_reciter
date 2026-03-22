@@ -603,6 +603,29 @@ def get_review_list(username):
         logger.error(f"获取复习列表失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
 
+@app.route('/api/words/extra-review', methods=['GET'])
+@token_required
+def get_extra_review_list(username):
+    """今日无待复习时：从全词库按复习次数最少优先、同层随机抽取加练词（默认 5 个）。"""
+    try:
+        with user_reciter_session(username) as reciter:
+            picked = reciter.get_extra_review_words(5)
+            words = [
+                {
+                    'english': w.english,
+                    'chinese': w.chinese,
+                    'success_count': w.success_count,
+                    'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
+                    'review_count': w.review_count,
+                    'example': w.example,
+                }
+                for w in picked
+            ]
+            return jsonify({'words': words, 'count': len(words)}), 200
+    except Exception as e:
+        logger.error(f"获取加练列表失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
 @app.route('/api/words/practice', methods=['POST'])
 @token_required
 def practice_word(username):
@@ -616,6 +639,8 @@ def practice_word(username):
         answer = data.get('answer', '').strip()
         # 当日错题巩固轮次：答对不计入掌握进度（success_count）与排期，见前端 wrongRoundNumber>0
         remedial = bool(data.get('remedial'))
+        # 无今日待复习时的加练：仅计复习次数，不改变掌握进度与排期
+        bonus_practice = bool(data.get('bonus_practice'))
 
         if not word_id or not answer:
             return jsonify({'error': '单词ID和答案不能为空'}), 400
@@ -626,13 +651,24 @@ def practice_word(username):
                 if w.english.lower() == word_id.lower():
                     word = w
                     break
+            if not word and bonus_practice:
+                for w in reciter.mastered_words:
+                    if w.english.lower() == word_id.lower():
+                        word = w
+                        break
 
             if not word:
                 return jsonify({'error': '单词未找到'}), 404
 
             is_correct = answer.strip().lower() == word.english.lower()
 
-            if is_correct:
+            if bonus_practice:
+                if is_correct:
+                    message = reciter.record_bonus_answer_correct(word)
+                else:
+                    reciter.record_answer_incorrect(word)
+                    message = '❌ 错误，请继续努力！'
+            elif is_correct:
                 message = reciter.record_answer_correct(word, remedial=remedial)
             else:
                 reciter.record_answer_incorrect(word)

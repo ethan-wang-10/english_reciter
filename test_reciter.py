@@ -354,6 +354,31 @@ class TestWordReciter(unittest.TestCase):
         reciter.record_answer_incorrect(w)
         self.assertEqual(w.review_count, 1)
 
+    def test_record_bonus_answer_correct(self):
+        """加练答对：只增加复习次数，不改变掌握进度与排期"""
+        reciter = WordReciter(self.config)
+        w = Word("d", "丁", success_count=0, next_review_date=date.today(), review_count=0)
+        nd = w.next_review_date
+        reciter.all_words.append(w)
+        reciter.record_bonus_answer_correct(w)
+        self.assertEqual(w.success_count, 0)
+        self.assertEqual(w.review_count, 1)
+        self.assertEqual(w.next_review_date, nd)
+
+    def test_get_extra_review_words(self):
+        """加练选词：复习次数少优先，同层最多取满 count"""
+        reciter = WordReciter(self.config)
+        reciter.all_words = [
+            Word("a", "甲", review_count=2),
+            Word("b", "乙", review_count=0),
+        ]
+        reciter.mastered_words = [
+            Word("c", "丙", review_count=0),
+        ]
+        picked = reciter.get_extra_review_words(5)
+        self.assertEqual(len(picked), 3)
+        self.assertEqual({w.english for w in picked}, {"a", "b", "c"})
+
 
 def run_tests():
     """运行所有测试"""

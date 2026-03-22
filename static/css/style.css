@@ -696,6 +696,26 @@ body {
     border-top: 1px dashed var(--border);
 }
 
+.review-empty-actions {
+    margin: 20px auto 0;
+    max-width: 420px;
+    text-align: center;
+}
+
+.review-empty-actions .btn-primary {
+    padding: 14px 28px;
+    font-weight: 700;
+}
+
+.review-empty-hint {
+    margin-top: 12px;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    font-weight: 500;
+    text-align: left;
+}
+
 .review-complete .btn-secondary {
     margin-top: 24px;
     padding: 14px 32px;
