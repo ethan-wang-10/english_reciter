@@ -480,7 +480,35 @@ class WordReciter:
     def calculate_review_days(self, success_count: int) -> int:
         """根据成功次数计算下次复习间隔天数。"""
         return self._calculate_review_days(success_count)
-    
+
+    def record_answer_incorrect(self, word: Word) -> None:
+        """记录一次答错（与 Web 端每次提交错误一致）。"""
+        word.review_count += 1
+
+    def record_answer_correct(self, word: Word, *, remedial: bool = False) -> str:
+        """
+        答对后的持久化更新（Web / CLI 共用）。
+        remedial=True：错题巩固，不增加 success_count，但排期到今日之后，避免当日重复出现。
+        """
+        if remedial:
+            word.review_count += 1
+            delta_days = self._calculate_review_days(word.success_count)
+            if delta_days < 1:
+                delta_days = 1
+            word.next_review_date = self.today + timedelta(days=delta_days)
+            return '✅ 正确！（错题巩固不计入掌握进度）'
+
+        word.success_count += 1
+        word.review_count += 1
+        if word.success_count >= self.config.MAX_SUCCESS_COUNT:
+            self.mastered_words.append(word)
+            self.all_words.remove(word)
+            return '🎉 已掌握单词！'
+
+        delta_days = self._calculate_review_days(word.success_count)
+        word.next_review_date = self.today + timedelta(days=delta_days)
+        return f'✅ 正确！下次复习: +{delta_days}天'
+
     def _get_today_review_list(self) -> List[Word]:
         """获取今日复习列表"""
         overdue_words = [w for w in self.all_words if w.next_review_date <= self.today]
@@ -601,11 +629,13 @@ class WordReciter:
         except Exception as e:
             logger.error(f"语音生成失败: {e}")
     
-    def _practice_word(self, word: Word) -> bool:
-        """单个单词练习流程"""
+    def _practice_word(self, word: Word, remedial: bool = False) -> bool:
+        """单个单词练习流程（与 Web 一致：最多 3 次尝试；错题巩固不计入掌握进度）。"""
         print(f"\n{'━'*30}")
         print(f"🔔 当前进度: {word.success_count}/{self.config.MAX_SUCCESS_COUNT}")
-        
+        if remedial:
+            print("📌 错题巩固（答对不计入掌握进度，与在线版一致）")
+
         example = self._get_example(word)
         
         # 清理例句中多余的英文下划线
@@ -671,6 +701,7 @@ class WordReciter:
             answer = answer.strip().lower()
             if answer == "h":
                 print(f"\n📢 正确答案: {word.english}")
+                self.record_answer_incorrect(word)
                 return False
             if answer == "s":
                 self._text_to_speech(example)
@@ -680,69 +711,89 @@ class WordReciter:
                 print("\n✅ 正确！")
                 self._text_to_speech(example)
                 return True
+            self.record_answer_incorrect(word)
             attempt += 1
             print(f"\n❌ 错误（剩余尝试次数 {MAX_ATTEMPTS - attempt}）")
-        
+
         print(f"\n📢 正确答案: {word.english}")
         return False
     
     def daily_review(self) -> None:
-        """执行每日复习"""
+        """执行每日复习（主轮 + 错题巩固轮，逻辑与 Web 端一致）。"""
         review_list = self._get_today_review_list()
         if not review_list:
             print("\n🎉 今日没有需要复习的单词！")
             return
-        
+
         print(f"\n📚 今日需要复习 {len(review_list)} 个单词（第{self.current_review_round + 1}轮）")
-        
+
         mastered_today = 0
         correct_count = 0
         wrong_count = 0
         total_words = len(review_list)
-        
+
         review_list.sort(key=lambda w: w.review_count)
-        
+
+        wrong_words: List[Word] = []
         for index, word in enumerate(review_list.copy(), start=1):
             print(f"\n⏳ 剩余 {total_words - index + 1} 个单词需要复习")
-            success = self._practice_word(word)
-            
+            success = self._practice_word(word, remedial=False)
+
             if success:
                 correct_count += 1
-                word.success_count += 1
-                word.review_count += 1
-                
-                if word.success_count >= self.config.MAX_SUCCESS_COUNT:
-                    self.mastered_words.append(word)
-                    self.all_words.remove(word)
+                mastered_before = len(self.mastered_words)
+                msg = self.record_answer_correct(word, remedial=False)
+                if len(self.mastered_words) > mastered_before:
                     mastered_today += 1
                     print(f"🎉 已掌握单词: {word.english}")
                 else:
-                    delta_days = self._calculate_review_days(word.success_count)
-                    word.next_review_date = self.today + timedelta(days=delta_days)
-                    print(f"⏱ 下次复习: {word.next_review_date} (+{delta_days}天，第{word.success_count}次成功)")
+                    print(msg)
             else:
                 wrong_count += 1
-                word.review_count += 1
-                print("⏳ 保持原复习计划")
-            
+                wrong_words.append(word)
+                print("⏳ 将进入错题巩固（与在线版一致）")
+
             self._check_and_advance_round()
-        
+
+        remedial_round = 0
+        remedial_correct = 0
+        while wrong_words:
+            remedial_round += 1
+            print(f"\n{'═'*30}")
+            print(f"📌 错题复习 · 第 {remedial_round} 轮（{len(wrong_words)} 个单词）")
+            next_wrong: List[Word] = []
+            for word in wrong_words:
+                success = self._practice_word(word, remedial=True)
+                if success:
+                    remedial_correct += 1
+                    msg = self.record_answer_correct(word, remedial=True)
+                    print(msg)
+                else:
+                    next_wrong.append(word)
+                    print("⏳ 本轮未答对，将进入下一轮错题巩固")
+
+                self._check_and_advance_round()
+            wrong_words = next_wrong
+
         accuracy = 0
         if total_words > 0:
             accuracy = correct_count / total_words * 100
-        
+
         print("\n📊 今日复习报告:")
         report = PrettyTable()
         report.field_names = ["统计项", "数量"]
         report.add_row(["复习单词总数", total_words])
-        report.add_row(["正确复习数量", correct_count])
-        report.add_row(["错误复习数量", wrong_count])
-        report.add_row(["复习正确率", f"{accuracy:.1f}%"])
+        report.add_row(["主轮答对数量", correct_count])
+        report.add_row(["主轮未答对数量", wrong_count])
+        if remedial_round > 0:
+            report.add_row(["错题巩固轮次", remedial_round])
+            report.add_row(["错题巩固答对", remedial_correct])
+        report.add_row(["主轮正确率", f"{accuracy:.1f}%"])
         report.add_row(["新掌握单词", mastered_today])
         report.add_row(["当前复习轮次", f"第{self.current_review_round + 1}轮"])
         report.add_row(["当前进度", f"{len(self.mastered_words)} 已掌握 / {len(self.all_words)} 待复习"])
         print(report)
-        
+
         self._save_data()
     
     def _check_and_advance_round(self) -> None:

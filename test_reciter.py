@@ -326,6 +326,34 @@ class TestWordReciter(unittest.TestCase):
         review_list = reciter._get_today_review_list()
         self.assertEqual(len(review_list), 0)
 
+    def test_record_answer_correct_main_pass(self):
+        """主轮答对：增加 success_count 与 review_count，并排期"""
+        reciter = WordReciter(self.config)
+        w = Word("a", "甲", success_count=0, next_review_date=date.today())
+        reciter.all_words.append(w)
+        reciter.record_answer_correct(w, remedial=False)
+        self.assertEqual(w.success_count, 1)
+        self.assertEqual(w.review_count, 1)
+        self.assertGreaterEqual(w.next_review_date, reciter.today)
+
+    def test_record_answer_correct_remedial(self):
+        """错题巩固答对：不增加 success_count，但排期到今日之后（与 Web 一致）"""
+        reciter = WordReciter(self.config)
+        w = Word("b", "乙", success_count=2, next_review_date=date.today())
+        reciter.all_words.append(w)
+        reciter.record_answer_correct(w, remedial=True)
+        self.assertEqual(w.success_count, 2)
+        self.assertEqual(w.review_count, 1)
+        self.assertGreater(w.next_review_date, reciter.today)
+
+    def test_record_answer_incorrect(self):
+        """答错：仅增加 review_count"""
+        reciter = WordReciter(self.config)
+        w = Word("c", "丙")
+        reciter.all_words.append(w)
+        reciter.record_answer_incorrect(w)
+        self.assertEqual(w.review_count, 1)
+
 
 def run_tests():
     """运行所有测试"""

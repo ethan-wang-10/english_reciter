@@ -451,25 +451,11 @@ def practice_word(username):
             is_correct = answer.strip().lower() == word.english.lower()
 
             if is_correct:
-                if remedial:
-                    message = '✅ 正确！（错题巩固不计入掌握进度）'
-                else:
-                    word.success_count += 1
-                    word.review_count += 1
-
-                    if word.success_count >= reciter.config.MAX_SUCCESS_COUNT:
-                        reciter.mastered_words.append(word)
-                        reciter.all_words.remove(word)
-                        message = '🎉 已掌握单词！'
-                    else:
-                        delta_days = reciter.calculate_review_days(word.success_count)
-                        word.next_review_date = date.today() + timedelta(days=delta_days)
-                        message = f'✅ 正确！下次复习: +{delta_days}天'
-                    reciter.save_learning_data(backup=False)
+                message = reciter.record_answer_correct(word, remedial=remedial)
             else:
-                word.review_count += 1
+                reciter.record_answer_incorrect(word)
                 message = '❌ 错误，请继续努力！'
-                reciter.save_learning_data(backup=False)
+            reciter.save_learning_data(backup=False)
 
             return jsonify({
                 'correct': is_correct,
