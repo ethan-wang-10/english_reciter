@@ -311,13 +311,13 @@ Content-Type: application/json
 }
 ```
 
-#### 导入单词
+#### 批量导入单词（JSON）
 ```
-POST /api/words/import
+POST /api/words/import-json
 Authorization: Bearer <token>
-Content-Type: multipart/form-data
+Content-Type: application/json
 
-file: <words.txt>
+[ { "english": "apple", "chinese": "苹果" }, ... ]
 ```
 
 #### 获取已掌握单词

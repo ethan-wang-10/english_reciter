@@ -1602,49 +1602,6 @@ async function wordbankImportSelected() {
 
 // ==================== 导入功能 ====================
 
-async function importWords() {
-    const fileInput = document.getElementById('file-input');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        showMessage('请先选择文件', 'error');
-        return;
-    }
-    
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const response = await fetch(`${API_BASE}/words/import`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.error || data.detail || '导入失败');
-        }
-        
-        showMessage(data.message, 'success');
-        
-        const uploadArea = document.querySelector('.upload-area');
-        const icon = uploadArea && uploadArea.querySelector('.upload-icon');
-        const firstP = uploadArea && uploadArea.querySelector('p');
-        if (icon) icon.textContent = '📄';
-        if (firstP) firstP.textContent = '点击或拖拽文件到此处';
-        fileInput.value = '';
-        
-        // 刷新统计
-        loadStats();
-    } catch (error) {
-        showMessage(error.message, 'error');
-    }
-}
-
 async function importWordsJson() {
     const ta = document.getElementById('import-json-textarea');
     if (!ta) return;
@@ -1787,12 +1744,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 下划线输入框的Enter键已经在initializeUnderlineInput中处理
     
-    // 导入单词
-    const importBtn = document.getElementById('import-btn');
-    if (importBtn) {
-        importBtn.addEventListener('click', importWords);
-    }
-
     const importJsonBtn = document.getElementById('import-json-btn');
     if (importJsonBtn) {
         importJsonBtn.addEventListener('click', importWordsJson);
@@ -1812,49 +1763,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (bonusReviewBtn) {
         bonusReviewBtn.addEventListener('click', () => {
             startBonusReview();
-        });
-    }
-
-    // 上传区域：点击与拖拽
-    const uploadArea = document.querySelector('.upload-area');
-    const fileInput = document.getElementById('file-input');
-    if (uploadArea && fileInput) {
-        fileInput.addEventListener('change', function (e) {
-            const fileName = e.target.files[0]?.name;
-            if (fileName) {
-                const icon = uploadArea.querySelector('.upload-icon');
-                const firstP = uploadArea.querySelector('p');
-                if (icon) icon.textContent = '✅';
-                if (firstP) firstP.textContent = fileName;
-            }
-        });
-
-        uploadArea.addEventListener('click', () => fileInput.click());
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((ev) => {
-            uploadArea.addEventListener(ev, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-        });
-        uploadArea.addEventListener('dragover', () => {
-            uploadArea.style.borderColor = 'var(--primary-color)';
-        });
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.style.borderColor = '';
-        });
-        uploadArea.addEventListener('drop', (e) => {
-            uploadArea.style.borderColor = '';
-            const files = e.dataTransfer && e.dataTransfer.files;
-            if (files && files.length > 0) {
-                try {
-                    const dt = new DataTransfer();
-                    dt.items.add(files[0]);
-                    fileInput.files = dt.files;
-                } catch (err) {
-                    /* 部分环境不可写 files，忽略 */
-                }
-                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
         });
     }
 

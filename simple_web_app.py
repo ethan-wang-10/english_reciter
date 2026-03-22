@@ -810,65 +810,6 @@ def speak_text(username):
         logger.error(f"朗读失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
 
-@app.route('/api/words/import', methods=['POST'])
-@token_required
-def import_words(username):
-    """导入单词文件"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({'error': '没有上传文件'}), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': '没有选择文件'}), 400
-        
-        content = file.read().decode('utf-8', errors='replace')
-        
-        words = []
-        for line in content.split('\n'):
-            if ',' in line:
-                parts = line.strip().split(',', 1)
-                if len(parts) == 2:
-                    en = parts[0].strip()[:500]
-                    zh = parts[1].strip()[:500]
-                    if en and zh:
-                        words.append((en, zh))
-        
-        with user_reciter_session(username) as reciter:
-            result = reciter.add_words(words)
-
-        added = result['added']
-        skipped = result['skipped_duplicate']
-        invalid = result['skipped_invalid']
-        logger.info(
-            "用户 %s 文件导入: 解析 %s 行, 新增 %s, 重复 %s, 无效 %s",
-            username,
-            len(words),
-            added,
-            skipped,
-            invalid,
-        )
-        if added == 0 and not words:
-            return jsonify({'error': '文件中没有有效的 英文,中文 行'}), 400
-        msg = f'成功加入 {added} 个新单词'
-        if skipped:
-            msg += f'，已跳过 {skipped} 个重复'
-        if invalid:
-            msg += f'，{invalid} 行无效已忽略'
-        if added == 0 and words:
-            msg = f'没有新单词：{skipped} 个与已有词重复' + (f'，{invalid} 行无效' if invalid else '')
-
-        return jsonify({
-            'message': msg,
-            'count': added,
-            'skipped_duplicate': skipped,
-            'skipped_invalid': invalid,
-        }), 200
-    except Exception as e:
-        logger.error(f"导入单词失败: {e}")
-        return jsonify({'error': '导入失败，请检查文件格式'}), 500
-
-
 def _parse_import_json_body(request):
     """解析 JSON 导入：根为数组，或 {\"words\": [...]}。"""
     data = request.get_json(silent=True)

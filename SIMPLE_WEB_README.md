@@ -55,7 +55,7 @@ docker run -p 8000:8000 english-reciter-simple
 | `/api/words/status` | GET | 获取学习状态 |
 | `/api/words/review` | GET | 获取今日复习列表 |
 | `/api/words/practice` | POST | 练习单词 |
-| `/api/words/import` | POST | 导入单词文件 |
+| `/api/words/import-json` | POST | 批量导入单词（JSON 数组或 `{ "words": [...] }`） |
 | `/api/words/mastered` | GET | 获取已掌握单词 |
 
 ## 认证方式

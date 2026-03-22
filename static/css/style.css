@@ -801,49 +801,11 @@ body {
     margin-bottom: 8px;
 }
 
-.import-box {
-    max-width: 600px;
-    margin: 24px auto;
-}
-
-.upload-area {
-    border: 3px dashed #c5d0d8;
-    border-radius: var(--radius-lg);
-    padding: 48px 20px;
-    text-align: center;
-    margin-bottom: 16px;
-    cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
-    background: #fafcff;
-}
-
-.upload-area:hover {
-    border-color: var(--secondary-color);
-    background: #e8f7fe;
-}
-
-.upload-icon {
-    font-size: 3rem;
-    margin-bottom: 12px;
-}
-
-.upload-hint {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    margin-top: 8px;
-    font-weight: 600;
-}
-
-#file-input {
-    display: none;
-}
-
 /* 系统词库（家长勾选导入） */
 .wordbank-panel {
     max-width: 640px;
-    margin: 32px auto 0;
-    padding: 28px 0 8px;
-    border-top: 3px dashed var(--border);
+    margin: 24px auto 0;
+    padding: 0 0 8px;
 }
 
 .wordbank-toolbar {
