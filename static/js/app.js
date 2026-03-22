@@ -517,6 +517,9 @@ function renderAdminUsers(users) {
                         启用
                     </label>
                 </td>
+                <td>
+                    <button type="button" class="btn-admin-pw" data-admin-set-password="${escapeHtml(u.username)}">设置密码</button>
+                </td>
             </tr>`;
     }).join('');
 
@@ -533,6 +536,34 @@ function renderAdminUsers(users) {
             } catch (e) {
                 showAdminNotice(e.message || '操作失败');
                 inp.checked = !want;
+            }
+        });
+    });
+
+    tbody.querySelectorAll('[data-admin-set-password]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const un = btn.getAttribute('data-admin-set-password');
+            const p1 = window.prompt(`为用户「${un}」设置新密码（至少6位）`, '');
+            if (p1 === null) return;
+            const p2 = window.prompt('请再次输入新密码', '');
+            if (p2 === null) return;
+            if (p1 !== p2) {
+                showAdminNotice('两次输入的密码不一致');
+                return;
+            }
+            if (p1.length < 6) {
+                showAdminNotice('密码至少6个字符');
+                return;
+            }
+            showAdminNotice('');
+            try {
+                await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/password`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ password: p1 })
+                });
+                showAdminNotice('密码已更新，该用户需重新登录');
+            } catch (e) {
+                showAdminNotice(e.message || '设置失败');
             }
         });
     });

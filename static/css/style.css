@@ -1236,6 +1236,22 @@ body {
     user-select: none;
 }
 
+.btn-admin-pw {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+}
+
+.btn-admin-pw:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-dark);
+}
+
 .admin-invite-once {
     background: #e8f5e9;
     border: 2px solid var(--primary-color);

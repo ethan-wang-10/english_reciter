@@ -921,6 +921,29 @@ def admin_set_user_enabled(username):
     return jsonify({'username': username, 'enabled': enabled}), 200
 
 
+@app.route('/api/admin/users/<username>/password', methods=['PATCH'])
+@admin_required
+def admin_set_user_password(username):
+    """管理员重置指定用户登录密码（该用户所有会话失效，需重新登录）。"""
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+    data = request.get_json(silent=True) or {}
+    new_password = (data.get('password') or '').strip()
+    if len(new_password) < 6:
+        return jsonify({'error': '密码至少6个字符'}), 400
+
+    users = load_users()
+    if username not in users:
+        return jsonify({'error': '用户不存在'}), 404
+
+    users[username]['password_hash'] = hash_password(new_password)
+    save_users(users)
+    _revoke_user_tokens(username)
+    _invalidate_user_reciter_cache(username)
+    logger.info("管理员重置用户密码: %s", username)
+    return jsonify({'username': username, 'message': '密码已更新，该用户需重新登录'}), 200
+
+
 @app.route('/api/admin/invites', methods=['POST'])
 @admin_required
 def admin_create_invite():
