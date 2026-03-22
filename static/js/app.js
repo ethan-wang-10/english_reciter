@@ -14,6 +14,14 @@ let wordMap = new Map();
 /** 0=今日待复习；≥1 表示第几轮错题复习 */
 let wrongRoundNumber = 0;
 
+/** 当次复习会话统计（loadReviewList 重置，showFinalComplete 展示） */
+let sessionInitialMainWords = 0;
+let sessionMainCorrect = 0;
+let sessionMainFailedThree = 0;
+let sessionRemedialCorrect = 0;
+let sessionTotalWrongAttempts = 0;
+let sessionNewMastered = [];
+
 // API 基础 URL
 const API_BASE = '/api';
 
@@ -736,6 +744,80 @@ function updateWrongRoundLabel() {
     }
 }
 
+function resetSessionReviewStats() {
+    sessionInitialMainWords = 0;
+    sessionMainCorrect = 0;
+    sessionMainFailedThree = 0;
+    sessionRemedialCorrect = 0;
+    sessionTotalWrongAttempts = 0;
+    sessionNewMastered = [];
+}
+
+function hideReviewSessionSummary() {
+    const box = document.getElementById('review-session-summary');
+    if (!box) return;
+    box.innerHTML = '';
+    box.hidden = true;
+}
+
+/**
+ * 当次复习结束时的文字总结（主轮 / 错题巩固 / 新掌握 / 命中率等）
+ * @param {number} remedialRoundsDone 结束时处于第几轮错题复习（0 表示未进入错题轮）
+ */
+function buildReviewSessionSummaryHtml(remedialRoundsDone) {
+    const n = sessionInitialMainWords;
+    const mainOk = sessionMainCorrect;
+    const mainFailed = sessionMainFailedThree;
+    const remedialOk = sessionRemedialCorrect;
+    const wrongTries = sessionTotalWrongAttempts;
+    const correctTries = mainOk + remedialOk;
+    const totalTries = correctTries + wrongTries;
+    const accPct = totalTries > 0 ? Math.round((correctTries / totalTries) * 1000) / 10 : 0;
+
+    const parts = [];
+    parts.push(
+        `<div class="review-summary-section"><strong>主轮</strong>：今日待复习共 ${n} 个词；` +
+        `在本轮流程中答对 ${mainOk} 个；${mainFailed} 个曾 3 次均未答对并进入错题巩固。</div>`
+    );
+
+    if (remedialRoundsDone > 0) {
+        parts.push(
+            `<div class="review-summary-section"><strong>错题巩固</strong>：共完成 ${remedialRoundsDone} 轮；` +
+            `错题轮累计答对 ${remedialOk} 次（含同一词多次练习）。</div>`
+        );
+    } else {
+        parts.push(
+            `<div class="review-summary-section"><strong>错题巩固</strong>：未触发，所有词在主轮已过关。</div>`
+        );
+    }
+
+    const masteredUnique = [...new Set(sessionNewMastered)];
+    if (masteredUnique.length > 0) {
+        const names = masteredUnique.map((en) => escapeHtml(en)).join('、');
+        parts.push(`<div class="review-summary-section"><strong>新掌握</strong>：${names}</div>`);
+    }
+
+    parts.push(
+        `<div class="review-summary-section"><strong>本次作答</strong>：共 ${totalTries} 次提交，` +
+        `其中答错 ${wrongTries} 次，答对率约 ${accPct}%。</div>`
+    );
+
+    let tip = '';
+    if (wrongTries === 0 && mainFailed === 0) {
+        tip = '全对通过，保持节奏即可。';
+    } else if (mainFailed > 0 || remedialRoundsDone > 1) {
+        tip = '错题已巩固完成；不熟悉的词可在「学习进度」里查看下次复习时间。';
+    } else if (wrongTries > 0) {
+        tip = '有拼写失误属正常，间隔复习会帮助巩固。';
+    }
+
+    if (tip) {
+        parts.push(`<p class="review-summary-tip">${escapeHtml(tip)}</p>`);
+    }
+
+    return `<div class="review-summary-inner">${parts.join('')}</div>`;
+}
+
 /** 一轮题目做完：无错题则结束；有错题则自动进入下一轮错题复习，直到本轮零错题 */
 function onPassComplete() {
     if (wrongWordsOrder.length === 0) {
@@ -771,8 +853,14 @@ function showFinalComplete() {
     document.getElementById('review-complete').style.display = 'block';
     const titleEl = document.getElementById('review-complete-title');
     const descEl = document.getElementById('review-complete-desc');
+    const summaryEl = document.getElementById('review-session-summary');
     if (titleEl) titleEl.textContent = '今日复习完成！';
     if (descEl) descEl.textContent = '恭喜！今日待复习已全部完成（含错题巩固）。';
+    const remedialRoundsDone = wrongRoundNumber;
+    if (summaryEl) {
+        summaryEl.innerHTML = buildReviewSessionSummaryHtml(remedialRoundsDone);
+        summaryEl.hidden = false;
+    }
     wrongWordsOrder = [];
     wrongWordsInThisPass = new Set();
     wrongRoundNumber = 0;
@@ -788,6 +876,7 @@ function showInitialEmptyReview() {
     const descEl = document.getElementById('review-complete-desc');
     if (titleEl) titleEl.textContent = '今日暂无待复习';
     if (descEl) descEl.textContent = '目前没有需要复习的单词，去导入一些吧！';
+    hideReviewSessionSummary();
     wrongWordsOrder = [];
     wrongWordsInThisPass = new Set();
     wrongRoundNumber = 0;
@@ -802,11 +891,14 @@ async function loadReviewList() {
         wrongWordsOrder = [];
         wrongRoundNumber = 0;
         wordMap = new Map();
+        resetSessionReviewStats();
+        hideReviewSessionSummary();
 
         const data = await apiRequest('/words/review');
         currentReviewList = data.words;
         currentReviewIndex = 0;
         currentReviewList.forEach((w) => wordMap.set(w.english, w));
+        sessionInitialMainWords = currentReviewList.length;
 
         if (currentReviewList.length === 0) {
             showInitialEmptyReview();
@@ -903,6 +995,19 @@ async function submitAnswer() {
             wordMap.set(word.english, word);
         }
 
+        if (!result.correct) {
+            sessionTotalWrongAttempts += 1;
+        } else {
+            if (wrongRoundNumber === 0) {
+                sessionMainCorrect += 1;
+            } else {
+                sessionRemedialCorrect += 1;
+            }
+            if (result.message && String(result.message).includes('已掌握')) {
+                sessionNewMastered.push(word.english);
+            }
+        }
+
         const messageDiv = document.getElementById('word-message');
         messageDiv.textContent = result.message;
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
@@ -926,7 +1031,10 @@ async function submitAnswer() {
             }
             
             if (currentErrorCount >= 3) {
-                // 3 次尝试均错：记入本轮错题栏，并进入下一轮错题复习候选
+                // 3 次尝试均错：记入本轮错题栏，并进入下一轮错题复习候选（仅主轮计入「进入错题」数）
+                if (wrongRoundNumber === 0) {
+                    sessionMainFailedThree += 1;
+                }
                 recordWrongAttempt(word);
                 // 错误次数达到3次，显示完整单词，然后进入下一个单词
                 document.getElementById('current-word-english').textContent = word.english;
