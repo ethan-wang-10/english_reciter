@@ -65,7 +65,7 @@ python reciter.py
 |------|------|
 | `learning_data.json` | CLI 默认学习数据（可从 `words.txt` 初始化） |
 | `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
-| `static/wordbanks/` | 内置词库 JSON 与 `manifest.json` |
+| `static/wordbanks/words.csv` | 内置词库（唯一数据源；改后提交 Git 并部署） |
 | `backups/` | 学习数据自动备份（若开启） |
 | `reciter.log` | 运行日志 |
 

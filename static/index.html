@@ -166,6 +166,7 @@
                                 <p class="review-empty-hint">从待复习与已掌握词库中，按复习次数从少到多优先抽取，同次数随机；答对仅增加复习次数，不改变掌握进度与排期。</p>
                             </div>
                             <button id="review-more" class="btn btn-secondary">继续学习</button>
+                            <button id="reset-today-btn" class="btn btn-danger-outline reset-today-btn" title="清空今日所有待复习单词" style="display:none;">清空今日待复习</button>
                         </div>
                     </div>
                     </div>
@@ -175,6 +176,20 @@
                             <p class="wrong-words-sub" id="wrong-round-label">同一单词 3 次尝试均错后会出现在这里</p>
                             <ul class="wrong-words-list" id="wrong-words-list"></ul>
                             <p class="wrong-words-empty" id="wrong-words-empty">暂无错题，继续加油！</p>
+                            <div class="wrong-order-control" id="wrong-order-control">
+                                <span class="wrong-order-label">错题顺序</span>
+                                <div class="wrong-order-btns">
+                                    <label class="wrong-order-btn">
+                                        <input type="radio" name="wrong-order" value="random" checked />
+                                        <span>乱序</span>
+                                    </label>
+                                    <label class="wrong-order-btn">
+                                        <input type="radio" name="wrong-order" value="field" />
+                                        <span>字典序</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <button id="reset-today-aside-btn" class="btn reset-today-aside-btn" title="清空今日所有待复习单词" style="display:none;">清空今日待复习</button>
                         </div>
                     </aside>
                     </div>
@@ -195,51 +210,65 @@
                 <div class="container">
                     <h2>导入单词</h2>
 
+                    <!-- 词库搜索区块（重新设计：无难度tab，直接全局搜索） -->
                     <div class="wordbank-panel" id="wordbank-panel">
-                        <h3 class="import-json-title">从词库添加（含小学 / 初中 / 高中 / 共享）</h3>
-                        <p class="import-json-desc">选择学段浏览，或在搜索框输入内容即可<strong>跨词库</strong>匹配；勾选后加入「待复习」（与当前账号已有英文重复则跳过）。</p>
-                        <div class="wordbank-toolbar">
-                            <div class="wordbank-phases" id="wordbank-phases" role="tablist" aria-label="学段"></div>
-                            <input type="search" id="wordbank-search" class="wordbank-search" placeholder="跨词库搜索：英文、中文或例句（匹配时显示词条所属词库）" autocomplete="off" />
+                        <h3 class="import-json-title">从词库搜索添加</h3>
+                        <p class="import-json-desc">在搜索框输入英文或中文（支持逗号分隔搜多个词），勾选后加入「待复习」。搜索结果来自小学 / 初中 / 高中 / 共享词库。</p>
+                        <div class="wordbank-toolbar wordbank-toolbar-search">
+                            <input type="search" id="wordbank-search" class="wordbank-search wordbank-search-full"
+                                placeholder="搜索单词，例如：apple 或 apple, banana, curious" autocomplete="off" />
                         </div>
-                        <p class="wordbank-meta" id="wordbank-meta">加载中…</p>
+                        <p class="wordbank-meta" id="wordbank-meta">请输入搜索词</p>
                         <div class="wordbank-actions">
-                            <button type="button" id="wordbank-select-filtered" class="btn btn-secondary">全选当前筛选</button>
+                            <button type="button" id="wordbank-select-filtered" class="btn btn-secondary">全选搜索结果</button>
                             <button type="button" id="wordbank-clear" class="btn btn-secondary">清除选择</button>
                             <span class="wordbank-selected-count" id="wordbank-selected-count">已选 0 词</span>
                         </div>
                         <div class="wordbank-list-wrap">
-                            <div id="wordbank-list" class="wordbank-list" role="list"></div>
-                            <button type="button" id="wordbank-load-more" class="btn btn-secondary wordbank-load-more" style="display: none;">加载更多</button>
+                            <div id="wordbank-list" class="wordbank-list" role="list">
+                                <p class="wordbank-empty wordbank-hint-text">请在上方搜索框输入单词进行搜索</p>
+                            </div>
                         </div>
                         <button type="button" id="wordbank-import-btn" class="btn btn-primary wordbank-import-btn">将选中的词加入待复习</button>
                     </div>
 
-                    <div class="import-simple-panel">
-                        <h3 class="import-json-title">家长：简单格式导入（共享词库）</h3>
+                    <!-- 文章导入区块 -->
+                    <div class="import-article-panel">
+                        <h3 class="import-json-title">从文章导入</h3>
                         <p class="import-json-desc">
-                            每行一条：<strong>单词</strong>、<strong>例句</strong>、<strong>中文译文</strong>，中间用 <strong>Tab</strong> 或 <strong>|</strong> 分隔。
-                            仅当该英文<strong>不在</strong>小学/初中/高中系统词库中时，才会写入<strong>全账户共享词库</strong>，所有登录用户可在上方「共享（家长贡献）」中勾选学习。
-                            也支持与原先相同的 JSON 数组格式（<code>english</code> / <code>example</code> / <code>chinese</code>）。
+                            粘贴一篇英文文章，系统会提取其中的词汇并与词库匹配。
+                            <span id="article-plan-hint" class="plan-hint"></span>
                         </p>
-                        <textarea id="import-simple-textarea" class="import-json-textarea" rows="10"
-                            spellcheck="false" placeholder="apple	I like apples.	苹果&#10;curious	She was curious about the box.	好奇的"></textarea>
-                        <div class="import-simple-options">
-                            <label class="import-simple-check">
-                                <input type="checkbox" id="import-simple-also-queue" />
-                                同时将<strong>新加入共享词库</strong>的单词加入我的「待复习」
-                            </label>
-                        </div>
-                        <button type="button" id="import-simple-btn" class="btn btn-primary import-json-btn">导入到共享词库</button>
+                        <textarea id="import-article-textarea" class="import-json-textarea" rows="8"
+                            spellcheck="false" placeholder="在此粘贴英文文章…"></textarea>
+                        <button type="button" id="import-article-btn" class="btn btn-primary import-json-btn">从文章提取词汇</button>
+                        <div id="article-import-result" class="article-import-result" style="display:none;"></div>
                     </div>
 
-                    <div class="import-json-panel">
-                        <h3 class="import-json-title">高级：JSON 导入到「待复习」</h3>
-                        <p class="import-json-desc">直接合并到当前账号的待复习列表（与已有英文重复则跳过），不经过共享词库。</p>
-                        <textarea id="import-json-textarea" class="import-json-textarea" rows="8"
-                            spellcheck="false" placeholder='[ { "english": "apple", "chinese": "苹果", "example": "..." } ]'></textarea>
-                        <button type="button" id="import-json-btn" class="btn btn-secondary import-json-btn">导入 JSON</button>
+                    <!-- 词汇导入（仅付费版）区块 -->
+                    <div class="import-vocab-panel" id="import-vocab-panel">
+                        <h3 class="import-json-title">词汇导入 <span class="paid-badge">付费版</span></h3>
+                        <p class="import-json-desc">
+                            输入逗号分隔的单词列表（如：attack, curious, abandon）。系统会检查词库中没有的词，并用 AI 自动生成释义和例句后写入词库，同时加入你的待复习列表。
+                        </p>
+                        <textarea id="import-vocab-textarea" class="import-json-textarea" rows="4"
+                            spellcheck="false" placeholder="attack, curious, abandon, persevere"></textarea>
+                        <div class="import-vocab-options">
+                            <label class="import-vocab-label">指定难度（可选）：</label>
+                            <select id="import-vocab-level" class="import-vocab-select">
+                                <option value="">自动判断</option>
+                                <option value="小学">小学</option>
+                                <option value="初中">初中</option>
+                                <option value="高中">高中</option>
+                                <option value="GRE">GRE</option>
+                            </select>
+                        </div>
+                        <button type="button" id="import-vocab-btn" class="btn btn-primary import-json-btn">词汇导入</button>
+                        <div id="import-vocab-locked" class="import-locked-hint" style="display:none;">
+                            此功能仅限付费版用户使用。请联系管理员升级账号。
+                        </div>
                     </div>
+
                     <div id="import-message" class="message"></div>
                 </div>
             </div>
@@ -299,6 +328,17 @@
                     </div>
                     <div id="admin-invite-once" class="admin-invite-once" style="display: none;"></div>
 
+                    <h3 class="admin-subtitle">DeepSeek API 配置</h3>
+                    <div class="admin-config-section">
+                        <p class="admin-hint" id="admin-deepseek-status">加载中…</p>
+                        <div class="form-group admin-config-group">
+                            <label>DeepSeek API Key</label>
+                            <input type="password" id="admin-deepseek-key" autocomplete="off"
+                                placeholder="sk-…（留空则清除）" />
+                        </div>
+                        <button type="button" id="admin-save-deepseek" class="btn btn-primary admin-config-save">保存 API Key</button>
+                    </div>
+
                     <h3 class="admin-subtitle">用户</h3>
                     <div class="admin-table-wrap">
                         <table class="admin-table">
@@ -307,9 +347,9 @@
                                     <th>用户</th>
                                     <th>待复习</th>
                                     <th>已掌握</th>
+                                    <th>套餐</th>
                                     <th>状态</th>
                                     <th>操作</th>
-                                    <th>密码</th>
                                 </tr>
                             </thead>
                             <tbody id="admin-users-tbody"></tbody>

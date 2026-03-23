@@ -6,7 +6,9 @@
 """
 
 import os
+import csv
 import json
+import random
 import re
 import tempfile
 import hashlib
@@ -14,6 +16,7 @@ import secrets
 import shutil
 import subprocess
 import threading
+import urllib.request
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, date
@@ -61,8 +64,59 @@ SHARED_DATA_DIR = DATA_DIR / "_shared"
 COMMUNITY_WB_FILE = SHARED_DATA_DIR / "community_wordbank.json"
 _community_wb_lock = threading.Lock()
 STATIC_WB_DIR = Path("static/wordbanks")
-_SYSTEM_WB_FILES = ("primary.json", "junior.json", "senior.json")
 _COMMUNITY_SCHEMA = "english_reciter.wordbank.community/v1"
+
+# 新 CSV 词汇表路径
+WORDS_CSV_FILE = STATIC_WB_DIR / "words.csv"
+_words_csv_lock = threading.Lock()
+_words_csv_cache: Optional[List[dict]] = None
+_words_csv_cache_mtime: float = 0.0
+
+# DeepSeek API
+DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+_APP_CONFIG_FILE = Path("config.json")
+
+
+def _load_app_config() -> dict:
+    if not _APP_CONFIG_FILE.exists():
+        return {}
+    try:
+        with open(_APP_CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("读取 config.json 失败: %s", e)
+        return {}
+
+
+def _save_app_config(data: dict) -> None:
+    fd, tmp = tempfile.mkstemp(suffix=".json", dir=str(_APP_CONFIG_FILE.parent), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, _APP_CONFIG_FILE)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def get_deepseek_api_key() -> str:
+    """读取 DeepSeek API Key：环境变量优先，其次 config.json。"""
+    env_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if env_key:
+        return env_key
+    return str(_load_app_config().get("deepseek_api_key", "") or "").strip()
+
+
+# 动态读取（每次调用 get_deepseek_api_key() 而不是模块级常量）
+DEEPSEEK_API_KEY = ""  # 保持兼容，实际使用 get_deepseek_api_key()
+
+# CSV 字段
+_CSV_FIELDS = ["english", "chinese", "level", "phonetic",
+               "example1", "example1_form", "example1_cn",
+               "example2", "example2_form", "example2_cn"]
 
 
 def _empty_community_doc() -> dict:
@@ -127,23 +181,8 @@ def _write_community_file_atomic(data: dict) -> None:
 
 
 def load_system_wordbank_english_lower() -> set:
-    """小学/初中/高中内置词库中出现的英文（小写），用于校验家长贡献不重复。"""
-    keys: set = set()
-    for name in _SYSTEM_WB_FILES:
-        p = STATIC_WB_DIR / name
-        if not p.exists():
-            continue
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                blob = json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning("读取系统词库失败 %s: %s", p, e)
-            continue
-        for w in blob.get("words") or []:
-            en = str(w.get("english", "")).strip().lower()
-            if en:
-                keys.add(en)
-    return keys
+    """主词库 ``static/wordbanks/words.csv`` 中的英文（小写），用于「共享词库」与家长导入去重。"""
+    return get_csv_english_set()
 
 
 def parse_simple_parent_import_text(text: str) -> Tuple[List[dict], Optional[str]]:
@@ -201,6 +240,238 @@ def parse_simple_parent_import_text(text: str) -> Tuple[List[dict], Optional[str
     return out, None
 
 
+# ==================== CSV 词汇表工具 ====================
+
+def load_words_csv() -> List[dict]:
+    """读取 CSV 词汇表，带缓存（文件未修改则复用内存缓存）。"""
+    global _words_csv_cache, _words_csv_cache_mtime
+    with _words_csv_lock:
+        try:
+            mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
+        except OSError:
+            mtime = 0.0
+        if _words_csv_cache is not None and mtime == _words_csv_cache_mtime:
+            return _words_csv_cache
+        if not WORDS_CSV_FILE.exists():
+            _words_csv_cache = []
+            _words_csv_cache_mtime = 0.0
+            return []
+        rows = []
+        try:
+            with open(WORDS_CSV_FILE, "r", encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    rows.append(dict(row))
+        except Exception as e:
+            logger.error("读取词汇CSV失败: %s", e)
+            rows = []
+        _words_csv_cache = rows
+        _words_csv_cache_mtime = mtime
+        return rows
+
+
+def invalidate_words_csv_cache() -> None:
+    global _words_csv_cache
+    with _words_csv_lock:
+        _words_csv_cache = None
+
+
+def get_csv_english_set() -> set:
+    """返回 CSV 中所有英文单词的小写集合。"""
+    return {r.get("english", "").strip().lower() for r in load_words_csv() if r.get("english", "").strip()}
+
+
+def append_words_to_csv(new_rows: List[dict]) -> int:
+    """将新词条 append 到 CSV 文件，返回实际写入数量。"""
+    if not new_rows:
+        return 0
+    with _words_csv_lock:
+        file_exists = WORDS_CSV_FILE.exists()
+        WORDS_CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(suffix=".csv", dir=str(WORDS_CSV_FILE.parent), text=True)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS, extrasaction="ignore")
+                if file_exists:
+                    with open(WORDS_CSV_FILE, "r", encoding="utf-8", newline="") as src:
+                        f.write(src.read())
+                else:
+                    writer.writeheader()
+                for row in new_rows:
+                    clean = {k: str(row.get(k, "") or "").strip() for k in _CSV_FIELDS}
+                    writer.writerow(clean)
+            os.replace(tmp, WORDS_CSV_FILE)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+        global _words_csv_cache
+        _words_csv_cache = None
+    return len(new_rows)
+
+
+def csv_word_to_review_item(row: dict, example_key: str = "1") -> dict:
+    """将 CSV 行转换为复习所用的词条字典，example_key 为 '1' 或 '2'。"""
+    k = example_key
+    ex_en = row.get(f"example{k}", "").strip()
+    ex_form = row.get(f"example{k}_form", "").strip()
+    ex_cn = row.get(f"example{k}_cn", "").strip()
+    example = f"{ex_en}_{ex_cn}" if ex_en or ex_cn else ""
+    return {
+        "english": row.get("english", "").strip(),
+        "chinese": row.get("chinese", "").strip(),
+        "level": row.get("level", "").strip(),
+        "phonetic": row.get("phonetic", "").strip(),
+        "example": example,
+        "example_form": ex_form,
+        "example_en": ex_en,
+        "example_cn": ex_cn,
+    }
+
+
+def pick_example_for_word(row: dict) -> dict:
+    """从词条的 2 个例句中随机选 1 个返回复习条目。"""
+    has1 = bool(row.get("example1", "").strip())
+    has2 = bool(row.get("example2", "").strip())
+    if has1 and has2:
+        k = random.choice(["1", "2"])
+    elif has2:
+        k = "2"
+    else:
+        k = "1"
+    return csv_word_to_review_item(row, k)
+
+
+def lookup_csv_word(english: str) -> Optional[dict]:
+    """在 CSV 中按英文精确匹配（不区分大小写），返回原始行或 None。"""
+    key = english.strip().lower()
+    for row in load_words_csv():
+        if row.get("english", "").strip().lower() == key:
+            return row
+    return None
+
+
+# ==================== 用户权限 ====================
+
+def get_user_plan(username: str) -> str:
+    """返回用户套餐类型: 'free' 或 'paid'。默认 free。"""
+    users = load_users()
+    u = users.get(username)
+    if isinstance(u, dict):
+        return u.get("plan", "free")
+    return "free"
+
+
+def set_user_plan(username: str, plan: str) -> bool:
+    """设置用户套餐。plan 必须为 'free' 或 'paid'。"""
+    if plan not in ("free", "paid"):
+        return False
+    users = load_users()
+    if username not in users:
+        return False
+    users[username]["plan"] = plan
+    save_users(users)
+    return True
+
+
+def is_paid_user(username: str) -> bool:
+    return get_user_plan(username) == "paid"
+
+
+# ==================== DeepSeek API ====================
+
+def _deepseek_chat(messages: List[dict], model: str = "deepseek-chat",
+                   max_tokens: int = 2048, temperature: float = 0.7) -> Optional[str]:
+    """调用 DeepSeek Chat API，返回助手回复文本；失败返回 None。"""
+    api_key = get_deepseek_api_key()
+    if not api_key:
+        logger.warning("DEEPSEEK_API_KEY 未配置，无法调用 DeepSeek API")
+        return None
+    payload = json.dumps({
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    req = urllib.request.Request(DEEPSEEK_API_URL, data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            return result["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error("DeepSeek API 调用失败: %s", e)
+        return None
+
+
+def deepseek_extract_lemmas(text: str) -> Optional[List[str]]:
+    """用 DeepSeek 从文章中提取单词原形列表。"""
+    prompt = (
+        "请从以下英文文章中提取所有实义词（名词、动词、形容词、副词），"
+        "还原为原形（lemma），去重，用英文逗号分隔，只返回单词列表，不要其他说明。\n\n"
+        f"{text[:3000]}"
+    )
+    reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=500)
+    if not reply:
+        return None
+    words = [w.strip().lower() for w in re.split(r'[,，\s]+', reply) if w.strip() and re.match(r'^[a-zA-Z]+$', w.strip())]
+    return words if words else None
+
+
+def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optional[List[dict]]:
+    """
+    用 DeepSeek 为单词列表生成词汇表条目（chinese, level, phonetic, examples）。
+    返回 list of dict，每个 dict 含 CSV 字段。
+    """
+    level_hint = f"，这批词汇难度级别为：{level}" if level else ""
+    words_str = "、".join(words[:30])  # 每批最多30词
+    prompt = f"""请为以下英语单词生成词汇表条目{level_hint}。
+
+单词列表：{words_str}
+
+请严格按照以下JSON数组格式返回，不要任何额外说明：
+[
+  {{
+    "english": "单词原形",
+    "chinese": "中文释义（简洁）",
+    "level": "小学/初中/高中/GRE（根据难度，如用户指定则使用指定值）",
+    "phonetic": "音标（如/æpl/）",
+    "example1": "第一个英文例句（难度与level匹配，句子自然，含该词的变形或原形）",
+    "example1_form": "该词在例句1中的实际形式（如与原形相同则为空字符串）",
+    "example1_cn": "例句1的中文翻译",
+    "example2": "第二个英文例句（与例句1不同语境）",
+    "example2_form": "该词在例句2中的实际形式（如与原形相同则为空字符串）",
+    "example2_cn": "例句2的中文翻译"
+  }}
+]
+
+注意：
+- level必须是"小学"、"初中"、"高中"或"GRE"之一{level_hint}
+- 例句难度要与level相符，小学/初中例句要简单易懂
+- example1_form 和 example2_form：只写在句子中实际出现的变形形式，如与原形完全相同则写空字符串
+"""
+    reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=3000)
+    if not reply:
+        return None
+    # 提取JSON
+    json_match = re.search(r'\[[\s\S]*\]', reply)
+    if not json_match:
+        logger.error("DeepSeek 返回格式不含JSON数组: %s", reply[:200])
+        return None
+    try:
+        data = json.loads(json_match.group(0))
+        return data if isinstance(data, list) else None
+    except json.JSONDecodeError as e:
+        logger.error("DeepSeek 返回JSON解析失败: %s", e)
+        return None
+
+
+# ==================== Token存储（内存中，重启后失效）====================
 # Token存储（内存中，重启后失效）
 # 实际应用中应使用数据库或Redis
 user_tokens: Dict[str, str] = {}  # token -> username
@@ -480,28 +751,46 @@ def verify_admin_token(token: str) -> bool:
     return True
 
 
+def _get_admin_config() -> dict:
+    """
+    读取管理员配置，优先级：环境变量 > config.json。
+    返回 {'username': str, 'password_hash': str, 'password': str}，不存在时为空字符串。
+    """
+    username = os.getenv('ADMIN_USERNAME', '').strip()
+    pwd_hash = os.getenv('ADMIN_PASSWORD_HASH', '').strip()
+    pwd_plain = os.getenv('ADMIN_PASSWORD', '').strip()
+
+    # 环境变量未设置时，从 config.json 读取
+    if not username:
+        cfg = _load_app_config()
+        username = str(cfg.get('admin_username', '') or '').strip()
+        if not pwd_hash:
+            pwd_hash = str(cfg.get('admin_password_hash', '') or '').strip()
+        if not pwd_plain:
+            pwd_plain = str(cfg.get('admin_password', '') or '').strip()
+
+    return {'username': username, 'password_hash': pwd_hash, 'password': pwd_plain}
+
+
 def admin_configured() -> bool:
-    """是否已配置管理员账号（环境变量）。"""
-    au = os.getenv('ADMIN_USERNAME', '').strip()
-    if not au:
+    """是否已配置管理员账号（环境变量或 config.json）。"""
+    cfg = _get_admin_config()
+    if not cfg['username']:
         return False
-    if os.getenv('ADMIN_PASSWORD_HASH', '').strip():
-        return True
-    return bool(os.getenv('ADMIN_PASSWORD', ''))
+    return bool(cfg['password_hash']) or bool(cfg['password'])
 
 
 def verify_admin_credentials(username: str, password: str) -> bool:
     if not admin_configured():
         return False
-    if username != os.getenv('ADMIN_USERNAME', '').strip():
+    cfg = _get_admin_config()
+    if username != cfg['username']:
         return False
-    pwd_hash = os.getenv('ADMIN_PASSWORD_HASH', '').strip()
-    if pwd_hash:
-        return verify_password(password, pwd_hash)
-    plain = os.getenv('ADMIN_PASSWORD', '')
-    if not plain:
-        return False
-    return secrets.compare_digest(password.encode('utf-8'), plain.encode('utf-8'))
+    if cfg['password_hash']:
+        return verify_password(password, cfg['password_hash'])
+    if cfg['password']:
+        return secrets.compare_digest(password.encode('utf-8'), cfg['password'].encode('utf-8'))
+    return False
 
 
 def _learning_data_summary(username: str) -> Dict[str, int]:
@@ -755,19 +1044,20 @@ def get_status(username):
     """获取学习状态"""
     try:
         with user_reciter_session(username) as reciter:
-            all_words = [
-                {
+            all_words = []
+            for w in reciter.all_words:
+                csv_row = lookup_csv_word(w.english)
+                all_words.append({
                     'english': w.english,
                     'chinese': w.chinese,
+                    'phonetic': csv_row.get('phonetic', '') if csv_row else '',
                     'success_count': w.success_count,
                     'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
                     'review_round': w.review_round,
                     'review_count': w.review_count,
                     'next_review_date': w.next_review_date.isoformat(),
                     'remaining_days': (w.next_review_date - date.today()).days
-                }
-                for w in reciter.all_words
-            ]
+                })
 
             stats = {
                 'total_words': len(all_words),
@@ -784,22 +1074,32 @@ def get_status(username):
 @app.route('/api/words/review', methods=['GET'])
 @token_required
 def get_review_list(username):
-    """获取今日复习列表"""
+    """获取今日复习列表（从CSV中补充 example_form、随机选择例句）"""
     try:
         with user_reciter_session(username) as reciter:
             review_list = reciter.get_today_review_list()
 
-            words = [
-                {
+            words = []
+            for w in review_list:
+                item = {
                     'english': w.english,
                     'chinese': w.chinese,
                     'success_count': w.success_count,
                     'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
                     'review_count': w.review_count,
-                    'example': w.example
+                    'example': w.example,
+                    'example_form': '',
                 }
-                for w in review_list
-            ]
+                # 尝试从 CSV 中获取更丰富的例句信息
+                csv_row = lookup_csv_word(w.english)
+                if csv_row:
+                    picked = pick_example_for_word(csv_row)
+                    if picked.get('example'):
+                        item['example'] = picked['example']
+                    item['example_form'] = picked.get('example_form', '')
+                    item['phonetic'] = csv_row.get('phonetic', '')
+                    item['level'] = csv_row.get('level', '')
+                words.append(item)
 
             return jsonify({'words': words, 'count': len(words)}), 200
     except Exception as e:
@@ -813,17 +1113,26 @@ def get_extra_review_list(username):
     try:
         with user_reciter_session(username) as reciter:
             picked = reciter.get_extra_review_words(5)
-            words = [
-                {
+            words = []
+            for w in picked:
+                item = {
                     'english': w.english,
                     'chinese': w.chinese,
                     'success_count': w.success_count,
                     'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
                     'review_count': w.review_count,
                     'example': w.example,
+                    'example_form': '',
                 }
-                for w in picked
-            ]
+                csv_row = lookup_csv_word(w.english)
+                if csv_row:
+                    picked_ex = pick_example_for_word(csv_row)
+                    if picked_ex.get('example'):
+                        item['example'] = picked_ex['example']
+                    item['example_form'] = picked_ex.get('example_form', '')
+                    item['phonetic'] = csv_row.get('phonetic', '')
+                    item['level'] = csv_row.get('level', '')
+                words.append(item)
             return jsonify({'words': words, 'count': len(words)}), 200
     except Exception as e:
         logger.error(f"获取加练列表失败: {e}")
@@ -863,7 +1172,22 @@ def practice_word(username):
             if not word:
                 return jsonify({'error': '单词未找到'}), 404
 
-            is_correct = answer.strip().lower() == word.english.lower()
+            submitted = answer.strip().lower()
+            correct_forms = {word.english.lower()}
+            # 检查 example_form（从 CSV 获取）
+            example_form = data.get('example_form', '').strip().lower()
+            if example_form:
+                correct_forms.add(example_form)
+            else:
+                csv_row = lookup_csv_word(word.english)
+                if csv_row:
+                    f1 = csv_row.get('example1_form', '').strip().lower()
+                    f2 = csv_row.get('example2_form', '').strip().lower()
+                    if f1:
+                        correct_forms.add(f1)
+                    if f2:
+                        correct_forms.add(f2)
+            is_correct = submitted in correct_forms
             old_success_count = word.success_count
             old_mastered_count = len(reciter.mastered_words)
 
@@ -1003,6 +1327,241 @@ def import_words_json(username):
     except Exception as e:
         logger.error(f"JSON 导入失败: {e}")
         return jsonify({'error': '导入失败，请检查 JSON 格式'}), 500
+
+
+@app.route('/api/user/plan', methods=['GET'])
+@token_required
+def get_user_plan_api(username):
+    """获取当前用户套餐类型。"""
+    return jsonify({'plan': get_user_plan(username)}), 200
+
+
+@app.route('/api/words/reset-today', methods=['POST'])
+@token_required
+def reset_today_review(username):
+    """清空今日待复习列表（将所有到期单词的 next_review_date 推迟一天）。"""
+    try:
+        with user_reciter_session(username) as reciter:
+            today = date.today()
+            count = 0
+            for w in reciter.all_words:
+                if w.next_review_date <= today:
+                    w.next_review_date = today + timedelta(days=1)
+                    count += 1
+            reciter.save_learning_data(backup=False)
+        _invalidate_user_reciter_cache(username)
+        return jsonify({'message': f'已清空 {count} 个今日待复习单词', 'count': count}), 200
+    except Exception as e:
+        logger.error("清空今日复习失败: %s", e)
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/wordbank/csv', methods=['GET'])
+@token_required
+def get_wordbank_csv(username):
+    """返回 CSV 词汇表（所有词或按 level 过滤）。"""
+    level = request.args.get('level', '').strip()
+    rows = load_words_csv()
+    if level:
+        rows = [r for r in rows if r.get('level', '') == level]
+    return jsonify({'words': rows, 'count': len(rows)}), 200
+
+
+@app.route('/api/wordbank/csv/search', methods=['GET'])
+@token_required
+def search_wordbank_csv(username):
+    """在 CSV 词汇表中搜索（支持英文/中文，逗号分隔多词）。"""
+    q = request.args.get('q', '').strip()
+    level = request.args.get('level', '').strip()
+    if not q:
+        return jsonify({'words': [], 'count': 0}), 200
+    terms = [t.strip().lower() for t in re.split(r'[,，]', q) if t.strip()]
+    rows = load_words_csv()
+    if level:
+        rows = [r for r in rows if r.get('level', '') == level]
+    result = []
+    seen = set()
+    for row in rows:
+        en = row.get('english', '').lower()
+        zh = row.get('chinese', '')
+        for term in terms:
+            # 英文字段：整词精确匹配（搜 run 不匹配 running/return）
+            if re.match(r'[a-z]', term):
+                matched = (en == term)
+            else:
+                # 中文搜索：包含匹配
+                matched = term in zh
+            if matched:
+                if en not in seen:
+                    seen.add(en)
+                    result.append(row)
+                break
+    return jsonify({'words': result, 'count': len(result)}), 200
+
+
+@app.route('/api/words/import-from-article', methods=['POST'])
+@token_required
+def import_from_article(username):
+    """
+    从文章文本提取单词，返回匹配词条列表（不直接加入待复习）：
+    - 免费版：按空格分词后去查 CSV
+    - 付费版：用 DeepSeek 提取原形，再查 CSV
+    前端拿到词条列表后注入选框，让用户确认后再加入待复习。
+    """
+    data = request.get_json(silent=True) or {}
+    text = str(data.get('text', '')).strip()
+    if not text:
+        return jsonify({'error': '文章内容不能为空'}), 400
+    if len(text) > 20000:
+        return jsonify({'error': '文章内容过长（最多20000字符）'}), 400
+
+    plan = get_user_plan(username)
+    if plan == 'paid' and get_deepseek_api_key():
+        lemmas = deepseek_extract_lemmas(text)
+        if lemmas is None:
+            return jsonify({'error': 'DeepSeek API 调用失败，请稍后重试'}), 500
+        method = 'deepseek'
+    else:
+        # 免费版：按空格和标点分词
+        raw_words = re.findall(r"[a-zA-Z']+", text)
+        lemmas = list({w.lower().strip("'") for w in raw_words if len(w) >= 2})
+        method = 'simple'
+
+    csv_set = get_csv_english_set()
+    matched_keys = [w for w in lemmas if w in csv_set]
+    if not matched_keys:
+        return jsonify({
+            'message': '未在词库中找到匹配词汇',
+            'method': method,
+            'words': [],
+        }), 200
+
+    # 返回完整词条数据，供前端注入选框
+    words = []
+    for en in matched_keys:
+        row = lookup_csv_word(en)
+        if row:
+            words.append(row)
+
+    return jsonify({
+        'message': f'从文章提取到 {len(words)} 个匹配词汇，请勾选后加入待复习',
+        'method': method,
+        'words': words,
+    }), 200
+
+
+@app.route('/api/wordbank/csv/import-words', methods=['POST'])
+@token_required
+def import_vocab_to_csv(username):
+    """
+    词汇导入功能（仅付费版）：
+    - 接收逗号分隔的单词列表
+    - 查找 CSV 中没有的词
+    - 用 DeepSeek 生成完整词条
+    - append 到 CSV
+    - 同时加入用户待复习
+    """
+    if not is_paid_user(username):
+        return jsonify({'error': '词汇导入功能仅限付费版用户使用'}), 403
+
+    data = request.get_json(silent=True) or {}
+    raw = str(data.get('words', '')).strip()
+    level_hint = str(data.get('level', '')).strip()  # 用户指定的level（可选）
+    also_queue = bool(data.get('also_add_to_queue', True))
+
+    if not raw:
+        return jsonify({'error': '单词列表不能为空'}), 400
+
+    # 解析逗号分隔（支持 a,b 和 a, b）
+    input_words = [w.strip().lower() for w in re.split(r'[,，]', raw) if w.strip()]
+    if not input_words:
+        return jsonify({'error': '未解析到有效单词'}), 400
+    if len(input_words) > 500:
+        return jsonify({'error': '单次最多处理 500 个单词'}), 400
+
+    if not get_deepseek_api_key():
+        return jsonify({'error': '服务端未配置 DEEPSEEK_API_KEY，无法使用此功能'}), 503
+
+    # 查找哪些不在 CSV 中
+    existing = get_csv_english_set()
+    new_words = [w for w in input_words if w not in existing]
+    already_in_csv = [w for w in input_words if w in existing]
+
+    generated_entries = []
+    failed_words = []
+
+    if new_words:
+        # 分批调用 DeepSeek（每批最多 50 个）
+        for i in range(0, len(new_words), 50):
+            batch = new_words[i : i + 50]
+            entries = deepseek_generate_word_entries(batch, level=level_hint)
+            if entries:
+                # 验证和清理返回数据
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    en = str(entry.get('english', '')).strip().lower()
+                    if not en or en not in [w.lower() for w in batch]:
+                        continue
+                    # 如果用户指定了level，覆盖DeepSeek生成的level
+                    if level_hint:
+                        entry['level'] = level_hint
+                    generated_entries.append(entry)
+            else:
+                failed_words.extend(batch)
+
+        if generated_entries:
+            try:
+                append_words_to_csv(generated_entries)
+                invalidate_words_csv_cache()
+            except Exception as e:
+                logger.error("写入CSV失败: %s", e)
+                return jsonify({'error': f'写入词库失败: {e}'}), 500
+
+    # 加入待复习
+    queue_result = None
+    if also_queue:
+        items_to_queue = []
+        # 已在CSV的词
+        for en in already_in_csv:
+            row = lookup_csv_word(en)
+            if row:
+                picked = pick_example_for_word(row)
+                items_to_queue.append({
+                    'english': picked['english'],
+                    'chinese': picked['chinese'],
+                    'example': picked['example'],
+                })
+        # 新生成的词
+        for entry in generated_entries:
+            picked = pick_example_for_word(entry)
+            items_to_queue.append({
+                'english': picked['english'],
+                'chinese': picked['chinese'],
+                'example': picked['example'],
+            })
+        if items_to_queue:
+            try:
+                with user_reciter_session(username) as reciter:
+                    queue_result = reciter.add_words_from_dicts(items_to_queue)
+            except Exception as e:
+                logger.error("加入待复习失败: %s", e)
+
+    msg = f"处理 {len(input_words)} 个单词：{len(generated_entries)} 个新词已写入词库"
+    if already_in_csv:
+        msg += f"，{len(already_in_csv)} 个已在词库中"
+    if failed_words:
+        msg += f"，{len(failed_words)} 个生成失败"
+    if queue_result:
+        msg += f"；已加入待复习 {queue_result.get('added', 0)} 个"
+
+    return jsonify({
+        'message': msg,
+        'new_in_csv': len(generated_entries),
+        'already_in_csv': len(already_in_csv),
+        'failed': failed_words,
+        'queue_result': queue_result,
+    }), 200
 
 
 @app.route('/api/wordbank/community', methods=['GET'])
@@ -1146,15 +1705,16 @@ def get_mastered_words(username):
     """获取已掌握单词"""
     try:
         with user_reciter_session(username) as reciter:
-            words = [
-                {
+            words = []
+            for w in reciter.mastered_words:
+                csv_row = lookup_csv_word(w.english)
+                words.append({
                     'english': w.english,
                     'chinese': w.chinese,
+                    'phonetic': csv_row.get('phonetic', '') if csv_row else '',
                     'review_count': w.review_count,
                     'mastered_date': w.next_review_date.isoformat()
-                }
-                for w in reciter.mastered_words
-            ]
+                })
 
             return jsonify({'words': words, 'count': len(words)}), 200
     except Exception as e:
@@ -1223,6 +1783,7 @@ def admin_list_users():
             'email': u.get('email'),
             'created_at': u.get('created_at'),
             'enabled': u.get('enabled', True),
+            'plan': u.get('plan', 'free'),
             'pending_words': summ['pending'],
             'mastered_words': summ['mastered'],
         })
@@ -1277,6 +1838,56 @@ def admin_set_user_password(username):
     _invalidate_user_reciter_cache(username)
     logger.info("管理员重置用户密码: %s", username)
     return jsonify({'username': username, 'message': '密码已更新，该用户需重新登录'}), 200
+
+
+@app.route('/api/admin/config', methods=['GET'])
+@admin_required
+def admin_get_config():
+    """读取 config.json（敏感字段脱敏显示）。"""
+    cfg = _load_app_config()
+    key = str(cfg.get("deepseek_api_key", "") or "").strip()
+    return jsonify({
+        "deepseek_api_key_set": bool(key),
+        "deepseek_api_key_preview": (key[:8] + "…" if len(key) > 8 else ("（已设置）" if key else "")),
+    }), 200
+
+
+@app.route('/api/admin/config', methods=['PATCH'])
+@admin_required
+def admin_update_config():
+    """更新 config.json 中的运行时配置（目前支持 deepseek_api_key）。"""
+    data = request.get_json(silent=True) or {}
+    cfg = _load_app_config()
+    changed = False
+    if "deepseek_api_key" in data:
+        new_key = str(data["deepseek_api_key"] or "").strip()
+        cfg["deepseek_api_key"] = new_key
+        changed = True
+    if not changed:
+        return jsonify({"error": "没有可更新的字段"}), 400
+    try:
+        _save_app_config(cfg)
+    except Exception as e:
+        logger.error("保存 config.json 失败: %s", e)
+        return jsonify({"error": "保存失败"}), 500
+    logger.info("管理员更新了 config.json")
+    return jsonify({"message": "配置已保存"}), 200
+
+
+@app.route('/api/admin/users/<username>/plan', methods=['PATCH'])
+@admin_required
+def admin_set_user_plan(username):
+    """管理员设置用户套餐（free/paid）。"""
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+    data = request.get_json(silent=True) or {}
+    plan = str(data.get('plan', '')).strip()
+    if plan not in ('free', 'paid'):
+        return jsonify({'error': "plan 须为 'free' 或 'paid'"}), 400
+    if not set_user_plan(username, plan):
+        return jsonify({'error': '用户不存在'}), 404
+    logger.info("管理员设置用户 %s 套餐为 %s", username, plan)
+    return jsonify({'username': username, 'plan': plan}), 200
 
 
 @app.route('/api/admin/invites', methods=['POST'])

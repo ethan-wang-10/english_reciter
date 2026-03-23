@@ -5,6 +5,11 @@ let currentReviewList = [];
 let currentReviewIndex = 0;
 let currentErrorCount = 0; // 当前单词错误次数
 let currentRevealedCount = 0; // 当前单词已揭示字母数
+let isSubmitting = false; // 防止重复提交（修复一闪而过bug）
+let isAdvancing = false;  // 防止重复推进到下一题
+
+/** 用户套餐类型: 'free' | 'paid' */
+let userPlan = 'free';
 
 /** 本轮 3 次尝试均错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
 let wrongWordsInThisPass = new Set();
@@ -230,11 +235,10 @@ function showMessage(message, type = 'success') {
 
 // 生成提示字符串
 function getHintString(word, revealedCount) {
-    const wordText = word.english;
+    const wordText = (word._targetAnswer || word.example_form || word.english || '');
     if (revealedCount >= wordText.length) {
         return wordText;
     }
-    // 显示前revealedCount个字母，其余用下划线
     const revealedPart = wordText.substring(0, revealedCount);
     const hiddenPart = '_'.repeat(wordText.length - revealedCount);
     return revealedPart + hiddenPart;
@@ -242,13 +246,18 @@ function getHintString(word, revealedCount) {
 
 // 初始化下划线显示 + 透明输入层（桌面/移动端统一，可唤起软键盘）
 function initializeUnderlineInput(word) {
+    const target = (word.example_form || '').trim() || word.english;
+    initializeUnderlineInputForTarget(word, target);
+}
+
+function initializeUnderlineInputForTarget(word, target) {
     const container = document.getElementById('underline-input');
     const capture = document.getElementById('mobile-word-capture');
     if (!container || !capture) return;
 
     container.innerHTML = '';
 
-    const wordLength = word.english.length;
+    const wordLength = target.length || word.english.length;
     container.dataset.wordLength = String(wordLength);
     container.dataset.currentInput = '';
 
@@ -420,8 +429,8 @@ async function speakExample() {
         return;
     }
     
-    // 提取英文部分（下划线前）
-    let enText = exampleText.split('_')[0];
+    // 提取英文部分（支持 _ 和 → 两种分隔符）
+    let enText = exampleText.split(' → ')[0].split('_')[0];
     if (!enText) {
         enText = exampleText;
     }
@@ -561,8 +570,42 @@ function getAdminToken() {
 function setAdminToken(t) {
     if (t) {
         sessionStorage.setItem('adminToken', t);
+        // token 刚设置，直接显示（刚登录成功，无需再验证）
+        _setResetBtnsDisplay(true);
     } else {
         sessionStorage.removeItem('adminToken');
+        _setResetBtnsDisplay(false);
+    }
+}
+
+function _setResetBtnsDisplay(visible) {
+    const display = visible ? '' : 'none';
+    const aside = document.getElementById('reset-today-aside-btn');
+    const complete = document.getElementById('reset-today-btn');
+    if (aside) aside.style.display = display;
+    if (complete) complete.style.display = display;
+}
+
+async function updateResetBtnsVisibility() {
+    const at = getAdminToken();
+    if (!at) {
+        _setResetBtnsDisplay(false);
+        return;
+    }
+    // 向后端验证 token 是否真实有效（防止过期 token 残留）
+    try {
+        const res = await fetch(`${API_BASE}/admin/config`, {
+            headers: { Authorization: `Bearer ${at}`, 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+            _setResetBtnsDisplay(true);
+        } else {
+            // token 无效或过期，清除并隐藏
+            setAdminToken(null);
+            _setResetBtnsDisplay(false);
+        }
+    } catch (_) {
+        _setResetBtnsDisplay(false);
     }
 }
 
@@ -621,11 +664,14 @@ function renderAdminUsers(users) {
     tbody.innerHTML = (users || []).map((u) => {
         const en = u.enabled !== false;
         const chk = en ? 'checked' : '';
+        const plan = u.plan || 'free';
+        const planLabel = plan === 'paid' ? '<span class="plan-badge-paid">付费</span>' : '<span class="plan-badge-free">免费</span>';
         return `
             <tr>
                 <td>${escapeHtml(u.username)}</td>
                 <td>${escapeHtml(u.pending_words)}</td>
                 <td>${escapeHtml(u.mastered_words)}</td>
+                <td>${planLabel}</td>
                 <td>${en ? '正常' : '已禁用'}</td>
                 <td>
                     <label class="admin-toggle">
@@ -635,6 +681,7 @@ function renderAdminUsers(users) {
                 </td>
                 <td>
                     <button type="button" class="btn-admin-pw" data-admin-set-password="${escapeHtml(u.username)}">设置密码</button>
+                    <button type="button" class="btn-admin-plan" data-admin-set-plan="${escapeHtml(u.username)}" data-current-plan="${escapeHtml(plan)}">${plan === 'paid' ? '降为免费' : '升为付费'}</button>
                 </td>
             </tr>`;
     }).join('');
@@ -683,6 +730,25 @@ function renderAdminUsers(users) {
             }
         });
     });
+
+    tbody.querySelectorAll('[data-admin-set-plan]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const un = btn.getAttribute('data-admin-set-plan');
+            const cur = btn.getAttribute('data-current-plan');
+            const newPlan = cur === 'paid' ? 'free' : 'paid';
+            showAdminNotice('');
+            try {
+                await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/plan`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ plan: newPlan })
+                });
+                await loadAdminDashboard();
+                showAdminNotice(`用户 ${un} 已设置为${newPlan === 'paid' ? '付费' : '免费'}版`);
+            } catch (e) {
+                showAdminNotice(e.message || '设置失败');
+            }
+        });
+    });
 }
 
 function renderAdminInvites(invites) {
@@ -700,13 +766,31 @@ function renderAdminInvites(invites) {
 }
 
 async function loadAdminDashboard() {
-    const [usersRes, invRes] = await Promise.all([
+    const [usersRes, invRes, cfgRes] = await Promise.all([
         apiAdminRequest('/admin/users'),
-        apiAdminRequest('/admin/invites')
+        apiAdminRequest('/admin/invites'),
+        apiAdminRequest('/admin/config').catch(() => null),
     ]);
     renderAdminUsers(usersRes.users);
     renderAdminInvites(invRes.invites);
+    renderAdminDeepseekStatus(cfgRes);
     showAdminDashboardPanel();
+}
+
+function renderAdminDeepseekStatus(cfg) {
+    const el = document.getElementById('admin-deepseek-status');
+    if (!el) return;
+    if (!cfg) {
+        el.textContent = '无法读取配置';
+        return;
+    }
+    if (cfg.deepseek_api_key_set) {
+        el.textContent = `当前已配置 API Key（${cfg.deepseek_api_key_preview}）。付费版功能可正常使用。`;
+        el.style.color = 'var(--primary-dark)';
+    } else {
+        el.textContent = '尚未配置 DeepSeek API Key。付费版功能（文章AI提取、词汇导入）将不可用。';
+        el.style.color = 'var(--error-color)';
+    }
 }
 
 async function openAdminOverlay() {
@@ -772,8 +856,45 @@ function showMainPage() {
     document.getElementById('username-display').textContent = username;
     
     loadStats();
+    // 获取用户套餐
+    loadUserPlan();
     // 默认展示「今日复习」区块；须拉取列表，否则会一直显示 index.html 里的占位词（如 apple）
     showSection('review');
+}
+
+async function loadUserPlan() {
+    try {
+        const data = await apiRequest('/user/plan');
+        userPlan = data.plan || 'free';
+        updatePlanUI();
+    } catch (_) {
+        userPlan = 'free';
+    }
+}
+
+function updatePlanUI() {
+    const hint = document.getElementById('article-plan-hint');
+    if (hint) {
+        if (userPlan === 'paid') {
+            hint.textContent = '（付费版：使用 AI 智能提取单词原形）';
+            hint.className = 'plan-hint paid';
+        } else {
+            hint.textContent = '（免费版：按空格分词匹配词库）';
+            hint.className = 'plan-hint free';
+        }
+    }
+    const vocabPanel = document.getElementById('import-vocab-panel');
+    const vocabLocked = document.getElementById('import-vocab-locked');
+    const vocabBtn = document.getElementById('import-vocab-btn');
+    if (vocabPanel) {
+        if (userPlan === 'paid') {
+            if (vocabLocked) vocabLocked.style.display = 'none';
+            if (vocabBtn) vocabBtn.style.display = '';
+        } else {
+            if (vocabLocked) vocabLocked.style.display = 'block';
+            if (vocabBtn) vocabBtn.style.display = 'none';
+        }
+    }
 }
 
 function showSection(sectionId) {
@@ -953,6 +1074,46 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
     return `<div class="review-summary-inner">${parts.join('')}</div>`;
 }
 
+function getWrongOrder() {
+    const radios = document.querySelectorAll('input[name="wrong-order"]');
+    for (const r of radios) {
+        if (r.checked) return r.value;
+    }
+    return 'random';
+}
+
+/** Fisher-Yates 原地打乱数组 */
+function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+}
+
+/**
+ * 按当前排序设置重排 currentReviewList 中「还没做的」部分（index 之后的），
+ * 已经做过的（index 之前）保持不动。
+ */
+function applyWrongOrderToRemaining() {
+    if (!wrongRoundNumber) return; // 主轮不干预
+    const done = currentReviewList.slice(0, currentReviewIndex);
+    let remaining = currentReviewList.slice(currentReviewIndex);
+    if (remaining.length <= 1) return;
+    if (getWrongOrder() === 'random') {
+        shuffleArray(remaining);
+    } else {
+        // 'field'：按单词在 wrongWordsOrder 中原始出现顺序排
+        // 用 wordMap 记录出现先后（以英文为键，值为首次出现的序号）
+        const orderIndex = new Map();
+        let idx = 0;
+        for (const [en] of wordMap) {
+            if (!orderIndex.has(en)) orderIndex.set(en, idx++);
+        }
+        remaining.sort((a, b) => (orderIndex.get(a.english) ?? 9999) - (orderIndex.get(b.english) ?? 9999));
+    }
+    currentReviewList = [...done, ...remaining];
+}
+
 /** 一轮题目做完：无错题则结束；有错题则自动进入下一轮错题复习，直到本轮零错题 */
 function onPassComplete() {
     if (wrongWordsOrder.length === 0) {
@@ -966,7 +1127,13 @@ function onPassComplete() {
         : `进入第 ${wrongRoundNumber} 轮错题复习（${n} 个单词）`;
     showMainBanner(msg);
 
-    currentReviewList = wrongWordsOrder.map((en) => wordMap.get(en)).filter(Boolean);
+    let orderedList = wrongWordsOrder.map((en) => wordMap.get(en)).filter(Boolean);
+    if (getWrongOrder() === 'random') {
+        shuffleArray(orderedList);
+    }
+    // 'field' 保持原来的出现顺序
+
+    currentReviewList = orderedList;
     wrongWordsOrder = [];
     wrongWordsInThisPass = new Set();
 
@@ -1038,6 +1205,8 @@ async function loadReviewList() {
         wrongWordsOrder = [];
         wrongRoundNumber = 0;
         wordMap = new Map();
+        isSubmitting = false;
+        isAdvancing = false;
         resetSessionReviewStats();
         hideReviewSessionSummary();
         reviewSessionMode = 'daily';
@@ -1074,6 +1243,8 @@ async function startBonusReview() {
         wrongWordsOrder = [];
         wrongRoundNumber = 0;
         wordMap = new Map();
+        isSubmitting = false;
+        isAdvancing = false;
         resetSessionReviewStats();
         hideReviewSessionSummary();
         reviewSessionMode = 'bonus';
@@ -1102,39 +1273,49 @@ async function showCurrentWord() {
     
     const word = currentReviewList[currentReviewIndex];
     
-    // 重置错误计数和揭示字母数
+    // 重置状态
     currentErrorCount = 0;
     currentRevealedCount = 0;
+    isSubmitting = false;
+    isAdvancing = false;
+
+    // 确定本题需要填写的答案（优先 example_form，否则 english 原形）
+    const targetAnswer = (word.example_form || '').trim() || word.english;
+    // 将 targetAnswer 存到 word 上供 getHintString 用
+    word._targetAnswer = targetAnswer;
     
     // 显示中文意思
     document.getElementById('current-word-chinese').textContent = word.chinese;
     const maxSucc = word.max_success_count != null ? word.max_success_count : 8;
     document.getElementById('current-word-progress').textContent = `${word.success_count}/${maxSucc}`;
     
-    // 处理例句：隐藏目标单词
+    // 处理例句：隐藏目标词（可能是变形）
     let exampleText = word.example || '暂无例句';
     if (exampleText !== '暂无例句') {
-        // 处理双语例句格式：英文_中文
         const parts = exampleText.split('_');
         if (parts.length >= 2) {
-            // 有下划线分隔，英文部分是parts[0]
             let englishPart = parts[0];
-            // 替换目标单词为下划线（忽略大小写）
-            const regex = new RegExp(`\\b${escapeRegExp(word.english)}\\b`, 'gi');
-            englishPart = englishPart.replace(regex, '_'.repeat(word.english.length));
-            // 重新组合
-            exampleText = englishPart + '_' + parts.slice(1).join('_');
+            // 隐藏变形或原形
+            const maskTarget = (word.example_form || '').trim() || word.english;
+            const regex = new RegExp(`\\b${escapeRegExp(maskTarget)}\\b`, 'gi');
+            englishPart = englishPart.replace(regex, '_'.repeat(maskTarget.length));
+            // 如果没有替换到，也尝试原形
+            if (maskTarget !== word.english) {
+                const regex2 = new RegExp(`\\b${escapeRegExp(word.english)}\\b`, 'gi');
+                englishPart = englishPart.replace(regex2, '_'.repeat(word.english.length));
+            }
+            exampleText = englishPart + ' → ' + parts.slice(1).join('_');
         } else {
-            // 单语例句，直接替换
-            const regex = new RegExp(`\\b${escapeRegExp(word.english)}\\b`, 'gi');
-            exampleText = exampleText.replace(regex, '_'.repeat(word.english.length));
+            const maskTarget = (word.example_form || '').trim() || word.english;
+            const regex = new RegExp(`\\b${escapeRegExp(maskTarget)}\\b`, 'gi');
+            exampleText = exampleText.replace(regex, '_'.repeat(maskTarget.length));
         }
     }
     
     document.getElementById('current-word-example').textContent = exampleText;
     
-    // 英文单词显示为提示字符串
-    const hintString = getHintString(word, currentRevealedCount);
+    // 提示字符串基于 targetAnswer
+    const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
     document.getElementById('current-word-english').textContent = hintString;
     
     // 绑定朗读按钮事件
@@ -1143,15 +1324,23 @@ async function showCurrentWord() {
         speakBtn.onclick = speakExample;
     }
     
-    // 初始化下划线输入框
-    initializeUnderlineInput(word);
+    // 初始化下划线输入框（基于 targetAnswer 的长度）
+    initializeUnderlineInputForTarget(word, targetAnswer);
     focusWordCapture(0);
 
     // 清空消息
     document.getElementById('word-message').style.display = 'none';
 }
 
+/** 根据 target（变形或原形）生成提示字符串 */
+function getHintStringForTarget(target, revealedCount) {
+    if (!target) return '';
+    if (revealedCount >= target.length) return target;
+    return target.substring(0, revealedCount) + '_'.repeat(target.length - revealedCount);
+}
+
 async function submitAnswer() {
+    if (isSubmitting || isAdvancing) return;
     const answer = getCurrentInput();
     const word = currentReviewList[currentReviewIndex];
     
@@ -1159,6 +1348,8 @@ async function submitAnswer() {
         focusWordCapture(0);
         return;
     }
+
+    isSubmitting = true;
     
     try {
         const result = await apiRequest('/words/practice', {
@@ -1166,6 +1357,7 @@ async function submitAnswer() {
             body: JSON.stringify({
                 word_id: word.english,
                 answer: answer,
+                example_form: word.example_form || '',
                 remedial: wrongRoundNumber > 0 && reviewSessionMode !== 'bonus',
                 bonus_practice: reviewSessionMode === 'bonus'
             })
@@ -1209,10 +1401,14 @@ async function submitAnswer() {
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
         messageDiv.style.display = 'block';
         
+        const targetAnswer = word._targetAnswer || word.example_form || word.english;
         if (result.correct) {
-            // 答案正确，显示完整单词，然后进入下一个单词
-            document.getElementById('current-word-english').textContent = word.english;
+            // 答案正确，显示完整答案，然后进入下一个单词
+            document.getElementById('current-word-english').textContent = targetAnswer;
+            isAdvancing = true;
             setTimeout(() => {
+                isSubmitting = false;
+                isAdvancing = false;
                 currentReviewIndex++;
                 showCurrentWord();
                 loadStats();
@@ -1222,37 +1418,43 @@ async function submitAnswer() {
             currentErrorCount++;
             
             // 每次错误多揭示一个字母
-            if (currentRevealedCount < word.english.length) {
+            if (currentRevealedCount < targetAnswer.length) {
                 currentRevealedCount++;
             }
             
             if (currentErrorCount >= 3) {
-                // 3 次尝试均错：记入本轮错题栏，并进入下一轮错题复习候选（仅主轮计入「进入错题」数）
+                // 3 次尝试均错：记入本轮错题栏
                 if (wrongRoundNumber === 0) {
                     sessionMainFailedThree += 1;
                 }
                 recordWrongAttempt(word);
-                // 错误次数达到3次，显示完整单词，然后进入下一个单词
-                document.getElementById('current-word-english').textContent = word.english;
+                document.getElementById('current-word-english').textContent = targetAnswer;
+                isAdvancing = true;
                 setTimeout(() => {
+                    isSubmitting = false;
+                    isAdvancing = false;
                     currentReviewIndex++;
                     showCurrentWord();
                     loadStats();
                 }, 1500);
             } else {
                 // 还有尝试机会，更新提示字符串
-                const hintString = getHintString(word, currentRevealedCount);
+                const targetAnswer = word._targetAnswer || word.example_form || word.english;
+                const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
                 document.getElementById('current-word-english').textContent = hintString;
                 
                 // 显示剩余次数
                 messageDiv.textContent = `${result.message} (还剩 ${3 - currentErrorCount} 次尝试机会)`;
                 // 清空下划线输入框，让用户重新输入
                 clearUnderlineInput();
+                isSubmitting = false;
                 focusWordCapture(0);
                 focusWordCapture(100);
             }
         }
     } catch (error) {
+        isSubmitting = false;
+        isAdvancing = false;
         const msg = error.message || '提交失败，请重试';
         const reviewSection = document.getElementById('review-section');
         const messageDiv = document.getElementById('word-message');
@@ -1302,10 +1504,11 @@ async function loadProgress() {
         // 显示单词列表
         const listHtml = data.words.map((word) => {
             const nextLine = escapeHtml(formatNextReviewLine(word));
+            const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
             return `
             <div class="word-item">
                 <div class="word-item-info">
-                    <div class="word-item-english">${escapeHtml(word.english)}</div>
+                    <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
                     <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
                     <div class="word-item-next-review">下次复习：${nextLine}</div>
                 </div>
@@ -1335,10 +1538,12 @@ async function loadMastered() {
     try {
         const data = await apiRequest('/words/mastered');
         
-        const listHtml = data.words.map(word => `
+        const listHtml = data.words.map(word => {
+            const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
+            return `
             <div class="word-item">
                 <div class="word-item-info">
-                    <div class="word-item-english">${escapeHtml(word.english)}</div>
+                    <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
                     <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
                 </div>
                 <div class="word-item-stats">
@@ -1348,7 +1553,8 @@ async function loadMastered() {
                     </div>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
         
         document.getElementById('mastered-list').innerHTML = listHtml || '<p style="padding: 20px; text-align: center; color: #999;">暂无已掌握单词</p>';
     } catch (error) {
@@ -1356,106 +1562,23 @@ async function loadMastered() {
     }
 }
 
-// ==================== 系统词库（家长勾选） ====================
+// ==================== 系统词库（全局搜索，无难度tab） ====================
 
-const WB_PHASES = [
-    { id: 'primary', label: '小学' },
-    { id: 'junior', label: '初中' },
-    { id: 'senior', label: '高中' },
-    { id: 'community', label: '共享（家长贡献）' }
-];
-
-const wbCache = {};
-/** 跨词库搜索用：小学+初中+高中+共享 合并后的列表（带 _bankId / _bankLabel） */
-let wbGlobalIndex = [];
-let wbGlobalIndexBuilt = false;
-
+/**
+ * wbState.selected: Set of "english_lower" keys
+ * wbState.selectedMap: Map of "english_lower" -> word object
+ */
 const wbState = {
-    phase: 'primary',
-    phaseLabel: '小学',
-    words: [],
     filtered: [],
     filter: '',
-    displayN: 200,
     selected: new Set(),
+    selectedMap: new Map(),
     searchTimer: null,
-    loading: false
+    loading: false,
 };
 
 function wordbankKey(en) {
     return String(en || '').trim().toLowerCase();
-}
-
-function wordbankKeyComposite(w) {
-    const bid = w._bankId || wbState.phase;
-    return `${bid}|${wordbankKey(w.english)}`;
-}
-
-function resolveWordForImport(k) {
-    const idx = k.indexOf('|');
-    if (idx === -1) return null;
-    const bankId = k.slice(0, idx);
-    const enLower = k.slice(idx + 1);
-    const list = wbCache[bankId];
-    if (!list) return null;
-    return list.find((x) => wordbankKey(x.english) === enLower) || null;
-}
-
-function invalidateWordbankCache(phaseId) {
-    if (phaseId) {
-        delete wbCache[phaseId];
-    } else {
-        Object.keys(wbCache).forEach((id) => {
-            delete wbCache[id];
-        });
-    }
-    wbGlobalIndexBuilt = false;
-    wbGlobalIndex = [];
-}
-
-async function ensureGlobalWordbankIndex() {
-    if (wbGlobalIndexBuilt) return;
-    wbGlobalIndex = [];
-    for (const p of WB_PHASES) {
-        const arr = await ensureWordbankLoaded(p.id);
-        wbGlobalIndex.push(...arr);
-    }
-    wbGlobalIndexBuilt = true;
-}
-
-async function ensureWordbankLoaded(phaseId) {
-    if (wbCache[phaseId]) return wbCache[phaseId];
-    const meta = WB_PHASES.find((x) => x.id === phaseId);
-    const label = meta ? meta.label : phaseId;
-    let wordsRaw;
-    if (phaseId === 'community') {
-        const data = await apiRequest('/wordbank/community');
-        wordsRaw = Array.isArray(data.words) ? data.words : [];
-    } else {
-        const res = await fetch(`/static/wordbanks/${phaseId}.json`);
-        if (!res.ok) throw new Error('词库加载失败');
-        const data = await res.json();
-        wordsRaw = Array.isArray(data.words) ? data.words : [];
-    }
-    const words = wordsRaw.map((w) => ({ ...w, _bankId: phaseId, _bankLabel: label }));
-    wbCache[phaseId] = words;
-    return words;
-}
-
-function applyWordbankFilter() {
-    const qRaw = (wbState.filter || '').trim();
-    if (!qRaw) {
-        wbState.filtered = wbState.words.slice();
-        return;
-    }
-    const q = qRaw.toLowerCase();
-    const source = wbGlobalIndex.length ? wbGlobalIndex : wbState.words;
-    wbState.filtered = source.filter((w) => {
-        const en = (w.english || '').toLowerCase();
-        const zh = w.chinese || '';
-        const ex = String(w.example || '').toLowerCase();
-        return en.includes(q) || zh.includes(qRaw) || ex.includes(q);
-    });
 }
 
 function updateWordbankSelectedCount() {
@@ -1466,41 +1589,62 @@ function updateWordbankSelectedCount() {
 function renderWordbankMeta() {
     const el = document.getElementById('wordbank-meta');
     if (!el) return;
-    const total = wbState.words.length;
-    const shown = wbState.filtered.length;
     const q = (wbState.filter || '').trim();
     if (wbState.loading) {
-        el.textContent = '加载中…';
+        el.textContent = '搜索中…';
         return;
     }
-    if (q) {
-        el.textContent = `跨词库匹配 ${shown} 条（含小学 / 初中 / 高中 / 共享）`;
-    } else {
-        el.textContent = `「${wbState.phaseLabel}」共 ${total} 词`;
+    if (!q && wbState.filtered.length === 0) {
+        el.textContent = '请输入搜索词';
+        return;
     }
+    el.textContent = `找到 ${wbState.filtered.length} 条匹配词条`;
 }
 
 function renderWordbankList() {
     const container = document.getElementById('wordbank-list');
-    const loadMore = document.getElementById('wordbank-load-more');
     if (!container) return;
-    const slice = wbState.filtered.slice(0, wbState.displayN);
     const q = (wbState.filter || '').trim();
-    const showBankTag = q.length > 0;
-    const html = slice
+
+    if (!q && wbState.filtered.length === 0) {
+        container.innerHTML = '<p class="wordbank-empty wordbank-hint-text">请在上方搜索框输入单词进行搜索</p>';
+        return;
+    }
+
+    if (wbState.loading) {
+        container.innerHTML = '<p class="wordbank-empty">搜索中…</p>';
+        return;
+    }
+
+    const LEVEL_COLORS = { '小学': 'primary', '初中': 'junior', '高中': 'senior', 'GRE': 'gre' };
+
+    // 先渲染已选中但当前搜索结果中不显示的词（保持勾选状态可见）
+    const filteredKeys = new Set(wbState.filtered.map(w => wordbankKey(w.english)));
+    const extraSelected = [];
+    for (const [k, w] of wbState.selectedMap.entries()) {
+        if (!filteredKeys.has(k)) {
+            extraSelected.push(w);
+        }
+    }
+
+    const allToShow = [...wbState.filtered, ...extraSelected];
+
+    const html = allToShow
         .map((w) => {
-            const k = wordbankKeyComposite(w);
+            const k = wordbankKey(w.english);
             const checked = wbState.selected.has(k) ? 'checked' : '';
-            const tag = showBankTag
-                ? `<span class="wb-bank-tag">${escapeHtml(w._bankLabel || '')}</span>`
-                : '';
+            const levelCls = LEVEL_COLORS[w.level] ? `wb-level-${LEVEL_COLORS[w.level]}` : 'wb-level-other';
+            const levelTag = w.level ? `<span class="wb-bank-tag ${levelCls}">${escapeHtml(w.level)}</span>` : '';
+            const ex1 = (w.example1 || w.example || '').split('_')[0].trim();
+            const exTag = ex1 ? `<span class="wb-ex">${escapeHtml(ex1.slice(0, 60))}…</span>` : '';
             return (
                 `<div class="wordbank-row" role="listitem">` +
                 `<label>` +
                 `<input type="checkbox" class="wordbank-cb" data-k="${escapeHtml(k)}" ${checked} />` +
-                `${tag}` +
+                `${levelTag}` +
                 `<span class="wb-en">${escapeHtml(w.english)}</span>` +
                 `<span class="wb-zh">${escapeHtml(w.chinese)}</span>` +
+                `${exTag}` +
                 `</label></div>`
             );
         })
@@ -1510,88 +1654,63 @@ function renderWordbankList() {
         cb.addEventListener('change', () => {
             const k = cb.dataset.k;
             if (!k) return;
-            if (cb.checked) wbState.selected.add(k);
-            else wbState.selected.delete(k);
+            if (cb.checked) {
+                wbState.selected.add(k);
+                // 找到对应 word 对象存入 map
+                const w = allToShow.find(x => wordbankKey(x.english) === k);
+                if (w) wbState.selectedMap.set(k, w);
+            } else {
+                wbState.selected.delete(k);
+                wbState.selectedMap.delete(k);
+            }
             updateWordbankSelectedCount();
         });
     });
-    if (loadMore) {
-        loadMore.style.display = wbState.filtered.length > wbState.displayN ? '' : 'none';
-    }
 }
 
-async function wordbankSwitchPhase(phaseId, label) {
-    wbState.phase = phaseId;
-    wbState.phaseLabel = label;
-    wbState.filter = '';
-    wbState.displayN = 200;
-    wbState.selected.clear();
-    const search = document.getElementById('wordbank-search');
-    if (search) search.value = '';
+async function doWordbankSearch(q) {
+    if (!q) {
+        wbState.filtered = [];
+        wbState.loading = false;
+        renderWordbankMeta();
+        renderWordbankList();
+        return;
+    }
     wbState.loading = true;
     renderWordbankMeta();
-    const list = document.getElementById('wordbank-list');
-    if (list) list.innerHTML = '<p class="wordbank-empty">加载中…</p>';
-    updateWordbankSelectedCount();
     try {
-        wbState.words = await ensureWordbankLoaded(phaseId);
+        const params = new URLSearchParams({ q });
+        const data = await apiRequest(`/wordbank/csv/search?${params}`);
+        wbState.filtered = Array.isArray(data.words) ? data.words : [];
     } catch (e) {
-        wbState.words = [];
-        if (list) list.innerHTML = `<p class="wordbank-empty">${escapeHtml(e.message || '加载失败')}</p>`;
+        wbState.filtered = [];
+        showMessage(e.message || '搜索失败', 'error');
     } finally {
         wbState.loading = false;
     }
-    applyWordbankFilter();
     renderWordbankMeta();
     renderWordbankList();
-
-    document.querySelectorAll('.wordbank-phase-btn').forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.phase === phaseId);
-    });
 }
 
 function initWordbankPanel() {
-    const phasesEl = document.getElementById('wordbank-phases');
-    if (!phasesEl) return;
-
-    phasesEl.innerHTML = WB_PHASES.map(
-        (p) =>
-            `<button type="button" class="wordbank-phase-btn${p.id === wbState.phase ? ' active' : ''}" data-phase="${p.id}" data-label="${escapeHtml(p.label)}">${escapeHtml(p.label)}</button>`
-    ).join('');
-
-    phasesEl.querySelectorAll('.wordbank-phase-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            const id = btn.dataset.phase;
-            const label = btn.dataset.label || id;
-            wordbankSwitchPhase(id, label);
-        });
-    });
-
     const search = document.getElementById('wordbank-search');
     if (search) {
         search.addEventListener('input', () => {
             wbState.filter = search.value;
-            wbState.displayN = 200;
+            // 用户开始输入，重置文章导入的 placeholder
+            search.placeholder = '搜索单词，例如：apple 或 apple, banana, curious';
             if (wbState.searchTimer) clearTimeout(wbState.searchTimer);
-            wbState.searchTimer = setTimeout(async () => {
-                const qRaw = (wbState.filter || '').trim();
-                if (qRaw) {
-                    try {
-                        await ensureGlobalWordbankIndex();
-                    } catch (err) {
-                        showMessage(err.message || '加载词库失败', 'error');
-                    }
-                }
-                applyWordbankFilter();
-                renderWordbankMeta();
-                renderWordbankList();
-            }, 280);
+            wbState.searchTimer = setTimeout(() => {
+                doWordbankSearch((wbState.filter || '').trim());
+            }, 350);
         });
     }
 
     document.getElementById('wordbank-select-filtered')?.addEventListener('click', () => {
         for (const w of wbState.filtered) {
-            wbState.selected.add(wordbankKeyComposite(w));
+            const k = wordbankKey(w.english);
+            wbState.selected.add(k);
+            wbState.selectedMap.set(k, w);
         }
         updateWordbankSelectedCount();
         renderWordbankList();
@@ -1599,18 +1718,12 @@ function initWordbankPanel() {
 
     document.getElementById('wordbank-clear')?.addEventListener('click', () => {
         wbState.selected.clear();
+        wbState.selectedMap.clear();
         updateWordbankSelectedCount();
         renderWordbankList();
     });
 
-    document.getElementById('wordbank-load-more')?.addEventListener('click', () => {
-        wbState.displayN += 200;
-        renderWordbankList();
-    });
-
     document.getElementById('wordbank-import-btn')?.addEventListener('click', wordbankImportSelected);
-
-    wordbankSwitchPhase('primary', '小学');
 }
 
 async function wordbankImportSelected() {
@@ -1619,15 +1732,20 @@ async function wordbankImportSelected() {
         return;
     }
     const items = [];
-    for (const k of wbState.selected) {
-        const w = resolveWordForImport(k);
+    for (const [k, w] of wbState.selectedMap.entries()) {
         if (!w) continue;
-        const o = { english: w.english, chinese: w.chinese };
-        if (w.example) o.example = w.example;
-        items.push(o);
+        const ex = (w.example1 || w.example || '');
+        const exCn = (w.example1_cn || '');
+        const example = ex ? (exCn ? `${ex}_${exCn}` : ex) : '';
+        items.push({
+            english: w.english,
+            chinese: w.chinese,
+            example: example || undefined,
+        });
     }
+    // 如果 selectedMap 没有完整 word 对象（兼容旧逻辑），跳过
     if (!items.length) {
-        showMessage('没有可导入的词条', 'error');
+        showMessage('没有可导入的词条（请重新搜索并勾选）', 'error');
         return;
     }
     const chunk = 500;
@@ -1649,6 +1767,11 @@ async function wordbankImportSelected() {
         if (skipped) msg += `，已跳过 ${skipped} 个重复`;
         if (invalid) msg += `，${invalid} 条无效已忽略`;
         showMessage(msg, 'success');
+        // 清空已选
+        wbState.selected.clear();
+        wbState.selectedMap.clear();
+        updateWordbankSelectedCount();
+        renderWordbankList();
         loadStats();
     } catch (error) {
         showMessage(error.message, 'error');
@@ -1657,66 +1780,131 @@ async function wordbankImportSelected() {
 
 // ==================== 导入功能 ====================
 
-async function importSimpleCommunity() {
-    const ta = document.getElementById('import-simple-textarea');
+async function importFromArticle() {
+    const ta = document.getElementById('import-article-textarea');
     if (!ta) return;
-    const raw = ta.value.trim();
-    if (!raw) {
-        showMessage('请先粘贴单词内容', 'error');
+    const text = ta.value.trim();
+    if (!text) {
+        showMessage('请先粘贴文章内容', 'error');
         return;
     }
-    const also = !!(document.getElementById('import-simple-also-queue') || {}).checked;
+    const btn = document.getElementById('import-article-btn');
+    if (btn) btn.disabled = true;
+    const resultDiv = document.getElementById('article-import-result');
+    if (resultDiv) {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<span class="loading-dots">正在提取词汇…</span>';
+    }
     try {
-        const data = await apiRequest('/wordbank/community/import-simple', {
+        const data = await apiRequest('/words/import-from-article', {
             method: 'POST',
-            body: JSON.stringify({ text: raw, also_add_to_queue: also })
+            body: JSON.stringify({ text })
         });
-        showMessage(data.message || '导入成功', 'success');
-        ta.value = '';
-        invalidateWordbankCache('community');
-        try {
-            if ((wbState.filter || '').trim()) {
-                await ensureGlobalWordbankIndex();
-                applyWordbankFilter();
-                renderWordbankMeta();
-                renderWordbankList();
-            } else if (wbState.phase === 'community') {
-                await wordbankSwitchPhase('community', '共享（家长贡献）');
-            }
-        } catch (_) {
-            /* ignore refresh errors */
+
+        const words = Array.isArray(data.words) ? data.words : [];
+        const method = data.method === 'deepseek' ? '（AI提取）' : '（空格分词）';
+
+        if (words.length === 0) {
+            showMessage(data.message || '未在词库中找到匹配词汇', 'error');
+            if (resultDiv) resultDiv.style.display = 'none';
+            return;
         }
-        loadStats();
+
+        // 将提取到的词汇追加进选框，并自动全选（保留原有已选中的词）
+        const newKeys = new Set(words.map(w => wordbankKey(w.english)));
+        for (const w of words) {
+            const k = wordbankKey(w.english);
+            wbState.selected.add(k);
+            wbState.selectedMap.set(k, w);
+        }
+        // 合并显示列表：原有 filtered 中已选中的词 + 新导入的词（去重）
+        const existingSelected = wbState.filtered.filter(w => {
+            const k = wordbankKey(w.english);
+            return wbState.selected.has(k) && !newKeys.has(k);
+        });
+        wbState.filtered = [...existingSelected, ...words];
+        wbState.filter = `[文章导入：${words.length} 词]`;
+
+        // 同步更新搜索框显示，让用户知道当前列表来源
+        const searchInput = document.getElementById('wordbank-search');
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.placeholder = `已从文章导入 ${words.length} 个词，可继续搜索…`;
+        }
+
+        updateWordbankSelectedCount();
+        renderWordbankMeta();
+        renderWordbankList();
+
+        // 滚动到词库选框顶部
+        const panel = document.getElementById('wordbank-panel');
+        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // 显示提取结果摘要
+        if (resultDiv) {
+            resultDiv.style.display = 'block';
+            const totalSelected = wbState.selected.size;
+            const extraHint = totalSelected > words.length ? `（含之前已选的 ${totalSelected - words.length} 词，共 ${totalSelected} 词已勾选）` : '';
+            resultDiv.innerHTML =
+                `<p class="article-result-title">✓ 已提取 ${words.length} 个词汇 ${method}${extraHint}，请确认后点击「将选中的词加入待复习」。</p>`;
+        }
+        ta.value = '';
     } catch (error) {
-        showMessage(error.message, 'error');
+        showMessage(error.message || '提取失败', 'error');
+        if (resultDiv) resultDiv.style.display = 'none';
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
-async function importWordsJson() {
-    const ta = document.getElementById('import-json-textarea');
+async function importVocabToCSV() {
+    if (userPlan !== 'paid') {
+        showMessage('词汇导入功能仅限付费版用户使用', 'error');
+        return;
+    }
+    const ta = document.getElementById('import-vocab-textarea');
+    const levelSel = document.getElementById('import-vocab-level');
     if (!ta) return;
     const raw = ta.value.trim();
     if (!raw) {
-        showMessage('请先粘贴 JSON', 'error');
+        showMessage('请先输入单词列表', 'error');
         return;
     }
-    let payload;
-    try {
-        payload = JSON.parse(raw);
-    } catch (e) {
-        showMessage('JSON 解析失败，请检查括号与逗号', 'error');
-        return;
+    const level = levelSel ? levelSel.value : '';
+    const btn = document.getElementById('import-vocab-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '处理中…';
     }
     try {
-        const data = await apiRequest('/words/import-json', {
+        const data = await apiRequest('/wordbank/csv/import-words', {
             method: 'POST',
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ words: raw, level, also_add_to_queue: true })
         });
-        showMessage(data.message || '导入成功', 'success');
+        showMessage(data.message || '词汇导入成功', 'success');
         ta.value = '';
+        if (levelSel) levelSel.value = '';
         loadStats();
     } catch (error) {
-        showMessage(error.message, 'error');
+        showMessage(error.message || '导入失败', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '词汇导入';
+        }
+    }
+}
+
+async function resetTodayReview() {
+    const confirmed = window.confirm('确认清空今日所有待复习单词吗？\n\n清空后，今日到期的单词将推迟到明天。');
+    if (!confirmed) return;
+    try {
+        const data = await apiRequest('/words/reset-today', { method: 'POST' });
+        showMainBanner(data.message || '今日待复习已清空');
+        loadStats();
+        loadReviewList();
+    } catch (e) {
+        showMainBanner(e.message || '操作失败');
     }
 }
 
@@ -1834,14 +2022,29 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 下划线输入框的Enter键已经在initializeUnderlineInput中处理
     
-    const importJsonBtn = document.getElementById('import-json-btn');
-    if (importJsonBtn) {
-        importJsonBtn.addEventListener('click', importWordsJson);
+    const importArticleBtn = document.getElementById('import-article-btn');
+    if (importArticleBtn) {
+        importArticleBtn.addEventListener('click', importFromArticle);
     }
-    const importSimpleBtn = document.getElementById('import-simple-btn');
-    if (importSimpleBtn) {
-        importSimpleBtn.addEventListener('click', importSimpleCommunity);
+    const importVocabBtn = document.getElementById('import-vocab-btn');
+    if (importVocabBtn) {
+        importVocabBtn.addEventListener('click', importVocabToCSV);
     }
+    const resetTodayBtn = document.getElementById('reset-today-btn');
+    if (resetTodayBtn) {
+        resetTodayBtn.addEventListener('click', resetTodayReview);
+    }
+    const resetTodayAsideBtn = document.getElementById('reset-today-aside-btn');
+    if (resetTodayAsideBtn) {
+        resetTodayAsideBtn.addEventListener('click', resetTodayReview);
+    }
+
+    // 错题顺序切换：实时对剩余题目重新排列
+    document.querySelectorAll('input[name="wrong-order"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+            applyWrongOrderToRemaining();
+        });
+    });
 
     initWordbankPanel();
     
@@ -1910,6 +2113,25 @@ document.addEventListener('DOMContentLoaded', function() {
             showAdminNotice(e.message || '生成失败');
         }
     });
+    document.getElementById('admin-save-deepseek')?.addEventListener('click', async () => {
+        const keyInput = document.getElementById('admin-deepseek-key');
+        const newKey = (keyInput ? keyInput.value : '').trim();
+        showAdminNotice('');
+        try {
+            await apiAdminRequest('/admin/config', {
+                method: 'PATCH',
+                body: JSON.stringify({ deepseek_api_key: newKey })
+            });
+            if (keyInput) keyInput.value = '';
+            showAdminNotice(newKey ? 'API Key 已保存' : 'API Key 已清除');
+            // 刷新状态显示
+            const cfg = await apiAdminRequest('/admin/config').catch(() => null);
+            renderAdminDeepseekStatus(cfg);
+        } catch (e) {
+            showAdminNotice(e.message || '保存失败');
+        }
+    });
+
     document.getElementById('admin-logout')?.addEventListener('click', async () => {
         try {
             const at = getAdminToken();
@@ -1931,6 +2153,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 初始化页面
+    updateResetBtnsVisibility();
     if (token && username) {
         showMainPage();
     } else {

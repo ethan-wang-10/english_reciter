@@ -56,7 +56,11 @@ docker run -p 8000:8000 english-reciter-simple
 | `/api/words/review` | GET | 获取今日复习列表 |
 | `/api/words/practice` | POST | 练习单词 |
 | `/api/words/import-json` | POST | 批量导入单词（JSON 数组或 `{ "words": [...] }`） |
+| `/api/wordbank/csv` | GET | 内置词库（来自 `static/wordbanks/words.csv`） |
+| `/api/wordbank/csv/search` | GET | 在词库中搜索（`q` 参数） |
 | `/api/words/mastered` | GET | 获取已掌握单词 |
+
+内置词库文件：`static/wordbanks/words.csv`（唯一数据源；更新后提交 Git 并部署）。
 
 ## 认证方式
 
@@ -73,10 +77,11 @@ english_reciter/
 ├── requirements-simple.txt # 简化依赖
 ├── start_simple_web.sh    # 启动脚本
 ├── SIMPLE_WEB_README.md   # 本文档
-├── static/                # 前端文件（与原始版本相同）
+├── static/                # 前端与内置词库
 │   ├── index.html
 │   ├── css/
-│   └── js/
+│   ├── js/
+│   └── wordbanks/words.csv  # 内置词库（唯一数据源）
 ├── user_data_simple/      # 用户数据目录（新）
 │   ├── users.json         # 用户信息
 │   └── <username>/        # 每个用户的数据目录
