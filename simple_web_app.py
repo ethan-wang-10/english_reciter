@@ -8,6 +8,7 @@
 import os
 import json
 import re
+import tempfile
 import hashlib
 import secrets
 import shutil
@@ -54,6 +55,151 @@ USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
 # 数据目录
 DATA_DIR = Path("user_data_simple")
 DATA_DIR.mkdir(exist_ok=True)
+
+# 全站共享词库（家长贡献，持久化在 user_data_simple/_shared/）
+SHARED_DATA_DIR = DATA_DIR / "_shared"
+COMMUNITY_WB_FILE = SHARED_DATA_DIR / "community_wordbank.json"
+_community_wb_lock = threading.Lock()
+STATIC_WB_DIR = Path("static/wordbanks")
+_SYSTEM_WB_FILES = ("primary.json", "junior.json", "senior.json")
+_COMMUNITY_SCHEMA = "english_reciter.wordbank.community/v1"
+
+
+def _empty_community_doc() -> dict:
+    return {
+        "schema": _COMMUNITY_SCHEMA,
+        "phase": "community",
+        "label": "共享（家长贡献）",
+        "description": "全账户共享：家长通过简单格式导入且不在系统词库中的单词",
+        "version": 1,
+        "count": 0,
+        "words": [],
+    }
+
+
+def _read_community_file_unlocked() -> dict:
+    """读取共享词库（调用方需已持锁或保证无并发写）。"""
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not COMMUNITY_WB_FILE.exists():
+        data = _empty_community_doc()
+        _write_community_file_atomic(data)
+        return data
+    try:
+        with open(COMMUNITY_WB_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("共享词库损坏，将重建空文件: %s", e)
+        data = _empty_community_doc()
+        _write_community_file_atomic(data)
+        return data
+    if not isinstance(raw, dict):
+        raw = _empty_community_doc()
+    words = raw.get("words")
+    if not isinstance(words, list):
+        words = []
+    raw["words"] = words
+    raw.setdefault("schema", _COMMUNITY_SCHEMA)
+    raw.setdefault("label", "共享（家长贡献）")
+    raw["count"] = len(words)
+    return raw
+
+
+def _write_community_file_atomic(data: dict) -> None:
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path = COMMUNITY_WB_FILE
+    data = dict(data)
+    words = data.get("words")
+    if not isinstance(words, list):
+        words = []
+    data["words"] = words
+    data["count"] = len(words)
+    fd, tmp_name = tempfile.mkstemp(suffix=".json", dir=str(SHARED_DATA_DIR), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def load_system_wordbank_english_lower() -> set:
+    """小学/初中/高中内置词库中出现的英文（小写），用于校验家长贡献不重复。"""
+    keys: set = set()
+    for name in _SYSTEM_WB_FILES:
+        p = STATIC_WB_DIR / name
+        if not p.exists():
+            continue
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                blob = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("读取系统词库失败 %s: %s", p, e)
+            continue
+        for w in blob.get("words") or []:
+            en = str(w.get("english", "")).strip().lower()
+            if en:
+                keys.add(en)
+    return keys
+
+
+def parse_simple_parent_import_text(text: str) -> Tuple[List[dict], Optional[str]]:
+    """
+    解析家长简易导入：每行「单词、例句、译文」，Tab 或 | 分隔；
+    也支持 JSON 数组或 {\"words\": [...]}，字段 english / example / chinese（或 translation）。
+    """
+    text = text.strip()
+    if not text:
+        return [], "内容为空"
+    if text[0] in "[{":
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            return [], f"JSON 解析失败: {e}"
+        if isinstance(data, dict) and "words" in data:
+            data = data["words"]
+        if not isinstance(data, list):
+            return [], "JSON 应为数组，或包含 words 数组的对象"
+        out: List[dict] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            en = str(item.get("english", "")).strip()
+            zh = str(item.get("chinese", "") or item.get("translation", "")).strip()
+            ex = str(item.get("example", "")).strip()
+            out.append({"english": en, "chinese": zh, "example": ex})
+        return out, None
+    out: List[dict] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts: Optional[List[str]] = None
+        if "\t" in line:
+            parts = [p.strip() for p in line.split("\t")]
+            if len(parts) < 3:
+                continue
+            en, ex, zh = parts[0], parts[1], parts[2]
+        elif "|" in line:
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) < 3:
+                continue
+            en = parts[0]
+            zh = parts[-1]
+            ex = "|".join(parts[1:-1]).strip()
+        else:
+            continue
+        out.append({"english": en, "chinese": zh, "example": ex})
+    if not out:
+        return [], (
+            "未解析到有效行。每行格式：单词、例句、译文，中间用 Tab 或 | 分隔"
+            "（示例：apple\\tI like apples.\\t苹果）"
+        )
+    return out, None
+
 
 # Token存储（内存中，重启后失效）
 # 实际应用中应使用数据库或Redis
@@ -857,6 +1003,141 @@ def import_words_json(username):
     except Exception as e:
         logger.error(f"JSON 导入失败: {e}")
         return jsonify({'error': '导入失败，请检查 JSON 格式'}), 500
+
+
+@app.route('/api/wordbank/community', methods=['GET'])
+@token_required
+def get_community_wordbank(username):
+    """返回全站共享词库（家长贡献），供导入页勾选。"""
+    with _community_wb_lock:
+        data = _read_community_file_unlocked()
+    return jsonify(
+        {
+            "schema": data.get("schema"),
+            "phase": "community",
+            "label": data.get("label", "共享（家长贡献）"),
+            "count": len(data.get("words") or []),
+            "words": data.get("words") or [],
+        }
+    ), 200
+
+
+@app.route('/api/wordbank/community/import-simple', methods=['POST'])
+@token_required
+def community_import_simple(username):
+    """
+    家长简易导入：单词 + 例句 + 译文 → 写入共享词库。
+    若英文已出现在小学/初中/高中系统词库，或已在共享词库中，则拒绝/跳过并返回明细。
+    可选 also_add_to_queue：同时将新词加入当前用户待复习。
+    """
+    if not _rate_allow(f"comm_import:{_client_ip()}", 40):
+        return jsonify({"error": "导入请求过于频繁，请稍后再试"}), 429
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("text", "")).strip()
+    also_queue = bool(body.get("also_add_to_queue"))
+
+    rows, parse_err = parse_simple_parent_import_text(text)
+    if parse_err:
+        return jsonify({"error": parse_err}), 400
+    if len(rows) > 500:
+        return jsonify({"error": "单次最多导入 500 条"}), 400
+
+    system_keys = load_system_wordbank_english_lower()
+    added_entries: List[dict] = []
+    rejected_in_system: List[str] = []
+    skipped_duplicate_community: List[str] = []
+    skipped_invalid = 0
+
+    with _community_wb_lock:
+        data = _read_community_file_unlocked()
+        words: List[dict] = list(data.get("words") or [])
+        comm_keys = {str(w.get("english", "")).strip().lower() for w in words if w.get("english")}
+
+        for row in rows:
+            en = str(row.get("english", "")).strip()[:500]
+            zh = str(row.get("chinese", "")).strip()[:500]
+            ex_raw = row.get("example")
+            ex = str(ex_raw).strip()[:4000] if ex_raw is not None else ""
+            if not en or not zh:
+                skipped_invalid += 1
+                continue
+            key = en.lower()
+            if key in system_keys:
+                rejected_in_system.append(en)
+                continue
+            if key in comm_keys:
+                skipped_duplicate_community.append(en)
+                continue
+            entry = {
+                "english": en,
+                "chinese": zh,
+                "example": ex or None,
+                "added_by": username,
+                "added_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+            words.append(entry)
+            comm_keys.add(key)
+            added_entries.append(entry)
+
+        data["words"] = words
+        if added_entries:
+            _write_community_file_atomic(data)
+
+    queue_result: Optional[dict] = None
+    queue_error: Optional[str] = None
+    if also_queue and added_entries:
+        to_queue = [
+            {"english": e["english"], "chinese": e["chinese"], "example": e.get("example")}
+            for e in added_entries
+        ]
+        try:
+            with user_reciter_session(username) as reciter:
+                queue_result = reciter.add_words_from_dicts(to_queue)
+        except Exception as e:
+            logger.error("简易导入后加入待复习失败: %s", e)
+            queue_error = str(e)
+
+    msg_parts = [f"共享词库新增 {len(added_entries)} 个单词"]
+    if rejected_in_system:
+        msg_parts.append(f"{len(rejected_in_system)} 个因已在系统词库中未加入")
+    if skipped_duplicate_community:
+        msg_parts.append(f"{len(skipped_duplicate_community)} 个已在共享词库中")
+    if skipped_invalid:
+        msg_parts.append(f"{skipped_invalid} 条缺少单词或译文已忽略")
+
+    msg = "；".join(msg_parts) + "。"
+    if queue_result:
+        msg += (
+            f" 待复习：新加 {queue_result.get('added', 0)}，"
+            f"跳过重复 {queue_result.get('skipped_duplicate', 0)}。"
+        )
+    if queue_error:
+        msg += " 共享词库已保存，但加入待复习失败，请稍后在共享词库中勾选导入。"
+
+    logger.info(
+        "用户 %s 共享词库简易导入: added=%s sys=%s dup=%s invalid=%s queue=%s",
+        username,
+        len(added_entries),
+        len(rejected_in_system),
+        len(skipped_duplicate_community),
+        skipped_invalid,
+        bool(queue_result),
+    )
+
+    payload: dict = {
+        "message": msg,
+        "added_to_community": len(added_entries),
+        "rejected_in_system": rejected_in_system,
+        "skipped_duplicate_community": skipped_duplicate_community,
+        "skipped_invalid": skipped_invalid,
+    }
+    if queue_result:
+        payload["queue_added"] = queue_result.get("added")
+        payload["queue_skipped_duplicate"] = queue_result.get("skipped_duplicate")
+        payload["queue_skipped_invalid"] = queue_result.get("skipped_invalid")
+    if queue_error:
+        payload["queue_error"] = queue_error
+    return jsonify(payload), 200
 
 
 @app.route('/api/words/mastered', methods=['GET'])

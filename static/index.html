@@ -196,11 +196,11 @@
                     <h2>导入单词</h2>
 
                     <div class="wordbank-panel" id="wordbank-panel">
-                        <h3 class="import-json-title">家长：从系统词库添加</h3>
-                        <p class="import-json-desc">选择学段后搜索、勾选单词，一键加入「待复习」（与已有英文重复则跳过）。</p>
+                        <h3 class="import-json-title">从词库添加（含小学 / 初中 / 高中 / 共享）</h3>
+                        <p class="import-json-desc">选择学段浏览，或在搜索框输入内容即可<strong>跨词库</strong>匹配；勾选后加入「待复习」（与当前账号已有英文重复则跳过）。</p>
                         <div class="wordbank-toolbar">
                             <div class="wordbank-phases" id="wordbank-phases" role="tablist" aria-label="学段"></div>
-                            <input type="search" id="wordbank-search" class="wordbank-search" placeholder="搜索英文或中文…" autocomplete="off" />
+                            <input type="search" id="wordbank-search" class="wordbank-search" placeholder="跨词库搜索：英文、中文或例句（匹配时显示词条所属词库）" autocomplete="off" />
                         </div>
                         <p class="wordbank-meta" id="wordbank-meta">加载中…</p>
                         <div class="wordbank-actions">
@@ -215,12 +215,30 @@
                         <button type="button" id="wordbank-import-btn" class="btn btn-primary wordbank-import-btn">将选中的词加入待复习</button>
                     </div>
 
+                    <div class="import-simple-panel">
+                        <h3 class="import-json-title">家长：简单格式导入（共享词库）</h3>
+                        <p class="import-json-desc">
+                            每行一条：<strong>单词</strong>、<strong>例句</strong>、<strong>中文译文</strong>，中间用 <strong>Tab</strong> 或 <strong>|</strong> 分隔。
+                            仅当该英文<strong>不在</strong>小学/初中/高中系统词库中时，才会写入<strong>全账户共享词库</strong>，所有登录用户可在上方「共享（家长贡献）」中勾选学习。
+                            也支持与原先相同的 JSON 数组格式（<code>english</code> / <code>example</code> / <code>chinese</code>）。
+                        </p>
+                        <textarea id="import-simple-textarea" class="import-json-textarea" rows="10"
+                            spellcheck="false" placeholder="apple	I like apples.	苹果&#10;curious	She was curious about the box.	好奇的"></textarea>
+                        <div class="import-simple-options">
+                            <label class="import-simple-check">
+                                <input type="checkbox" id="import-simple-also-queue" />
+                                同时将<strong>新加入共享词库</strong>的单词加入我的「待复习」
+                            </label>
+                        </div>
+                        <button type="button" id="import-simple-btn" class="btn btn-primary import-json-btn">导入到共享词库</button>
+                    </div>
+
                     <div class="import-json-panel">
-                        <h3 class="import-json-title">家长：粘贴 JSON 导入</h3>
-                        <p class="import-json-desc">将学习数据 JSON 粘贴到下方，导入后会加入「待复习」词库（与已有单词英文重复则跳过）。</p>
-                        <textarea id="import-json-textarea" class="import-json-textarea" rows="12"
-                            spellcheck="false" placeholder='[ { "english": "apple", "chinese": "苹果", ... } ]'></textarea>
-                        <button type="button" id="import-json-btn" class="btn btn-primary import-json-btn">导入 JSON</button>
+                        <h3 class="import-json-title">高级：JSON 导入到「待复习」</h3>
+                        <p class="import-json-desc">直接合并到当前账号的待复习列表（与已有英文重复则跳过），不经过共享词库。</p>
+                        <textarea id="import-json-textarea" class="import-json-textarea" rows="8"
+                            spellcheck="false" placeholder='[ { "english": "apple", "chinese": "苹果", "example": "..." } ]'></textarea>
+                        <button type="button" id="import-json-btn" class="btn btn-secondary import-json-btn">导入 JSON</button>
                     </div>
                     <div id="import-message" class="message"></div>
                 </div>
