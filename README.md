@@ -1,160 +1,84 @@
-# 英语背诵系统 (English Reciter)
+# English Reciter · 英语背诵系统
 
-一个基于Python的智能英语单词背诵系统，支持语音朗读和间隔重复学习算法。
+基于间隔重复的英语单词学习工具，提供**命令行**与 **Web** 两种使用方式：Web 版支持多用户、词库导入与游戏化进度；CLI 版适合本地终端快速复习。
 
-## 功能特点
+## 功能概览
 
-### 🎯 智能学习系统
-- **间隔重复算法**：基于艾宾浩斯遗忘曲线，自动安排复习时间
-- **单词分类管理**：自动区分待复习单词和已掌握单词
-- **学习进度跟踪**：实时记录每个单词的学习状态和成功率
+| 能力 | 说明 |
+|------|------|
+| 间隔重复 | 按 `config.json` 中的天数阶梯安排复习（默认 1→2→4→7→15→30→60→90 天） |
+| 掌握判定 | 连续成功达到 `max_success_count`（默认 8）后移入已掌握列表 |
+| 例句 | 本地例句库（`word_examples.json`），离线可用 |
+| Web 版 | Flask 应用、注册登录、多用户数据隔离（`user_data_simple/`）、静态前端 |
+| CLI 版 | 交互菜单：今日复习、进度、已掌握词汇与巩固 |
+| 备份 | 可配置自动备份学习数据到 `backups/` |
+| 游戏化 | Web 端积分与成就（见 `gamification.py`） |
 
-### 🔊 语音朗读功能
-- **TTS语音合成**：支持单词和例句的语音朗读
-- **多语言支持**：中英文双语朗读
-- **发音练习**：帮助用户纠正发音
+## 环境要求
 
-### 📊 学习统计
-- **学习进度可视化**：显示已掌握单词数量和待复习单词数量
-- **学习历史记录**：保存每次学习的数据
-- **个性化复习计划**：根据个人学习情况动态调整复习频率
+- Python **3.11+**（与 Docker 镜像一致时推荐 3.11）
+- 操作系统：Windows / macOS / Linux
 
-## 系统要求
+## 快速开始
 
-- Python 3.7+
-- macOS / Linux / Windows
-- 网络连接（用于语音合成）
-
-## 安装依赖
+### Web 版（推荐）
 
 ```bash
-pip install requests
+pip install -r requirements-simple.txt
+python simple_web_app.py
 ```
 
-## 使用方法
+浏览器访问：<http://localhost:8000>。生产环境请设置 `SECRET_KEY`，详见下文与 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
-### 1. 启动系统
+### Docker
+
 ```bash
-python3 reciter.py
+docker compose up -d
 ```
 
-### 2. 主菜单功能
+默认映射端口以 `docker-compose.yml` 为准；容器内使用 Gunicorn 启动 `simple_web_app`。
 
-系统启动后，您将看到以下选项：
+### 命令行版
 
-```
-=== 英语背诵系统 ===
-1. 今日复习
-2. 查看学习进度
-3. 查看已掌握词汇
-4. 复习已掌握词汇
-5. 退出
+```bash
+pip install -r requirements-simple.txt
+python reciter.py
 ```
 
-#### 📖 今日复习 (选项1)
-- 系统会根据间隔重复算法自动选择需要复习的单词
-- 每个单词会显示英文、中文释义和例句
-- 支持语音朗读功能
-- 根据回答正确率自动调整单词的复习间隔
+主菜单包含今日复习、学习进度、已掌握词汇与巩固复习等选项。
 
-#### 📈 查看学习进度 (选项2)
-- 显示总体学习统计信息
-- 查看已掌握单词数量
-- 查看待复习单词数量
-- 显示学习进度百分比
+## 配置
 
-#### 📚 查看已掌握词汇 (选项3)
-- 列出所有已掌握的单词
-- 显示每个单词的成功次数和下次复习时间
+通过项目根目录的 [config.json](config.json) 调整行为，例如：
 
-#### 🔄 复习已掌握词汇 (选项4)
-- 对已掌握的单词进行巩固复习
-- 防止遗忘，加深记忆
+- `word_file` / `data_file`：词表与学习数据路径（CLI 默认 `words.txt`、`learning_data.json`）
+- `max_success_count`：判定「已掌握」所需连续成功次数（默认 8）
+- `review_interval_days`：各成功阶段对应的复习间隔（天）
+- `tts_enabled`：是否启用朗读相关能力
+- `backup_enabled`、`backup_interval_days`、`max_backups`：备份策略
 
-## 数据文件
+修改后重启对应进程生效。
 
-### learning_data.json
-系统的主要数据文件，包含：
-- `all_words`: 待复习的单词列表
-- `mastered_words`: 已掌握的单词列表
+## 数据与目录
 
-每个单词包含以下字段：
-- `english`: 英文单词
-- `chinese`: 中文释义
-- `success_count`: 成功次数（达到4次即视为掌握）
-- `next_review_date`: 下次复习日期
-- `example`: 例句
-- `review_round`: 复习轮次
-- `review_count`: 复习次数
+| 路径 | 含义 |
+|------|------|
+| `learning_data.json` | CLI 默认学习数据（可从 `words.txt` 初始化） |
+| `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
+| `static/wordbanks/` | 内置词库 JSON 与 `manifest.json` |
+| `backups/` | 学习数据自动备份（若开启） |
+| `reciter.log` | 运行日志 |
 
-### words.txt
-原始单词数据文件，包含88个单词，其中：
-- 3个待复习单词（success_count=2）
-- 85个已掌握单词（success_count=4）
+## 依赖说明
 
-## 学习算法
+主要依赖见 [requirements-simple.txt](requirements-simple.txt)（Flask、Flask-CORS、Gunicorn、prettytable、readchar、NLTK 等）。安装 Web 与 CLI 共用该文件即可。
 
-### 间隔重复规则
-- 单词首次学习后，根据回答正确率安排下次复习时间
-- 正确回答：`success_count` +1
-- 错误回答：`success_count` 重置为0
-- 当 `success_count` ≥ 8 时，单词移至已掌握列表（基于艾宾浩斯遗忘曲线）
+## 更多文档
 
-### 复习间隔（基于艾宾浩斯遗忘曲线）
-- 第1次成功：1天后复习
-- 第2次成功：2天后复习  
-- 第3次成功：4天后复习
-- 第4次成功：7天后复习
-- 第5次成功：15天后复习
-- 第6次成功：30天后复习
-- 第7次成功：60天后复习
-- 第8次成功：90天后复习（标记为已掌握）
+- [QUICK_START.md](QUICK_START.md) — 启动步骤与使用流程
+- [DEPLOYMENT.md](DEPLOYMENT.md) — 生产部署与安全项（如 `SECRET_KEY`）
+- [USAGE.md](USAGE.md) — 使用说明（若与当前版本有出入，以代码与配置为准）
 
-这种间隔设置基于艾宾浩斯遗忘曲线，能够有效对抗遗忘，确保长期记忆效果。
-
-## 自定义配置
-
-您可以通过修改 `reciter.py` 文件中的常量来调整系统行为：
-
-```python
-MAX_SUCCESS_COUNT = 4  # 掌握标准（成功次数）
-REVIEW_INTERVALS = [1, 3, 7, 30]  # 复习间隔（天）
-```
-
-## 故障排除
-
-### 语音朗读问题
-- 确保网络连接正常
-- 检查语音合成API是否可用
-
-### 数据文件问题
-- 如果 `learning_data.json` 损坏，系统会自动从 `words.txt` 恢复数据
-- 定期备份数据文件以防丢失
-
-## 开发说明
-
-### 项目结构
-```
-english_reciter/
-├── reciter.py          # 主程序
-├── learning_data.json  # 学习数据
-├── words.txt           # 原始单词数据
-├── README.md           # 说明文档
-└── .vscode/            # VSCode配置
-```
-
-### 核心类
-- `WordReciter`: 主要的背诵系统类
-- `Word`: 单词数据模型
-
-## 贡献
-
-欢迎提交Issue和Pull Request来改进这个项目！
-
-## 许可证
+## 开源协议
 
 MIT License
-
----
-
-**开始您的英语学习之旅吧！** 🚀
