@@ -27,6 +27,11 @@ htmlcov/
 # --- Local runtime backups (CLI / 旧版) ---
 backups/
 
+# --- 用户数据（勿提交；避免 git pull 覆盖线上/本机学习进度）---
+learning_data.json
+user_data_simple/*
+!user_data_simple/.gitkeep
+
 # --- Local secrets / env ---
 .env
 .env.*
