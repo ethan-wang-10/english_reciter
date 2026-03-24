@@ -1943,8 +1943,6 @@ def admin_delete_user_words(username):
         return jsonify({'error': '请提供 english 字段（字符串或字符串数组）'}), 400
     if not english_list:
         return jsonify({'error': '单词列表不能为空'}), 400
-    if len(english_list) > 500:
-        return jsonify({'error': '单次最多删除 500 条'}), 400
 
     try:
         with user_reciter_session(username) as reciter:
