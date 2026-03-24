@@ -1336,26 +1336,6 @@ def get_user_plan_api(username):
     return jsonify({'plan': get_user_plan(username)}), 200
 
 
-@app.route('/api/words/reset-today', methods=['POST'])
-@token_required
-def reset_today_review(username):
-    """清空今日待复习列表（将所有到期单词的 next_review_date 推迟一天）。"""
-    try:
-        with user_reciter_session(username) as reciter:
-            today = date.today()
-            count = 0
-            for w in reciter.all_words:
-                if w.next_review_date <= today:
-                    w.next_review_date = today + timedelta(days=1)
-                    count += 1
-            reciter.save_learning_data(backup=False)
-        _invalidate_user_reciter_cache(username)
-        return jsonify({'message': f'已清空 {count} 个今日待复习单词', 'count': count}), 200
-    except Exception as e:
-        logger.error("清空今日复习失败: %s", e)
-        return jsonify({'error': '服务器内部错误'}), 500
-
-
 @app.route('/api/wordbank/csv', methods=['GET'])
 @token_required
 def get_wordbank_csv(username):
@@ -1888,6 +1868,98 @@ def admin_set_user_plan(username):
         return jsonify({'error': '用户不存在'}), 404
     logger.info("管理员设置用户 %s 套餐为 %s", username, plan)
     return jsonify({'username': username, 'plan': plan}), 200
+
+
+@app.route('/api/admin/users/<username>/words', methods=['GET'])
+@admin_required
+def admin_list_user_words(username):
+    """列出指定用户待复习/已掌握单词（管理员）。"""
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+    users = load_users()
+    if username not in users:
+        return jsonify({'error': '用户不存在'}), 404
+
+    status = request.args.get('status', 'all').strip().lower()
+    if status not in ('all', 'pending', 'mastered'):
+        status = 'all'
+    q = request.args.get('q', '').strip().lower()
+
+    try:
+        with user_reciter_session(username) as reciter:
+            words = []
+            if status in ('all', 'pending'):
+                for w in reciter.all_words:
+                    csv_row = lookup_csv_word(w.english)
+                    words.append({
+                        'english': w.english,
+                        'chinese': w.chinese,
+                        'phonetic': csv_row.get('phonetic', '') if csv_row else '',
+                        'status': 'pending',
+                        'success_count': w.success_count,
+                        'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
+                        'review_count': w.review_count,
+                        'next_review_date': w.next_review_date.isoformat(),
+                    })
+            if status in ('all', 'mastered'):
+                for w in reciter.mastered_words:
+                    csv_row = lookup_csv_word(w.english)
+                    words.append({
+                        'english': w.english,
+                        'chinese': w.chinese,
+                        'phonetic': csv_row.get('phonetic', '') if csv_row else '',
+                        'status': 'mastered',
+                        'review_count': w.review_count,
+                        'next_review_date': w.next_review_date.isoformat(),
+                    })
+            if q:
+                words = [
+                    x for x in words
+                    if q in x['english'].lower() or q in (x.get('chinese') or '').lower()
+                ]
+            return jsonify({'words': words, 'count': len(words)}), 200
+    except Exception as e:
+        logger.error("管理员列出用户单词失败: %s", e)
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/admin/users/<username>/words', methods=['DELETE'])
+@admin_required
+def admin_delete_user_words(username):
+    """从指定用户学习数据中永久删除单词（管理员）。"""
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+    users = load_users()
+    if username not in users:
+        return jsonify({'error': '用户不存在'}), 404
+
+    data = request.get_json(silent=True) or {}
+    raw = data.get('english')
+    if isinstance(raw, str):
+        english_list = [raw]
+    elif isinstance(raw, list):
+        english_list = raw
+    else:
+        return jsonify({'error': '请提供 english 字段（字符串或字符串数组）'}), 400
+    if not english_list:
+        return jsonify({'error': '单词列表不能为空'}), 400
+    if len(english_list) > 500:
+        return jsonify({'error': '单次最多删除 500 条'}), 400
+
+    try:
+        with user_reciter_session(username) as reciter:
+            result = reciter.remove_words_by_english(english_list)
+        _invalidate_user_reciter_cache(username)
+        logger.info(
+            "管理员删除用户 %s 单词: removed=%s not_found=%s",
+            username,
+            result.get('removed'),
+            len(result.get('not_found') or []),
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error("管理员删除用户单词失败: %s", e)
+        return jsonify({'error': '服务器内部错误'}), 500
 
 
 @app.route('/api/admin/invites', methods=['POST'])

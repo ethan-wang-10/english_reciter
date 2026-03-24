@@ -283,6 +283,24 @@ class TestWordReciter(unittest.TestCase):
         self.assertEqual(len(reciter.all_words), 0)
         self.assertEqual(r['skipped_duplicate'], 1)
         self.assertEqual(r['added'], 0)
+
+    def test_remove_words_by_english_pending(self):
+        """按英文移除待复习单词（不区分大小写）"""
+        reciter = WordReciter(self.config)
+        reciter.add_words([("apple", "苹果"), ("banana", "香蕉")])
+        r = reciter.remove_words_by_english(["Apple", "missing"])
+        self.assertEqual(r["removed"], 1)
+        self.assertEqual(r["not_found"], ["missing"])
+        self.assertEqual(len(reciter.all_words), 1)
+        self.assertEqual(reciter.all_words[0].english, "banana")
+
+    def test_remove_words_by_english_mastered(self):
+        """按英文移除已掌握单词"""
+        reciter = WordReciter(self.config)
+        reciter.mastered_words.append(Word("z", "终"))
+        r = reciter.remove_words_by_english(["Z"])
+        self.assertEqual(r["removed"], 1)
+        self.assertEqual(len(reciter.mastered_words), 0)
     
     def test_process_overdue_words(self):
         """测试处理过期单词"""

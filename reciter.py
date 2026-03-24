@@ -476,6 +476,54 @@ class WordReciter:
     def save_learning_data(self, backup: bool = True) -> None:
         """持久化学习数据（供 Web / 外部调用）。"""
         self._save_data(backup=backup)
+
+    def remove_words_by_english(self, english_candidates: List[str]) -> dict:
+        """
+        按英文（不区分大小写）从待复习与已掌握中移除单词；同步删除本地例句库中对应条目。
+        english_candidates 中同一词只处理一次（按首次出现顺序）。
+        """
+        keys_ordered: List[str] = []
+        seen = set()
+        for e in english_candidates:
+            if not e or not str(e).strip():
+                continue
+            k = str(e).strip().lower()
+            if k not in seen:
+                seen.add(k)
+                keys_ordered.append(k)
+        if not keys_ordered:
+            return {'removed': 0, 'removed_english': [], 'not_found': []}
+
+        removed_english: List[str] = []
+        not_found: List[str] = []
+
+        for key in keys_ordered:
+            found = False
+            for lst in (self.all_words, self.mastered_words):
+                for i in range(len(lst)):
+                    if lst[i].english.lower() == key:
+                        w = lst.pop(i)
+                        removed_english.append(w.english)
+                        lk = w.english.lower()
+                        if lk in self.example_generator.local_db:
+                            del self.example_generator.local_db[lk]
+                        found = True
+                        break
+                if found:
+                    break
+            if not found:
+                not_found.append(key)
+
+        if removed_english:
+            self._update_review_round()
+            self.save_learning_data(backup=True)
+            self.example_generator.save_local_db()
+
+        return {
+            'removed': len(removed_english),
+            'removed_english': removed_english,
+            'not_found': not_found,
+        }
     
     def calculate_review_days(self, success_count: int) -> int:
         """根据成功次数计算下次复习间隔天数。"""

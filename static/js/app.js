@@ -570,42 +570,8 @@ function getAdminToken() {
 function setAdminToken(t) {
     if (t) {
         sessionStorage.setItem('adminToken', t);
-        // token 刚设置，直接显示（刚登录成功，无需再验证）
-        _setResetBtnsDisplay(true);
     } else {
         sessionStorage.removeItem('adminToken');
-        _setResetBtnsDisplay(false);
-    }
-}
-
-function _setResetBtnsDisplay(visible) {
-    const display = visible ? '' : 'none';
-    const aside = document.getElementById('reset-today-aside-btn');
-    const complete = document.getElementById('reset-today-btn');
-    if (aside) aside.style.display = display;
-    if (complete) complete.style.display = display;
-}
-
-async function updateResetBtnsVisibility() {
-    const at = getAdminToken();
-    if (!at) {
-        _setResetBtnsDisplay(false);
-        return;
-    }
-    // 向后端验证 token 是否真实有效（防止过期 token 残留）
-    try {
-        const res = await fetch(`${API_BASE}/admin/config`, {
-            headers: { Authorization: `Bearer ${at}`, 'Content-Type': 'application/json' }
-        });
-        if (res.ok) {
-            _setResetBtnsDisplay(true);
-        } else {
-            // token 无效或过期，清除并隐藏
-            setAdminToken(null);
-            _setResetBtnsDisplay(false);
-        }
-    } catch (_) {
-        _setResetBtnsDisplay(false);
     }
 }
 
@@ -765,6 +731,101 @@ function renderAdminInvites(invites) {
     }).join('');
 }
 
+function populateAdminWordsUserSelect(users) {
+    const sel = document.getElementById('admin-words-user');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = (users || []).map((u) => {
+        const un = u.username;
+        return `<option value="${escapeHtml(un)}">${escapeHtml(un)}</option>`;
+    }).join('');
+    if (prev && [...sel.options].some((o) => o.value === prev)) {
+        sel.value = prev;
+    } else if (sel.options.length) {
+        sel.selectedIndex = 0;
+    }
+}
+
+function renderAdminWordsTable(words) {
+    const tbody = document.getElementById('admin-words-tbody');
+    const emptyEl = document.getElementById('admin-words-empty');
+    const selAll = document.getElementById('admin-words-select-all');
+    if (selAll) selAll.checked = false;
+    if (!tbody) return;
+    if (!words || !words.length) {
+        tbody.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    tbody.innerHTML = words.map((w) => {
+        const en = escapeHtml(w.english);
+        const stLabel = w.status === 'mastered' ? '已掌握' : '待复习';
+        return `
+            <tr>
+                <td class="admin-words-col-cb"><input type="checkbox" class="admin-word-cb" data-english="${escapeHtml(w.english)}" /></td>
+                <td>${en}</td>
+                <td>${escapeHtml(w.chinese)}</td>
+                <td>${escapeHtml(stLabel)}</td>
+                <td><button type="button" class="btn btn-danger-outline admin-word-delete" data-english="${escapeHtml(w.english)}">删除</button></td>
+            </tr>`;
+    }).join('');
+}
+
+async function loadAdminUserWords() {
+    const sel = document.getElementById('admin-words-user');
+    const user = sel && sel.value;
+    const tbody = document.getElementById('admin-words-tbody');
+    const emptyEl = document.getElementById('admin-words-empty');
+    if (!user) {
+        if (tbody) tbody.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    try {
+        const status = (document.getElementById('admin-words-status') || {}).value || 'all';
+        const q = ((document.getElementById('admin-words-q') || {}).value || '').trim();
+        const params = new URLSearchParams({ status, q });
+        const data = await apiAdminRequest(`/admin/users/${encodeURIComponent(user)}/words?${params}`);
+        renderAdminWordsTable(data.words || []);
+    } catch (e) {
+        showAdminNotice(e.message || '加载失败');
+        renderAdminWordsTable([]);
+    }
+}
+
+async function adminConfirmDeleteWords(englishList) {
+    const sel = document.getElementById('admin-words-user');
+    const user = sel && sel.value;
+    if (!user || !englishList.length) return;
+    const preview = englishList.slice(0, 5).join('、');
+    const more = englishList.length > 5 ? ` 等共 ${englishList.length} 个` : '';
+    const ok = window.confirm(`确定从用户「${user}」的学词数据中永久删除：${preview}${more}？\n\n此操作不可恢复。`);
+    if (!ok) return;
+    await adminDeleteUserWords(englishList);
+}
+
+async function adminDeleteUserWords(englishList) {
+    const sel = document.getElementById('admin-words-user');
+    const user = sel && sel.value;
+    if (!user || !englishList || !englishList.length) return;
+    showAdminNotice('');
+    try {
+        const data = await apiAdminRequest(`/admin/users/${encodeURIComponent(user)}/words`, {
+            method: 'DELETE',
+            body: JSON.stringify({ english: englishList })
+        });
+        const parts = [];
+        if (data.removed) parts.push(`已删除 ${data.removed} 个`);
+        if (data.not_found && data.not_found.length) parts.push(`未找到 ${data.not_found.length} 个`);
+        showAdminNotice(parts.join('；') || '完成');
+        await loadAdminDashboard();
+    } catch (e) {
+        showAdminNotice(e.message || '删除失败');
+    }
+}
+
 async function loadAdminDashboard() {
     const [usersRes, invRes, cfgRes] = await Promise.all([
         apiAdminRequest('/admin/users'),
@@ -774,6 +835,8 @@ async function loadAdminDashboard() {
     renderAdminUsers(usersRes.users);
     renderAdminInvites(invRes.invites);
     renderAdminDeepseekStatus(cfgRes);
+    populateAdminWordsUserSelect(usersRes.users);
+    await loadAdminUserWords();
     showAdminDashboardPanel();
 }
 
@@ -1895,19 +1958,6 @@ async function importVocabToCSV() {
     }
 }
 
-async function resetTodayReview() {
-    const confirmed = window.confirm('确认清空今日所有待复习单词吗？\n\n清空后，今日到期的单词将推迟到明天。');
-    if (!confirmed) return;
-    try {
-        const data = await apiRequest('/words/reset-today', { method: 'POST' });
-        showMainBanner(data.message || '今日待复习已清空');
-        loadStats();
-        loadReviewList();
-    } catch (e) {
-        showMainBanner(e.message || '操作失败');
-    }
-}
-
 // ==================== 事件监听与初始化 ====================
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -2030,14 +2080,29 @@ document.addEventListener('DOMContentLoaded', function() {
     if (importVocabBtn) {
         importVocabBtn.addEventListener('click', importVocabToCSV);
     }
-    const resetTodayBtn = document.getElementById('reset-today-btn');
-    if (resetTodayBtn) {
-        resetTodayBtn.addEventListener('click', resetTodayReview);
-    }
-    const resetTodayAsideBtn = document.getElementById('reset-today-aside-btn');
-    if (resetTodayAsideBtn) {
-        resetTodayAsideBtn.addEventListener('click', resetTodayReview);
-    }
+    document.getElementById('admin-words-user')?.addEventListener('change', () => loadAdminUserWords());
+    document.getElementById('admin-words-status')?.addEventListener('change', () => loadAdminUserWords());
+    document.getElementById('admin-words-refresh')?.addEventListener('click', () => loadAdminUserWords());
+    document.getElementById('admin-words-select-all')?.addEventListener('change', (e) => {
+        const on = e.target.checked;
+        document.querySelectorAll('.admin-word-cb').forEach((cb) => { cb.checked = on; });
+    });
+    document.getElementById('admin-words-tbody')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.admin-word-delete');
+        if (!btn) return;
+        const en = btn.getAttribute('data-english');
+        if (en) adminConfirmDeleteWords([en]);
+    });
+    document.getElementById('admin-words-delete-selected')?.addEventListener('click', () => {
+        const list = [...document.querySelectorAll('.admin-word-cb:checked')]
+            .map((cb) => cb.getAttribute('data-english'))
+            .filter(Boolean);
+        if (!list.length) {
+            showAdminNotice('请先勾选要删除的单词');
+            return;
+        }
+        adminConfirmDeleteWords(list);
+    });
 
     // 错题顺序切换：实时对剩余题目重新排列
     document.querySelectorAll('input[name="wrong-order"]').forEach((radio) => {
@@ -2153,7 +2218,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 初始化页面
-    updateResetBtnsVisibility();
     if (token && username) {
         showMainPage();
     } else {

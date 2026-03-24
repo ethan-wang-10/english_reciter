@@ -166,7 +166,6 @@
                                 <p class="review-empty-hint">从待复习与已掌握词库中，按复习次数从少到多优先抽取，同次数随机；答对仅增加复习次数，不改变掌握进度与排期。</p>
                             </div>
                             <button id="review-more" class="btn btn-secondary">继续学习</button>
-                            <button id="reset-today-btn" class="btn btn-danger-outline reset-today-btn" title="清空今日所有待复习单词" style="display:none;">清空今日待复习</button>
                         </div>
                     </div>
                     </div>
@@ -189,7 +188,6 @@
                                     </label>
                                 </div>
                             </div>
-                            <button id="reset-today-aside-btn" class="btn reset-today-aside-btn" title="清空今日所有待复习单词" style="display:none;">清空今日待复习</button>
                         </div>
                     </aside>
                     </div>
@@ -337,6 +335,46 @@
                                 placeholder="sk-…（留空则清除）" />
                         </div>
                         <button type="button" id="admin-save-deepseek" class="btn btn-primary admin-config-save">保存 API Key</button>
+                    </div>
+
+                    <h3 class="admin-subtitle">用户词库管理</h3>
+                    <div class="admin-config-section" id="admin-words-panel">
+                        <p class="admin-hint">从指定用户的学习数据中<strong>永久删除</strong>单词（不可恢复，需重新导入）。</p>
+                        <div class="form-group admin-config-group">
+                            <label for="admin-words-user">选择用户</label>
+                            <select id="admin-words-user"></select>
+                        </div>
+                        <div class="admin-words-toolbar">
+                            <div class="form-group admin-config-group">
+                                <label for="admin-words-status">范围</label>
+                                <select id="admin-words-status">
+                                    <option value="all">全部</option>
+                                    <option value="pending">待复习</option>
+                                    <option value="mastered">已掌握</option>
+                                </select>
+                            </div>
+                            <div class="form-group admin-config-group admin-words-search-wrap">
+                                <label for="admin-words-q">筛选</label>
+                                <input type="search" id="admin-words-q" placeholder="英文或中文（可选）" autocomplete="off" />
+                            </div>
+                            <button type="button" id="admin-words-refresh" class="btn btn-secondary">刷新列表</button>
+                            <button type="button" id="admin-words-delete-selected" class="btn btn-danger-outline">删除所选</button>
+                        </div>
+                        <div class="admin-table-wrap">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th class="admin-words-col-cb"><input type="checkbox" id="admin-words-select-all" title="全选当前列表" /></th>
+                                        <th>英文</th>
+                                        <th>中文</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-words-tbody"></tbody>
+                            </table>
+                        </div>
+                        <p class="admin-hint" id="admin-words-empty" style="display:none;">该用户暂无单词或筛选无结果。</p>
                     </div>
 
                     <h3 class="admin-subtitle">用户</h3>
