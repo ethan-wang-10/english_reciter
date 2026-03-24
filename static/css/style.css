@@ -507,10 +507,49 @@ body {
 .review-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px 16px;
     margin-bottom: 24px;
     padding-bottom: 18px;
     border-bottom: 3px dashed var(--border);
+}
+
+.review-word-row {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.word-review-phonetic {
+    font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+}
+
+.review-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.review-phonetic-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.review-phonetic-toggle input {
+    margin: 0;
+    cursor: pointer;
 }
 
 .word-english {
@@ -1754,6 +1793,36 @@ body {
     border-color: var(--secondary-dark);
     box-shadow: 0 3px 0 var(--secondary-dark);
     color: #fff;
+}
+
+.admin-words-details {
+    margin: 20px 0 10px;
+}
+.admin-words-details > summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+}
+.admin-words-details > summary::-webkit-details-marker {
+    display: none;
+}
+.admin-words-details-summary .admin-subtitle {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.admin-words-details-summary .admin-subtitle::before {
+    content: '▸';
+    font-size: 0.75em;
+    opacity: 0.7;
+    transition: transform 0.15s ease;
+}
+.admin-words-details[open] .admin-words-details-summary .admin-subtitle::before {
+    transform: rotate(90deg);
+}
+.admin-words-details .admin-config-section {
+    margin-top: 10px;
 }
 
 .admin-words-toolbar {

@@ -1173,21 +1173,8 @@ def practice_word(username):
                 return jsonify({'error': '单词未找到'}), 404
 
             submitted = answer.strip().lower()
-            correct_forms = {word.english.lower()}
-            # 检查 example_form（从 CSV 获取）
-            example_form = data.get('example_form', '').strip().lower()
-            if example_form:
-                correct_forms.add(example_form)
-            else:
-                csv_row = lookup_csv_word(word.english)
-                if csv_row:
-                    f1 = csv_row.get('example1_form', '').strip().lower()
-                    f2 = csv_row.get('example2_form', '').strip().lower()
-                    if f1:
-                        correct_forms.add(f1)
-                    if f2:
-                        correct_forms.add(f2)
-            is_correct = submitted in correct_forms
+            # 仅接受单词原形（词库中的 english），不接受例句中的变形形式
+            is_correct = submitted == word.english.strip().lower()
             old_success_count = word.success_count
             old_mastered_count = len(reciter.mastered_words)
 

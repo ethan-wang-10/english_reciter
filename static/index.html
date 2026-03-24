@@ -134,8 +134,17 @@
                     <div id="review-container" class="review-container">
                         <div id="review-box" class="review-box">
                             <div class="review-header">
-                                <span class="word-english" id="current-word-english">apple</span>
-                                <span class="word-progress" id="current-word-progress">3/8</span>
+                                <div class="review-word-row">
+                                    <span class="word-english" id="current-word-english">apple</span>
+                                    <span id="current-word-phonetic" class="word-item-phonetic word-review-phonetic" hidden></span>
+                                </div>
+                                <div class="review-header-right">
+                                    <label class="review-phonetic-toggle">
+                                        <input type="checkbox" id="review-show-phonetic" />
+                                        <span>显示音标</span>
+                                    </label>
+                                    <span class="word-progress" id="current-word-progress">3/8</span>
+                                </div>
                             </div>
                             <div class="review-content">
                                 <div class="word-chinese" id="current-word-chinese">苹果</div>
@@ -337,7 +346,10 @@
                         <button type="button" id="admin-save-deepseek" class="btn btn-primary admin-config-save">保存 API Key</button>
                     </div>
 
-                    <h3 class="admin-subtitle">用户词库管理</h3>
+                    <details class="admin-words-details">
+                        <summary class="admin-words-details-summary">
+                            <span class="admin-subtitle">用户词库管理</span>
+                        </summary>
                     <div class="admin-config-section" id="admin-words-panel">
                         <p class="admin-hint">从指定用户的学习数据中<strong>永久删除</strong>单词（不可恢复，需重新导入）。</p>
                         <div class="form-group admin-config-group">
@@ -376,6 +388,7 @@
                         </div>
                         <p class="admin-hint" id="admin-words-empty" style="display:none;">该用户暂无单词或筛选无结果。</p>
                     </div>
+                    </details>
 
                     <h3 class="admin-subtitle">用户</h3>
                     <div class="admin-table-wrap">

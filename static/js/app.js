@@ -233,9 +233,25 @@ function showMessage(message, type = 'success') {
     }, 3000);
 }
 
+const REVIEW_PHONETIC_STORAGE_KEY = 'english_reciter_review_show_phonetic';
+
+function updateReviewPhoneticDisplay(word) {
+    const phEl = document.getElementById('current-word-phonetic');
+    const cb = document.getElementById('review-show-phonetic');
+    if (!phEl) return;
+    const show = cb && cb.checked && word && String(word.phonetic || '').trim();
+    if (show) {
+        phEl.textContent = String(word.phonetic).trim();
+        phEl.hidden = false;
+    } else {
+        phEl.textContent = '';
+        phEl.hidden = true;
+    }
+}
+
 // 生成提示字符串
 function getHintString(word, revealedCount) {
-    const wordText = (word._targetAnswer || word.example_form || word.english || '');
+    const wordText = (word._targetAnswer || word.english || '');
     if (revealedCount >= wordText.length) {
         return wordText;
     }
@@ -246,7 +262,7 @@ function getHintString(word, revealedCount) {
 
 // 初始化下划线显示 + 透明输入层（桌面/移动端统一，可唤起软键盘）
 function initializeUnderlineInput(word) {
-    const target = (word.example_form || '').trim() || word.english;
+    const target = (word.english || '').trim();
     initializeUnderlineInputForTarget(word, target);
 }
 
@@ -1342,9 +1358,8 @@ async function showCurrentWord() {
     isSubmitting = false;
     isAdvancing = false;
 
-    // 确定本题需要填写的答案（优先 example_form，否则 english 原形）
-    const targetAnswer = (word.example_form || '').trim() || word.english;
-    // 将 targetAnswer 存到 word 上供 getHintString 用
+    // 本题仅填写单词原形（english），例句中可为变形，挖空仍按变形匹配
+    const targetAnswer = (word.english || '').trim();
     word._targetAnswer = targetAnswer;
     
     // 显示中文意思
@@ -1377,9 +1392,10 @@ async function showCurrentWord() {
     
     document.getElementById('current-word-example').textContent = exampleText;
     
-    // 提示字符串基于 targetAnswer
+    // 提示字符串基于原形长度
     const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
     document.getElementById('current-word-english').textContent = hintString;
+    updateReviewPhoneticDisplay(word);
     
     // 绑定朗读按钮事件
     const speakBtn = document.getElementById('speak-example-btn');
@@ -1420,7 +1436,6 @@ async function submitAnswer() {
             body: JSON.stringify({
                 word_id: word.english,
                 answer: answer,
-                example_form: word.example_form || '',
                 remedial: wrongRoundNumber > 0 && reviewSessionMode !== 'bonus',
                 bonus_practice: reviewSessionMode === 'bonus'
             })
@@ -1464,7 +1479,7 @@ async function submitAnswer() {
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
         messageDiv.style.display = 'block';
         
-        const targetAnswer = word._targetAnswer || word.example_form || word.english;
+        const targetAnswer = word._targetAnswer || word.english;
         if (result.correct) {
             // 答案正确，显示完整答案，然后进入下一个单词
             document.getElementById('current-word-english').textContent = targetAnswer;
@@ -1502,7 +1517,7 @@ async function submitAnswer() {
                 }, 1500);
             } else {
                 // 还有尝试机会，更新提示字符串
-                const targetAnswer = word._targetAnswer || word.example_form || word.english;
+                const targetAnswer = word._targetAnswer || word.english;
                 const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
                 document.getElementById('current-word-english').textContent = hintString;
                 
@@ -1972,6 +1987,16 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         prime();
         window.speechSynthesis.addEventListener('voiceschanged', prime);
+    }
+
+    const phoneticCb = document.getElementById('review-show-phonetic');
+    if (phoneticCb) {
+        phoneticCb.checked = localStorage.getItem(REVIEW_PHONETIC_STORAGE_KEY) === '1';
+        phoneticCb.addEventListener('change', () => {
+            localStorage.setItem(REVIEW_PHONETIC_STORAGE_KEY, phoneticCb.checked ? '1' : '0');
+            const word = currentReviewList[currentReviewIndex];
+            if (word) updateReviewPhoneticDisplay(word);
+        });
     }
 
     // 登录表单
