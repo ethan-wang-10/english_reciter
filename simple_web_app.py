@@ -1045,8 +1045,11 @@ def get_status(username):
     try:
         with user_reciter_session(username) as reciter:
             all_words = []
+            today_d = date.today()
             for w in reciter.all_words:
                 csv_row = lookup_csv_word(w.english)
+                nd = w.next_review_date
+                is_co = nd < today_d
                 all_words.append({
                     'english': w.english,
                     'chinese': w.chinese,
@@ -1055,8 +1058,10 @@ def get_status(username):
                     'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
                     'review_round': w.review_round,
                     'review_count': w.review_count,
-                    'next_review_date': w.next_review_date.isoformat(),
-                    'remaining_days': (w.next_review_date - date.today()).days
+                    'next_review_date': nd.isoformat(),
+                    'remaining_days': (nd - today_d).days,
+                    'is_carryover': is_co,
+                    'carryover_days': (today_d - nd).days if is_co else 0,
                 })
 
             stats = {
@@ -1080,7 +1085,10 @@ def get_review_list(username):
             review_list = reciter.get_today_review_list()
 
             words = []
+            today_d = date.today()
             for w in review_list:
+                nd = w.next_review_date
+                is_carryover = nd < today_d
                 item = {
                     'english': w.english,
                     'chinese': w.chinese,
@@ -1089,6 +1097,9 @@ def get_review_list(username):
                     'review_count': w.review_count,
                     'example': w.example,
                     'example_form': '',
+                    'scheduled_due_date': nd.isoformat(),
+                    'is_carryover': is_carryover,
+                    'carryover_days': (today_d - nd).days if is_carryover else 0,
                 }
                 # 尝试从 CSV 中获取更丰富的例句信息
                 csv_row = lookup_csv_word(w.english)
@@ -1115,6 +1126,7 @@ def get_extra_review_list(username):
             picked = reciter.get_extra_review_words(5)
             words = []
             for w in picked:
+                nd = w.next_review_date
                 item = {
                     'english': w.english,
                     'chinese': w.chinese,
@@ -1123,6 +1135,9 @@ def get_extra_review_list(username):
                     'review_count': w.review_count,
                     'example': w.example,
                     'example_form': '',
+                    'scheduled_due_date': nd.isoformat(),
+                    'is_carryover': False,
+                    'carryover_days': 0,
                 }
                 csv_row = lookup_csv_word(w.english)
                 if csv_row:

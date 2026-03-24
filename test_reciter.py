@@ -303,14 +303,26 @@ class TestWordReciter(unittest.TestCase):
         self.assertEqual(len(reciter.mastered_words), 0)
     
     def test_process_overdue_words(self):
-        """测试处理过期单词"""
+        """逾期单词不再被改成今天，以保留「遗留」可区分性"""
         reciter = WordReciter(self.config)
         yesterday = date.today() - timedelta(days=1)
         word = Word("test", "测试", next_review_date=yesterday)
         reciter.all_words.append(word)
         
         reciter._process_overdue_words()
-        self.assertEqual(word.next_review_date, date.today())
+        self.assertEqual(word.next_review_date, yesterday)
+
+    def test_today_scheduled_first_then_carryover_oldest(self):
+        """今日列表：今日排期优先，遗留在后（越早到期越靠前）"""
+        reciter = WordReciter(self.config)
+        t0 = date.today()
+        reciter.all_words = [
+            Word("now", "今", next_review_date=t0),
+            Word("mid", "中", next_review_date=t0 - timedelta(days=1)),
+            Word("old", "旧", next_review_date=t0 - timedelta(days=5)),
+        ]
+        lst = reciter._get_today_review_list()
+        self.assertEqual([w.english for w in lst], ["now", "old", "mid"])
     
     def test_get_today_review_list(self):
         """测试获取今日复习列表"""

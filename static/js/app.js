@@ -1455,6 +1455,24 @@ async function showCurrentWord() {
     const targetAnswer = (word.english || '').trim();
     word._targetAnswer = targetAnswer;
     
+    const dueHint = document.getElementById('review-due-hint');
+    if (dueHint) {
+        if (reviewSessionMode === 'bonus') {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-bonus';
+            dueHint.textContent = '随机加练（不改变掌握进度与排期）';
+        } else if (word.is_carryover) {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-carryover';
+            const d = Number(word.carryover_days) > 0 ? Number(word.carryover_days) : 1;
+            dueHint.textContent = `此前未按计划完成 · 已逾期 ${d} 天（排在今日排期之后）`;
+        } else {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-scheduled';
+            dueHint.textContent = '今日排期复习';
+        }
+    }
+
     // 显示中文意思
     document.getElementById('current-word-chinese').textContent = word.chinese;
     const maxSucc = word.max_success_count != null ? word.max_success_count : 8;
@@ -1676,12 +1694,15 @@ async function loadProgress() {
         const listHtml = data.words.map((word) => {
             const nextLine = escapeHtml(formatNextReviewLine(word));
             const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
+            const coTag = word.is_carryover
+                ? `<span class="word-item-carryover-tag">遗留${word.carryover_days ? ` · 逾期${word.carryover_days}天` : ''}</span>`
+                : '';
             return `
             <div class="word-item">
                 <div class="word-item-info">
                     <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
                     <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
-                    <div class="word-item-next-review">下次复习：${nextLine}</div>
+                    <div class="word-item-next-review">下次复习：${nextLine} ${coTag}</div>
                 </div>
                 <div class="word-item-stats">
                     <div class="word-stat">

@@ -619,6 +619,33 @@ body {
     box-shadow: 0 3px 0 var(--secondary-dark);
 }
 
+.review-due-hint {
+    margin: 0 0 12px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    line-height: 1.4;
+}
+
+.review-due-hint-carryover {
+    background: #fff8e6;
+    color: #b45309;
+    border: 1px solid #fbbf24;
+}
+
+.review-due-hint-scheduled {
+    background: #eef6ff;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+}
+
+.review-due-hint-bonus {
+    background: #f3f4f6;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
 .word-chinese {
     font-size: 1.35rem;
     margin-bottom: 18px;
@@ -862,6 +889,19 @@ body {
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-secondary);
+}
+
+.word-item-carryover-tag {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #b45309;
+    background: #fff8e6;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid #fbbf24;
+    vertical-align: middle;
 }
 
 .word-item-next-review {

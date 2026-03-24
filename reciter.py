@@ -441,15 +441,13 @@ class WordReciter:
         print("\n📊 本次复习完成！")
     
     def _process_overdue_words(self) -> None:
-        """处理过期单词"""
-        overdue_count = 0
-        for word in self.all_words:
-            if word.next_review_date < self.today:
-                word.next_review_date = self.today
-                overdue_count += 1
-        
+        """
+        跨日时调用。不再把逾期日期强行改为「今天」，以保留 next_review_date < 今天，
+        用于区分「此前未按计划完成而遗留」与「今日排期」；列表内先今日排期、后遗留。
+        """
+        overdue_count = sum(1 for w in self.all_words if w.next_review_date < self.today)
         if overdue_count > 0:
-            logger.info(f"更新了 {overdue_count} 个过期单词的复习日期")
+            logger.info(f"当前有 {overdue_count} 个单词的排期早于今日（遗留，排在今日排期之后）")
     
     def _update_review_round(self) -> None:
         """更新复习轮次"""
@@ -580,6 +578,15 @@ class WordReciter:
         word.next_review_date = self.today + timedelta(days=delta_days)
         return f'✅ 正确！下次复习: +{delta_days}天'
 
+    def _sort_today_review_bucket(self, words: List[Word]) -> List[Word]:
+        """同一轮内排序：今日排期（符合进度）优先，其次遗留（越早到期越靠前）。"""
+        today = self.today
+        due_today = [w for w in words if w.next_review_date == today]
+        carryover = [w for w in words if w.next_review_date < today]
+        due_today.sort(key=lambda w: (w.review_count, w.english.lower()))
+        carryover.sort(key=lambda w: (w.next_review_date, w.review_count, w.english.lower()))
+        return due_today + carryover
+
     def _get_today_review_list(self) -> List[Word]:
         """获取今日复习列表"""
         overdue_words = [w for w in self.all_words if w.next_review_date <= self.today]
@@ -594,13 +601,11 @@ class WordReciter:
         
         if self.current_review_round in words_by_round:
             current_round_words = words_by_round[self.current_review_round]
-            current_round_words.sort(key=lambda w: w.review_count)
-            return current_round_words
+            return self._sort_today_review_bucket(current_round_words)
         
         min_round = min(words_by_round.keys())
         min_round_words = words_by_round[min_round]
-        min_round_words.sort(key=lambda w: w.review_count)
-        return min_round_words
+        return self._sort_today_review_bucket(min_round_words)
     
     def show_status(self) -> None:
         """显示复习状态看板"""
