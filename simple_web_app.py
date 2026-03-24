@@ -1451,7 +1451,7 @@ def import_vocab_to_csv(username):
     - 查找 CSV 中没有的词
     - 用 DeepSeek 生成完整词条
     - append 到 CSV
-    - 同时加入用户待复习
+    - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
     if not is_paid_user(username):
         return jsonify({'error': '词汇导入功能仅限付费版用户使用'}), 403
@@ -1546,6 +1546,8 @@ def import_vocab_to_csv(username):
         msg += f"，{len(failed_words)} 个生成失败"
     if queue_result:
         msg += f"；已加入待复习 {queue_result.get('added', 0)} 个"
+    elif not also_queue:
+        msg += "；未加入待复习（仅写入词库）"
 
     return jsonify({
         'message': msg,
@@ -1554,6 +1556,7 @@ def import_vocab_to_csv(username):
         'already_in_csv_words': already_in_csv,
         'failed': failed_words,
         'queue_result': queue_result,
+        'also_add_to_queue': also_queue,
     }), 200
 
 

@@ -1052,6 +1052,7 @@ function showLoginPage() {
     document.getElementById('main-page').classList.remove('active');
     const gl = document.getElementById('admin-gear-login');
     if (gl) gl.style.display = '';
+    document.querySelector('#main-page .nav-user')?.removeAttribute('aria-label');
 }
 
 function showMainPage() {
@@ -1059,8 +1060,13 @@ function showMainPage() {
     document.getElementById('main-page').classList.add('active');
     const gl = document.getElementById('admin-gear-login');
     if (gl) gl.style.display = 'none';
-    document.getElementById('username-display').textContent = username;
-    
+    const udisp = document.getElementById('username-display');
+    if (udisp) udisp.textContent = username;
+    document.querySelector('#main-page .nav-user')?.setAttribute(
+        'aria-label',
+        username ? `当前用户 ${username}` : ''
+    );
+
     loadStats();
     // 获取用户套餐
     loadUserPlan();
@@ -2197,6 +2203,7 @@ async function importVocabToCSV() {
     }
     const ta = document.getElementById('import-vocab-textarea');
     const levelSel = document.getElementById('import-vocab-level');
+    const addToQueueCb = document.getElementById('import-vocab-add-to-queue');
     if (!ta) return;
     const raw = ta.value.trim();
     if (!raw) {
@@ -2204,6 +2211,7 @@ async function importVocabToCSV() {
         return;
     }
     const level = levelSel ? levelSel.value : '';
+    const alsoAddToQueue = addToQueueCb ? !!addToQueueCb.checked : true;
     const btn = document.getElementById('import-vocab-btn');
     if (btn) {
         btn.disabled = true;
@@ -2212,7 +2220,7 @@ async function importVocabToCSV() {
     try {
         const data = await apiRequest('/wordbank/csv/import-words', {
             method: 'POST',
-            body: JSON.stringify({ words: raw, level, also_add_to_queue: true })
+            body: JSON.stringify({ words: raw, level, also_add_to_queue: alsoAddToQueue })
         });
         showMessage(buildVocabImportFeedback(data), 'success', 9000);
         ta.value = '';

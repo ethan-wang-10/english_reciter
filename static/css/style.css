@@ -353,6 +353,10 @@ body {
     display: none;
 }
 
+.brand-name-tiny {
+    display: none;
+}
+
 /* 移动端底部 Tab（小屏显示，大屏隐藏） */
 .mobile-tabbar {
     display: none;
@@ -1376,6 +1380,10 @@ body {
     }
 
     .brand-name-short {
+        display: none;
+    }
+
+    .brand-name-tiny {
         display: inline;
     }
 
@@ -1405,30 +1413,33 @@ body {
         display: block;
     }
 
-    /* 顶栏：仅品牌 + 用户区，无横向标签 */
+    /* 顶栏：仅品牌 + 用户区，无横向标签（尽量压低高度与宽度占用） */
     .navbar {
         flex-direction: row;
         flex-wrap: nowrap;
         align-items: center;
-        gap: 8px;
-        padding: 6px 10px;
-        padding-top: max(6px, env(safe-area-inset-top, 0px));
+        gap: 6px;
+        padding: 3px 8px;
+        padding-top: max(2px, env(safe-area-inset-top, 0px));
+        border-bottom-width: 2px;
+        box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04);
     }
 
     .nav-brand {
         flex-shrink: 0;
-        max-width: 42%;
-        gap: 6px;
+        max-width: 36%;
+        gap: 4px;
         min-width: 0;
     }
 
-    .logo {
-        font-size: 22px;
+    .nav-brand .logo {
+        display: none;
     }
 
     .brand-name {
-        font-size: 0.95rem;
-        max-width: 9em;
+        font-size: 0.88rem;
+        font-weight: 800;
+        max-width: 5.5em;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1443,21 +1454,31 @@ body {
     .nav-user {
         flex-shrink: 0;
         width: auto;
-        gap: 6px;
+        gap: 4px;
     }
 
     .nav-user #username-display {
-        max-width: 4.5rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        padding: 5px 8px;
-        font-size: 0.72rem;
+        display: none;
+    }
+
+    .navbar .btn-gear {
+        width: 32px;
+        height: 32px;
+        font-size: 1.05rem;
+        border-radius: 8px;
+        border-width: 1px;
     }
 
     .nav-user .btn-secondary {
-        padding: 6px 10px;
-        font-size: 0.78rem;
+        padding: 4px 8px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        border-width: 1px;
+        box-shadow: 0 2px 0 var(--primary-dark);
+    }
+
+    .nav-user .btn-secondary:active {
+        box-shadow: none;
     }
 
     /* 三列一排，减少纵向占用 */
@@ -2239,6 +2260,24 @@ body {
     font-family: inherit;
     background: #fff;
     cursor: pointer;
+}
+.import-vocab-queue-row {
+    flex-wrap: wrap;
+}
+.import-vocab-queue-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+.import-vocab-queue-label input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color);
 }
 .import-locked-hint {
     margin-top: 12px;

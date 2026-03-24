@@ -80,7 +80,7 @@
             <nav class="navbar">
                 <div class="nav-brand">
                     <span class="logo">📚</span>
-                    <span class="brand-name"><span class="brand-name-full">智能英语背诵</span><span class="brand-name-short" aria-hidden="true">智能背诵</span></span>
+                    <span class="brand-name"><span class="brand-name-full">智能英语背诵</span><span class="brand-name-short" aria-hidden="true">智能背诵</span><span class="brand-name-tiny" aria-hidden="true">背诵</span></span>
                 </div>
                 <div class="nav-menu nav-menu-desktop">
                     <button class="nav-item active" data-page="review">今日复习</button>
@@ -293,7 +293,7 @@
                     <div class="import-vocab-panel" id="import-vocab-panel">
                         <h3 class="import-json-title">词汇导入 <span class="paid-badge">付费版</span></h3>
                         <p class="import-json-desc">
-                            输入逗号分隔的单词列表（如：attack, curious, abandon）。系统会检查词库中没有的词，并用 AI 自动生成释义和例句后写入词库，同时加入你的待复习列表。
+                            输入逗号分隔的单词列表（如：attack, curious, abandon）。系统会检查词库中没有的词，并用 AI 自动生成释义和例句后写入词库。可勾选是否将词同步加入你的待复习列表；不勾选则仅扩充词库，不加入当前账号的待复习。
                         </p>
                         <textarea id="import-vocab-textarea" class="import-json-textarea" rows="4"
                             spellcheck="false" placeholder="attack, curious, abandon, persevere"></textarea>
@@ -306,6 +306,12 @@
                                 <option value="高中">高中</option>
                                 <option value="GRE">GRE</option>
                             </select>
+                        </div>
+                        <div class="import-vocab-options import-vocab-queue-row">
+                            <label class="import-vocab-queue-label">
+                                <input type="checkbox" id="import-vocab-add-to-queue" checked />
+                                <span>加入我的待复习列表</span>
+                            </label>
                         </div>
                         <button type="button" id="import-vocab-btn" class="btn btn-primary import-json-btn">词汇导入</button>
                         <div id="import-vocab-locked" class="import-locked-hint" style="display:none;">
