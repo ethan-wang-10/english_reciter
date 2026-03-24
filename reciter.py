@@ -933,6 +933,8 @@ class WordReciter:
         added: List[Word] = []
         skipped_duplicate = 0
         skipped_invalid = 0
+        skipped_duplicate_words: List[str] = []
+        _dup_cap = 80
 
         for raw in items:
             if not isinstance(raw, dict):
@@ -946,6 +948,8 @@ class WordReciter:
             key = en.lower()
             if key in existing:
                 skipped_duplicate += 1
+                if len(skipped_duplicate_words) < _dup_cap:
+                    skipped_duplicate_words.append(en)
                 continue
             try:
                 payload = dict(raw)
@@ -975,6 +979,7 @@ class WordReciter:
             'added': len(added),
             'skipped_duplicate': skipped_duplicate,
             'skipped_invalid': skipped_invalid,
+            'skipped_duplicate_words': skipped_duplicate_words,
         }
 
 

@@ -30,6 +30,9 @@ let sessionNewMastered = [];
 /** daily=今日待复习；bonus=无待复习时的随机加练 */
 let reviewSessionMode = 'daily';
 
+/** 主轮结束后在弹框中选择「稍后再说」未进入错题巩固（用于总结文案） */
+let sessionSkippedRemedialAfterMain = false;
+
 /** 最近一次 GET /api/gamification 结果，用于成就展示 */
 let lastGamificationProfile = null;
 
@@ -221,7 +224,7 @@ function showError(message) {
     }, 3000);
 }
 
-function showMessage(message, type = 'success') {
+function showMessage(message, type = 'success', durationMs = 3000) {
     const messageDiv = document.getElementById('import-message');
     if (!messageDiv) return;
     messageDiv.textContent = message;
@@ -230,7 +233,35 @@ function showMessage(message, type = 'success') {
     setTimeout(() => {
         messageDiv.className = 'message';
         messageDiv.style.display = 'none';
-    }, 3000);
+    }, durationMs);
+}
+
+/** 词汇导入（付费）接口返回拼装成可读说明（在服务端 message 基础上补充词条明细） */
+function buildVocabImportFeedback(data) {
+    let msg = data.message || '处理完成';
+    const q = data.queue_result;
+    if (q) {
+        if (q.skipped_duplicate && q.skipped_duplicate > 0) {
+            const dw = q.skipped_duplicate_words;
+            if (Array.isArray(dw) && dw.length) {
+                const show = dw.slice(0, 22);
+                msg += ` 待复习重复：${show.join('、')}${dw.length > 22 ? '…' : ''}`;
+            }
+        }
+        if (q.skipped_invalid && q.skipped_invalid > 0) {
+            msg += ` 无效 ${q.skipped_invalid} 条已忽略。`;
+        }
+    }
+    const aw = data.already_in_csv_words;
+    if (Array.isArray(aw) && aw.length) {
+        const show = aw.slice(0, 18);
+        msg += ` 系统词库已有：${show.join('、')}${aw.length > 18 ? '…' : ''}`;
+    }
+    if (Array.isArray(data.failed) && data.failed.length) {
+        const show = data.failed.slice(0, 10);
+        msg += ` AI 生成失败：${show.join('、')}${data.failed.length > 10 ? '…' : ''}`;
+    }
+    return msg;
 }
 
 const REVIEW_PHONETIC_STORAGE_KEY = 'english_reciter_review_show_phonetic';
@@ -1114,6 +1145,10 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
             `<div class="review-summary-section"><strong>错题巩固</strong>：共完成 ${remedialRoundsDone} 轮；` +
             `错题轮累计答对 ${remedialOk} 次（含同一词多次练习）。</div>`
         );
+    } else if (mainFailed > 0 && sessionSkippedRemedialAfterMain) {
+        parts.push(
+            `<div class="review-summary-section"><strong>错题巩固</strong>：主轮有 ${mainFailed} 个词 3 次均未答对，你已选择「稍后再说」，本次未进行错题巩固。</div>`
+        );
     } else {
         parts.push(
             `<div class="review-summary-section"><strong>错题巩固</strong>：未触发，所有词在主轮已过关。</div>`
@@ -1140,6 +1175,8 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
         }
     } else if (wrongTries === 0 && mainFailed === 0) {
         tip = '全对通过，保持节奏即可。';
+    } else if (mainFailed > 0 && sessionSkippedRemedialAfterMain) {
+        tip = '可随时点击「继续学习」再次进入今日复习流程；错题仍会在后续排期中再次出现。';
     } else if (mainFailed > 0 || remedialRoundsDone > 1) {
         tip = '错题已巩固完成；不熟悉的词可在「学习进度」里查看下次复习时间。';
     } else if (wrongTries > 0) {
@@ -1193,12 +1230,8 @@ function applyWrongOrderToRemaining() {
     currentReviewList = [...done, ...remaining];
 }
 
-/** 一轮题目做完：无错题则结束；有错题则自动进入下一轮错题复习，直到本轮零错题 */
-function onPassComplete() {
-    if (wrongWordsOrder.length === 0) {
-        showFinalComplete();
-        return;
-    }
+/** 进入下一轮错题复习（主轮结束后需用户确认时由弹框调用，或错题轮结束后自动调用） */
+function enterRemedialRound() {
     wrongRoundNumber += 1;
     const n = wrongWordsOrder.length;
     const msg = wrongRoundNumber === 1
@@ -1210,7 +1243,6 @@ function onPassComplete() {
     if (getWrongOrder() === 'random') {
         shuffleArray(orderedList);
     }
-    // 'field' 保持原来的出现顺序
 
     currentReviewList = orderedList;
     wrongWordsOrder = [];
@@ -1229,6 +1261,55 @@ function onPassComplete() {
     setTimeout(() => showCurrentWord(), 400);
 }
 
+function closeRemedialOfferModal() {
+    const modal = document.getElementById('remedial-offer-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+}
+
+/** 当日主轮结束且有错题：弹框询问，不自动进入错题复习 */
+function showRemedialOfferModal() {
+    const n = wrongWordsOrder.length;
+    const countEl = document.getElementById('remedial-offer-count');
+    if (countEl) countEl.textContent = String(n);
+    const modal = document.getElementById('remedial-offer-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+    }
+    document.getElementById('review-box').style.display = 'none';
+    document.getElementById('review-complete').style.display = 'none';
+}
+
+function onRemedialOfferAccept() {
+    closeRemedialOfferModal();
+    sessionSkippedRemedialAfterMain = false;
+    enterRemedialRound();
+}
+
+function onRemedialOfferDecline() {
+    closeRemedialOfferModal();
+    wrongWordsOrder = [];
+    wrongWordsInThisPass = new Set();
+    sessionSkippedRemedialAfterMain = true;
+    showFinalComplete();
+}
+
+/** 一轮题目做完：无错题则结束；主轮有错题时弹框确认；错题轮之间仍自动进入下一轮 */
+function onPassComplete() {
+    if (wrongWordsOrder.length === 0) {
+        showFinalComplete();
+        return;
+    }
+    if (wrongRoundNumber === 0 && reviewSessionMode === 'daily') {
+        showRemedialOfferModal();
+        return;
+    }
+    enterRemedialRound();
+}
+
 function showFinalComplete() {
     document.getElementById('review-box').style.display = 'none';
     document.getElementById('review-complete').style.display = 'block';
@@ -1237,12 +1318,20 @@ function showFinalComplete() {
     const summaryEl = document.getElementById('review-session-summary');
     const isBonus = reviewSessionMode === 'bonus';
     if (titleEl) {
-        titleEl.textContent = isBonus ? '加练完成！' : '今日复习完成！';
+        if (!isBonus && sessionSkippedRemedialAfterMain) {
+            titleEl.textContent = '今日主轮复习完成';
+        } else {
+            titleEl.textContent = isBonus ? '加练完成！' : '今日复习完成！';
+        }
     }
     if (descEl) {
-        descEl.textContent = isBonus
-            ? '本次随机加练已完成（含错题巩固）。'
-            : '恭喜！今日待复习已全部完成（含错题巩固）。';
+        if (!isBonus && sessionSkippedRemedialAfterMain) {
+            descEl.textContent = '你已选择暂不进行错题巩固，可随时点击「继续学习」再次进入复习。';
+        } else {
+            descEl.textContent = isBonus
+                ? '本次随机加练已完成（含错题巩固）。'
+                : '恭喜！今日待复习已全部完成（含错题巩固）。';
+        }
     }
     const remedialRoundsDone = wrongRoundNumber;
     showReviewEmptyActions(false);
@@ -1253,6 +1342,7 @@ function showFinalComplete() {
     wrongWordsOrder = [];
     wrongWordsInThisPass = new Set();
     wrongRoundNumber = 0;
+    sessionSkippedRemedialAfterMain = false;
     renderWrongPanel();
     updateWrongRoundLabel();
     loadStats();
@@ -1270,6 +1360,7 @@ function showInitialEmptyReview() {
     hideReviewSessionSummary();
     reviewSessionMode = 'daily';
     showReviewEmptyActions(true);
+    sessionSkippedRemedialAfterMain = false;
     wrongWordsOrder = [];
     wrongWordsInThisPass = new Set();
     wrongRoundNumber = 0;
@@ -1280,6 +1371,7 @@ function showInitialEmptyReview() {
 
 async function loadReviewList() {
     try {
+        sessionSkippedRemedialAfterMain = false;
         wrongWordsInThisPass = new Set();
         wrongWordsOrder = [];
         wrongRoundNumber = 0;
@@ -1318,6 +1410,7 @@ async function startBonusReview() {
             showMainBanner('词库为空，请先导入单词');
             return;
         }
+        sessionSkippedRemedialAfterMain = false;
         wrongWordsInThisPass = new Set();
         wrongWordsOrder = [];
         wrongRoundNumber = 0;
@@ -1826,10 +1919,16 @@ async function wordbankImportSelected() {
         showMessage('没有可导入的词条（请重新搜索并勾选）', 'error');
         return;
     }
+    const importBtn = document.getElementById('wordbank-import-btn');
+    if (importBtn) {
+        importBtn.disabled = true;
+        importBtn.textContent = '导入中…';
+    }
     const chunk = 500;
     let added = 0;
     let skipped = 0;
     let invalid = 0;
+    const dupWords = [];
     try {
         for (let i = 0; i < items.length; i += chunk) {
             const part = items.slice(i, i + chunk);
@@ -1840,11 +1939,22 @@ async function wordbankImportSelected() {
             added += data.added || 0;
             skipped += data.skipped_duplicate || 0;
             invalid += data.skipped_invalid || 0;
+            if (Array.isArray(data.skipped_duplicate_words)) {
+                dupWords.push(...data.skipped_duplicate_words);
+            }
         }
-        let msg = `成功加入 ${added} 个新单词`;
-        if (skipped) msg += `，已跳过 ${skipped} 个重复`;
-        if (invalid) msg += `，${invalid} 条无效已忽略`;
-        showMessage(msg, 'success');
+        const dupUnique = [...new Set(dupWords)];
+        const parts = [];
+        if (added > 0) parts.push(`新加入 ${added} 个`);
+        if (skipped > 0) parts.push(`已有 ${skipped} 个在学习列表中（重复）`);
+        if (invalid > 0) parts.push(`${invalid} 条无效已忽略`);
+        let msg = parts.join('；') || '完成';
+        if (dupUnique.length) {
+            const show = dupUnique.slice(0, 28);
+            msg += `。重复词条：${show.join('、')}${dupUnique.length > 28 ? '…' : ''}`;
+        }
+        const msgType = added > 0 ? 'success' : 'info';
+        showMessage(msg, msgType, 6500);
         // 清空已选
         wbState.selected.clear();
         wbState.selectedMap.clear();
@@ -1853,6 +1963,11 @@ async function wordbankImportSelected() {
         loadStats();
     } catch (error) {
         showMessage(error.message, 'error');
+    } finally {
+        if (importBtn) {
+            importBtn.disabled = false;
+            importBtn.textContent = '将选中的词加入待复习';
+        }
     }
 }
 
@@ -1883,7 +1998,12 @@ async function importFromArticle() {
         const method = data.method === 'deepseek' ? '（AI提取）' : '（空格分词）';
 
         if (words.length === 0) {
-            showMessage(data.message || '未在词库中找到匹配词汇', 'error');
+            const st = data.stats;
+            let hint = data.message || '未在词库中找到匹配词汇';
+            if (st && typeof st.lemmas_total === 'number') {
+                hint += `（从文章识别 ${st.lemmas_total} 个不重复英文词，词库中均无匹配）`;
+            }
+            showMessage(hint, 'error', 5500);
             if (resultDiv) resultDiv.style.display = 'none';
             return;
         }
@@ -1926,6 +2046,15 @@ async function importFromArticle() {
             resultDiv.innerHTML =
                 `<p class="article-result-title">✓ 已提取 ${words.length} 个词汇 ${method}${extraHint}，请确认后点击「将选中的词加入待复习」。</p>`;
         }
+        const st = data.stats;
+        if (st && typeof st.lemmas_total === 'number') {
+            const modeLabel = data.method === 'deepseek' ? 'AI 提取原形' : '按空格分词';
+            showMessage(
+                `已从文章得到 ${st.lemmas_total} 个不重复英文词（${modeLabel}）。其中 ${st.matched_in_csv} 个在系统词库中有词条；另有 ${st.not_in_csv} 个词库中暂无。当前已勾选 ${words.length} 条，确认后点击「将选中的词加入待复习」。`,
+                'success',
+                7000
+            );
+        }
         ta.value = '';
     } catch (error) {
         showMessage(error.message || '提取失败', 'error');
@@ -1959,7 +2088,7 @@ async function importVocabToCSV() {
             method: 'POST',
             body: JSON.stringify({ words: raw, level, also_add_to_queue: true })
         });
-        showMessage(data.message || '词汇导入成功', 'success');
+        showMessage(buildVocabImportFeedback(data), 'success', 9000);
         ta.value = '';
         if (levelSel) levelSel.value = '';
         loadStats();
@@ -2134,6 +2263,14 @@ document.addEventListener('DOMContentLoaded', function() {
         radio.addEventListener('change', () => {
             applyWrongOrderToRemaining();
         });
+    });
+
+    document.getElementById('remedial-offer-accept')?.addEventListener('click', onRemedialOfferAccept);
+    document.getElementById('remedial-offer-decline')?.addEventListener('click', onRemedialOfferDecline);
+    document.getElementById('remedial-offer-modal')?.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remedial-offer-backdrop')) {
+            onRemedialOfferDecline();
+        }
     });
 
     initWordbankPanel();

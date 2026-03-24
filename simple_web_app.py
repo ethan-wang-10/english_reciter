@@ -1395,12 +1395,19 @@ def import_from_article(username):
         method = 'simple'
 
     csv_set = get_csv_english_set()
-    matched_keys = [w for w in lemmas if w in csv_set]
+    unique_lemmas = list(dict.fromkeys(lemmas))
+    matched_keys = [w for w in unique_lemmas if w in csv_set]
+    stats = {
+        'lemmas_total': len(unique_lemmas),
+        'matched_in_csv': len(matched_keys),
+        'not_in_csv': len(unique_lemmas) - len(matched_keys),
+    }
     if not matched_keys:
         return jsonify({
             'message': '未在词库中找到匹配词汇',
             'method': method,
             'words': [],
+            'stats': stats,
         }), 200
 
     # 返回完整词条数据，供前端注入选框
@@ -1410,10 +1417,13 @@ def import_from_article(username):
         if row:
             words.append(row)
 
+    stats['matched_in_csv'] = len(words)
+
     return jsonify({
         'message': f'从文章提取到 {len(words)} 个匹配词汇，请勾选后加入待复习',
         'method': method,
         'words': words,
+        'stats': stats,
     }), 200
 
 
@@ -1526,6 +1536,7 @@ def import_vocab_to_csv(username):
         'message': msg,
         'new_in_csv': len(generated_entries),
         'already_in_csv': len(already_in_csv),
+        'already_in_csv_words': already_in_csv,
         'failed': failed_words,
         'queue_result': queue_result,
     }), 200

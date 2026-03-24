@@ -496,6 +496,56 @@ body {
     }
 }
 
+/* 主轮结束 → 错题巩固确认弹层 */
+.remedial-offer-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2500;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: max(16px, env(safe-area-inset-top, 16px)) max(16px, env(safe-area-inset-right, 16px))
+        max(16px, env(safe-area-inset-bottom, 16px)) max(16px, env(safe-area-inset-left, 16px));
+}
+
+.remedial-offer-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.48);
+}
+
+.remedial-offer-card {
+    position: relative;
+    z-index: 1;
+    max-width: 420px;
+    width: 100%;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 3px solid var(--primary-color);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+    padding: 24px 22px 22px;
+}
+
+.remedial-offer-card h3 {
+    margin: 0 0 12px;
+    font-size: 1.2rem;
+    color: var(--primary-dark);
+}
+
+.remedial-offer-body {
+    margin: 0 0 20px;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+}
+
+.remedial-offer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
 .review-box {
     background: var(--surface);
     padding: 32px 28px 36px;
@@ -1104,6 +1154,13 @@ body {
     background: #ffeceb;
     color: var(--error-dark);
     border: 2px solid var(--error-color);
+    display: block;
+}
+
+.message.info {
+    background: #e8f4fc;
+    color: #0d47a1;
+    border: 2px solid #64b5f6;
     display: block;
 }
 
