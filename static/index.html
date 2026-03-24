@@ -80,9 +80,9 @@
             <nav class="navbar">
                 <div class="nav-brand">
                     <span class="logo">📚</span>
-                    <span class="brand-name">智能英语背诵</span>
+                    <span class="brand-name"><span class="brand-name-full">智能英语背诵</span><span class="brand-name-short" aria-hidden="true">智能背诵</span></span>
                 </div>
-                <div class="nav-menu">
+                <div class="nav-menu nav-menu-desktop">
                     <button class="nav-item active" data-page="review">今日复习</button>
                     <button class="nav-item" data-page="progress">学习进度</button>
                     <button class="nav-item" data-page="import">导入单词</button>
@@ -100,6 +100,30 @@
                     <button id="logout-btn" class="btn btn-secondary">退出</button>
                 </div>
             </nav>
+
+            <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="主导航">
+                <button type="button" class="mobile-tab active" data-page="review">今日复习</button>
+                <button type="button" class="mobile-tab" data-page="import">导入</button>
+                <button type="button" class="mobile-tab" data-page="leaderboard">排行</button>
+                <button type="button" class="mobile-tab mobile-tab-more" id="mobile-more-btn" aria-expanded="false" aria-controls="mobile-more-sheet">更多</button>
+            </nav>
+            <div id="mobile-more-sheet" class="mobile-more-sheet" aria-hidden="true">
+                <div class="mobile-more-backdrop" id="mobile-more-backdrop"></div>
+                <div class="mobile-more-panel" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
+                    <div class="mobile-more-panel-head">
+                        <h3 id="mobile-more-title" class="mobile-more-title">更多</h3>
+                        <button type="button" class="mobile-more-close" id="mobile-more-close" aria-label="关闭">×</button>
+                    </div>
+                    <div class="mobile-more-gamification" id="mobile-more-gamification" title="学习积分与连续打卡">
+                        <span class="ng-level" id="mobile-ng-level">Lv.1</span>
+                        <span class="ng-xp" id="mobile-ng-xp">0 XP</span>
+                        <span class="ng-streak" id="mobile-ng-streak" title="连续打卡天数">🔥 0</span>
+                    </div>
+                    <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
+                    <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
+                </div>
+            </div>
+
             <div id="main-error-banner" class="main-error-banner" role="alert" style="display: none;"></div>
             
             <!-- 今日复习页面 -->

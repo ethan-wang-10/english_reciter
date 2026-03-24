@@ -109,10 +109,106 @@ function updateGamificationNav(g) {
     const lv = document.getElementById('ng-level');
     const xp = document.getElementById('ng-xp');
     const st = document.getElementById('ng-streak');
-    if (!lv || !xp || !st) return;
-    lv.textContent = `Lv.${g.level}`;
-    xp.textContent = `${formatNumber(g.total_xp)} XP`;
-    st.textContent = `🔥 ${g.streak}`;
+    if (lv && xp && st) {
+        lv.textContent = `Lv.${g.level}`;
+        xp.textContent = `${formatNumber(g.total_xp)} XP`;
+        st.textContent = `🔥 ${g.streak}`;
+    }
+    const mlv = document.getElementById('mobile-ng-level');
+    const mxp = document.getElementById('mobile-ng-xp');
+    const mst = document.getElementById('mobile-ng-streak');
+    if (mlv && mxp && mst) {
+        mlv.textContent = `Lv.${g.level}`;
+        mxp.textContent = `${formatNumber(g.total_xp)} XP`;
+        mst.textContent = `🔥 ${g.streak}`;
+    }
+}
+
+function openMobileMoreSheet() {
+    const sheet = document.getElementById('mobile-more-sheet');
+    const btn = document.getElementById('mobile-more-btn');
+    if (sheet) {
+        sheet.classList.add('is-open');
+        sheet.setAttribute('aria-hidden', 'false');
+    }
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+}
+
+function closeMobileMoreSheet() {
+    const sheet = document.getElementById('mobile-more-sheet');
+    const btn = document.getElementById('mobile-more-btn');
+    if (sheet) {
+        sheet.classList.remove('is-open');
+        sheet.setAttribute('aria-hidden', 'true');
+    }
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+/** 根据 visualViewport 估算键盘占用高度，供 #main-page 底部 padding 抬高可滚动区域 */
+function updateVisualViewportKeyboardInset() {
+    const vv = window.visualViewport;
+    if (!vv) {
+        document.documentElement.style.setProperty('--keyboard-inset', '0px');
+        return;
+    }
+    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
+}
+
+function isTextLikeField(el) {
+    if (!el) return false;
+    if (el.tagName === 'TEXTAREA') return true;
+    if (el.tagName !== 'INPUT') return false;
+    const type = String(el.type || 'text').toLowerCase();
+    return ['text', 'password', 'search', 'email', 'tel', 'url', 'number'].includes(type) || type === '';
+}
+
+/** 复习透明输入层或导入区输入框聚焦时，将输入区滚入可视范围 */
+function scrollFocusedInputIntoViewIfNeeded() {
+    const el = document.activeElement;
+    if (!el || !isTextLikeField(el)) return;
+    if (el.id === 'mobile-word-capture') {
+        const wrap = el.closest('.underline-input-wrapper');
+        if (wrap) {
+            wrap.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+        }
+        return;
+    }
+    if (el.closest('#import-section')) {
+        el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    }
+}
+
+function setupVisualViewportKeyboardAvoid() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    let raf = null;
+    const schedule = () => {
+        if (raf != null) return;
+        raf = requestAnimationFrame(() => {
+            raf = null;
+            updateVisualViewportKeyboardInset();
+            scrollFocusedInputIntoViewIfNeeded();
+        });
+    };
+
+    vv.addEventListener('resize', schedule);
+    vv.addEventListener('scroll', schedule);
+    window.addEventListener('resize', schedule);
+    schedule();
+
+    document.getElementById('main-page')?.addEventListener('focusin', (e) => {
+        const t = e.target;
+        if (!isTextLikeField(t)) return;
+        if (t.id !== 'mobile-word-capture' && !t.closest('#import-section')) return;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                updateVisualViewportKeyboardInset();
+                scrollFocusedInputIntoViewIfNeeded();
+            });
+        });
+    }, true);
 }
 
 async function refreshGamification() {
@@ -1013,13 +1109,22 @@ function showSection(sectionId) {
     if (sectionElement) {
         sectionElement.classList.add('active');
     }
-    
+
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
-    const navItem = document.querySelector(`[data-page="${sectionId}"]`);
-    if (navItem) {
-        navItem.classList.add('active');
+    document.querySelectorAll('.mobile-tab').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.mobile-more-link').forEach(btn => btn.classList.remove('active'));
+
+    document.querySelectorAll(`.nav-item[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
+    document.querySelectorAll(`.mobile-tab[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
+    document.querySelectorAll(`.mobile-more-link[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
+
+    const moreBtn = document.getElementById('mobile-more-btn');
+    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered')) {
+        moreBtn.classList.add('active');
     }
-    
+
+    closeMobileMoreSheet();
+
     if (sectionId === 'review') {
         loadReviewList();
     } else if (sectionId === 'progress') {
@@ -2126,6 +2231,8 @@ async function importVocabToCSV() {
 // ==================== 事件监听与初始化 ====================
 
 document.addEventListener('DOMContentLoaded', function() {
+    setupVisualViewportKeyboardAvoid();
+
     // 预加载语音列表（Android 等环境首次 getVoices() 可能为空）
     if (typeof window.speechSynthesis !== 'undefined') {
         const prime = () => {
@@ -2201,6 +2308,33 @@ document.addEventListener('DOMContentLoaded', function() {
         item.addEventListener('click', () => {
             const page = item.dataset.page;
             showSection(page);
+        });
+    });
+
+    document.querySelectorAll('.mobile-tab[data-page]').forEach(item => {
+        item.addEventListener('click', () => {
+            const page = item.dataset.page;
+            showSection(page);
+        });
+    });
+
+    const mobileMoreBtn = document.getElementById('mobile-more-btn');
+    if (mobileMoreBtn) {
+        mobileMoreBtn.addEventListener('click', () => {
+            const sheet = document.getElementById('mobile-more-sheet');
+            if (sheet && sheet.classList.contains('is-open')) {
+                closeMobileMoreSheet();
+            } else {
+                openMobileMoreSheet();
+            }
+        });
+    }
+    document.getElementById('mobile-more-backdrop')?.addEventListener('click', closeMobileMoreSheet);
+    document.getElementById('mobile-more-close')?.addEventListener('click', closeMobileMoreSheet);
+    document.querySelectorAll('.mobile-more-link').forEach((item) => {
+        item.addEventListener('click', () => {
+            const page = item.dataset.page;
+            if (page) showSection(page);
         });
     });
 
