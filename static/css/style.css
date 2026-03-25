@@ -1596,6 +1596,7 @@ body {
     flex: 1;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
     padding: 14px 16px;
     border: 3px solid #d4d4d4;
@@ -1639,6 +1640,19 @@ body {
 
 .underline-char.empty {
     color: transparent;
+}
+
+.underline-char.fixed {
+    border-bottom: none;
+    min-width: 0.35em;
+    color: var(--text-secondary);
+    font-weight: 800;
+    align-self: flex-end;
+    padding-bottom: 2px;
+}
+
+.underline-char.fixed.underline-fixed-space {
+    min-width: 0.5em;
 }
 
 .underline-cursor {

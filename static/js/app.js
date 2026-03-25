@@ -387,6 +387,20 @@ function getHintString(word, revealedCount) {
     return revealedPart + hiddenPart;
 }
 
+// 复习输入：仅字母/数字需用户键入；空格、撇号、连字符等作为固定占位显示
+function isUnderlineTypeableChar(ch) {
+    return /[a-zA-Z0-9]/.test(ch);
+}
+
+function applyTargetCasingToTypedChar(targetChar, typedLower) {
+    if (!typedLower) return '';
+    if (/[0-9]/.test(targetChar)) return typedLower;
+    if (targetChar === targetChar.toUpperCase() && targetChar !== targetChar.toLowerCase()) {
+        return typedLower.toUpperCase();
+    }
+    return typedLower.toLowerCase();
+}
+
 // 初始化下划线显示 + 透明输入层（桌面/移动端统一，可唤起软键盘）
 function initializeUnderlineInput(word) {
     const target = (word.english || '').trim();
@@ -400,23 +414,40 @@ function initializeUnderlineInputForTarget(word, target) {
 
     container.innerHTML = '';
 
-    const wordLength = target.length || word.english.length;
-    container.dataset.wordLength = String(wordLength);
-    container.dataset.currentInput = '';
-
-    for (let i = 0; i < wordLength; i++) {
+    const chars = [...(target || '')];
+    let typeableCount = 0;
+    for (let i = 0; i < chars.length; i++) {
+        const ch = chars[i];
         const charSpan = document.createElement('span');
-        charSpan.className = 'underline-char empty';
         charSpan.dataset.index = String(i);
+        if (isUnderlineTypeableChar(ch)) {
+            typeableCount++;
+            charSpan.className = 'underline-char empty';
+            charSpan.dataset.role = 'letter';
+            charSpan.dataset.targetChar = ch;
+        } else {
+            charSpan.className = 'underline-char fixed';
+            charSpan.dataset.role = 'fixed';
+            if (ch === ' ') {
+                charSpan.classList.add('underline-fixed-space');
+                charSpan.textContent = '\u00a0';
+            } else {
+                charSpan.textContent = ch;
+            }
+        }
         container.appendChild(charSpan);
     }
+
+    container.dataset.targetText = target;
+    container.dataset.wordLength = String(typeableCount);
+    container.dataset.currentInput = '';
 
     capture.value = '';
 
     const syncFromCapture = () => {
-        let v = capture.value.replace(/[^a-zA-Z]/g, '').toLowerCase();
-        if (v.length > wordLength) {
-            v = v.slice(0, wordLength);
+        let v = capture.value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        if (v.length > typeableCount) {
+            v = v.slice(0, typeableCount);
         }
         capture.value = v;
         container.dataset.currentInput = v;
@@ -439,29 +470,41 @@ function initializeUnderlineInputForTarget(word, target) {
 function updateUnderlineDisplay() {
     const container = document.getElementById('underline-input');
     if (!container) return;
-    
-    const wordLength = parseInt(container.dataset.wordLength);
+
     const currentInput = container.dataset.currentInput || '';
-    
-    const charSpans = container.querySelectorAll('.underline-char');
-    charSpans.forEach((span, index) => {
+
+    const letterSpans = container.querySelectorAll('.underline-char[data-role="letter"]');
+    letterSpans.forEach((span, index) => {
+        const tgt = span.dataset.targetChar || '';
         if (index < currentInput.length) {
-            // 有字符
-            span.textContent = currentInput[index];
+            const c = currentInput[index];
+            span.textContent = applyTargetCasingToTypedChar(tgt, c);
             span.className = 'underline-char filled';
         } else {
-            // 无字符
             span.textContent = '';
             span.className = 'underline-char empty';
         }
     });
 }
 
-// 获取当前输入值
+// 获取当前输入值（含固定占位符，与词库原形一致以便后端校验）
 function getCurrentInput() {
     const container = document.getElementById('underline-input');
     if (!container) return '';
-    return container.dataset.currentInput || '';
+    const target = container.dataset.targetText || '';
+    const typed = container.dataset.currentInput || '';
+    let li = 0;
+    let out = '';
+    for (const ch of [...target]) {
+        if (isUnderlineTypeableChar(ch)) {
+            const c = li < typed.length ? typed[li] : '';
+            out += c ? applyTargetCasingToTypedChar(ch, c) : '';
+            li++;
+        } else {
+            out += ch;
+        }
+    }
+    return out;
 }
 
 // 清空下划线输入
