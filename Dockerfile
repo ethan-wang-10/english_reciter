@@ -17,7 +17,8 @@ RUN pip install --no-cache-dir -r requirements-simple.txt
 # 复制应用代码
 COPY reciter.py .
 COPY simple_web_app.py .
-COPY config.json .
+COPY config.example.json .
+RUN cp config.example.json config.json
 
 # 创建必要的目录
 RUN mkdir -p static user_data_simple

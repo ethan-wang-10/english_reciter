@@ -36,6 +36,8 @@ user_data_simple/*
 .env
 .env.*
 !.env.example
+# 本地/部署配置（含 API Key 等）；git pull 不覆盖 — 从 config.example.json 复制一份改名
+config.json
 
 # --- OS / editor ---
 .DS_Store

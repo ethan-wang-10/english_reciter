@@ -11,5 +11,5 @@
   "max_backups": 10,
   "language": "zh",
   "log_level": "INFO",
-  "deepseek_api_key": "sk-ee5095f10a7c466c933f4a8119d6aff6"
+  "deepseek_api_key": ""
 }

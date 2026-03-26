@@ -6,7 +6,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 间隔重复 | 按 `config.json` 中的天数阶梯安排复习（默认 1→2→4→7→15→30→60→90 天） |
+| 间隔重复 | 按本地 `config.json`（由 `config.example.json` 复制）中的天数阶梯安排复习（默认 1→2→4→7→15→30→60→90 天） |
 | 掌握判定 | 连续成功达到 `max_success_count`（默认 8）后移入已掌握列表 |
 | 例句 | 本地例句库（`word_examples.json`），离线可用 |
 | Web 版 | Flask 应用、注册登录、多用户数据隔离（`user_data_simple/`）、静态前端 |
@@ -49,7 +49,13 @@ python reciter.py
 
 ## 配置
 
-通过项目根目录的 [config.json](config.json) 调整行为，例如：
+首次克隆后请复制模板并自行编辑（**`config.json` 已加入 `.gitignore`，不会被 `git pull` 覆盖**）：
+
+```bash
+cp config.example.json config.json
+```
+
+通过项目根目录的 `config.json` 调整行为，例如：
 
 - `word_file` / `data_file`：词表与学习数据路径（CLI 默认 `words.txt`、`learning_data.json`）
 - `max_success_count`：判定「已掌握」所需连续成功次数（默认 8）
