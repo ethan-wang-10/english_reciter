@@ -383,7 +383,7 @@ def is_paid_user(username: str) -> bool:
 # ==================== DeepSeek API ====================
 
 def _deepseek_chat(messages: List[dict], model: str = "deepseek-chat",
-                   max_tokens: int = 2048, temperature: float = 0.7) -> Optional[str]:
+                   max_tokens: int = 4096, temperature: float = 0.7) -> Optional[str]:
     """调用 DeepSeek Chat API，返回助手回复文本；失败返回 None。"""
     api_key = get_deepseek_api_key()
     if not api_key:
@@ -416,7 +416,7 @@ def deepseek_extract_lemmas(text: str) -> Optional[List[str]]:
         "还原为原形（lemma），去重，用英文逗号分隔，只返回单词列表，不要其他说明。\n\n"
         f"{text[:3000]}"
     )
-    reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=500)
+    reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=2500)
     if not reply:
         return None
     words = [w.strip().lower() for w in re.split(r'[,，\s]+', reply) if w.strip() and re.match(r'^[a-zA-Z]+$', w.strip())]
@@ -455,7 +455,10 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
 - 例句难度要与level相符，小学/初中例句要简单易懂
 - example1_form 和 example2_form：只写在句子中实际出现的变形形式，如与原形完全相同则写空字符串
 """
-    reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=3000)
+    wc = max(1, min(len(words), 30))
+    # 多词时每条 JSON 较长，固定 3000 易截断导致解析失败；按词数放大，上限与 DeepSeek 输出上限对齐
+    max_out = min(8192, max(2500, 700 + wc * 260))
+    reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=max_out)
     if not reply:
         return None
     # 提取JSON
