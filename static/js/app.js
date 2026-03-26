@@ -122,7 +122,11 @@ function updateGamificationNav(g) {
     const ck = document.getElementById('ng-checkin');
     const minC = Number(g.check_in_min_correct) || 5;
     const todayC = Number(g.today_correct_count) || 0;
-    const ckText = `打卡 ${todayC}/${minC}`;
+    const checkInDone = !!g.check_in_done_today || (minC > 0 && todayC >= minC);
+    const ckText = checkInDone ? '✓ 打卡完成' : `打卡 ${todayC}/${minC}`;
+    const ckTitle = checkInDone
+        ? `今日已有效打卡（已答对 ${todayC} 词）`
+        : `今日答对 ${todayC} 词，有效打卡需 ${minC} 词`;
     if (lv && xp && st) {
         lv.textContent = `Lv.${g.level}`;
         xp.textContent = `${formatNumber(g.total_xp)} XP`;
@@ -130,7 +134,8 @@ function updateGamificationNav(g) {
     }
     if (ck) {
         ck.textContent = ckText;
-        ck.classList.toggle('ng-checkin-done', !!g.check_in_done_today);
+        ck.title = ckTitle;
+        ck.classList.toggle('ng-checkin-done', checkInDone);
     }
     const mlv = document.getElementById('mobile-ng-level');
     const mxp = document.getElementById('mobile-ng-xp');
@@ -143,7 +148,8 @@ function updateGamificationNav(g) {
     }
     if (mck) {
         mck.textContent = ckText;
-        mck.classList.toggle('ng-checkin-done', !!g.check_in_done_today);
+        mck.title = ckTitle;
+        mck.classList.toggle('ng-checkin-done', checkInDone);
     }
 }
 
@@ -352,11 +358,25 @@ function renderDuelRow(d, me) {
                   d.pk_stats_end_date,
               )}（双方同意次日）</div>`
             : '';
+    const pkDays =
+        d.status === 'active' && d.pk_checkin_days && typeof d.pk_checkin_days === 'object'
+            ? (() => {
+                  const a = d.from_user;
+                  const b = d.target_user;
+                  if (!a || !b) return '';
+                  const na = Number(d.pk_checkin_days[a] ?? d.pk_checkin_days[String(a)]) || 0;
+                  const nb = Number(d.pk_checkin_days[b] ?? d.pk_checkin_days[String(b)]) || 0;
+                  return `<div class="settings-duel-pk-range">计分区间内有效打卡：${escapeHtml(
+                      String(a),
+                  )} ${na} 天 · ${escapeHtml(String(b))} ${nb} 天</div>`;
+              })()
+            : '';
     return `<li class="settings-duel-item">
     <span class="settings-duel-meta">${escapeHtml(role)} ${escapeHtml(other)} · ${wager} XP · ${escapeHtml(monthBit)}</span>
     <span class="settings-duel-status">${escapeHtml(statusLabel)}</span>
     ${inviteExpiry}
     ${pkRange}
+    ${pkDays}
     ${actions}
   </li>`;
 }
@@ -364,6 +384,35 @@ function renderDuelRow(d, me) {
 function getPendingIncomingDuels(duels) {
     if (!Array.isArray(duels) || !username) return [];
     return duels.filter((d) => d.status === 'pending' && d.target_user === username);
+}
+
+/** 进行中、尚未结算的 1v1 PK（用于顶栏 PK 角标与状态弹窗） */
+function getPkOngoingDuels(duels) {
+    if (!Array.isArray(duels) || !username) return [];
+    return duels.filter((d) => d.status === 'active' && !d.settled);
+}
+
+function updatePkActiveChipsFromDuels(duels) {
+    const n = getPkOngoingDuels(duels).length;
+    const pairs = [
+        [document.getElementById('ng-pk-badge'), document.getElementById('ng-pk-active')],
+        [document.getElementById('mobile-ng-pk-badge'), document.getElementById('mobile-ng-pk-active')],
+    ];
+    pairs.forEach(([badge, btn]) => {
+        if (!btn) return;
+        if (badge) {
+            if (n > 0) {
+                badge.hidden = false;
+                badge.setAttribute('aria-hidden', 'false');
+                badge.textContent = n > 9 ? '9+' : String(n);
+            } else {
+                badge.hidden = true;
+                badge.setAttribute('aria-hidden', 'true');
+                badge.textContent = '';
+            }
+        }
+        btn.setAttribute('aria-label', n > 0 ? `进行中的 PK，共 ${n} 场` : '进行中的 PK');
+    });
 }
 
 function updatePkInviteBadgeFromDuels(duels) {
@@ -387,11 +436,14 @@ function updatePkInviteBadgeFromDuels(duels) {
 async function refreshPkInviteIndicator() {
     if (!token || !username) {
         updatePkInviteBadgeFromDuels([]);
+        updatePkActiveChipsFromDuels([]);
         return;
     }
     try {
         const data = await apiRequest('/challenges');
-        updatePkInviteBadgeFromDuels(data.challenges || []);
+        const list = data.challenges || [];
+        updatePkInviteBadgeFromDuels(list);
+        updatePkActiveChipsFromDuels(list);
     } catch (_) {
         /* ignore */
     }
@@ -456,6 +508,75 @@ function closePkInviteModal() {
     }
 }
 
+function pkCheckinDaysLine(d) {
+    const raw = d.pk_checkin_days;
+    if (!raw || typeof raw !== 'object') return '';
+    const a = d.from_user;
+    const b = d.target_user;
+    if (!a || !b) return '';
+    const na = Number(raw[a] ?? raw[String(a)]) || 0;
+    const nb = Number(raw[b] ?? raw[String(b)]) || 0;
+    return `<p class="pk-status-meta">有效打卡天数（计分区间内）：${escapeHtml(String(a))} <strong>${na}</strong> 天 · ${escapeHtml(
+        String(b),
+    )} <strong>${nb}</strong> 天</p>`;
+}
+
+function renderPkStatusCard(d, me) {
+    const other = d.from_user === me ? d.target_user : d.from_user;
+    const role = d.from_user === me ? '你是发起方' : '你是应战方';
+    const wager = Number(d.wager_xp) || 0;
+    const wagerLabel = wager === 0 ? '无赌注' : `${wager} XP`;
+    const pkRange =
+        d.pk_stats_start_date && d.pk_stats_end_date
+            ? `<p class="pk-status-meta">PK 计分区间：${escapeHtml(d.pk_stats_start_date)} ～ ${escapeHtml(
+                  d.pk_stats_end_date,
+              )}</p>`
+            : '';
+    const monthLine = d.month
+        ? `<p class="pk-status-meta">计分月份：${escapeHtml(String(d.month))}</p>`
+        : '';
+    const daysLine = pkCheckinDaysLine(d);
+    return `<div class="pk-status-item">
+    <p class="pk-status-lead"><strong>${escapeHtml(other)}</strong> · ${escapeHtml(wagerLabel)}</p>
+    <p class="pk-status-line">${escapeHtml(role)} · 状态：<strong>进行中</strong></p>
+    ${monthLine}
+    ${pkRange}
+    ${daysLine}
+  </div>`;
+}
+
+async function loadPkStatusModalBody() {
+    const body = document.getElementById('pk-status-body');
+    if (!body) return;
+    body.innerHTML = '<p class="pk-invite-loading">加载中…</p>';
+    const data = await apiRequest('/challenges');
+    const list = data.challenges || [];
+    updatePkInviteBadgeFromDuels(list);
+    updatePkActiveChipsFromDuels(list);
+    const ongoing = getPkOngoingDuels(list);
+    if (!ongoing.length) {
+        body.innerHTML = '<p class="pk-invite-empty">当前没有进行中的 PK。</p>';
+        return;
+    }
+    body.innerHTML = ongoing.map((d) => renderPkStatusCard(d, username)).join('');
+}
+
+function openPkStatusModal() {
+    const modal = document.getElementById('pk-status-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+    }
+}
+
+function closePkStatusModal() {
+    const modal = document.getElementById('pk-status-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+}
+
 async function loadPkInviteModalBody() {
     const body = document.getElementById('pk-invite-body');
     if (!body) return;
@@ -463,6 +584,7 @@ async function loadPkInviteModalBody() {
     const data = await apiRequest('/challenges');
     const list = data.challenges || [];
     updatePkInviteBadgeFromDuels(list);
+    updatePkActiveChipsFromDuels(list);
     const pending = getPendingIncomingDuels(list);
     if (!pending.length) {
         body.innerHTML = '<p class="pk-invite-empty">暂无待处理的 1v1 PK 邀约。</p>';
@@ -567,6 +689,7 @@ function renderUserSettingsPanel(s) {
     }
 
     updatePkInviteBadgeFromDuels(s.duels);
+    updatePkActiveChipsFromDuels(s.duels);
 }
 
 const AVATAR_CROP_VIEW = 280;
@@ -1799,7 +1922,9 @@ function showLoginPage() {
     document.querySelector('#main-page .nav-user')?.removeAttribute('aria-label');
     updateNavUserAvatar(null);
     updatePkInviteBadgeFromDuels([]);
+    updatePkActiveChipsFromDuels([]);
     closePkInviteModal();
+    closePkStatusModal();
     stopPkInvitePolling();
 }
 
@@ -3556,6 +3681,27 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })();
     });
+    document.querySelectorAll('.js-pk-status-open').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            void (async () => {
+                openPkStatusModal();
+                const body = document.getElementById('pk-status-body');
+                if (body) body.innerHTML = '<p class="pk-invite-loading">加载中…</p>';
+                try {
+                    await loadPkStatusModalBody();
+                } catch (err) {
+                    if (body) {
+                        body.innerHTML = `<p class="pk-invite-empty" style="color:var(--error-dark)">${escapeHtml(
+                            err.message || '加载失败',
+                        )}</p>`;
+                    }
+                }
+            })();
+        });
+    });
+    document.getElementById('pk-status-backdrop')?.addEventListener('click', closePkStatusModal);
+    document.getElementById('pk-status-close')?.addEventListener('click', closePkStatusModal);
+
     document.getElementById('pk-invite-backdrop')?.addEventListener('click', closePkInviteModal);
     document.getElementById('pk-invite-close')?.addEventListener('click', closePkInviteModal);
     document.getElementById('pk-invite-body')?.addEventListener('click', async (e) => {
@@ -3687,6 +3833,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const crop = document.getElementById('avatar-crop-overlay');
         if (crop && crop.style.display !== 'none') {
             closeAvatarCropModal();
+            return;
+        }
+        const pkStatusModal = document.getElementById('pk-status-modal');
+        if (pkStatusModal && pkStatusModal.style.display !== 'none') {
+            closePkStatusModal();
             return;
         }
         const pkModal = document.getElementById('pk-invite-modal');

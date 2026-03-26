@@ -493,6 +493,16 @@ def list_duels_for_user(data_dir: Path, username: str) -> List[Dict[str, Any]]:
     out = []
     for d in duels:
         if d.get("from_user") == username or d.get("target_user") == username:
-            out.append(enrich_duel_for_api(dict(d)))
+            row = enrich_duel_for_api(dict(d))
+            fu = row.get("from_user")
+            tu = row.get("target_user")
+            if fu and tu:
+                row["pk_checkin_days"] = {
+                    str(fu): duel_pk_days_for_user(data_dir, str(fu), row),
+                    str(tu): duel_pk_days_for_user(data_dir, str(tu), row),
+                }
+            else:
+                row["pk_checkin_days"] = {}
+            out.append(row)
     out.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
     return out

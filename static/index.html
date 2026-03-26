@@ -95,6 +95,10 @@
                     <span class="ng-xp" id="ng-xp">0 XP</span>
                     <span class="ng-streak" id="ng-streak" title="连续有效打卡（每日至少答对 5 词）">🔥 0</span>
                     <span class="ng-checkin" id="ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
+                    <button type="button" class="ng-pk js-pk-status-open" id="ng-pk-active" title="进行中的 PK">
+                        <span class="ng-pk-label" aria-hidden="true">PK</span>
+                        <span id="ng-pk-badge" class="ng-pk-badge" hidden aria-hidden="true"></span>
+                    </button>
                 </div>
                 <div class="nav-user">
                     <div class="nav-user-gear-cluster">
@@ -131,6 +135,10 @@
                         <span class="ng-xp" id="mobile-ng-xp">0 XP</span>
                         <span class="ng-streak" id="mobile-ng-streak" title="连续有效打卡（每日至少答对 5 词）">🔥 0</span>
                         <span class="ng-checkin" id="mobile-ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
+                        <button type="button" class="ng-pk js-pk-status-open" id="mobile-ng-pk-active" title="进行中的 PK">
+                            <span class="ng-pk-label" aria-hidden="true">PK</span>
+                            <span id="mobile-ng-pk-badge" class="ng-pk-badge" hidden aria-hidden="true"></span>
+                        </button>
                     </div>
                     <button type="button" class="mobile-more-link" data-page="discover">单词学习</button>
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
@@ -475,6 +483,18 @@
                     <button type="button" class="pk-invite-close" id="pk-invite-close" aria-label="关闭">×</button>
                 </div>
                 <div id="pk-invite-body" class="pk-invite-body"></div>
+            </div>
+        </div>
+
+        <!-- 进行中 PK 状态（打卡旁入口） -->
+        <div id="pk-status-modal" class="pk-invite-modal pk-status-modal" style="display: none;" aria-hidden="true">
+            <div class="pk-invite-backdrop" id="pk-status-backdrop"></div>
+            <div class="pk-invite-card pk-status-card" role="dialog" aria-modal="true" aria-labelledby="pk-status-title">
+                <div class="pk-invite-card-head">
+                    <h3 id="pk-status-title">进行中的 PK</h3>
+                    <button type="button" class="pk-invite-close" id="pk-status-close" aria-label="关闭">×</button>
+                </div>
+                <div id="pk-status-body" class="pk-invite-body pk-status-body"></div>
             </div>
         </div>
 

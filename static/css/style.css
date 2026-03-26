@@ -618,6 +618,48 @@ body {
     color: var(--primary-dark);
 }
 
+.mobile-more-gamification .ng-pk {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    margin: 0;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+    background: linear-gradient(145deg, #f4eefe, #ede7fa);
+    border: 2px solid #b794f6;
+    box-shadow: 0 2px 0 #9b6fd6;
+    border-radius: var(--radius-pill);
+    color: #5b2c92;
+}
+
+.mobile-more-gamification .ng-pk:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 0 #9b6fd6;
+}
+
+.mobile-more-gamification .ng-pk-badge {
+    position: absolute;
+    top: -5px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    border-radius: var(--radius-pill);
+    background: var(--error-color);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 800;
+    line-height: 12px;
+    text-align: center;
+    border: 2px solid var(--surface);
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
 .mobile-more-link {
     display: block;
     width: 100%;
@@ -978,6 +1020,50 @@ body {
     flex-wrap: wrap;
     gap: 10px;
     justify-content: flex-end;
+}
+
+.pk-status-modal .pk-status-card {
+    background: linear-gradient(180deg, #f4eefe 0%, var(--surface) 40%);
+    box-shadow: 0 var(--tactile-depth) 0 #9b6fd6, 0 16px 48px rgba(0, 0, 0, 0.18);
+}
+
+.pk-status-modal .pk-invite-card-head h3 {
+    color: #5b2c92;
+}
+
+.pk-status-item {
+    padding: 14px 14px 16px;
+    margin-bottom: 12px;
+    background: var(--surface);
+    border: 2px solid #d4b8f8;
+    border-radius: var(--radius-md);
+}
+
+.pk-status-item:last-child {
+    margin-bottom: 0;
+}
+
+.pk-status-lead {
+    margin: 0 0 8px;
+    font-size: 1rem;
+}
+
+.pk-status-line {
+    margin: 0 0 6px;
+    font-size: 0.92rem;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.pk-status-meta {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.pk-status-meta + .pk-status-meta {
+    margin-top: 4px;
 }
 
 .review-box {
@@ -2207,6 +2293,79 @@ body {
     background: #e8f8ec;
     border-color: var(--primary-color);
     color: var(--primary-dark);
+}
+
+/* 极窄屏：已完成打卡时缩短为「✓ 打卡」（文案仍由 JS 写入完整，供读屏） */
+@media (max-width: 380px) {
+    .nav-gamification .ng-checkin.ng-checkin-done,
+    .mobile-more-gamification .ng-checkin.ng-checkin-done {
+        font-size: 0;
+        line-height: 0;
+        color: transparent;
+    }
+
+    .nav-gamification .ng-checkin.ng-checkin-done::after,
+    .mobile-more-gamification .ng-checkin.ng-checkin-done::after {
+        content: '✓ 打卡';
+        font-weight: 800;
+        color: var(--primary-dark);
+    }
+
+    .nav-gamification .ng-checkin.ng-checkin-done::after {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .mobile-more-gamification .ng-checkin.ng-checkin-done::after {
+        font-size: 0.78rem;
+        line-height: 1.25;
+    }
+}
+
+.nav-gamification .ng-pk {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    margin: 0;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+    background: linear-gradient(145deg, #f4eefe, #ede7fa);
+    border: 2px solid #b794f6;
+    box-shadow: 0 2px 0 #9b6fd6;
+    border-radius: var(--radius-pill);
+    color: #5b2c92;
+}
+
+.nav-gamification .ng-pk:hover {
+    filter: brightness(1.03);
+}
+
+.nav-gamification .ng-pk:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 0 #9b6fd6;
+}
+
+.nav-gamification .ng-pk-badge {
+    position: absolute;
+    top: -5px;
+    right: -6px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: var(--radius-pill);
+    background: var(--error-color);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 13px;
+    text-align: center;
+    border: 2px solid var(--surface);
+    box-sizing: border-box;
+    pointer-events: none;
 }
 
 /* 用户设置浮层 */
