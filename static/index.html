@@ -392,6 +392,7 @@
                 <div class="settings-panel-body" id="settings-panel-body">
                     <div class="settings-block">
                         <h3 class="settings-subtitle">头像</h3>
+                        <p class="settings-hint settings-avatar-upload-hint">选择图片后可在圆框内拖动、缩放；服务器只保留一张 WebP 头像。</p>
                         <div class="settings-avatar-row">
                             <img id="settings-avatar-preview" class="settings-avatar-preview" alt="" width="72" height="72" hidden />
                             <span id="settings-avatar-placeholder" class="settings-avatar-placeholder" aria-hidden="true">👤</span>
@@ -440,6 +441,26 @@
                         <ul class="settings-duel-list" id="settings-duel-list"></ul>
                     </div>
                     <p class="settings-message" id="settings-message" role="status"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 头像裁剪（上传前） -->
+        <div id="avatar-crop-overlay" class="avatar-crop-overlay" style="display: none;" aria-hidden="true">
+            <div class="avatar-crop-backdrop" id="avatar-crop-backdrop"></div>
+            <div class="avatar-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="avatar-crop-title">
+                <h3 id="avatar-crop-title">裁剪头像</h3>
+                <p class="avatar-crop-hint">圆内为最终显示区域。拖动调整位置，滑块缩放。</p>
+                <div class="avatar-crop-viewport" id="avatar-crop-viewport" tabindex="-1">
+                    <img id="avatar-crop-img" alt="" draggable="false" />
+                </div>
+                <div class="avatar-crop-zoom-row">
+                    <label for="avatar-crop-zoom">缩放</label>
+                    <input type="range" id="avatar-crop-zoom" min="100" max="300" value="100" />
+                </div>
+                <div class="avatar-crop-actions">
+                    <button type="button" class="btn btn-secondary" id="avatar-crop-cancel">取消</button>
+                    <button type="button" class="btn btn-primary" id="avatar-crop-ok">确定上传</button>
                 </div>
             </div>
         </div>

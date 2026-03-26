@@ -363,7 +363,7 @@ function renderUserSettingsPanel(s) {
     const ph = document.getElementById('settings-avatar-placeholder');
     if (prev && ph) {
         if (s.avatar_url) {
-            prev.src = `${s.avatar_url}${s.avatar_url.indexOf('?') >= 0 ? '&' : '?'}t=${Date.now()}`;
+            prev.src = `${avatarDisplayUrl(s.avatar_url, 128)}&t=${Date.now()}`;
             prev.hidden = false;
             ph.hidden = true;
         } else {
@@ -452,6 +452,199 @@ function renderUserSettingsPanel(s) {
     }
 }
 
+const AVATAR_CROP_VIEW = 280;
+let avatarCrop = {
+    objectUrl: null,
+    iw: 0,
+    ih: 0,
+    scale: 1,
+    imgX: 0,
+    imgY: 0,
+    coverScale: 1,
+    dragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    startImgX: 0,
+    startImgY: 0,
+};
+
+/** 列表/缩略图用较小尺寸，减轻传输 */
+function avatarDisplayUrl(url, w) {
+    if (!url) return '';
+    const sep = url.indexOf('?') >= 0 ? '&' : '?';
+    return `${url}${sep}w=${w}`;
+}
+
+function applyAvatarCropTransform() {
+    const img = document.getElementById('avatar-crop-img');
+    if (!img || !avatarCrop.iw) return;
+    const w = avatarCrop.iw * avatarCrop.scale;
+    const h = avatarCrop.ih * avatarCrop.scale;
+    img.style.width = `${w}px`;
+    img.style.height = `${h}px`;
+    img.style.left = `${avatarCrop.imgX}px`;
+    img.style.top = `${avatarCrop.imgY}px`;
+}
+
+function clampAvatarCrop() {
+    const { scale, iw, ih } = avatarCrop;
+    const vw = AVATAR_CROP_VIEW;
+    const fw = iw * scale;
+    const fh = ih * scale;
+    avatarCrop.imgX = Math.min(0, Math.max(vw - fw, avatarCrop.imgX));
+    avatarCrop.imgY = Math.min(0, Math.max(vw - fh, avatarCrop.imgY));
+}
+
+function onAvatarCropZoomInput() {
+    const zoomEl = document.getElementById('avatar-crop-zoom');
+    const raw = zoomEl && zoomEl.value != null ? parseInt(zoomEl.value, 10) : 100;
+    const pct = (Number.isFinite(raw) ? raw : 100) / 100;
+    const z = Math.max(1, Math.min(3, pct));
+    const vw = AVATAR_CROP_VIEW;
+    const cx = vw / 2;
+    const cy = vw / 2;
+    const prevScale = avatarCrop.scale;
+    avatarCrop.scale = avatarCrop.coverScale * z;
+    const ix = (cx - avatarCrop.imgX) / prevScale;
+    const iy = (cy - avatarCrop.imgY) / prevScale;
+    avatarCrop.imgX = cx - ix * avatarCrop.scale;
+    avatarCrop.imgY = cy - iy * avatarCrop.scale;
+    clampAvatarCrop();
+    applyAvatarCropTransform();
+}
+
+function closeAvatarCropModal() {
+    const overlay = document.getElementById('avatar-crop-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+    const img = document.getElementById('avatar-crop-img');
+    if (img) img.removeAttribute('src');
+    if (avatarCrop.objectUrl) {
+        URL.revokeObjectURL(avatarCrop.objectUrl);
+        avatarCrop.objectUrl = null;
+    }
+    avatarCrop.dragging = false;
+}
+
+function openAvatarCropModal(file) {
+    if (!file || !file.type.startsWith('image/')) {
+        setSettingsMessage('请选择图片文件', true);
+        return;
+    }
+    closeAvatarCropModal();
+    avatarCrop.objectUrl = URL.createObjectURL(file);
+    const img = document.getElementById('avatar-crop-img');
+    const overlay = document.getElementById('avatar-crop-overlay');
+    if (!img || !overlay) return;
+    img.onload = () => {
+        avatarCrop.iw = img.naturalWidth;
+        avatarCrop.ih = img.naturalHeight;
+        if (!avatarCrop.iw || !avatarCrop.ih) {
+            setSettingsMessage('无法读取图片尺寸', true);
+            closeAvatarCropModal();
+            return;
+        }
+        const vw = AVATAR_CROP_VIEW;
+        avatarCrop.coverScale = Math.max(vw / avatarCrop.iw, vw / avatarCrop.ih);
+        avatarCrop.scale = avatarCrop.coverScale;
+        const fw = avatarCrop.iw * avatarCrop.scale;
+        const fh = avatarCrop.ih * avatarCrop.scale;
+        avatarCrop.imgX = (vw - fw) / 2;
+        avatarCrop.imgY = (vw - fh) / 2;
+        const zoomEl = document.getElementById('avatar-crop-zoom');
+        if (zoomEl) zoomEl.value = '100';
+        applyAvatarCropTransform();
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        img.onload = null;
+    };
+    img.onerror = () => {
+        setSettingsMessage('无法加载图片', true);
+        closeAvatarCropModal();
+    };
+    img.src = avatarCrop.objectUrl;
+}
+
+async function confirmAvatarCropUpload() {
+    const img = document.getElementById('avatar-crop-img');
+    if (!img || !img.complete || !avatarCrop.iw) return;
+    const vw = AVATAR_CROP_VIEW;
+    const out = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = out;
+    canvas.height = out;
+    const ctx = canvas.getContext('2d');
+    const { scale, imgX, imgY, iw, ih } = avatarCrop;
+    const sx = (0 - imgX) / scale;
+    const sy = (0 - imgY) / scale;
+    const sw = vw / scale;
+    try {
+        ctx.drawImage(img, sx, sy, sw, sw, 0, 0, out, out);
+    } catch (err) {
+        setSettingsMessage('裁剪失败，请重试', true);
+        return;
+    }
+    let uploadBlob = await new Promise((resolve) => {
+        canvas.toBlob((b) => resolve(b), 'image/webp', 0.88);
+    });
+    if (!uploadBlob || uploadBlob.size < 20) {
+        uploadBlob = await new Promise((resolve) => {
+            canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9);
+        });
+    }
+    if (!uploadBlob) {
+        setSettingsMessage('无法生成图片', true);
+        return;
+    }
+    const isJpeg = uploadBlob.type === 'image/jpeg';
+    closeAvatarCropModal();
+    try {
+        await postAvatarFile(uploadBlob, isJpeg ? 'avatar.jpg' : 'avatar.webp');
+        setSettingsMessage('头像已更新');
+        await loadUserSettingsPanel();
+    } catch (err) {
+        setSettingsMessage(err.message || '上传失败', true);
+    }
+}
+
+function bindAvatarCropUi() {
+    const vp = document.getElementById('avatar-crop-viewport');
+    const zoom = document.getElementById('avatar-crop-zoom');
+    document.getElementById('avatar-crop-cancel')?.addEventListener('click', () => closeAvatarCropModal());
+    document.getElementById('avatar-crop-backdrop')?.addEventListener('click', () => closeAvatarCropModal());
+    document.getElementById('avatar-crop-ok')?.addEventListener('click', () => confirmAvatarCropUpload());
+    zoom?.addEventListener('input', () => onAvatarCropZoomInput());
+    if (!vp) return;
+    vp.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        avatarCrop.dragging = true;
+        avatarCrop.dragStartX = e.clientX;
+        avatarCrop.dragStartY = e.clientY;
+        avatarCrop.startImgX = avatarCrop.imgX;
+        avatarCrop.startImgY = avatarCrop.imgY;
+        try {
+            vp.setPointerCapture(e.pointerId);
+        } catch (_) {
+            /* ignore */
+        }
+    });
+    vp.addEventListener('pointermove', (e) => {
+        if (!avatarCrop.dragging) return;
+        avatarCrop.imgX = avatarCrop.startImgX + (e.clientX - avatarCrop.dragStartX);
+        avatarCrop.imgY = avatarCrop.startImgY + (e.clientY - avatarCrop.dragStartY);
+        clampAvatarCrop();
+        applyAvatarCropTransform();
+    });
+    const endDrag = () => {
+        avatarCrop.dragging = false;
+    };
+    vp.addEventListener('pointerup', endDrag);
+    vp.addEventListener('pointercancel', endDrag);
+}
+
 async function loadUserSettingsPanel() {
     try {
         const [s, poolState] = await Promise.all([
@@ -467,9 +660,9 @@ async function loadUserSettingsPanel() {
     }
 }
 
-async function postAvatarFile(file) {
+async function postAvatarFile(file, filename = 'avatar.webp') {
     const fd = new FormData();
-    fd.append('file', file);
+    fd.append('file', file, filename);
     const headers = {};
     if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(`${API_BASE}/user/avatar`, { method: 'POST', headers, body: fd });
@@ -530,7 +723,7 @@ function renderMonthlyPoolRace(pool) {
                 const cd = Number(r.competition_days) || 0;
                 const me = uname === username ? ' mp-lane-me' : '';
                 const av = r.avatar_url
-                    ? `<img src="${escapeHtml(r.avatar_url)}" alt="" width="28" height="28" loading="lazy" />`
+                    ? `<img src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="28" height="28" loading="lazy" />`
                     : '<span class="mp-lane-avatar-ph" aria-hidden="true">👤</span>';
                 const you = uname === username ? ' <span class="lb-you">我</span>' : '';
                 return `<div class="mp-lane${me}">
@@ -597,7 +790,7 @@ function renderLeaderboardTable(rows) {
         .map((r) => {
             const me = r.is_viewer ? 'leaderboard-row-me' : '';
             const av = r.avatar_url
-                ? `<img class="lb-avatar" src="${escapeHtml(r.avatar_url)}" alt="" width="32" height="32" loading="lazy" />`
+                ? `<img class="lb-avatar" src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="32" height="32" loading="lazy" />`
                 : '<span class="lb-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
             return `<tr class="${me}">
                 <td>${escapeHtml(r.rank)}</td>
@@ -3016,19 +3209,14 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('settings-backdrop')?.addEventListener('click', closeSettings);
     document.getElementById('settings-close')?.addEventListener('click', closeSettings);
     document.getElementById('username-display')?.addEventListener('click', () => openSettings());
-    document.getElementById('settings-avatar-input')?.addEventListener('change', async (e) => {
+    document.getElementById('settings-avatar-input')?.addEventListener('change', (e) => {
         const inp = e.target;
         const f = inp.files && inp.files[0];
         inp.value = '';
         if (!f) return;
-        try {
-            await postAvatarFile(f);
-            setSettingsMessage('头像已更新');
-            await loadUserSettingsPanel();
-        } catch (err) {
-            setSettingsMessage(err.message || '上传失败', true);
-        }
+        openAvatarCropModal(f);
     });
+    bindAvatarCropUi();
     document.getElementById('settings-avatar-remove')?.addEventListener('click', async () => {
         try {
             await deleteAvatarApi();
@@ -3113,6 +3301,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
+        const crop = document.getElementById('avatar-crop-overlay');
+        if (crop && crop.style.display !== 'none') {
+            closeAvatarCropModal();
+            return;
+        }
         const ov = document.getElementById('settings-overlay');
         if (ov && ov.style.display !== 'none') closeSettings();
     });

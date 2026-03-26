@@ -20,6 +20,7 @@ import urllib.request
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, date
+from io import BytesIO
 from pathlib import Path
 from functools import wraps
 from typing import Dict, Generator, List, Optional, Tuple
@@ -38,6 +39,18 @@ from reciter import (
 )
 import gamification as gamification_mod
 import challenges as challenges_mod
+
+try:
+    from PIL import Image as PILImage
+except ImportError:
+    PILImage = None  # type: ignore
+
+# 头像：磁盘仅保留 avatar.webp；长边上限；GET ?w= 为按需缩略图（不传则原图）
+AVATAR_MAX_SIDE = 512
+AVATAR_WEBP_QUALITY = 82
+AVATAR_THUMB_WEBP_QUALITY = 72
+AVATAR_THUMB_MAX = 512
+AVATAR_THUMB_MIN = 32
 
 # 日志配置
 logger = get_logger(__name__)
@@ -531,6 +544,37 @@ def user_avatar_disk_path(username: str) -> Optional[Path]:
         if p.exists():
             return p
     return None
+
+
+def _avatar_pil_to_rgb(im: "PILImage.Image") -> "PILImage.Image":
+    if im.mode == "RGBA":
+        bg = PILImage.new("RGB", im.size, (255, 255, 255))
+        bg.paste(im, mask=im.split()[3])
+        return bg
+    if im.mode == "P" and "transparency" in im.info:
+        return _avatar_pil_to_rgb(im.convert("RGBA"))
+    return im.convert("RGB")
+
+
+def _save_user_avatar_webp(src_stream, dst: Path) -> None:
+    """将上传图像规范为 RGB、限制长边、保存为单个 WebP 文件。"""
+    assert PILImage is not None
+    try:
+        src_stream.seek(0)
+    except (OSError, AttributeError, TypeError):
+        pass
+    im = PILImage.open(src_stream)
+    im = _avatar_pil_to_rgb(im)
+    w, h = im.size
+    m = max(w, h)
+    if m > AVATAR_MAX_SIDE:
+        s = AVATAR_MAX_SIDE / m
+        im = im.resize(
+            (max(1, int(w * s)), max(1, int(h * s))),
+            PILImage.LANCZOS,
+        )
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    im.save(dst, "WEBP", quality=AVATAR_WEBP_QUALITY, method=6)
 
 
 def enrich_monthly_pool_with_avatars(pool: dict) -> dict:
@@ -1136,29 +1180,47 @@ def get_user_settings(username):
 
 @app.route('/api/user/avatar/<uname>', methods=['GET'])
 def get_user_avatar_file(uname):
-    """公开读取头像（供 img src）。"""
+    """公开读取头像（供 img src）。可选 ?w=64 等生成小尺寸 WebP，减轻传输。"""
     path = user_avatar_disk_path(uname)
     if not path:
         return '', 404
+    wq = request.args.get("w", type=int)
+    if (
+        wq is not None
+        and PILImage is not None
+        and AVATAR_THUMB_MIN <= wq <= AVATAR_THUMB_MAX
+    ):
+        try:
+            im = PILImage.open(path)
+            im = _avatar_pil_to_rgb(im)
+            im = im.resize((wq, wq), PILImage.LANCZOS)
+            buf = BytesIO()
+            im.save(
+                buf,
+                "WEBP",
+                quality=AVATAR_THUMB_WEBP_QUALITY,
+                method=4,
+            )
+            buf.seek(0)
+            return send_file(buf, mimetype="image/webp", max_age=86400)
+        except Exception as e:
+            logger.warning("头像缩略图生成失败，回退原文件: %s", e)
     return send_file(path, max_age=3600)
 
 
 @app.route('/api/user/avatar', methods=['POST'])
 @token_required
 def post_user_avatar(username):
-    """上传头像，覆盖旧文件。"""
+    """上传头像：统一处理为单个 avatar.webp（覆盖旧文件）。"""
+    if PILImage is None:
+        return jsonify({'error': '服务器未安装 Pillow，无法处理头像'}), 500
     if 'file' not in request.files:
         return jsonify({'error': '缺少 file 字段'}), 400
     f = request.files['file']
     if not f or not f.filename:
         return jsonify({'error': '未选择文件'}), 400
     ct = (f.mimetype or '').lower()
-    ext_map = {
-        'image/jpeg': '.jpg',
-        'image/png': '.png',
-        'image/webp': '.webp',
-    }
-    if ct not in ext_map:
+    if ct not in ('image/jpeg', 'image/png', 'image/webp'):
         return jsonify({'error': '仅支持 JPEG、PNG、WebP'}), 400
     user_dir = DATA_DIR / username
     user_dir.mkdir(parents=True, exist_ok=True)
@@ -1167,12 +1229,17 @@ def post_user_avatar(username):
             old.unlink()
         except OSError:
             pass
-    dst = user_dir / f"avatar{ext_map[ct]}"
+    dst = user_dir / "avatar.webp"
     try:
-        f.save(dst)
-    except OSError as e:
+        _save_user_avatar_webp(f.stream, dst)
+    except Exception as e:
         logger.error(f"保存头像失败: {e}")
-        return jsonify({'error': '保存失败'}), 500
+        try:
+            if dst.exists():
+                dst.unlink()
+        except OSError:
+            pass
+        return jsonify({'error': '无法解析或保存图片'}), 400
     return jsonify({
         'ok': True,
         'avatar_url': f'/api/user/avatar/{username}',
