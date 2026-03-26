@@ -1824,17 +1824,50 @@ async function submitAnswer() {
 
 // ==================== 学习地图（按已掌握词数里程碑） ====================
 
-/** 里程碑：阈值 = 至少已掌握该数量的单词 */
+/** 里程碑：level = 级别，n = 至少已掌握词数（终极 4000） */
+const LEARNING_MAP_ROW_SIZE = 4;
+
 const LEARNING_MAP_MILESTONES = [
-    { n: 0, title: '启程', icon: '🌱' },
-    { n: 10, title: '词汇新星', icon: '⭐' },
-    { n: 25, title: '稳步积累', icon: '🌿' },
-    { n: 50, title: '扎实前行', icon: '🎯' },
-    { n: 100, title: '词汇能手', icon: '🏆' },
-    { n: 200, title: '卓越进阶', icon: '💎' },
-    { n: 500, title: '词汇大师', icon: '👑' },
-    { n: 1000, title: '词库传奇', icon: '🏅' },
+    { level: 1, n: 0, title: '启程', icon: '🌱' },
+    { level: 2, n: 50, title: '词汇新星', icon: '⭐' },
+    { level: 3, n: 150, title: '稳步积累', icon: '🌿' },
+    { level: 4, n: 300, title: '进阶之路', icon: '🎯' },
+    { level: 5, n: 600, title: '词汇能手', icon: '🏆' },
+    { level: 6, n: 1000, title: '精通', icon: '💎' },
+    { level: 7, n: 1500, title: '专家', icon: '👑' },
+    { level: 8, n: 2000, title: '大师', icon: '🎖️' },
+    { level: 9, n: 2500, title: '传奇', icon: '🏅' },
+    { level: 10, n: 3000, title: '史诗', icon: '✨' },
+    { level: 11, n: 3500, title: '神话', icon: '🌠' },
+    { level: 12, n: 4000, title: '词海终极', icon: '🌟' },
 ];
+
+function learningMapRenderNode(ms, m, nextGoal) {
+    const unlocked = m >= ms.n;
+    const isNext = Boolean(nextGoal && ms.n === nextGoal.n);
+    const stateClass = unlocked ? 'learning-map-node--unlocked' : 'learning-map-node--locked';
+    const nextClass = isNext ? ' learning-map-node--next' : '';
+    const countLabel = ms.n === 0 ? '起点' : `${formatNumber(ms.n)} 词`;
+    const aria = `Lv.${ms.level} ${ms.title}，目标 ${ms.n === 0 ? '0' : formatNumber(ms.n)} 词，${
+        unlocked ? '已达成' : '未达成'
+    }`;
+    const veilHtml = unlocked
+        ? ''
+        : '<div class="learning-map-node-veil" aria-hidden="true"></div>';
+    return `
+        <div class="learning-map-node ${stateClass}${nextClass}" role="group" aria-label="${escapeHtml(aria)}">
+            <div class="learning-map-node-box">
+                <span class="learning-map-node-level">Lv.${ms.level}</span>
+                <div class="learning-map-node-bubble" aria-hidden="true">
+                    <span class="learning-map-node-icon">${ms.icon}</span>
+                </div>
+                <span class="learning-map-node-count">${countLabel}</span>
+                <span class="learning-map-node-title">${escapeHtml(ms.title)}</span>
+            </div>
+            ${veilHtml}
+        </div>
+    `;
+}
 
 function renderLearningMap(masteredWords) {
     const root = document.getElementById('learning-map');
@@ -1854,36 +1887,41 @@ function renderLearningMap(masteredWords) {
     if (hint) {
         if (nextGoal) {
             const remain = nextGoal.n - m;
-            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 距离「${nextGoal.title}」（${formatNumber(
+            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 下一目标 Lv.${nextGoal.level}「${nextGoal.title}」（${formatNumber(
                 nextGoal.n,
-            )} 词）还需 ${formatNumber(remain)} 词`;
+            )} 词）还需 ${formatNumber(remain)} 词 · 终极 Lv.12 为 ${formatNumber(4000)} 词`;
         } else {
-            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 已解锁全部里程碑，继续保持！`;
+            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 已达成 Lv.12 词海终极（${formatNumber(
+                4000,
+            )} 词），继续保持！`;
         }
     }
 
-    const stepsHtml = LEARNING_MAP_MILESTONES.map((ms, i) => {
-        const unlocked = m >= ms.n;
-        const isNext = Boolean(nextGoal && ms.n === nextGoal.n);
-        const side = i % 2 === 0 ? 'left' : 'right';
-        const stateClass = unlocked ? 'learning-map-node--unlocked' : 'learning-map-node--locked';
-        const nextClass = isNext ? ' learning-map-node--next' : '';
-        const countLabel = ms.n === 0 ? '起点' : `${formatNumber(ms.n)} 词`;
-        const aria = `${ms.title}，目标 ${ms.n === 0 ? '0' : formatNumber(ms.n)} 词，${unlocked ? '已达成' : '未达成'}`;
-        return `
-            <div class="learning-map-step learning-map-step--${side}">
-                <div class="learning-map-node ${stateClass}${nextClass}" role="group" aria-label="${escapeHtml(aria)}">
-                    <div class="learning-map-node-bubble" aria-hidden="true">
-                        <span class="learning-map-node-icon">${ms.icon}</span>
-                    </div>
-                    <span class="learning-map-node-count">${countLabel}</span>
-                    <span class="learning-map-node-title">${escapeHtml(ms.title)}</span>
-                </div>
-            </div>
-        `;
-    }).join('');
+    const list = LEARNING_MAP_MILESTONES;
+    const rowsHtml = [];
+    for (let start = 0; start < list.length; start += LEARNING_MAP_ROW_SIZE) {
+        const chunk = list.slice(start, start + LEARNING_MAP_ROW_SIZE);
+        const rowIndex = Math.floor(start / LEARNING_MAP_ROW_SIZE);
+        const dir = rowIndex % 2 === 0 ? 'ltr' : 'rtl';
+        const parts = [];
+        chunk.forEach((ms, i) => {
+            parts.push(learningMapRenderNode(ms, m, nextGoal));
+            if (i < chunk.length - 1) {
+                parts.push('<div class="lm-seg lm-seg--h" aria-hidden="true"></div>');
+            }
+        });
+        rowsHtml.push(`<div class="learning-map-row learning-map-row--${dir}">${parts.join('')}</div>`);
+        if (start + LEARNING_MAP_ROW_SIZE < list.length) {
+            const nextRowRtl = (rowIndex + 1) % 2 === 1;
+            rowsHtml.push(
+                `<div class="lm-row-join lm-row-join--${nextRowRtl ? 'to-rtl' : 'to-ltr'}" aria-hidden="true">
+                    <div class="lm-row-join-curve"></div>
+                </div>`,
+            );
+        }
+    }
 
-    root.innerHTML = `<div class="learning-map-spine" aria-hidden="true"></div><div class="learning-map-steps">${stepsHtml}</div>`;
+    root.innerHTML = `<div class="learning-map-rows">${rowsHtml.join('')}</div>`;
 }
 
 // ==================== 进度功能 ====================
