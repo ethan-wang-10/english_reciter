@@ -1211,9 +1211,7 @@ def get_user_avatar_file(uname):
 @app.route('/api/user/avatar', methods=['POST'])
 @token_required
 def post_user_avatar(username):
-    """上传头像：统一处理为单个 avatar.webp（覆盖旧文件）。"""
-    if PILImage is None:
-        return jsonify({'error': '服务器未安装 Pillow，无法处理头像'}), 500
+    """上传头像：有 Pillow 时统一为压缩 WebP；否则原样保存为单个 avatar.<ext>（覆盖旧文件）。"""
     if 'file' not in request.files:
         return jsonify({'error': '缺少 file 字段'}), 400
     f = request.files['file']
@@ -1222,6 +1220,11 @@ def post_user_avatar(username):
     ct = (f.mimetype or '').lower()
     if ct not in ('image/jpeg', 'image/png', 'image/webp'):
         return jsonify({'error': '仅支持 JPEG、PNG、WebP'}), 400
+    ext_map = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+    }
     user_dir = DATA_DIR / username
     user_dir.mkdir(parents=True, exist_ok=True)
     for old in user_dir.glob('avatar.*'):
@@ -1229,17 +1232,32 @@ def post_user_avatar(username):
             old.unlink()
         except OSError:
             pass
-    dst = user_dir / "avatar.webp"
-    try:
-        _save_user_avatar_webp(f.stream, dst)
-    except Exception as e:
-        logger.error(f"保存头像失败: {e}")
+    if PILImage is not None:
+        dst = user_dir / "avatar.webp"
         try:
-            if dst.exists():
-                dst.unlink()
-        except OSError:
+            _save_user_avatar_webp(f.stream, dst)
+        except Exception as e:
+            logger.error(f"保存头像失败: {e}")
+            try:
+                if dst.exists():
+                    dst.unlink()
+            except OSError:
+                pass
+            return jsonify({'error': '无法解析或保存图片'}), 400
+    else:
+        dst = user_dir / f"avatar{ext_map[ct]}"
+        logger.warning(
+            "Pillow 未安装，头像以原图保存；建议执行 pip install -r requirements-simple.txt"
+        )
+        try:
+            f.stream.seek(0)
+        except (OSError, AttributeError, TypeError):
             pass
-        return jsonify({'error': '无法解析或保存图片'}), 400
+        try:
+            f.save(dst)
+        except OSError as e:
+            logger.error(f"保存头像失败: {e}")
+            return jsonify({'error': '保存失败'}), 500
     return jsonify({
         'ok': True,
         'avatar_url': f'/api/user/avatar/{username}',

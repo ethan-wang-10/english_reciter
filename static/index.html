@@ -338,9 +338,19 @@
             <div id="discover-section" class="section">
                 <div class="container discover-page">
                     <h2>单词学习</h2>
-                    <p class="discover-intro">展示单词、音标与例句，可朗读；仅供浏览，不参与复习计分。</p>
+                    <p class="discover-intro">展示单词、音标与例句，可朗读；仅供浏览，不参与复习计分。顺序为：先你的「待复习」单词，再按所选难度浏览系统词库。</p>
                     <div id="discovery-empty" class="discovery-empty" style="display: none;" role="status"></div>
                     <div id="discovery-root" class="discovery-root" style="display: none;">
+                        <div class="discovery-toolbar discovery-level-row">
+                            <label class="discovery-level-label" for="discovery-level">词库难度</label>
+                            <select id="discovery-level" class="discovery-level-select" aria-label="词库难度">
+                                <option value="">全部</option>
+                                <option value="小学">小学</option>
+                                <option value="初中">初中</option>
+                                <option value="高中">高中</option>
+                                <option value="GRE">GRE</option>
+                            </select>
+                        </div>
                         <div id="discovery-card-wrap" class="discovery-card-wrap"></div>
                         <div class="discovery-toolbar">
                             <button type="button" id="discovery-prev" class="btn btn-secondary discovery-nav-btn">← 上一词</button>

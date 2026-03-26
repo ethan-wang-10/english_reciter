@@ -2591,42 +2591,82 @@ async function loadMastered() {
 
 let discoveryDeck = [];
 let discoveryIndex = 0;
+/** 当前牌组中「待复习」词条数量（用于序号旁提示） */
+let discoveryPendingCount = 0;
+
+const DISCOVERY_LEVEL_STORAGE_KEY = 'english_reciter_discovery_level';
+
+function discoveryExampleFromCsvRow(row) {
+    const ex1 = String(row.example1 || '').trim();
+    const cn1 = String(row.example1_cn || '').trim();
+    if (ex1 || cn1) {
+        if (ex1 && cn1) return `${ex1}_${cn1}`;
+        return ex1 || cn1;
+    }
+    const ex2 = String(row.example2 || '').trim();
+    const cn2 = String(row.example2_cn || '').trim();
+    if (ex2 || cn2) {
+        if (ex2 && cn2) return `${ex2}_${cn2}`;
+        return ex2 || cn2;
+    }
+    return '';
+}
+
+function discoverySortPending(a, b) {
+    const da = new Date(a.next_review_date).getTime();
+    const db = new Date(b.next_review_date).getTime();
+    if (da !== db) return da - db;
+    return String(a.english).localeCompare(String(b.english), 'en');
+}
 
 async function loadDiscovery() {
     const emptyEl = document.getElementById('discovery-empty');
     const rootEl = document.getElementById('discovery-root');
+    const levelSel = document.getElementById('discovery-level');
+    const level = levelSel && levelSel.value != null ? String(levelSel.value).trim() : '';
     try {
-        const [st, mast] = await Promise.all([apiRequest('/words/status'), apiRequest('/words/mastered')]);
-        const byEn = new Map();
+        const csvPath = level ? `/wordbank/csv?level=${encodeURIComponent(level)}` : '/wordbank/csv';
+        const [st, wb] = await Promise.all([apiRequest('/words/status'), apiRequest(csvPath)]);
+
+        const pending = [];
         for (const w of st.words || []) {
-            byEn.set(String(w.english).toLowerCase(), {
+            pending.push({
                 english: w.english,
                 chinese: w.chinese,
                 phonetic: w.phonetic || '',
                 example: (w.example && String(w.example).trim()) || '',
                 source: 'pending',
+                next_review_date: w.next_review_date,
             });
         }
-        for (const w of mast.words || []) {
-            const k = String(w.english).toLowerCase();
-            if (!byEn.has(k)) {
-                byEn.set(k, {
-                    english: w.english,
-                    chinese: w.chinese,
-                    phonetic: w.phonetic || '',
-                    example: (w.example && String(w.example).trim()) || '',
-                    source: 'mastered',
-                });
-            }
+        pending.sort(discoverySortPending);
+
+        const pendingKeys = new Set(pending.map((x) => String(x.english).toLowerCase()));
+        const wordbankPart = [];
+        for (const row of wb.words || []) {
+            const en = String(row.english || '').trim();
+            if (!en) continue;
+            const k = en.toLowerCase();
+            if (pendingKeys.has(k)) continue;
+            wordbankPart.push({
+                english: en,
+                chinese: String(row.chinese || '').trim(),
+                phonetic: String(row.phonetic || '').trim(),
+                example: discoveryExampleFromCsvRow(row),
+                source: 'wordbank',
+            });
         }
-        discoveryDeck = Array.from(byEn.values());
-        discoveryDeck.sort((a, b) => a.english.localeCompare(b.english, 'en'));
+        wordbankPart.sort((a, b) => a.english.localeCompare(b.english, 'en'));
+
+        discoveryPendingCount = pending.length;
+        discoveryDeck = pending.concat(wordbankPart);
         if (discoveryIndex >= discoveryDeck.length) discoveryIndex = 0;
 
         if (discoveryDeck.length === 0) {
             if (emptyEl) {
                 emptyEl.style.display = 'block';
-                emptyEl.innerHTML = '<p>暂无单词。请先到「导入单词」添加学习内容。</p>';
+                emptyEl.innerHTML =
+                    '<p>暂无可用词条。请先到「导入单词」添加待复习内容，或调整难度后重试。</p>';
             }
             if (rootEl) rootEl.style.display = 'none';
             return;
@@ -2685,7 +2725,15 @@ function renderDiscoveryCard() {
       </article>
     `;
     wrap.innerHTML = html;
-    if (counter) counter.textContent = `${discoveryIndex + 1} / ${discoveryDeck.length}`;
+    if (counter) {
+        const n = discoveryDeck.length;
+        const i = discoveryIndex + 1;
+        if (discoveryPendingCount > 0 && w.source === 'pending') {
+            counter.textContent = `${i} / ${n}（待复习 ${discoveryPendingCount}）`;
+        } else {
+            counter.textContent = `${i} / ${n}`;
+        }
+    }
 
     const speakBtn = wrap.querySelector('.discovery-speak-word');
     if (speakBtn) {
@@ -2864,6 +2912,27 @@ function initWordbankPanel() {
     document.getElementById('discovery-prev')?.addEventListener('click', () => discoveryGo(-1));
     document.getElementById('discovery-next')?.addEventListener('click', () => discoveryGo(1));
     document.getElementById('discovery-shuffle')?.addEventListener('click', () => discoveryShuffle());
+
+    const discoveryLevel = document.getElementById('discovery-level');
+    if (discoveryLevel) {
+        try {
+            const saved = localStorage.getItem(DISCOVERY_LEVEL_STORAGE_KEY);
+            if (saved !== null && [...discoveryLevel.options].some((o) => o.value === saved)) {
+                discoveryLevel.value = saved;
+            }
+        } catch (_) {
+            /* ignore */
+        }
+        discoveryLevel.addEventListener('change', () => {
+            try {
+                localStorage.setItem(DISCOVERY_LEVEL_STORAGE_KEY, discoveryLevel.value);
+            } catch (_) {
+                /* ignore */
+            }
+            discoveryIndex = 0;
+            loadDiscovery();
+        });
+    }
 
     document.getElementById('wordbank-select-filtered')?.addEventListener('click', () => {
         for (const w of wbState.filtered) {
