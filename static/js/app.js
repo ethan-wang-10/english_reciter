@@ -372,6 +372,7 @@ function renderUserSettingsPanel(s) {
             ph.hidden = false;
         }
     }
+    updateNavUserAvatar(s.avatar_url);
     updateSettingsCheckinHintFromProfile(s);
     updateSettingsMonthlyGoalBonusNotice(s);
     const dim = Number(s.month_days_in_month) || 31;
@@ -473,6 +474,34 @@ function avatarDisplayUrl(url, w) {
     if (!url) return '';
     const sep = url.indexOf('?') >= 0 ? '&' : '?';
     return `${url}${sep}w=${w}`;
+}
+
+function updateNavUserAvatar(avatarUrl) {
+    const img = document.getElementById('nav-user-avatar-img');
+    const ph = document.getElementById('nav-user-avatar-ph');
+    if (!img || !ph) return;
+    if (avatarUrl) {
+        img.src = `${avatarDisplayUrl(avatarUrl, 64)}&t=${Date.now()}`;
+        img.hidden = false;
+        ph.hidden = true;
+    } else {
+        img.removeAttribute('src');
+        img.hidden = true;
+        ph.hidden = false;
+    }
+}
+
+async function refreshNavUserAvatar() {
+    if (!token || !username) {
+        updateNavUserAvatar(null);
+        return;
+    }
+    try {
+        const s = await apiRequest('/user/settings');
+        updateNavUserAvatar(s && s.avatar_url);
+    } catch (_) {
+        updateNavUserAvatar(null);
+    }
 }
 
 function applyAvatarCropTransform() {
@@ -1652,6 +1681,7 @@ function showLoginPage() {
     const gl = document.getElementById('admin-gear-login');
     if (gl) gl.style.display = '';
     document.querySelector('#main-page .nav-user')?.removeAttribute('aria-label');
+    updateNavUserAvatar(null);
 }
 
 function showMainPage() {
@@ -1667,6 +1697,7 @@ function showMainPage() {
     );
 
     loadStats();
+    refreshNavUserAvatar();
     // 获取用户套餐
     loadUserPlan();
     // 默认展示「今日复习」区块；须拉取列表，否则会一直显示 index.html 里的占位词（如 apple）
@@ -3379,7 +3410,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('settings-backdrop')?.addEventListener('click', closeSettings);
     document.getElementById('settings-close')?.addEventListener('click', closeSettings);
-    document.getElementById('username-display')?.addEventListener('click', () => openSettings());
     document.getElementById('settings-avatar-input')?.addEventListener('change', (e) => {
         const inp = e.target;
         const f = inp.files && inp.files[0];
@@ -3595,7 +3625,7 @@ document.addEventListener('DOMContentLoaded', function() {
         adminGearLogin.addEventListener('click', () => openAdminOverlay());
     }
     if (adminGearMain) {
-        adminGearMain.addEventListener('click', () => openAdminOverlay());
+        adminGearMain.addEventListener('click', () => openSettings());
     }
     document.getElementById('admin-close')?.addEventListener('click', () => closeAdminOverlay());
     document.getElementById('admin-overlay')?.addEventListener('click', (e) => {

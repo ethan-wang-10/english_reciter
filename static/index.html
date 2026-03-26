@@ -12,7 +12,7 @@
 </head>
 <body>
     <div id="app">
-        <button type="button" id="admin-gear-login" class="btn-gear btn-gear-fixed" title="管理员">⚙</button>
+        <button type="button" id="admin-gear-login" class="btn-gear btn-gear-fixed" title="管理员设置">⚙</button>
         <!-- 登录页面 -->
         <div id="login-page" class="page active">
             <div class="container">
@@ -97,8 +97,12 @@
                     <span class="ng-checkin" id="ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
                 </div>
                 <div class="nav-user">
-                    <button type="button" id="admin-gear-main" class="btn-gear" title="管理员">⚙</button>
-                    <button type="button" class="username-btn" id="username-display" title="用户设置"></button>
+                    <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
+                    <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
+                        <img id="nav-user-avatar-img" class="nav-user-avatar-img" alt="" width="32" height="32" loading="lazy" hidden />
+                        <span id="nav-user-avatar-ph" class="nav-user-avatar-ph" aria-hidden="true">👤</span>
+                    </span>
+                    <span class="username-inline" id="username-display" title="当前用户"></span>
                     <button id="logout-btn" class="btn btn-secondary">退出</button>
                 </div>
             </nav>
