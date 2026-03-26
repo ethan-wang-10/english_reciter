@@ -310,11 +310,13 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-shrink: 0;
 }
 
 .logo {
     font-size: 32px;
     line-height: 1;
+    flex-shrink: 0;
 }
 
 .brand-name {
@@ -483,6 +485,13 @@ body {
     display: none;
 }
 
+/* 中等宽度顶栏：品牌仅保留 📚，为游戏化与用户区让出横向空间 */
+@media (max-width: 1200px) and (min-width: 769px) {
+    .navbar .nav-brand .brand-name {
+        display: none;
+    }
+}
+
 /* 移动端底部 Tab（小屏显示，大屏隐藏） */
 .mobile-tabbar {
     display: none;
@@ -570,11 +579,25 @@ body {
 
 .mobile-more-gamification {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
     font-size: 0.82rem;
     font-weight: 800;
     margin-bottom: 14px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.mobile-more-gamification::-webkit-scrollbar {
+    display: none;
+}
+
+.mobile-more-gamification > * {
+    flex-shrink: 0;
 }
 
 .mobile-more-gamification .ng-level {
@@ -1736,16 +1759,14 @@ body {
         padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
     }
 
-    .brand-name-full {
-        display: none;
-    }
-
-    .brand-name-short {
-        display: none;
-    }
-
+    .brand-name-full,
+    .brand-name-short,
     .brand-name-tiny {
-        display: inline;
+        display: none !important;
+    }
+
+    .brand-name {
+        display: none !important;
     }
 
     .nav-menu-desktop {
@@ -1788,22 +1809,15 @@ body {
 
     .nav-brand {
         flex-shrink: 0;
-        max-width: 36%;
-        gap: 4px;
+        max-width: none;
+        gap: 0;
         min-width: 0;
     }
 
     .nav-brand .logo {
-        display: none;
-    }
-
-    .brand-name {
-        font-size: 0.88rem;
-        font-weight: 800;
-        max-width: 5.5em;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        display: block;
+        font-size: 1.45rem;
+        line-height: 1;
     }
 
     .nav-item {
@@ -2243,15 +2257,37 @@ body {
     color: var(--primary-dark);
 }
 
-/* 导航条：等级 / XP / 连续打卡 */
+/* 导航条：等级 / XP / 连续打卡（单行横向滚动，避免窄屏换行） */
 .nav-gamification {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap;
+    gap: 6px;
     font-size: 0.88rem;
     font-weight: 800;
     color: var(--text-primary);
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.nav-gamification::-webkit-scrollbar {
+    display: none;
+}
+
+.nav-gamification > * {
+    flex-shrink: 0;
+}
+
+/* 桌面顶栏：游戏化区可收缩，内部横向滚动而不把整行撑换行 */
+@media (min-width: 769px) {
+    .navbar .nav-gamification {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
 }
 
 .nav-gamification .ng-level {
@@ -2295,8 +2331,11 @@ body {
     color: var(--primary-dark);
 }
 
-/* 极窄屏：已完成打卡时缩短为「✓ 打卡」（文案仍由 JS 写入完整，供读屏） */
-@media (max-width: 380px) {
+/*
+ * 中等宽度以下：已完成打卡显示为「✓ 打卡」（DOM 仍为完整文案，供读屏）
+ * 极窄屏规则已并入 max-width: 1200px
+ */
+@media (max-width: 1200px) {
     .nav-gamification .ng-checkin.ng-checkin-done,
     .mobile-more-gamification .ng-checkin.ng-checkin-done {
         font-size: 0;
@@ -2319,6 +2358,26 @@ body {
     .mobile-more-gamification .ng-checkin.ng-checkin-done::after {
         font-size: 0.78rem;
         line-height: 1.25;
+    }
+}
+
+/* 顶栏游戏化区：略收紧药丸，减轻窄屏横向压力（仍配合单行滚动） */
+@media (max-width: 1200px) {
+    .nav-gamification .ng-level,
+    .nav-gamification .ng-xp,
+    .nav-gamification .ng-streak {
+        padding: 5px 8px;
+        font-size: 0.82rem;
+    }
+
+    .nav-gamification .ng-checkin {
+        padding: 5px 8px;
+        font-size: 0.76rem;
+    }
+
+    .nav-gamification .ng-pk {
+        padding: 5px 8px;
+        font-size: 0.76rem;
     }
 }
 
