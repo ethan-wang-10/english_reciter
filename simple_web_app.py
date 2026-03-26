@@ -37,6 +37,7 @@ from reciter import (
     get_logger,
 )
 import gamification as gamification_mod
+import challenges as challenges_mod
 
 # 日志配置
 logger = get_logger(__name__)
@@ -519,6 +520,17 @@ def _rate_allow(bucket_key: str, max_events: int) -> bool:
 
 def is_valid_username(username: str) -> bool:
     return bool(username and USERNAME_PATTERN.fullmatch(username))
+
+
+def user_avatar_disk_path(username: str) -> Optional[Path]:
+    if not is_valid_username(username):
+        return None
+    d = DATA_DIR / username
+    for name in ("avatar.webp", "avatar.jpg", "avatar.jpeg", "avatar.png"):
+        p = d / name
+        if p.exists():
+            return p
+    return None
 
 
 def _is_legacy_sha256_hex(stored: str) -> bool:
@@ -1005,7 +1017,7 @@ def get_gamification(username):
 @app.route('/api/gamification', methods=['PATCH'])
 @token_required
 def patch_gamification_settings(username):
-    """更新排行榜展示等设置"""
+    """更新排行榜展示、本月打卡目标等"""
     try:
         data = request.get_json()
         if data is None:
@@ -1013,10 +1025,40 @@ def patch_gamification_settings(username):
         opt_in = data.get('leaderboard_opt_in')
         if opt_in is not None and not isinstance(opt_in, bool):
             return jsonify({'error': 'leaderboard_opt_in 须为布尔值'}), 400
-        out = gamification_mod.patch_settings(
-            DATA_DIR, username, leaderboard_opt_in=opt_in
+        monthly_goal = None
+        clear_monthly_goal = False
+        if 'monthly_checkin_goal' in data:
+            mg = data.get('monthly_checkin_goal')
+            if mg is None or mg == '':
+                clear_monthly_goal = True
+            else:
+                try:
+                    monthly_goal = int(mg)
+                except (TypeError, ValueError):
+                    return jsonify({'error': 'monthly_checkin_goal 须为整数'}), 400
+        try:
+            out = gamification_mod.patch_settings(
+                DATA_DIR,
+                username,
+                leaderboard_opt_in=opt_in,
+                monthly_checkin_goal=monthly_goal,
+                clear_monthly_goal=clear_monthly_goal,
+            )
+        except ValueError as ve:
+            return jsonify({'error': str(ve)}), 400
+        with user_reciter_session(username) as reciter:
+            mastered_n = len(reciter.mastered_words)
+        profile = gamification_mod.public_profile(
+            DATA_DIR, username, mastered_words=mastered_n
         )
-        return jsonify(out), 200
+        return jsonify({**out, **{k: profile[k] for k in (
+            'month_key', 'month_valid_checkin_days', 'month_days_in_month',
+            'monthly_checkin_goal', 'monthly_checkin_goal_month',
+            'today_correct_count', 'check_in_done_today', 'check_in_min_correct',
+            'monthly_goal_completion_bonus_xp',
+            'monthly_goal_bonus_awarded_this_month', 'checkin_goal_xp_per_day',
+            'total_xp', 'level', 'xp_to_next_level',
+        ) if k in profile}}), 200
     except Exception as e:
         logger.error(f"更新游戏化设置失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -1035,10 +1077,150 @@ def get_leaderboard(username):
         rows = gamification_mod.build_leaderboard(
             DATA_DIR, enabled, viewer=username
         )
+        for r in rows:
+            u = r.get("username") or ""
+            r["avatar_url"] = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
         return jsonify({'leaderboard': rows}), 200
     except Exception as e:
         logger.error(f"获取排行榜失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/user/settings', methods=['GET'])
+@token_required
+def get_user_settings(username):
+    """设置页汇总：游戏化、月度奖池、挑战列表、头像。"""
+    try:
+        with user_reciter_session(username) as reciter:
+            mastered_n = len(reciter.mastered_words)
+        prof = gamification_mod.public_profile(
+            DATA_DIR, username, mastered_words=mastered_n
+        )
+        pool = challenges_mod.get_monthly_pool_state(DATA_DIR, username)
+        duels = challenges_mod.list_duels_for_user(DATA_DIR, username)
+        av = user_avatar_disk_path(username)
+        prof["avatar_url"] = f"/api/user/avatar/{username}" if av else None
+        prof["monthly_pool"] = pool
+        prof["duels"] = duels
+        prof["wager_tiers"] = list(challenges_mod.WAGER_TIERS)
+        return jsonify(prof), 200
+    except Exception as e:
+        logger.error(f"获取用户设置失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/user/avatar/<uname>', methods=['GET'])
+def get_user_avatar_file(uname):
+    """公开读取头像（供 img src）。"""
+    path = user_avatar_disk_path(uname)
+    if not path:
+        return '', 404
+    return send_file(path, max_age=3600)
+
+
+@app.route('/api/user/avatar', methods=['POST'])
+@token_required
+def post_user_avatar(username):
+    """上传头像，覆盖旧文件。"""
+    if 'file' not in request.files:
+        return jsonify({'error': '缺少 file 字段'}), 400
+    f = request.files['file']
+    if not f or not f.filename:
+        return jsonify({'error': '未选择文件'}), 400
+    ct = (f.mimetype or '').lower()
+    ext_map = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+    }
+    if ct not in ext_map:
+        return jsonify({'error': '仅支持 JPEG、PNG、WebP'}), 400
+    user_dir = DATA_DIR / username
+    user_dir.mkdir(parents=True, exist_ok=True)
+    for old in user_dir.glob('avatar.*'):
+        try:
+            old.unlink()
+        except OSError:
+            pass
+    dst = user_dir / f"avatar{ext_map[ct]}"
+    try:
+        f.save(dst)
+    except OSError as e:
+        logger.error(f"保存头像失败: {e}")
+        return jsonify({'error': '保存失败'}), 500
+    return jsonify({
+        'ok': True,
+        'avatar_url': f'/api/user/avatar/{username}',
+    }), 200
+
+
+@app.route('/api/user/avatar', methods=['DELETE'])
+@token_required
+def delete_user_avatar(username):
+    path = user_avatar_disk_path(username)
+    if path:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    return jsonify({'ok': True, 'avatar_url': None}), 200
+
+
+@app.route('/api/monthly-pool', methods=['GET'])
+@token_required
+def api_monthly_pool_get(username):
+    return jsonify(challenges_mod.get_monthly_pool_state(DATA_DIR, username)), 200
+
+
+@app.route('/api/monthly-pool/join', methods=['POST'])
+@token_required
+def api_monthly_pool_join(username):
+    ok, msg, state = challenges_mod.join_monthly_pool(DATA_DIR, username)
+    if not ok:
+        return jsonify({'error': msg}), 400
+    return jsonify(state), 200
+
+
+@app.route('/api/challenges', methods=['GET'])
+@token_required
+def api_challenges_list(username):
+    return jsonify({'challenges': challenges_mod.list_duels_for_user(DATA_DIR, username)}), 200
+
+
+@app.route('/api/challenges', methods=['POST'])
+@token_required
+def api_challenges_create(username):
+    data = request.get_json() or {}
+    target = (data.get('target_username') or '').strip()
+    if not is_valid_username(target):
+        return jsonify({'error': '无效的目标用户名'}), 400
+    users = load_users()
+    if target not in users:
+        return jsonify({'error': '用户不存在'}), 400
+    if target == username:
+        return jsonify({'error': '不能挑战自己'}), 400
+    try:
+        wager = int(data.get('wager_xp', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'wager_xp 须为整数'}), 400
+    month = (data.get('month') or '').strip() or None
+    ok, msg, row = challenges_mod.create_duel(
+        DATA_DIR, username, target, wager_xp=wager, duel_month=month
+    )
+    if not ok or not row:
+        return jsonify({'error': msg or '创建失败'}), 400
+    return jsonify(row), 201
+
+
+@app.route('/api/challenges/<duel_id>/respond', methods=['POST'])
+@token_required
+def api_challenges_respond(username, duel_id):
+    data = request.get_json() or {}
+    accept = bool(data.get('accept'))
+    ok, msg, row = challenges_mod.respond_duel(DATA_DIR, duel_id, username, accept)
+    if not ok or not row:
+        return jsonify({'error': msg or '操作失败'}), 400
+    return jsonify(row), 200
 
 
 @app.route('/api/words/status', methods=['GET'])

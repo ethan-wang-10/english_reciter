@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+import calendar
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -22,6 +23,12 @@ DAILY_XP_SOFT_CAP = 300
 OVER_CAP_MULTIPLIER = 0.5
 
 MAX_LEVEL = 99
+
+# 当日答对次数 ≥ 此值才算「有效打卡」，并参与连续打卡统计
+CHECKIN_MIN_CORRECT = 5
+
+# 完成本月打卡目标时的一次性奖励：目标天数 × 此值（XP）
+CHECKIN_GOAL_XP_PER_DAY = 30
 
 # 成就 id -> 展示信息
 ACHIEVEMENT_DEFS: Dict[str, Dict[str, str]] = {
@@ -50,6 +57,11 @@ def default_state() -> Dict[str, Any]:
         "daily_xp": {},
         "achievements": {},
         "leaderboard_opt_in": True,
+        # 本月打卡天数目标：与 mcheckin_goal_month 同时有效
+        "mcheckin_goal": None,
+        "mcheckin_goal_month": None,
+        # 已为哪个月份发放过「完成打卡目标」一次性奖励（YYYY-MM）
+        "mcheckin_goal_bonus_awarded_month": None,
     }
 
 
@@ -72,6 +84,13 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
         base["achievements"] = dict(raw["achievements"])
     if "daily_xp" in raw and isinstance(raw["daily_xp"], dict):
         base["daily_xp"] = {str(k): int(v) for k, v in raw["daily_xp"].items()}
+    if base.get("mcheckin_goal") is not None:
+        try:
+            base["mcheckin_goal"] = int(base["mcheckin_goal"])
+        except (TypeError, ValueError):
+            base["mcheckin_goal"] = None
+    if base.get("mcheckin_goal_bonus_awarded_month") is not None:
+        base["mcheckin_goal_bonus_awarded_month"] = str(base["mcheckin_goal_bonus_awarded_month"])
     return base
 
 
@@ -116,10 +135,10 @@ def _update_streak(state: Dict[str, Any], today: date) -> None:
     last = state.get("last_streak_date")
     streak = int(state.get("streak") or 0)
 
-    # 当日有答对即算打卡（含 XP 被软上限减为 0 的情况）
+    # 当日累计答对 ≥ CHECKIN_MIN_CORRECT 才算有效打卡日（连续 streak 仅统计有效日）
     by_day = state.get("streak_correct_by_day") or {}
-    earned_today = int(by_day.get(key, 0)) > 0 or int(state["daily_xp"].get(key, 0)) > 0
-    if not earned_today:
+    valid_checkin_today = int(by_day.get(key, 0)) >= CHECKIN_MIN_CORRECT
+    if not valid_checkin_today:
         return
 
     if not last:
@@ -211,6 +230,64 @@ def _unlock_achievements(
     return new_list
 
 
+def valid_checkin_days_in_month(state: Dict[str, Any], year_month: str) -> int:
+    """自然月内「有效打卡」天数：当日答对次数 ≥ CHECKIN_MIN_CORRECT 的日期数。"""
+    sbd = state.get("streak_correct_by_day") or {}
+    ym = year_month.strip()
+    if len(ym) != 7:
+        return 0
+    n = 0
+    for day_key, cnt in sbd.items():
+        if not isinstance(day_key, str) or not day_key.startswith(ym):
+            continue
+        try:
+            date.fromisoformat(day_key[:10])
+        except ValueError:
+            continue
+        if int(cnt or 0) >= CHECKIN_MIN_CORRECT:
+            n += 1
+    return n
+
+
+def try_grant_monthly_checkin_goal_bonus(data_dir: Path, username: str) -> int:
+    """
+    在已设目标且当月有效打卡天数已达标时，发放一次性「目标天数 × CHECKIN_GOAL_XP_PER_DAY」。
+    用于保存目标后立刻达标、或补发。返回本次发放的 XP（0 表示未发放）。
+    """
+    state = load_state(data_dir, username)
+    today = date.today()
+    ym = today.strftime("%Y-%m")
+    if state.get("mcheckin_goal_month") != ym or state.get("mcheckin_goal") is None:
+        return 0
+    if state.get("mcheckin_goal_bonus_awarded_month") == ym:
+        return 0
+    try:
+        g = int(state["mcheckin_goal"])
+    except (TypeError, ValueError):
+        return 0
+    if valid_checkin_days_in_month(state, ym) < g:
+        return 0
+    bonus = g * CHECKIN_GOAL_XP_PER_DAY
+    state["mcheckin_goal_bonus_awarded_month"] = ym
+    state["total_xp"] = int(state.get("total_xp") or 0) + bonus
+    save_state(data_dir, username, state)
+    return bonus
+
+
+def apply_xp_delta(data_dir: Path, username: str, delta: int) -> Tuple[bool, str, int]:
+    """
+    调整 total_xp（可为负）。成功返回 (True, "", new_total)；失败 (False, 错误信息, 当前 total)。
+    """
+    state = load_state(data_dir, username)
+    cur = int(state.get("total_xp") or 0)
+    new_total = cur + int(delta)
+    if new_total < 0:
+        return False, "积分不足", cur
+    state["total_xp"] = new_total
+    save_state(data_dir, username, state)
+    return True, "", new_total
+
+
 def award_correct_answer(
     data_dir: Path,
     username: str,
@@ -224,10 +301,12 @@ def award_correct_answer(
 ) -> Dict[str, Any]:
     """
     答对后加分、更新 streak、解锁成就。在同一用户锁内调用。
+    若已设本月打卡目标且当月有效打卡天数已达目标，且尚未发放过，则一次性发放「目标天数 × CHECKIN_GOAL_XP_PER_DAY」额外奖励（不影响日常练习 XP）。
     """
     state = load_state(data_dir, username)
     today = date.today()
     day_key = today.isoformat()
+    ym = today.strftime("%Y-%m")
 
     success_increased = new_success_count > old_success_count
     raw = compute_raw_xp(
@@ -243,26 +322,46 @@ def award_correct_answer(
     sbd[day_key] = int(sbd.get(day_key, 0)) + 1
 
     state["total_correct"] = int(state.get("total_correct") or 0) + 1
+    _update_streak(state, today)
+
+    monthly_bonus_xp = 0
+    if (
+        state.get("mcheckin_goal_month") == ym
+        and state.get("mcheckin_goal") is not None
+        and state.get("mcheckin_goal_bonus_awarded_month") != ym
+    ):
+        g = int(state["mcheckin_goal"])
+        if valid_checkin_days_in_month(state, ym) >= g:
+            monthly_bonus_xp = g * CHECKIN_GOAL_XP_PER_DAY
+            state["mcheckin_goal_bonus_awarded_month"] = ym
+
     if xp_gain > 0:
         state["total_xp"] = int(state.get("total_xp") or 0) + xp_gain
         state["daily_xp"][day_key] = daily_so_far + xp_gain
-    _update_streak(state, today)
+    if monthly_bonus_xp > 0:
+        state["total_xp"] = int(state.get("total_xp") or 0) + monthly_bonus_xp
 
     new_achievements = _unlock_achievements(state, mastered_words=mastered_words)
     save_state(data_dir, username, state)
 
     lv = level_from_xp(int(state["total_xp"]))
     _, need_next = xp_to_next_level(int(state["total_xp"]))
+    today_correct = int(sbd.get(day_key, 0))
+    check_in_done = today_correct >= CHECKIN_MIN_CORRECT
 
     return {
         "xp_gained": xp_gain,
         "raw_xp": raw,
+        "monthly_goal_bonus_xp": monthly_bonus_xp,
         "total_xp": int(state["total_xp"]),
         "level": lv,
         "xp_to_next_level": need_next,
         "streak": int(state.get("streak") or 0),
         "new_achievements": new_achievements,
         "daily_xp_today": int(state["daily_xp"].get(day_key, 0)),
+        "today_correct_count": today_correct,
+        "check_in_done_today": check_in_done,
+        "check_in_min_correct": CHECKIN_MIN_CORRECT,
     }
 
 
@@ -305,6 +404,19 @@ def public_profile(data_dir: Path, username: str, *, mastered_words: int) -> Dic
         row["unlocked_at"] = ach.get(aid)
         all_defs.append(row)
 
+    today = date.today()
+    day_key = today.isoformat()
+    ym = today.strftime("%Y-%m")
+    sbd = state.get("streak_correct_by_day") or {}
+    today_correct = int(sbd.get(day_key, 0))
+    month_days = valid_checkin_days_in_month(state, ym)
+    goal = state.get("mcheckin_goal")
+    goal_month = state.get("mcheckin_goal_month")
+    if goal_month != ym:
+        goal = None
+
+    bonus_total = int(goal) * CHECKIN_GOAL_XP_PER_DAY if goal is not None else None
+
     return {
         "total_xp": total_xp,
         "level": lv,
@@ -315,16 +427,53 @@ def public_profile(data_dir: Path, username: str, *, mastered_words: int) -> Dic
         "leaderboard_opt_in": bool(state.get("leaderboard_opt_in", True)),
         "achievements_unlocked": unlocked,
         "achievements_all": all_defs,
-        "daily_xp_today": int(state.get("daily_xp", {}).get(date.today().isoformat(), 0)),
+        "daily_xp_today": int(state.get("daily_xp", {}).get(day_key, 0)),
+        "today_correct_count": today_correct,
+        "check_in_done_today": today_correct >= CHECKIN_MIN_CORRECT,
+        "check_in_min_correct": CHECKIN_MIN_CORRECT,
+        "month_key": ym,
+        "month_valid_checkin_days": month_days,
+        "month_days_in_month": calendar.monthrange(today.year, today.month)[1],
+        "monthly_checkin_goal": goal,
+        "monthly_checkin_goal_month": goal_month,
+        "monthly_goal_completion_bonus_xp": bonus_total,
+        "monthly_goal_bonus_awarded_this_month": state.get("mcheckin_goal_bonus_awarded_month") == ym,
+        "checkin_goal_xp_per_day": CHECKIN_GOAL_XP_PER_DAY,
     }
 
 
-def patch_settings(data_dir: Path, username: str, leaderboard_opt_in: Optional[bool]) -> Dict[str, Any]:
+def patch_settings(
+    data_dir: Path,
+    username: str,
+    leaderboard_opt_in: Optional[bool] = None,
+    monthly_checkin_goal: Optional[int] = None,
+    *,
+    clear_monthly_goal: bool = False,
+) -> Dict[str, Any]:
     state = load_state(data_dir, username)
     if leaderboard_opt_in is not None:
         state["leaderboard_opt_in"] = bool(leaderboard_opt_in)
+    today = date.today()
+    ym = today.strftime("%Y-%m")
+    dim = calendar.monthrange(today.year, today.month)[1]
+    if clear_monthly_goal:
+        state["mcheckin_goal"] = None
+        state["mcheckin_goal_month"] = None
+    elif monthly_checkin_goal is not None:
+        g = int(monthly_checkin_goal)
+        if g < 1 or g > dim:
+            raise ValueError(f"本月目标须在 1～{dim} 之间")
+        state["mcheckin_goal"] = g
+        state["mcheckin_goal_month"] = ym
     save_state(data_dir, username, state)
-    return {"leaderboard_opt_in": state["leaderboard_opt_in"]}
+    bonus_granted = try_grant_monthly_checkin_goal_bonus(data_dir, username)
+    state = load_state(data_dir, username)
+    return {
+        "leaderboard_opt_in": state["leaderboard_opt_in"],
+        "monthly_checkin_goal": state.get("mcheckin_goal") if state.get("mcheckin_goal_month") == ym else None,
+        "monthly_checkin_goal_month": state.get("mcheckin_goal_month"),
+        "monthly_goal_bonus_just_granted_xp": bonus_granted,
+    }
 
 
 def build_leaderboard(

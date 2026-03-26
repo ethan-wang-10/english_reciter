@@ -115,18 +115,31 @@ function updateGamificationNav(g) {
     const lv = document.getElementById('ng-level');
     const xp = document.getElementById('ng-xp');
     const st = document.getElementById('ng-streak');
+    const ck = document.getElementById('ng-checkin');
+    const minC = Number(g.check_in_min_correct) || 5;
+    const todayC = Number(g.today_correct_count) || 0;
+    const ckText = `打卡 ${todayC}/${minC}`;
     if (lv && xp && st) {
         lv.textContent = `Lv.${g.level}`;
         xp.textContent = `${formatNumber(g.total_xp)} XP`;
         st.textContent = `🔥 ${g.streak}`;
     }
+    if (ck) {
+        ck.textContent = ckText;
+        ck.classList.toggle('ng-checkin-done', !!g.check_in_done_today);
+    }
     const mlv = document.getElementById('mobile-ng-level');
     const mxp = document.getElementById('mobile-ng-xp');
     const mst = document.getElementById('mobile-ng-streak');
+    const mck = document.getElementById('mobile-ng-checkin');
     if (mlv && mxp && mst) {
         mlv.textContent = `Lv.${g.level}`;
         mxp.textContent = `${formatNumber(g.total_xp)} XP`;
         mst.textContent = `🔥 ${g.streak}`;
+    }
+    if (mck) {
+        mck.textContent = ckText;
+        mck.classList.toggle('ng-checkin-done', !!g.check_in_done_today);
     }
 }
 
@@ -232,6 +245,218 @@ async function refreshGamification() {
     }
 }
 
+function setSettingsMessage(text, isError) {
+    const el = document.getElementById('settings-message');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('settings-message-error', !!isError);
+}
+
+function openSettings() {
+    const ov = document.getElementById('settings-overlay');
+    if (ov) {
+        ov.style.display = 'flex';
+        ov.setAttribute('aria-hidden', 'false');
+    }
+    loadUserSettingsPanel();
+}
+
+function closeSettings() {
+    const ov = document.getElementById('settings-overlay');
+    if (ov) {
+        ov.style.display = 'none';
+        ov.setAttribute('aria-hidden', 'true');
+    }
+}
+
+function isSettingsOverlayOpen() {
+    const ov = document.getElementById('settings-overlay');
+    return Boolean(ov && ov.style.display !== 'none' && ov.getAttribute('aria-hidden') !== 'true');
+}
+
+/** 仅更新设置面板「今日打卡」文案（字段与 GET /gamification 一致） */
+function updateSettingsCheckinHintFromProfile(g) {
+    if (!g) return;
+    const hint = document.getElementById('settings-checkin-hint');
+    if (!hint) return;
+    const minC = Number(g.check_in_min_correct) || 5;
+    const tc = Number(g.today_correct_count) || 0;
+    const done = g.check_in_done_today;
+    hint.textContent = `今日已答对 ${tc} 词；有效打卡需至少 ${minC} 词。${done ? '今日已有效打卡。' : '继续加油。'}`;
+}
+
+/** 月度打卡「额外奖励」说明（仅影响目标天数×30，不影响日常练习与其它积分） */
+function updateSettingsMonthlyGoalBonusNotice(s) {
+    const el = document.getElementById('settings-goal-bonus-hint');
+    if (!el) return;
+    const goal = s.monthly_checkin_goal;
+    const per = Number(s.checkin_goal_xp_per_day) || 30;
+    if (goal == null || goal === '') {
+        el.hidden = true;
+        el.textContent = '';
+        return;
+    }
+    const g = Number(goal);
+    const bonusXp = Number.isFinite(g) ? g * per : 0;
+    el.hidden = false;
+    if (s.monthly_goal_bonus_awarded_this_month) {
+        el.textContent = `本月打卡目标额外奖励（${formatNumber(bonusXp)} XP）已发放。`;
+    } else {
+        el.textContent =
+            `额外奖励：当月有效打卡满 ${g} 天后一次性获得 ${formatNumber(bonusXp)} XP（${g}×${per}）；若本月未达标则不发放该额外奖励；练习、奖池与 PK 等其它积分照常。`;
+    }
+}
+
+function renderDuelRow(d, me) {
+    const other = d.from_user === me ? d.target_user : d.from_user;
+    const role = d.from_user === me ? '发起 →' : '← 收到';
+    const id = String(d.id || '');
+    let actions = '';
+    if (d.status === 'pending' && d.target_user === me) {
+        actions =
+            '<span class="settings-duel-actions">' +
+            `<button type="button" class="btn btn-primary settings-duel-btn" data-duel-id="${escapeHtml(id)}" data-duel-accept="1">接受</button> ` +
+            `<button type="button" class="btn btn-secondary settings-duel-btn" data-duel-id="${escapeHtml(id)}" data-duel-accept="0">拒绝</button>` +
+            '</span>';
+    }
+    let statusLabel = String(d.status || '');
+    if (d.settled) {
+        if (d.tie) statusLabel = '平局（已退回赌注）';
+        else if (d.winner === me) statusLabel = '已结算 · 胜';
+        else statusLabel = '已结算 · 负';
+    } else if (d.status === 'active') {
+        statusLabel = '进行中';
+    } else if (d.status === 'declined') {
+        statusLabel = '已拒绝';
+    } else if (d.status === 'pending') {
+        statusLabel = '待处理';
+    }
+    const wager = Number(d.wager_xp) || 0;
+    return `<li class="settings-duel-item">
+    <span class="settings-duel-meta">${escapeHtml(role)} ${escapeHtml(other)} · ${wager} XP · ${escapeHtml(d.month || '')}</span>
+    <span class="settings-duel-status">${escapeHtml(statusLabel)}</span>
+    ${actions}
+  </li>`;
+}
+
+function renderUserSettingsPanel(s) {
+    setSettingsMessage('');
+    const prev = document.getElementById('settings-avatar-preview');
+    const ph = document.getElementById('settings-avatar-placeholder');
+    if (prev && ph) {
+        if (s.avatar_url) {
+            prev.src = `${s.avatar_url}${s.avatar_url.indexOf('?') >= 0 ? '&' : '?'}t=${Date.now()}`;
+            prev.hidden = false;
+            ph.hidden = true;
+        } else {
+            prev.removeAttribute('src');
+            prev.hidden = true;
+            ph.hidden = false;
+        }
+    }
+    updateSettingsCheckinHintFromProfile(s);
+    updateSettingsMonthlyGoalBonusNotice(s);
+    const dim = Number(s.month_days_in_month) || 31;
+    const input = document.getElementById('settings-month-goal');
+    if (input) {
+        input.max = String(dim);
+        input.placeholder = `1～${dim}`;
+        input.value =
+            s.monthly_checkin_goal != null && s.monthly_checkin_goal !== ''
+                ? String(s.monthly_checkin_goal)
+                : '';
+    }
+    const days = Number(s.month_valid_checkin_days) || 0;
+    const goal = s.monthly_checkin_goal;
+    const fill = document.getElementById('settings-month-goal-fill');
+    const text = document.getElementById('settings-month-goal-text');
+    if (goal != null && goal !== '') {
+        const g = Number(goal);
+        const pct = g > 0 ? Math.min(100, Math.round((days / g) * 100)) : 0;
+        if (fill) fill.style.width = `${pct}%`;
+        if (text) text.textContent = `本月有效打卡 ${days} / ${g} 天`;
+    } else {
+        if (fill) fill.style.width = '0%';
+        if (text) text.textContent = `本月有效打卡 ${days} 天（未设置目标）`;
+    }
+
+    const pool = s.monthly_pool || {};
+    const poolHint = document.getElementById('settings-pool-hint');
+    const joinBtn = document.getElementById('settings-pool-join');
+    if (poolHint) {
+        let t = `${pool.month || ''} 奖池共 ${formatNumber(pool.pool_xp || 0)} XP，${pool.participant_count || 0} 人参与。`;
+        if (pool.joined) t += ' 你已加入。';
+        if (!pool.join_window_open) {
+            t += ` 加入窗口为每月 1～${pool.join_window_last_day || 5} 日。`;
+        }
+        poolHint.textContent = t;
+    }
+    if (joinBtn) {
+        joinBtn.disabled = !!pool.joined || !pool.join_window_open;
+        joinBtn.textContent = pool.joined ? '已加入本月奖池' : `加入奖池（${pool.fee_xp || 150} XP）`;
+    }
+
+    const sel = document.getElementById('settings-duel-wager');
+    if (sel && Array.isArray(s.wager_tiers) && s.wager_tiers.length) {
+        const tiers = s.wager_tiers.map(Number);
+        const preferred = tiers.includes(100) ? 100 : tiers[0];
+        sel.innerHTML = tiers
+            .map((w) => {
+                const n = Number(w);
+                const label = n === 0 ? '无赌注' : `${n} XP`;
+                const optSel = n === preferred ? ' selected' : '';
+                return `<option value="${n}"${optSel}>${label}</option>`;
+            })
+            .join('');
+    }
+
+    const list = document.getElementById('settings-duel-list');
+    if (list && Array.isArray(s.duels)) {
+        list.innerHTML = s.duels.length
+            ? s.duels.map((d) => renderDuelRow(d, username)).join('')
+            : '<li class="settings-duel-empty">暂无挑战</li>';
+    }
+}
+
+async function loadUserSettingsPanel() {
+    try {
+        const [s, poolState] = await Promise.all([
+            apiRequest('/user/settings'),
+            apiRequest('/monthly-pool'),
+        ]);
+        s.monthly_pool = poolState;
+        renderUserSettingsPanel(s);
+        lastGamificationProfile = s;
+        updateGamificationNav(s);
+    } catch (e) {
+        setSettingsMessage(e.message || '加载失败', true);
+    }
+}
+
+async function postAvatarFile(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(`${API_BASE}/user/avatar`, { method: 'POST', headers, body: fd });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || err.detail || '上传失败');
+    }
+    return response.json();
+}
+
+async function deleteAvatarApi() {
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(`${API_BASE}/user/avatar`, { method: 'DELETE', headers });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || err.detail || '移除失败');
+    }
+    return response.json();
+}
+
 function renderLeaderboardTable(rows) {
     const wrap = document.getElementById('leaderboard-table-wrap');
     if (!wrap) return;
@@ -247,9 +472,12 @@ function renderLeaderboardTable(rows) {
     const body = rows
         .map((r) => {
             const me = r.is_viewer ? 'leaderboard-row-me' : '';
+            const av = r.avatar_url
+                ? `<img class="lb-avatar" src="${escapeHtml(r.avatar_url)}" alt="" width="32" height="32" loading="lazy" />`
+                : '<span class="lb-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
             return `<tr class="${me}">
                 <td>${escapeHtml(r.rank)}</td>
-                <td>${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</td>
+                <td class="lb-user-cell">${av}<span class="lb-username">${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</span></td>
                 <td>Lv.${escapeHtml(r.level)}</td>
                 <td>${escapeHtml(formatNumber(r.total_xp))}</td>
                 <td>🔥 ${escapeHtml(r.streak)}</td>
@@ -748,6 +976,7 @@ async function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
 
+    closeSettings();
     showLoginPage();
 }
 
@@ -1212,6 +1441,10 @@ async function loadStats() {
     }
     try {
         await refreshGamification();
+        if (isSettingsOverlayOpen() && lastGamificationProfile) {
+            updateSettingsCheckinHintFromProfile(lastGamificationProfile);
+            updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
+        }
     } catch (_) {
         /* 积分接口失败不影响复习 */
     }
@@ -1740,15 +1973,24 @@ async function submitAnswer() {
             const gm = result.gamification;
             if (gm.xp_gained > 0) {
                 msgText += ` +${gm.xp_gained} XP（累计 ${formatNumber(gm.total_xp)} · Lv.${gm.level} · 连续 ${gm.streak} 天）`;
+            } else {
+                msgText += `（累计 ${formatNumber(gm.total_xp)} · Lv.${gm.level} · 连续 ${gm.streak} 天）`;
+            }
+            if (gm.monthly_goal_bonus_xp > 0) {
+                msgText += ` · 打卡目标额外奖励 +${formatNumber(gm.monthly_goal_bonus_xp)} XP`;
             }
             if (gm.new_achievements && gm.new_achievements.length) {
                 msgText += ` · 新成就：${gm.new_achievements.map((x) => x.title).join('、')}`;
             }
-            updateGamificationNav({
-                level: gm.level,
-                total_xp: gm.total_xp,
-                streak: gm.streak
-            });
+            lastGamificationProfile = { ...(lastGamificationProfile || {}), ...gm };
+            if (gm.monthly_goal_bonus_xp > 0) {
+                lastGamificationProfile.monthly_goal_bonus_awarded_this_month = true;
+            }
+            updateGamificationNav(lastGamificationProfile);
+            if (isSettingsOverlayOpen()) {
+                updateSettingsCheckinHintFromProfile(gm);
+                updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
+            }
         }
         messageDiv.textContent = msgText;
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
@@ -2635,6 +2877,114 @@ document.addEventListener('DOMContentLoaded', function() {
             const page = item.dataset.page;
             if (page) showSection(page);
         });
+    });
+    document.getElementById('mobile-open-settings')?.addEventListener('click', () => {
+        closeMobileMoreSheet();
+        openSettings();
+    });
+
+    document.getElementById('settings-backdrop')?.addEventListener('click', closeSettings);
+    document.getElementById('settings-close')?.addEventListener('click', closeSettings);
+    document.getElementById('username-display')?.addEventListener('click', () => openSettings());
+    document.getElementById('settings-avatar-input')?.addEventListener('change', async (e) => {
+        const inp = e.target;
+        const f = inp.files && inp.files[0];
+        inp.value = '';
+        if (!f) return;
+        try {
+            await postAvatarFile(f);
+            setSettingsMessage('头像已更新');
+            await loadUserSettingsPanel();
+        } catch (err) {
+            setSettingsMessage(err.message || '上传失败', true);
+        }
+    });
+    document.getElementById('settings-avatar-remove')?.addEventListener('click', async () => {
+        try {
+            await deleteAvatarApi();
+            setSettingsMessage('已移除头像');
+            await loadUserSettingsPanel();
+        } catch (err) {
+            setSettingsMessage(err.message || '操作失败', true);
+        }
+    });
+    document.getElementById('settings-month-goal-save')?.addEventListener('click', async () => {
+        const inp = document.getElementById('settings-month-goal');
+        const raw = inp && inp.value.trim();
+        try {
+            let body;
+            if (raw === '') {
+                body = { monthly_checkin_goal: null };
+            } else {
+                const n = parseInt(raw, 10);
+                if (Number.isNaN(n)) {
+                    setSettingsMessage('请输入有效天数', true);
+                    return;
+                }
+                body = { monthly_checkin_goal: n };
+            }
+            const res = await apiRequest('/gamification', { method: 'PATCH', body: JSON.stringify(body) });
+            let msg = '本月目标已保存';
+            if (res.monthly_goal_bonus_just_granted_xp > 0) {
+                msg += ` · 已发放打卡目标奖励 +${formatNumber(res.monthly_goal_bonus_just_granted_xp)} XP`;
+            }
+            setSettingsMessage(msg);
+            await loadUserSettingsPanel();
+        } catch (err) {
+            setSettingsMessage(err.message || '保存失败', true);
+        }
+    });
+    document.getElementById('settings-pool-join')?.addEventListener('click', async () => {
+        try {
+            await apiRequest('/monthly-pool/join', { method: 'POST', body: '{}' });
+            setSettingsMessage('已加入本月奖池');
+            await loadUserSettingsPanel();
+        } catch (err) {
+            setSettingsMessage(err.message || '加入失败', true);
+        }
+    });
+    document.getElementById('settings-duel-send')?.addEventListener('click', async () => {
+        const tin = document.getElementById('settings-duel-target');
+        const t = (tin && tin.value) || '';
+        const w = document.getElementById('settings-duel-wager');
+        const wager = w ? parseInt(w.value, 10) : 0;
+        if (!t.trim()) {
+            setSettingsMessage('请填写对方用户名', true);
+            return;
+        }
+        try {
+            await apiRequest('/challenges', {
+                method: 'POST',
+                body: JSON.stringify({ target_username: t.trim(), wager_xp: wager }),
+            });
+            setSettingsMessage('挑战已发出');
+            if (tin) tin.value = '';
+            await loadUserSettingsPanel();
+        } catch (err) {
+            setSettingsMessage(err.message || '发起失败', true);
+        }
+    });
+    document.getElementById('settings-duel-list')?.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.settings-duel-btn[data-duel-id]');
+        if (!btn) return;
+        const id = btn.getAttribute('data-duel-id');
+        const accept = btn.getAttribute('data-duel-accept') === '1';
+        if (!id) return;
+        try {
+            await apiRequest(`/challenges/${encodeURIComponent(id)}/respond`, {
+                method: 'POST',
+                body: JSON.stringify({ accept }),
+            });
+            setSettingsMessage(accept ? '已接受挑战' : '已拒绝');
+            await loadUserSettingsPanel();
+        } catch (err) {
+            setSettingsMessage(err.message || '操作失败', true);
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const ov = document.getElementById('settings-overlay');
+        if (ov && ov.style.display !== 'none') closeSettings();
     });
 
     const lbOptIn = document.getElementById('leaderboard-opt-in');

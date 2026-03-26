@@ -93,11 +93,12 @@
                 <div class="nav-gamification" id="nav-gamification" title="学习积分与连续打卡">
                     <span class="ng-level" id="ng-level">Lv.1</span>
                     <span class="ng-xp" id="ng-xp">0 XP</span>
-                    <span class="ng-streak" id="ng-streak" title="连续打卡天数">🔥 0</span>
+                    <span class="ng-streak" id="ng-streak" title="连续有效打卡（每日至少答对 5 词）">🔥 0</span>
+                    <span class="ng-checkin" id="ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
                 </div>
                 <div class="nav-user">
                     <button type="button" id="admin-gear-main" class="btn-gear" title="管理员">⚙</button>
-                    <span id="username-display"></span>
+                    <button type="button" class="username-btn" id="username-display" title="用户设置"></button>
                     <button id="logout-btn" class="btn btn-secondary">退出</button>
                 </div>
             </nav>
@@ -118,11 +119,13 @@
                     <div class="mobile-more-gamification" id="mobile-more-gamification" title="学习积分与连续打卡">
                         <span class="ng-level" id="mobile-ng-level">Lv.1</span>
                         <span class="ng-xp" id="mobile-ng-xp">0 XP</span>
-                        <span class="ng-streak" id="mobile-ng-streak" title="连续打卡天数">🔥 0</span>
+                        <span class="ng-streak" id="mobile-ng-streak" title="连续有效打卡（每日至少答对 5 词）">🔥 0</span>
+                        <span class="ng-checkin" id="mobile-ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
                     </div>
                     <button type="button" class="mobile-more-link" data-page="discover">单词学习</button>
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
+                    <button type="button" class="mobile-more-link" id="mobile-open-settings">用户设置</button>
                 </div>
             </div>
 
@@ -373,6 +376,67 @@
 
                     <h3 class="achievements-section-title">我的成就</h3>
                     <div id="achievements-grid" class="achievements-grid"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 用户设置 -->
+        <div id="settings-overlay" class="settings-overlay" style="display: none;" aria-hidden="true">
+            <div class="settings-backdrop" id="settings-backdrop"></div>
+            <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+                <div class="settings-panel-head">
+                    <h2 id="settings-title">用户设置</h2>
+                    <button type="button" class="settings-close" id="settings-close" aria-label="关闭">×</button>
+                </div>
+                <div class="settings-panel-body" id="settings-panel-body">
+                    <div class="settings-block">
+                        <h3 class="settings-subtitle">头像</h3>
+                        <div class="settings-avatar-row">
+                            <img id="settings-avatar-preview" class="settings-avatar-preview" alt="" width="72" height="72" hidden />
+                            <span id="settings-avatar-placeholder" class="settings-avatar-placeholder" aria-hidden="true">👤</span>
+                            <div class="settings-avatar-actions">
+                                <input type="file" id="settings-avatar-input" accept="image/jpeg,image/png,image/webp" class="settings-avatar-input" />
+                                <label for="settings-avatar-input" class="btn btn-secondary settings-avatar-label">选择图片</label>
+                                <button type="button" class="btn btn-secondary" id="settings-avatar-remove">移除头像</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-block">
+                        <h3 class="settings-subtitle">今日打卡</h3>
+                        <p class="settings-hint" id="settings-checkin-hint">—</p>
+                    </div>
+                    <div class="settings-block">
+                        <h3 class="settings-subtitle">本月打卡目标</h3>
+                        <div class="settings-goal-row">
+                            <input type="number" id="settings-month-goal" min="1" max="31" class="settings-month-goal-input" placeholder="天数" />
+                            <button type="button" class="btn btn-primary" id="settings-month-goal-save">保存</button>
+                        </div>
+                        <div class="settings-progress-wrap">
+                            <div class="settings-progress-bar"><div class="settings-progress-fill" id="settings-month-goal-fill"></div></div>
+                            <p class="settings-hint" id="settings-month-goal-text">—</p>
+                        </div>
+                        <p class="settings-hint settings-goal-bonus-hint" id="settings-goal-bonus-hint" hidden></p>
+                    </div>
+                    <div class="settings-block">
+                        <h3 class="settings-subtitle">月度群体挑战</h3>
+                        <p class="settings-hint" id="settings-pool-hint">—</p>
+                        <button type="button" class="btn btn-primary" id="settings-pool-join">加入奖池（150 XP）</button>
+                    </div>
+                    <div class="settings-block">
+                        <h3 class="settings-subtitle">1v1 打卡 PK</h3>
+                        <div class="settings-goal-row">
+                            <input type="text" id="settings-duel-target" class="settings-duel-input" placeholder="对方用户名" autocomplete="username" />
+                            <select id="settings-duel-wager" class="settings-duel-wager">
+                                <option value="0">无赌注</option>
+                                <option value="50">50 XP</option>
+                                <option value="100" selected>100 XP</option>
+                                <option value="200">200 XP</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" id="settings-duel-send">发起</button>
+                        </div>
+                        <ul class="settings-duel-list" id="settings-duel-list"></ul>
+                    </div>
+                    <p class="settings-message" id="settings-message" role="status"></p>
                 </div>
             </div>
         </div>
