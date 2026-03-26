@@ -1439,6 +1439,7 @@ def get_review_list(username):
                     'scheduled_due_date': nd.isoformat(),
                     'is_carryover': is_carryover,
                     'carryover_days': (today_d - nd).days if is_carryover else 0,
+                    'examples': [],
                 }
                 # 尝试从 CSV 中获取更丰富的例句信息
                 csv_row = lookup_csv_word(w.english)
@@ -1449,6 +1450,14 @@ def get_review_list(username):
                     item['example_form'] = picked.get('example_form', '')
                     item['phonetic'] = csv_row.get('phonetic', '')
                     item['level'] = csv_row.get('level', '')
+                    item['examples'] = examples_from_csv_row(csv_row)
+                if not item['examples'] and (getattr(w, 'example', None) or '').strip():
+                    raw = (w.example or '').strip()
+                    if '_' in raw:
+                        a, b = raw.split('_', 1)
+                        item['examples'] = [{'en': a.strip(), 'cn': b.strip()}]
+                    else:
+                        item['examples'] = [{'en': raw, 'cn': ''}]
                 words.append(item)
 
             return jsonify({'words': words, 'count': len(words)}), 200

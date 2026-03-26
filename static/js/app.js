@@ -2593,6 +2593,8 @@ let discoveryDeck = [];
 let discoveryIndex = 0;
 /** 当前牌组中「待复习」词条数量（用于序号旁提示） */
 let discoveryPendingCount = 0;
+/** 「今日单词」模式：牌组仅为今日复习列表 */
+let discoveryModeToday = false;
 
 const DISCOVERY_LEVEL_STORAGE_KEY = 'english_reciter_discovery_level';
 
@@ -2696,7 +2698,38 @@ async function loadDiscovery() {
     const emptyEl = document.getElementById('discovery-empty');
     const rootEl = document.getElementById('discovery-root');
     const level = String(getDiscoverySelectedLevel() || '').trim();
+    discoveryModeToday = false;
     try {
+        if (level === 'today') {
+            discoveryModeToday = true;
+            const rev = await apiRequest('/words/review');
+            const list = rev.words || [];
+            discoveryDeck = list.map((w) => ({
+                english: w.english,
+                chinese: w.chinese,
+                phonetic: w.phonetic || '',
+                examples: buildPendingDiscoveryExamples(w),
+                source: 'today',
+                next_review_date: w.scheduled_due_date,
+            }));
+            discoveryPendingCount = 0;
+            if (discoveryIndex >= discoveryDeck.length) discoveryIndex = 0;
+
+            if (discoveryDeck.length === 0) {
+                if (emptyEl) {
+                    emptyEl.style.display = 'block';
+                    emptyEl.innerHTML =
+                        '<p>今日暂无需要复习的单词。可稍后再试，或切换到「全部」等其它词库。</p>';
+                }
+                if (rootEl) rootEl.style.display = 'none';
+                return;
+            }
+            if (emptyEl) emptyEl.style.display = 'none';
+            if (rootEl) rootEl.style.display = 'block';
+            renderDiscoveryCard();
+            return;
+        }
+
         const csvPath = level ? `/wordbank/csv?level=${encodeURIComponent(level)}` : '/wordbank/csv';
         const [st, wb] = await Promise.all([apiRequest('/words/status'), apiRequest(csvPath)]);
 
@@ -2813,7 +2846,9 @@ function renderDiscoveryCard() {
     if (counter) {
         const n = discoveryDeck.length;
         const i = discoveryIndex + 1;
-        if (discoveryPendingCount > 0 && w.source === 'pending') {
+        if (discoveryModeToday && w.source === 'today') {
+            counter.textContent = `${i} / ${n}（今日复习）`;
+        } else if (discoveryPendingCount > 0 && w.source === 'pending') {
             counter.textContent = `${i} / ${n}（待复习 ${discoveryPendingCount}）`;
         } else {
             counter.textContent = `${i} / ${n}`;
