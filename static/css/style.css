@@ -316,7 +316,7 @@ body {
 /* 顶栏：始终只显示 📚 图标，完整名称由 .nav-brand[aria-label] 提供（读屏 / 悬停） */
 .navbar .nav-brand {
     gap: 0;
-    margin-inline-end: 12px;
+    margin-inline-end: 16px;
 }
 
 .navbar .nav-brand .brand-name {
@@ -2280,12 +2280,13 @@ body {
     flex-shrink: 0;
 }
 
-/* 桌面顶栏：游戏化区可收缩；与左侧菜单组之间留白（原「排行榜」前间距移至此） */
+/* 桌面顶栏：游戏化区占满中间空隙、药丸靠右，与右侧消息/用户区保持 12px（沿用 .navbar 的 gap） */
 @media (min-width: 769px) {
     .navbar .nav-gamification {
         flex: 1 1 auto;
         min-width: 0;
         margin-inline-start: 12px;
+        justify-content: flex-end;
     }
 }
 
