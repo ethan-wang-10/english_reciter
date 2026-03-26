@@ -1238,10 +1238,7 @@ def api_challenges_create(username):
         wager = int(data.get('wager_xp', 0))
     except (TypeError, ValueError):
         return jsonify({'error': 'wager_xp 须为整数'}), 400
-    month = (data.get('month') or '').strip() or None
-    ok, msg, row = challenges_mod.create_duel(
-        DATA_DIR, username, target, wager_xp=wager, duel_month=month
-    )
+    ok, msg, row = challenges_mod.create_duel(DATA_DIR, username, target, wager_xp=wager)
     if not ok or not row:
         return jsonify({'error': msg or '创建失败'}), 400
     return jsonify(row), 201

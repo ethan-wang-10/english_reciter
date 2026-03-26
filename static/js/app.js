@@ -328,10 +328,20 @@ function renderDuelRow(d, me) {
         statusLabel = '进行中';
     } else if (d.status === 'declined') {
         statusLabel = '已拒绝';
+    } else if (d.status === 'expired') {
+        statusLabel = '已过期';
     } else if (d.status === 'pending') {
         statusLabel = '待处理';
     }
     const wager = Number(d.wager_xp) || 0;
+    const monthBit =
+        d.status === 'pending' ? '待接受' : d.month ? String(d.month) : '';
+    const inviteExpiry =
+        d.status === 'pending' && d.expires_at
+            ? `<div class="settings-duel-pk-range">邀约有效期至 ${escapeHtml(
+                  String(d.expires_at).replace('T', ' ').slice(0, 16),
+              )}</div>`
+            : '';
     const pkRange =
         d.pk_stats_start_date && d.pk_stats_end_date
             ? `<div class="settings-duel-pk-range">PK 计分区间：${escapeHtml(d.pk_stats_start_date)} ～ ${escapeHtml(
@@ -339,8 +349,9 @@ function renderDuelRow(d, me) {
               )}（双方同意次日）</div>`
             : '';
     return `<li class="settings-duel-item">
-    <span class="settings-duel-meta">${escapeHtml(role)} ${escapeHtml(other)} · ${wager} XP · ${escapeHtml(d.month || '')}</span>
+    <span class="settings-duel-meta">${escapeHtml(role)} ${escapeHtml(other)} · ${wager} XP · ${escapeHtml(monthBit)}</span>
     <span class="settings-duel-status">${escapeHtml(statusLabel)}</span>
+    ${inviteExpiry}
     ${pkRange}
     ${actions}
   </li>`;

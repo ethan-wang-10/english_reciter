@@ -9,7 +9,7 @@ import json
 import threading
 import uuid
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,8 +21,10 @@ PREPARATION_LAST_DAY = 5
 COMPETITION_START_DAY = 6
 JOIN_WINDOW_LAST_DAY = PREPARATION_LAST_DAY  # 仅准备期内可加入奖池
 WAGER_TIERS = (0, 50, 100, 200)
+# 1v1 邀约：自发起日起第 N 个自然日 23:59:59 前未接受则自动过期
+DUEL_INVITE_EXPIRY_DAYS = 5
 
-_challenges_lock = threading.Lock()
+_challenges_lock = threading.RLock()
 
 
 def challenges_dir(data_dir: Path) -> Path:
@@ -57,6 +59,13 @@ def _save_json(path: Path, data: Any) -> None:
 
 def month_key(d: date) -> str:
     return d.strftime("%Y-%m")
+
+
+def duel_invite_expires_at_from_created(created: datetime) -> datetime:
+    """自 created 所在日起第 DUEL_INVITE_EXPIRY_DAYS 个自然日 23:59:59（本地时间）。"""
+    d0 = created.date()
+    last_day = d0 + timedelta(days=DUEL_INVITE_EXPIRY_DAYS - 1)
+    return datetime.combine(last_day, time(23, 59, 59))
 
 
 def pool_join_window_open(today: Optional[date] = None) -> bool:
@@ -137,7 +146,7 @@ def duel_pk_days_for_user(data_dir: Path, username: str, duel: Dict[str, Any]) -
 
 
 def enrich_duel_for_api(duel: Dict[str, Any]) -> Dict[str, Any]:
-    """补充 PK 计分起止日期供前端展示。"""
+    """补充 PK 计分起止日期、邀约过期时间供前端展示。"""
     out = dict(duel)
     rng = duel_pk_counting_range(out)
     if rng:
@@ -147,7 +156,52 @@ def enrich_duel_for_api(duel: Dict[str, Any]) -> Dict[str, Any]:
     else:
         out["pk_stats_start_date"] = None
         out["pk_stats_end_date"] = None
+    if out.get("status") == "pending" and not out.get("expires_at") and out.get("created_at"):
+        try:
+            ca = str(out["created_at"]).replace("Z", "")
+            dt = datetime.fromisoformat(ca[:19])
+            out["expires_at"] = duel_invite_expires_at_from_created(dt).isoformat(timespec="seconds")
+        except (ValueError, TypeError):
+            pass
     return out
+
+
+def _parse_iso_datetime(s: str) -> Optional[datetime]:
+    if not s:
+        return None
+    t = str(s).replace("Z", "")
+    try:
+        return datetime.fromisoformat(t[:19])
+    except ValueError:
+        return None
+
+
+def expire_pending_duels_if_needed(data_dir: Path) -> None:
+    """pending 在邀约截止时间（第 N 个自然日 23:59）之后仍未处理则标记为 expired。"""
+    now = datetime.now()
+    with _challenges_lock:
+        data = _load_duels(data_dir)
+        duels = data.get("duels") or []
+        changed = False
+        for d in duels:
+            if d.get("status") != "pending":
+                continue
+            ca = _parse_iso_datetime(str(d["created_at"])) if d.get("created_at") else None
+            if ca:
+                correct_exp = duel_invite_expires_at_from_created(ca).isoformat(timespec="seconds")
+                if d.get("expires_at") != correct_exp:
+                    d["expires_at"] = correct_exp
+                    changed = True
+            exp_s = d.get("expires_at")
+            exp_dt = _parse_iso_datetime(str(exp_s)) if exp_s else None
+            if not exp_dt:
+                continue
+            if now > exp_dt:
+                d["status"] = "expired"
+                d["expired_at"] = now.isoformat(timespec="seconds")
+                changed = True
+        if changed:
+            _save_duels(data_dir, data)
 
 
 def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
@@ -307,23 +361,25 @@ def create_duel(
     target_user: str,
     *,
     wager_xp: int,
-    duel_month: Optional[str] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if wager_xp not in WAGER_TIERS:
         return False, f"wager_xp 须为 {list(WAGER_TIERS)} 之一", None
     if from_user == target_user:
         return False, "不能挑战自己", None
-    today = date.today()
-    ym = duel_month or month_key(today)
+    expire_pending_duels_if_needed(data_dir)
+    now = datetime.now()
+    created_iso = now.isoformat(timespec="seconds")
+    expires_iso = duel_invite_expires_at_from_created(now).isoformat(timespec="seconds")
     duel_id = str(uuid.uuid4())
     row = {
         "id": duel_id,
-        "month": ym,
+        "month": None,
         "from_user": from_user,
         "target_user": target_user,
         "wager_xp": int(wager_xp),
         "status": "pending",
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "created_at": created_iso,
+        "expires_at": expires_iso,
         "accepted_at": None,
         "settled": False,
         "winner": None,
@@ -342,6 +398,7 @@ def respond_duel(
     target_user: str,
     accept: bool,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    expire_pending_duels_if_needed(data_dir)
     with _challenges_lock:
         data = _load_duels(data_dir)
         duels = data.get("duels") or []
@@ -354,12 +411,14 @@ def respond_duel(
             return False, "挑战不存在", None
         if found.get("target_user") != target_user:
             return False, "无权操作", None
+        if found.get("status") == "expired":
+            return False, "邀约已过期", None
         if found.get("status") != "pending":
             return False, "已处理", None
         if not accept:
             found["status"] = "declined"
             _save_duels(data_dir, data)
-            return True, "", found
+            return True, "", enrich_duel_for_api(found)
 
         w = int(found.get("wager_xp") or 0)
         a, b = found.get("from_user"), found.get("target_user")
@@ -371,8 +430,10 @@ def respond_duel(
             if not ok2:
                 gamification_mod.apply_xp_delta(data_dir, str(a), w)
                 return False, f"应战方{msg2}", None
+        accept_now = datetime.now()
+        found["month"] = month_key(accept_now.date())
         found["status"] = "active"
-        found["accepted_at"] = datetime.now().isoformat(timespec="seconds")
+        found["accepted_at"] = accept_now.isoformat(timespec="seconds")
         found["escrow_xp"] = w
         _save_duels(data_dir, data)
         return True, "", enrich_duel_for_api(found)
@@ -425,6 +486,7 @@ def settle_due_duels(data_dir: Path) -> None:
 
 
 def list_duels_for_user(data_dir: Path, username: str) -> List[Dict[str, Any]]:
+    expire_pending_duels_if_needed(data_dir)
     settle_due_duels(data_dir)
     data = _load_duels(data_dir)
     duels = data.get("duels") or []
