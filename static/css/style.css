@@ -614,14 +614,15 @@ body {
     letter-spacing: 0.04em;
 }
 
-/* 复习区：主栏 + 右侧错题 */
+/* 复习区：主栏 + 右侧错题（顶对齐：统一用 review-layout 上内边距，勿给主栏单独 margin-top） */
 .review-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 280px;
-    gap: 20px;
+    gap: 20px 22px;
     align-items: start;
     max-width: 1100px;
     margin: 0 auto;
+    padding-top: 24px;
 }
 
 .review-main-wrap {
@@ -630,20 +631,24 @@ body {
 
 .review-container {
     max-width: 100%;
-    margin: 24px 0 40px;
+    margin: 0 0 40px;
 }
 
 .wrong-words-aside {
     position: sticky;
     top: 88px;
+    align-self: start;
 }
 
 .wrong-words-card {
-    background: var(--surface);
+    background: linear-gradient(180deg, #fff8f8 0%, var(--surface) 38%);
     border-radius: var(--radius-lg);
     border: 2px solid var(--error-color);
-    box-shadow: 0 var(--tactile-depth) 0 var(--error-dark);
-    padding: 18px 16px 20px;
+    box-shadow: 0 6px 0 var(--error-dark);
+    padding: 20px 18px 22px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .wrong-words-title {
@@ -703,10 +708,13 @@ body {
 @media (max-width: 900px) {
     .review-layout {
         grid-template-columns: 1fr;
+        gap: 18px;
+        padding-top: 16px;
     }
 
     .wrong-words-aside {
         position: static;
+        width: 100%;
     }
 }
 
@@ -1565,8 +1573,12 @@ body {
         line-height: 1.15;
     }
 
+    .review-layout {
+        padding-top: 10px;
+    }
+
     .review-container {
-        margin: 10px 0 28px;
+        margin: 0 0 28px;
     }
 
     .review-box {
