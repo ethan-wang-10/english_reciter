@@ -313,6 +313,15 @@ body {
     flex-shrink: 0;
 }
 
+/* 顶栏：始终只显示 📚 图标，完整名称由 .nav-brand[aria-label] 提供（读屏 / 悬停） */
+.navbar .nav-brand {
+    gap: 0;
+}
+
+.navbar .nav-brand .brand-name {
+    display: none !important;
+}
+
 .logo {
     font-size: 32px;
     line-height: 1;
@@ -483,13 +492,6 @@ body {
 
 .brand-name-tiny {
     display: none;
-}
-
-/* 中等宽度顶栏：品牌仅保留 📚，为游戏化与用户区让出横向空间 */
-@media (max-width: 1200px) and (min-width: 769px) {
-    .navbar .nav-brand .brand-name {
-        display: none;
-    }
 }
 
 /* 移动端底部 Tab（小屏显示，大屏隐藏） */
@@ -1757,16 +1759,6 @@ body {
     .container {
         padding: 12px;
         padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
-    }
-
-    .brand-name-full,
-    .brand-name-short,
-    .brand-name-tiny {
-        display: none !important;
-    }
-
-    .brand-name {
-        display: none !important;
     }
 
     .nav-menu-desktop {
