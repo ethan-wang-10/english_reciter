@@ -342,7 +342,7 @@
             <div id="discover-section" class="section">
                 <div class="container discover-page">
                     <h2>单词学习</h2>
-                    <p class="discover-intro">展示单词、音标与例句，可朗读；仅供浏览，不参与复习计分。「全部」等选项：先你的「待复习」单词，再按所选难度浏览系统词库；「今日单词」仅含今日复习任务中的词。</p>
+                    <p class="discover-intro">展示单词、音标与例句，可朗读；仅供浏览，不参与复习计分。「全部」：先待复习再浏览全库；选择「小学」等难度时，仅展示该难度词库中的词（含你在该难度的待复习词）；「今日单词」仅含今日复习任务。</p>
                     <div id="discovery-empty" class="discovery-empty" style="display: none;" role="status"></div>
                     <div id="discovery-root" class="discovery-root" style="display: none;">
                         <div class="discovery-toolbar discovery-top-controls">
@@ -355,12 +355,12 @@
                                     <button type="button" class="discovery-level-btn" data-discovery-level="初中">初中</button>
                                     <button type="button" class="discovery-level-btn" data-discovery-level="高中">高中</button>
                                     <button type="button" class="discovery-level-btn" data-discovery-level="GRE">GRE</button>
+                                    <button type="button" id="discovery-shuffle" class="discovery-shuffle-btn">乱序重排</button>
                                 </div>
-                                <button type="button" id="discovery-shuffle" class="discovery-shuffle-btn">乱序重排</button>
                             </div>
                         </div>
                         <div id="discovery-card-wrap" class="discovery-card-wrap"></div>
-                        <div class="discovery-toolbar">
+                        <div class="discovery-toolbar discovery-bottom-nav">
                             <button type="button" id="discovery-prev" class="btn btn-secondary discovery-nav-btn">← 上一词</button>
                             <span id="discovery-counter" class="discovery-counter" aria-live="polite"></span>
                             <button type="button" id="discovery-next" class="btn btn-secondary discovery-nav-btn">下一词 →</button>

@@ -2622,12 +2622,13 @@ async function loadMastered() {
 
 let discoveryDeck = [];
 let discoveryIndex = 0;
-/** 当前牌组中「待复习」词条数量（用于序号旁提示） */
-let discoveryPendingCount = 0;
 /** 「今日单词」模式：牌组仅为今日复习列表 */
 let discoveryModeToday = false;
 
 const DISCOVERY_LEVEL_STORAGE_KEY = 'english_reciter_discovery_level';
+
+/** 选择具体难度时，待复习词也须属于该难度（与系统词库 level 一致） */
+const DISCOVERY_BANK_LEVELS = new Set(['小学', '初中', '高中', 'GRE']);
 
 function discoveryExamplesFromCsvRow(row) {
     const out = [];
@@ -2743,7 +2744,6 @@ async function loadDiscovery() {
                 source: 'today',
                 next_review_date: w.scheduled_due_date,
             }));
-            discoveryPendingCount = 0;
             if (discoveryIndex >= discoveryDeck.length) discoveryIndex = 0;
 
             if (discoveryDeck.length === 0) {
@@ -2764,16 +2764,20 @@ async function loadDiscovery() {
         const csvPath = level ? `/wordbank/csv?level=${encodeURIComponent(level)}` : '/wordbank/csv';
         const [st, wb] = await Promise.all([apiRequest('/words/status'), apiRequest(csvPath)]);
 
-        const pending = [];
+        let pending = [];
         for (const w of st.words || []) {
             pending.push({
                 english: w.english,
                 chinese: w.chinese,
                 phonetic: w.phonetic || '',
+                level: String(w.level || '').trim(),
                 examples: buildPendingDiscoveryExamples(w),
                 source: 'pending',
                 next_review_date: w.next_review_date,
             });
+        }
+        if (DISCOVERY_BANK_LEVELS.has(level)) {
+            pending = pending.filter((p) => p.level === level);
         }
         pending.sort(discoverySortPending);
 
@@ -2794,7 +2798,6 @@ async function loadDiscovery() {
         }
         wordbankPart.sort((a, b) => a.english.localeCompare(b.english, 'en'));
 
-        discoveryPendingCount = pending.length;
         discoveryDeck = pending.concat(wordbankPart);
         if (discoveryIndex >= discoveryDeck.length) discoveryIndex = 0;
 
@@ -2838,29 +2841,7 @@ function renderDiscoveryCard() {
             ? `<p class="discovery-card-phonetic word-item-phonetic">${escapeHtml(phon)}</p>`
             : '<p class="discovery-card-phonetic discovery-card-phonetic--empty">音标暂无</p>';
     const examples = getDiscoveryExamplesForCard(w);
-    let exampleBlock = '<p class="discovery-card-na">暂无例句</p>';
-    if (examples.length > 0) {
-        exampleBlock = `<div class="discovery-examples">${examples
-            .map((ex, idx) => {
-                const speakable = Boolean(ex.en);
-                const enLine = ex.en
-                    ? `<p class="discovery-example-line discovery-example-line--en">${escapeHtml(ex.en)}</p>`
-                    : '';
-                const cnLine = ex.cn
-                    ? `<p class="discovery-example-line discovery-example-line--cn">${escapeHtml(ex.cn)}</p>`
-                    : '';
-                return `<div class="discovery-example-block">
-      <div class="discovery-example-block-body">
-        ${enLine}
-        ${cnLine}
-      </div>
-      <button type="button" class="btn-speak discovery-speak-example" title="朗读例句" aria-label="朗读例句 ${
-          idx + 1
-      }" ${speakable ? '' : 'disabled'}>🔊</button>
-    </div>`;
-            })
-            .join('')}</div>`;
-    }
+    const exampleBlock = discoveryTwoExampleSlotsHtml(examples);
     const html = `
       <article class="discovery-card" aria-label="单词卡片 ${escapeHtml(w.english)}">
         <div class="discovery-card-body">
@@ -2879,8 +2860,6 @@ function renderDiscoveryCard() {
         const i = discoveryIndex + 1;
         if (discoveryModeToday && w.source === 'today') {
             counter.textContent = `${i} / ${n}（今日复习）`;
-        } else if (discoveryPendingCount > 0 && w.source === 'pending') {
-            counter.textContent = `${i} / ${n}（待复习 ${discoveryPendingCount}）`;
         } else {
             counter.textContent = `${i} / ${n}`;
         }
@@ -2892,13 +2871,45 @@ function renderDiscoveryCard() {
             speakEnglishInBrowser(w.english, () => {});
         });
     }
-    wrap.querySelectorAll('.discovery-speak-example').forEach((btn, idx) => {
-        const seg = examples[idx];
+    wrap.querySelectorAll('.discovery-speak-example').forEach((btn) => {
+        const si = btn.getAttribute('data-example-slot');
+        const seg = si != null ? examples[parseInt(si, 10)] : null;
         if (!seg || !seg.en) return;
         btn.addEventListener('click', () => {
             speakEnglishInBrowser(seg.en, () => {});
         });
     });
+}
+
+/** 固定 2 条例句槽位，减少切换单词时卡片高度跳动 */
+function discoveryTwoExampleSlotsHtml(examples) {
+    const slots = [];
+    for (let idx = 0; idx < 2; idx++) {
+        const ex = examples[idx];
+        if (ex && (ex.en || ex.cn)) {
+            const speakable = Boolean(ex.en);
+            const enLine = ex.en
+                ? `<p class="discovery-example-line discovery-example-line--en">${escapeHtml(ex.en)}</p>`
+                : '';
+            const cnLine = ex.cn
+                ? `<p class="discovery-example-line discovery-example-line--cn">${escapeHtml(ex.cn)}</p>`
+                : '';
+            slots.push(`<div class="discovery-example-block">
+      <div class="discovery-example-block-body">
+        ${enLine}
+        ${cnLine}
+      </div>
+      <button type="button" class="btn-speak discovery-speak-example" data-example-slot="${idx}" title="朗读例句" aria-label="朗读例句 ${
+          idx + 1
+      }" ${speakable ? '' : 'disabled'}>🔊</button>
+    </div>`);
+        } else {
+            slots.push(
+                '<div class="discovery-example-block discovery-example-block--placeholder" aria-hidden="true"></div>',
+            );
+        }
+    }
+    return `<div class="discovery-examples">${slots.join('')}</div>`;
 }
 
 function discoveryGo(delta) {

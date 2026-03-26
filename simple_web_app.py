@@ -1391,6 +1391,7 @@ def get_status(username):
                     'english': w.english,
                     'chinese': w.chinese,
                     'phonetic': csv_row.get('phonetic', '') if csv_row else '',
+                    'level': (csv_row.get('level') or '').strip() if csv_row else '',
                     'example': ex_text,
                     'examples': examples_list,
                     'success_count': w.success_count,
