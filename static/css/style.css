@@ -592,6 +592,7 @@ body {
     overflow-x: auto;
     overflow-y: visible;
     padding-block: 3px;
+    padding-inline-end: 14px;
     box-sizing: content-box;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
@@ -2267,6 +2268,8 @@ body {
     /* visible：避免药丸底部 2px box-shadow 被裁切（勿用 overflow-y: hidden） */
     overflow-y: visible;
     padding-block: 3px;
+    /* PK 角标 right:-6px 会超出药丸，避免被 overflow-x 裁切 */
+    padding-inline-end: 14px;
     box-sizing: content-box;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
