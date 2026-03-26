@@ -16,7 +16,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import gamification as gamification_mod
 
 MONTHLY_POOL_FEE_XP = 150
-JOIN_WINDOW_LAST_DAY = 5  # 每月 1～5 日可报名
+# 每月 1～5 日为准备期（报名、组队）；第 6 日起比赛正式开始，有效打卡仅计 6 日及以后
+PREPARATION_LAST_DAY = 5
+COMPETITION_START_DAY = 6
+JOIN_WINDOW_LAST_DAY = PREPARATION_LAST_DAY  # 仅准备期内可加入奖池
 WAGER_TIERS = (0, 50, 100, 200)
 
 _challenges_lock = threading.Lock()
@@ -61,6 +64,36 @@ def pool_join_window_open(today: Optional[date] = None) -> bool:
     return 1 <= t.day <= JOIN_WINDOW_LAST_DAY
 
 
+def pool_preparation_phase(today: Optional[date] = None) -> bool:
+    """每月 1～5 日为准备期（尚未开赛）。"""
+    t = today or date.today()
+    return 1 <= t.day <= PREPARATION_LAST_DAY
+
+
+def pool_competition_phase(today: Optional[date] = None) -> bool:
+    """第 6 日起为比赛期（本月内）。"""
+    t = today or date.today()
+    return t.day >= COMPETITION_START_DAY
+
+
+def max_competition_days_in_month(ym: str) -> int:
+    """本月可用于比赛的有效打卡天数上限（从 6 日到月末的天数）。"""
+    parts = ym.split("-")
+    if len(parts) != 2:
+        return 0
+    y, m = int(parts[0]), int(parts[1])
+    dim = monthrange(y, m)[1]
+    return max(0, dim - PREPARATION_LAST_DAY)
+
+
+def competition_checkin_days_for_user(data_dir: Path, username: str, ym: str) -> int:
+    """比赛期内的有效打卡天数（仅 6 日及以后）。"""
+    st = gamification_mod.load_state(data_dir, username)
+    return gamification_mod.valid_checkin_days_in_month_from_day(
+        st, ym, COMPETITION_START_DAY
+    )
+
+
 def valid_checkin_days_for_user(data_dir: Path, username: str, ym: str) -> int:
     st = gamification_mod.load_state(data_dir, username)
     return gamification_mod.valid_checkin_days_in_month(st, ym)
@@ -97,7 +130,7 @@ def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
         best = -1
         counts: Dict[str, int] = {}
         for u in participants:
-            c = valid_checkin_days_for_user(data_dir, u, ym)
+            c = competition_checkin_days_for_user(data_dir, u, ym)
             counts[u] = c
             if c > best:
                 best = c
@@ -135,8 +168,29 @@ def get_monthly_pool_state(data_dir: Path, username: str) -> Dict[str, Any]:
     participants = list(block.get("participants") or [])
     pool = int(block.get("pool_xp") or 0)
     joined = username in participants
-    my_days = valid_checkin_days_for_user(data_dir, username, ym) if joined else 0
     dim = monthrange(today.year, today.month)[1]
+    race_max = max_competition_days_in_month(ym)
+    in_prep = pool_preparation_phase(today)
+    in_comp = pool_competition_phase(today)
+    phase = "preparation" if in_prep else "competition"
+
+    my_comp_days = competition_checkin_days_for_user(data_dir, username, ym) if joined else 0
+    # 兼容旧字段：全月有效打卡天数（含准备期）
+    my_month_valid_days = valid_checkin_days_for_user(data_dir, username, ym) if joined else 0
+
+    runners: List[Dict[str, Any]] = []
+    for u in participants:
+        cd = competition_checkin_days_for_user(data_dir, u, ym)
+        prog = (cd / race_max) if race_max > 0 else 0.0
+        prog = max(0.0, min(1.0, float(prog)))
+        runners.append(
+            {
+                "username": u,
+                "competition_days": cd,
+                "progress": round(prog, 4),
+            }
+        )
+    runners.sort(key=lambda x: (-x["competition_days"], x["username"]))
 
     return {
         "month": ym,
@@ -145,15 +199,23 @@ def get_monthly_pool_state(data_dir: Path, username: str) -> Dict[str, Any]:
         "fee_xp": MONTHLY_POOL_FEE_XP,
         "join_window_open": pool_join_window_open(today),
         "join_window_last_day": JOIN_WINDOW_LAST_DAY,
+        "preparation_last_day": PREPARATION_LAST_DAY,
+        "competition_start_day": COMPETITION_START_DAY,
+        "phase": phase,
+        "preparation_phase": in_prep,
+        "competition_phase": in_comp,
+        "competition_days_max": race_max,
+        "runners": runners,
         "joined": joined,
-        "my_month_valid_days": my_days,
+        "my_month_valid_days": my_month_valid_days,
+        "my_competition_days": my_comp_days,
         "month_days": dim,
     }
 
 
 def join_monthly_pool(data_dir: Path, username: str) -> Tuple[bool, str, Dict[str, Any]]:
     if not pool_join_window_open():
-        return False, f"仅在每月 1～{JOIN_WINDOW_LAST_DAY} 日可加入群体挑战", {}
+        return False, f"仅在每月 1～{JOIN_WINDOW_LAST_DAY} 日准备期内可加入群体挑战", {}
 
     _settle_monthly_pool_if_needed(data_dir)
     today = date.today()

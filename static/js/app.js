@@ -384,10 +384,17 @@ function renderUserSettingsPanel(s) {
     const poolHint = document.getElementById('settings-pool-hint');
     const joinBtn = document.getElementById('settings-pool-join');
     if (poolHint) {
+        const prepD = pool.preparation_last_day || 5;
+        const stD = pool.competition_start_day || 6;
         let t = `${pool.month || ''} 奖池共 ${formatNumber(pool.pool_xp || 0)} XP，${pool.participant_count || 0} 人参与。`;
         if (pool.joined) t += ' 你已加入。';
+        if (pool.preparation_phase || pool.phase === 'preparation') {
+            t += ` 当前为准备期（1～${prepD} 日可报名）；${stD} 日起比赛正式开始。`;
+        } else {
+            t += ` 比赛进行中（赛跑进度仅计 ${stD} 日及以后有效打卡）。`;
+        }
         if (!pool.join_window_open) {
-            t += ` 加入窗口为每月 1～${pool.join_window_last_day || 5} 日。`;
+            t += ` 报名窗口为每月 1～${pool.join_window_last_day || 5} 日。`;
         }
         poolHint.textContent = t;
     }
@@ -415,6 +422,15 @@ function renderUserSettingsPanel(s) {
         list.innerHTML = s.duels.length
             ? s.duels.map((d) => renderDuelRow(d, username)).join('')
             : '<li class="settings-duel-empty">暂无挑战</li>';
+    }
+
+    const duelSel = document.getElementById('settings-duel-target-select');
+    if (duelSel && Array.isArray(s.duel_opponents)) {
+        const prev = duelSel.value;
+        duelSel.innerHTML =
+            '<option value="">选择对手</option>' +
+            s.duel_opponents.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+        if (prev && s.duel_opponents.includes(prev)) duelSel.value = prev;
     }
 }
 
@@ -455,6 +471,96 @@ async function deleteAvatarApi() {
         throw new Error(err.error || err.detail || '移除失败');
     }
     return response.json();
+}
+
+function renderMonthlyPoolRace(pool) {
+    const wrap = document.getElementById('monthly-pool-race-wrap');
+    if (!wrap) return;
+    if (!pool) {
+        wrap.innerHTML = '';
+        return;
+    }
+    const prepDay = pool.preparation_last_day || 5;
+    const startDay = pool.competition_start_day || 6;
+    const maxDays = Number(pool.competition_days_max) || 0;
+    const runners = Array.isArray(pool.runners) ? pool.runners : [];
+    const isPrep = pool.phase === 'preparation' || pool.preparation_phase;
+    const poolXp = formatNumber(pool.pool_xp || 0);
+    const fee = pool.fee_xp || 150;
+
+    let joinBtnHtml = '';
+    if (pool.join_window_open && !pool.joined) {
+        joinBtnHtml = `<button type="button" class="btn btn-primary mp-race-join" id="leaderboard-pool-join">加入奖池（${fee} XP）</button>`;
+    } else if (pool.joined) {
+        joinBtnHtml = '<span class="mp-race-badge mp-race-badge--go">已报名</span>';
+    }
+
+    const desc = isPrep
+        ? `每月 1～${prepDay} 日为准备期（可支付 ${fee} XP 加入奖池）；第 ${startDay} 日起比赛正式开始，赛跑进度仅统计当月 ${startDay} 日及之后的有效打卡天数。`
+        : `本月比赛进行中。进度 = ${startDay} 日及以后的有效打卡天数 ÷ 本月可比赛天数（${maxDays}）。`;
+
+    let lanesHtml = '';
+    if (runners.length === 0) {
+        lanesHtml = `<p class="mp-race-empty">暂无参赛者。请在每月 1～${prepDay} 日准备期内加入奖池。</p>`;
+    } else {
+        lanesHtml = runners
+            .map((r) => {
+                const uname = r.username || '';
+                const u = escapeHtml(uname);
+                const p = Math.max(0, Math.min(1, Number(r.progress) || 0));
+                const pct = Math.round(p * 100);
+                const cd = Number(r.competition_days) || 0;
+                const me = uname === username ? ' mp-lane-me' : '';
+                const av = r.avatar_url
+                    ? `<img src="${escapeHtml(r.avatar_url)}" alt="" width="28" height="28" loading="lazy" />`
+                    : '<span class="mp-lane-avatar-ph" aria-hidden="true">👤</span>';
+                const you = uname === username ? ' <span class="lb-you">我</span>' : '';
+                return `<div class="mp-lane${me}">
+                    <div class="mp-lane-user">${av}<span class="mp-lane-name">${u}${you}</span></div>
+                    <div class="mp-lane-track">
+                        <div class="mp-lane-fill" style="width:${pct}%"></div>
+                        <div class="mp-lane-pin" style="left:${pct}%">🏃</div>
+                    </div>
+                    <div class="mp-lane-days">${cd}/${maxDays}天</div>
+                </div>`;
+            })
+            .join('');
+    }
+
+    const badge = isPrep
+        ? '<span class="mp-race-badge mp-race-badge--prep">准备期</span>'
+        : '<span class="mp-race-badge mp-race-badge--go">比赛进行中</span>';
+
+    wrap.innerHTML = `
+<div class="mp-race">
+  <div class="mp-race-head">
+    <div class="mp-race-title">月度群体挑战</div>
+    ${badge}
+    <span style="font-weight:800;color:var(--text-secondary);font-size:0.9rem">${pool.participant_count || 0} 人 · 奖池 ${poolXp} XP</span>
+    ${joinBtnHtml}
+    <div class="mp-race-desc">${desc}</div>
+  </div>
+  <div class="mp-race-body">
+    <div class="mp-race-lanes">${lanesHtml}</div>
+    <div class="mp-race-finish">
+      <div class="mp-race-pool-ico">🏆</div>
+      <div class="mp-race-pool-xp">${poolXp} XP</div>
+    </div>
+  </div>
+</div>`;
+
+    const btn = document.getElementById('leaderboard-pool-join');
+    if (btn) {
+        btn.addEventListener('click', async () => {
+            try {
+                await apiRequest('/monthly-pool/join', { method: 'POST', body: '{}' });
+                showMainBanner('已加入本月奖池');
+                await loadLeaderboardSection();
+            } catch (e) {
+                showMainBanner(e.message || '加入失败');
+            }
+        });
+    }
 }
 
 function renderLeaderboardTable(rows) {
@@ -517,7 +623,11 @@ async function loadLeaderboardSection() {
     if (loading) loading.style.display = 'block';
     try {
         await refreshGamification();
-        const data = await apiRequest('/leaderboard');
+        const [data, pool] = await Promise.all([
+            apiRequest('/leaderboard'),
+            apiRequest('/monthly-pool'),
+        ]);
+        renderMonthlyPoolRace(pool);
         renderLeaderboardTable(data.leaderboard);
         renderAchievementsGrid(lastGamificationProfile);
     } catch (e) {
@@ -525,6 +635,8 @@ async function loadLeaderboardSection() {
         if (wrap) {
             wrap.innerHTML = `<p class="leaderboard-empty">${escapeHtml(e.message || '加载失败')}</p>`;
         }
+        const raceWrap = document.getElementById('monthly-pool-race-wrap');
+        if (raceWrap) raceWrap.innerHTML = '';
     } finally {
         if (loading) loading.style.display = 'none';
     }
@@ -2944,12 +3056,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     document.getElementById('settings-duel-send')?.addEventListener('click', async () => {
-        const tin = document.getElementById('settings-duel-target');
+        const tin = document.getElementById('settings-duel-target-select');
         const t = (tin && tin.value) || '';
         const w = document.getElementById('settings-duel-wager');
         const wager = w ? parseInt(w.value, 10) : 0;
         if (!t.trim()) {
-            setSettingsMessage('请填写对方用户名', true);
+            setSettingsMessage('请选择对手', true);
             return;
         }
         try {

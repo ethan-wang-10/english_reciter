@@ -2263,6 +2263,227 @@ body {
     font-size: 0.95rem;
 }
 
+/* 排行榜页：月度群体挑战赛跑 */
+.monthly-pool-race-wrap {
+    margin-bottom: 24px;
+}
+
+.mp-race {
+    background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px 18px;
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04);
+}
+
+.mp-race-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    margin-bottom: 14px;
+}
+
+.mp-race-title {
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.mp-race-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 0.78rem;
+    font-weight: 800;
+    margin-right: 4px;
+}
+
+.mp-race-badge--prep {
+    background: #fff3e0;
+    color: #e65100;
+    border: 2px solid #ffcc80;
+}
+
+.mp-race-badge--go {
+    background: #e8f5e9;
+    color: #1b5e20;
+    border: 2px solid var(--primary-color);
+}
+
+.mp-race-desc {
+    flex: 1 1 100%;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.mp-race-join {
+    flex-shrink: 0;
+}
+
+.mp-race-body {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+}
+
+.mp-race-lanes {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mp-lane {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) minmax(0, 3fr) auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.mp-lane-me {
+    background: rgba(88, 204, 2, 0.08);
+    border-radius: var(--radius-md);
+    padding: 4px 8px;
+    margin: -4px -8px;
+}
+
+.mp-lane-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-weight: 700;
+    font-size: 0.88rem;
+}
+
+.mp-lane-user img {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+}
+
+.mp-lane-user .mp-lane-avatar-ph {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #eef1f4;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    border: 2px solid var(--border);
+}
+
+.mp-lane-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mp-lane-track {
+    position: relative;
+    height: 22px;
+    border-radius: 999px;
+    background: #eef1f4;
+    border: 2px solid #dde3e8;
+    overflow: visible;
+}
+
+.mp-lane-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #b8e986, var(--primary-color));
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+.mp-lane-pin {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.1rem;
+    line-height: 1;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+    z-index: 2;
+}
+
+.mp-lane-days {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.mp-race-finish {
+    flex-shrink: 0;
+    width: 88px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 6px;
+    background: linear-gradient(145deg, #fff9e6, #ffe8a8);
+    border: 2px solid var(--accent-yellow);
+    border-radius: var(--radius-md);
+    box-shadow: 0 2px 0 var(--accent-yellow-dark);
+}
+
+.mp-race-pool-ico {
+    font-size: 1.75rem;
+    line-height: 1;
+}
+
+.mp-race-pool-xp {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #6d4c00;
+    text-align: center;
+    word-break: break-all;
+}
+
+.mp-race-empty {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    padding: 8px 0;
+}
+
+@media (max-width: 640px) {
+    .mp-lane {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .mp-race-body {
+        flex-direction: column;
+    }
+
+    .mp-race-finish {
+        width: 100%;
+        flex-direction: row;
+        justify-content: center;
+    }
+}
+
+.settings-duel-select {
+    min-width: 140px;
+}
+
+.settings-duel-row {
+    flex-wrap: wrap;
+}
+
 .leaderboard-opt-in-label {
     display: flex;
     align-items: center;

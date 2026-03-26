@@ -371,6 +371,7 @@
                         <input type="checkbox" id="leaderboard-opt-in" checked />
                         <span>在排行榜中展示我的学习数据</span>
                     </label>
+                    <div id="monthly-pool-race-wrap" class="monthly-pool-race-wrap"></div>
                     <div id="leaderboard-loading" class="leaderboard-loading" style="display: none;">加载中…</div>
                     <div id="leaderboard-table-wrap" class="leaderboard-table-wrap"></div>
 
@@ -424,8 +425,10 @@
                     </div>
                     <div class="settings-block">
                         <h3 class="settings-subtitle">1v1 打卡 PK</h3>
-                        <div class="settings-goal-row">
-                            <input type="text" id="settings-duel-target" class="settings-duel-input" placeholder="对方用户名" autocomplete="username" />
+                        <div class="settings-goal-row settings-duel-row">
+                            <select id="settings-duel-target-select" class="settings-duel-input settings-duel-select" aria-label="选择对手">
+                                <option value="">选择对手</option>
+                            </select>
                             <select id="settings-duel-wager" class="settings-duel-wager">
                                 <option value="0">无赌注</option>
                                 <option value="50">50 XP</option>

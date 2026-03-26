@@ -249,6 +249,32 @@ def valid_checkin_days_in_month(state: Dict[str, Any], year_month: str) -> int:
     return n
 
 
+def valid_checkin_days_in_month_from_day(
+    state: Dict[str, Any], year_month: str, min_day_of_month: int
+) -> int:
+    """
+    自然月内，仅统计「日号 ≥ min_day_of_month」的有效打卡天数。
+    用于月度群体挑战：第 1～5 日为准备期，第 6 日起计入比赛进度与结算。
+    """
+    sbd = state.get("streak_correct_by_day") or {}
+    ym = year_month.strip()
+    if len(ym) != 7:
+        return 0
+    n = 0
+    for day_key, cnt in sbd.items():
+        if not isinstance(day_key, str) or not day_key.startswith(ym):
+            continue
+        try:
+            d = date.fromisoformat(day_key[:10])
+        except ValueError:
+            continue
+        if d.day < int(min_day_of_month):
+            continue
+        if int(cnt or 0) >= CHECKIN_MIN_CORRECT:
+            n += 1
+    return n
+
+
 def try_grant_monthly_checkin_goal_bonus(data_dir: Path, username: str) -> int:
     """
     在已设目标且当月有效打卡天数已达标时，发放一次性「目标天数 × CHECKIN_GOAL_XP_PER_DAY」。

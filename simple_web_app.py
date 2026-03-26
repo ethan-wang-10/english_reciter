@@ -533,6 +533,28 @@ def user_avatar_disk_path(username: str) -> Optional[Path]:
     return None
 
 
+def enrich_monthly_pool_with_avatars(pool: dict) -> dict:
+    """为奖池赛跑参与者补充 avatar_url（供前端展示）。"""
+    for r in pool.get("runners") or []:
+        u = str(r.get("username") or "")
+        if u:
+            r["avatar_url"] = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
+        else:
+            r["avatar_url"] = None
+    return pool
+
+
+def list_challenge_opponent_usernames(viewer: str) -> List[str]:
+    """可发起 1v1 的用户名（与排行榜同源：已启用且参与排行展示的用户，不含自己）。"""
+    users = load_users()
+    enabled = [
+        u for u in users
+        if isinstance(users.get(u), dict) and is_user_enabled(u)
+    ]
+    rows = gamification_mod.build_leaderboard(DATA_DIR, enabled, viewer=viewer)
+    return [str(r["username"]) for r in rows if r.get("username") and r["username"] != viewer]
+
+
 def _is_legacy_sha256_hex(stored: str) -> bool:
     return len(stored) == 64 and all(c in "0123456789abcdefABCDEF" for c in stored)
 
@@ -1096,13 +1118,16 @@ def get_user_settings(username):
         prof = gamification_mod.public_profile(
             DATA_DIR, username, mastered_words=mastered_n
         )
-        pool = challenges_mod.get_monthly_pool_state(DATA_DIR, username)
+        pool = enrich_monthly_pool_with_avatars(
+            challenges_mod.get_monthly_pool_state(DATA_DIR, username)
+        )
         duels = challenges_mod.list_duels_for_user(DATA_DIR, username)
         av = user_avatar_disk_path(username)
         prof["avatar_url"] = f"/api/user/avatar/{username}" if av else None
         prof["monthly_pool"] = pool
         prof["duels"] = duels
         prof["wager_tiers"] = list(challenges_mod.WAGER_TIERS)
+        prof["duel_opponents"] = list_challenge_opponent_usernames(username)
         return jsonify(prof), 200
     except Exception as e:
         logger.error(f"获取用户设置失败: {e}")
@@ -1169,7 +1194,10 @@ def delete_user_avatar(username):
 @app.route('/api/monthly-pool', methods=['GET'])
 @token_required
 def api_monthly_pool_get(username):
-    return jsonify(challenges_mod.get_monthly_pool_state(DATA_DIR, username)), 200
+    pool = enrich_monthly_pool_with_avatars(
+        challenges_mod.get_monthly_pool_state(DATA_DIR, username)
+    )
+    return jsonify(pool), 200
 
 
 @app.route('/api/monthly-pool/join', methods=['POST'])
@@ -1179,6 +1207,13 @@ def api_monthly_pool_join(username):
     if not ok:
         return jsonify({'error': msg}), 400
     return jsonify(state), 200
+
+
+@app.route('/api/challenges/opponents', methods=['GET'])
+@token_required
+def api_challenges_opponents(username):
+    """1v1 可选择的对手（排行榜中展示的用户，不含自己）。"""
+    return jsonify({'opponents': list_challenge_opponent_usernames(username)}), 200
 
 
 @app.route('/api/challenges', methods=['GET'])
