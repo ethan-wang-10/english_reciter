@@ -54,6 +54,7 @@ def default_state() -> Dict[str, Any]:
         "total_correct": 0,
         "streak": 0,
         "last_streak_date": None,
+        "streak_correct_by_day": {},
         "daily_xp": {},
         "achievements": {},
         "leaderboard_opt_in": True,
@@ -84,6 +85,14 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
         base["achievements"] = dict(raw["achievements"])
     if "daily_xp" in raw and isinstance(raw["daily_xp"], dict):
         base["daily_xp"] = {str(k): int(v) for k, v in raw["daily_xp"].items()}
+    if "streak_correct_by_day" in raw and isinstance(raw["streak_correct_by_day"], dict):
+        sbd: Dict[str, int] = {}
+        for dk, cnt in raw["streak_correct_by_day"].items():
+            try:
+                sbd[str(dk)] = int(cnt)
+            except (TypeError, ValueError):
+                continue
+        base["streak_correct_by_day"] = sbd
     if base.get("mcheckin_goal") is not None:
         try:
             base["mcheckin_goal"] = int(base["mcheckin_goal"])
