@@ -332,9 +332,16 @@ function renderDuelRow(d, me) {
         statusLabel = '待处理';
     }
     const wager = Number(d.wager_xp) || 0;
+    const pkRange =
+        d.pk_stats_start_date && d.pk_stats_end_date
+            ? `<div class="settings-duel-pk-range">PK 计分区间：${escapeHtml(d.pk_stats_start_date)} ～ ${escapeHtml(
+                  d.pk_stats_end_date,
+              )}（双方同意次日）</div>`
+            : '';
     return `<li class="settings-duel-item">
     <span class="settings-duel-meta">${escapeHtml(role)} ${escapeHtml(other)} · ${wager} XP · ${escapeHtml(d.month || '')}</span>
     <span class="settings-duel-status">${escapeHtml(statusLabel)}</span>
+    ${pkRange}
     ${actions}
   </li>`;
 }

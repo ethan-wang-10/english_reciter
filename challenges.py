@@ -99,6 +99,57 @@ def valid_checkin_days_for_user(data_dir: Path, username: str, ym: str) -> int:
     return gamification_mod.valid_checkin_days_in_month(st, ym)
 
 
+def duel_pk_counting_range(duel: Dict[str, Any]) -> Optional[Tuple[date, date]]:
+    """
+    1v1 PK 计分区间：双方同意（应战接受）的次日起，至决斗所属自然月月末（含端点）。
+    若接受日过晚导致次月才起算，则该自然月内无计分日，返回 None。
+    """
+    ym = str(duel.get("month") or "").strip()
+    if len(ym) != 7:
+        return None
+    accepted = duel.get("accepted_at")
+    if not accepted:
+        return None
+    try:
+        ts = str(accepted).replace("Z", "")
+        acc_d = date.fromisoformat(ts[:10])
+    except ValueError:
+        return None
+    y, m = map(int, ym.split("-"))
+    dim = monthrange(y, m)[1]
+    month_first = date(y, m, 1)
+    month_last = date(y, m, dim)
+    pk_start = acc_d + timedelta(days=1)
+    eff_start = max(month_first, pk_start)
+    if eff_start > month_last:
+        return None
+    return eff_start, month_last
+
+
+def duel_pk_days_for_user(data_dir: Path, username: str, duel: Dict[str, Any]) -> int:
+    """1v1 在计分区间内的有效打卡天数。"""
+    rng = duel_pk_counting_range(duel)
+    if not rng:
+        return 0
+    s, e = rng
+    st = gamification_mod.load_state(data_dir, username)
+    return gamification_mod.valid_checkin_days_in_range(st, s, e)
+
+
+def enrich_duel_for_api(duel: Dict[str, Any]) -> Dict[str, Any]:
+    """补充 PK 计分起止日期供前端展示。"""
+    out = dict(duel)
+    rng = duel_pk_counting_range(out)
+    if rng:
+        s, e = rng
+        out["pk_stats_start_date"] = s.isoformat()
+        out["pk_stats_end_date"] = e.isoformat()
+    else:
+        out["pk_stats_start_date"] = None
+        out["pk_stats_end_date"] = None
+    return out
+
+
 def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
     """若存在未结算的上一自然月奖池，则瓜分。"""
     path = monthly_pool_path(data_dir)
@@ -282,7 +333,7 @@ def create_duel(
         duels = data.setdefault("duels", [])
         duels.append(row)
         _save_duels(data_dir, data)
-    return True, "", row
+    return True, "", enrich_duel_for_api(row)
 
 
 def respond_duel(
@@ -324,7 +375,7 @@ def respond_duel(
         found["accepted_at"] = datetime.now().isoformat(timespec="seconds")
         found["escrow_xp"] = w
         _save_duels(data_dir, data)
-        return True, "", found
+        return True, "", enrich_duel_for_api(found)
 
 
 def settle_due_duels(data_dir: Path) -> None:
@@ -346,8 +397,8 @@ def settle_due_duels(data_dir: Path) -> None:
             a = str(d.get("from_user") or "")
             b = str(d.get("target_user") or "")
             w = int(d.get("wager_xp") or 0)
-            da = valid_checkin_days_for_user(data_dir, a, ym)
-            db = valid_checkin_days_for_user(data_dir, b, ym)
+            da = duel_pk_days_for_user(data_dir, a, d)
+            db = duel_pk_days_for_user(data_dir, b, d)
             winner = None
             if da > db:
                 winner = a
@@ -362,6 +413,10 @@ def settle_due_duels(data_dir: Path) -> None:
             d["settled_at"] = datetime.now().isoformat(timespec="seconds")
             d["days_a"] = da
             d["days_b"] = db
+            rng = duel_pk_counting_range(d)
+            if rng:
+                d["pk_stats_start_date"] = rng[0].isoformat()
+                d["pk_stats_end_date"] = rng[1].isoformat()
             d["winner"] = winner
             d["tie"] = winner is None
             changed = True
@@ -376,6 +431,6 @@ def list_duels_for_user(data_dir: Path, username: str) -> List[Dict[str, Any]]:
     out = []
     for d in duels:
         if d.get("from_user") == username or d.get("target_user") == username:
-            out.append(dict(d))
+            out.append(enrich_duel_for_api(dict(d)))
     out.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
     return out

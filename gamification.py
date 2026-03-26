@@ -275,6 +275,26 @@ def valid_checkin_days_in_month_from_day(
     return n
 
 
+def valid_checkin_days_in_range(state: Dict[str, Any], start_date: date, end_date: date) -> int:
+    """统计闭区间 [start_date, end_date] 内的有效打卡天数。"""
+    if start_date > end_date:
+        return 0
+    sbd = state.get("streak_correct_by_day") or {}
+    n = 0
+    for day_key, cnt in sbd.items():
+        if not isinstance(day_key, str):
+            continue
+        try:
+            d = date.fromisoformat(day_key[:10])
+        except ValueError:
+            continue
+        if d < start_date or d > end_date:
+            continue
+        if int(cnt or 0) >= CHECKIN_MIN_CORRECT:
+            n += 1
+    return n
+
+
 def try_grant_monthly_checkin_goal_bonus(data_dir: Path, username: str) -> int:
     """
     在已设目标且当月有效打卡天数已达标时，发放一次性「目标天数 × CHECKIN_GOAL_XP_PER_DAY」。
