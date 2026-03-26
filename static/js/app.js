@@ -2596,20 +2596,93 @@ let discoveryPendingCount = 0;
 
 const DISCOVERY_LEVEL_STORAGE_KEY = 'english_reciter_discovery_level';
 
-function discoveryExampleFromCsvRow(row) {
-    const ex1 = String(row.example1 || '').trim();
-    const cn1 = String(row.example1_cn || '').trim();
-    if (ex1 || cn1) {
-        if (ex1 && cn1) return `${ex1}_${cn1}`;
-        return ex1 || cn1;
+function discoveryExamplesFromCsvRow(row) {
+    const out = [];
+    for (const k of ['1', '2']) {
+        const en = String(row[`example${k}`] || '').trim();
+        const cn = String(row[`example${k}_cn`] || '').trim();
+        if (en || cn) out.push({ en, cn });
     }
-    const ex2 = String(row.example2 || '').trim();
-    const cn2 = String(row.example2_cn || '').trim();
-    if (ex2 || cn2) {
-        if (ex2 && cn2) return `${ex2}_${cn2}`;
-        return ex2 || cn2;
+    return out;
+}
+
+function buildPendingDiscoveryExamples(w) {
+    if (Array.isArray(w.examples) && w.examples.length) {
+        return w.examples
+            .map((e) => ({
+                en: String(e.en || '').trim(),
+                cn: String(e.cn || '').trim(),
+            }))
+            .filter((e) => e.en || e.cn);
     }
-    return '';
+    const single = String(w.example || '').trim();
+    if (!single) return [];
+    const i = single.indexOf('_');
+    if (i === -1) return [{ en: single, cn: '' }];
+    return [{ en: single.slice(0, i).trim(), cn: single.slice(i + 1).trim() }];
+}
+
+function getDiscoveryExamplesForCard(w) {
+    if (Array.isArray(w.examples) && w.examples.length) {
+        return w.examples
+            .map((e) => ({
+                en: String(e.en || '').trim(),
+                cn: String(e.cn || '').trim(),
+            }))
+            .filter((e) => e.en || e.cn);
+    }
+    const single = String(w.example || '').trim();
+    if (!single) return [];
+    const i = single.indexOf('_');
+    if (i === -1) return [{ en: single, cn: '' }];
+    return [{ en: single.slice(0, i).trim(), cn: single.slice(i + 1).trim() }];
+}
+
+function getDiscoverySelectedLevel() {
+    const active = document.querySelector('.discovery-level-btn.is-active');
+    if (!active) return '';
+    return active.getAttribute('data-discovery-level') ?? '';
+}
+
+function initDiscoveryLevelButtons() {
+    const group = document.querySelector('.discovery-level-buttons');
+    if (!group) return;
+    const buttons = group.querySelectorAll('.discovery-level-btn');
+    if (!buttons.length) return;
+    let saved = '';
+    try {
+        saved = localStorage.getItem(DISCOVERY_LEVEL_STORAGE_KEY);
+        if (saved === null) saved = '';
+    } catch (_) {
+        saved = '';
+    }
+    buttons.forEach((btn) => {
+        const v = btn.getAttribute('data-discovery-level') ?? '';
+        if (v === saved) btn.classList.add('is-active');
+    });
+    if (!group.querySelector('.discovery-level-btn.is-active')) {
+        buttons[0].classList.add('is-active');
+    }
+    buttons.forEach((btn) => {
+        btn.setAttribute('aria-pressed', btn.classList.contains('is-active') ? 'true' : 'false');
+    });
+    group.addEventListener('click', (e) => {
+        const t = e.target.closest('.discovery-level-btn');
+        if (!t || !group.contains(t)) return;
+        buttons.forEach((b) => {
+            b.classList.remove('is-active');
+            b.setAttribute('aria-pressed', 'false');
+        });
+        t.classList.add('is-active');
+        t.setAttribute('aria-pressed', 'true');
+        try {
+            localStorage.setItem(DISCOVERY_LEVEL_STORAGE_KEY, t.getAttribute('data-discovery-level') ?? '');
+        } catch (_) {
+            /* ignore */
+        }
+        discoveryIndex = 0;
+        loadDiscovery();
+    });
 }
 
 function discoverySortPending(a, b) {
@@ -2622,8 +2695,7 @@ function discoverySortPending(a, b) {
 async function loadDiscovery() {
     const emptyEl = document.getElementById('discovery-empty');
     const rootEl = document.getElementById('discovery-root');
-    const levelSel = document.getElementById('discovery-level');
-    const level = levelSel && levelSel.value != null ? String(levelSel.value).trim() : '';
+    const level = String(getDiscoverySelectedLevel() || '').trim();
     try {
         const csvPath = level ? `/wordbank/csv?level=${encodeURIComponent(level)}` : '/wordbank/csv';
         const [st, wb] = await Promise.all([apiRequest('/words/status'), apiRequest(csvPath)]);
@@ -2634,7 +2706,7 @@ async function loadDiscovery() {
                 english: w.english,
                 chinese: w.chinese,
                 phonetic: w.phonetic || '',
-                example: (w.example && String(w.example).trim()) || '',
+                examples: buildPendingDiscoveryExamples(w),
                 source: 'pending',
                 next_review_date: w.next_review_date,
             });
@@ -2652,7 +2724,7 @@ async function loadDiscovery() {
                 english: en,
                 chinese: String(row.chinese || '').trim(),
                 phonetic: String(row.phonetic || '').trim(),
-                example: discoveryExampleFromCsvRow(row),
+                examples: discoveryExamplesFromCsvRow(row),
                 source: 'wordbank',
             });
         }
@@ -2701,17 +2773,30 @@ function renderDiscoveryCard() {
         phon.length > 0
             ? `<p class="discovery-card-phonetic word-item-phonetic">${escapeHtml(phon)}</p>`
             : '<p class="discovery-card-phonetic discovery-card-phonetic--empty">音标暂无</p>';
-    const exRaw = (w.example || '').trim();
-    const exEn = englishFromExampleField(exRaw);
-    const exampleBlock =
-        exRaw.length > 0
-            ? `<div class="discovery-card-example">
-            <p class="discovery-card-example-text">${escapeHtml(exRaw)}</p>
-            <button type="button" class="btn-speak discovery-speak-example" title="朗读例句" aria-label="朗读例句" ${
-                exEn ? '' : 'disabled'
-            }>🔊</button>
-          </div>`
-            : '<p class="discovery-card-na">暂无例句</p>';
+    const examples = getDiscoveryExamplesForCard(w);
+    let exampleBlock = '<p class="discovery-card-na">暂无例句</p>';
+    if (examples.length > 0) {
+        exampleBlock = `<div class="discovery-examples">${examples
+            .map((ex, idx) => {
+                const speakable = Boolean(ex.en);
+                const enLine = ex.en
+                    ? `<p class="discovery-example-line discovery-example-line--en">${escapeHtml(ex.en)}</p>`
+                    : '';
+                const cnLine = ex.cn
+                    ? `<p class="discovery-example-line discovery-example-line--cn">${escapeHtml(ex.cn)}</p>`
+                    : '';
+                return `<div class="discovery-example-block">
+      <div class="discovery-example-block-body">
+        ${enLine}
+        ${cnLine}
+      </div>
+      <button type="button" class="btn-speak discovery-speak-example" title="朗读例句" aria-label="朗读例句 ${
+          idx + 1
+      }" ${speakable ? '' : 'disabled'}>🔊</button>
+    </div>`;
+            })
+            .join('')}</div>`;
+    }
     const html = `
       <article class="discovery-card" aria-label="单词卡片 ${escapeHtml(w.english)}">
         <div class="discovery-card-body">
@@ -2741,12 +2826,13 @@ function renderDiscoveryCard() {
             speakEnglishInBrowser(w.english, () => {});
         });
     }
-    const exBtn = wrap.querySelector('.discovery-speak-example');
-    if (exBtn && exEn) {
-        exBtn.addEventListener('click', () => {
-            speakEnglishInBrowser(exEn, () => {});
+    wrap.querySelectorAll('.discovery-speak-example').forEach((btn, idx) => {
+        const seg = examples[idx];
+        if (!seg || !seg.en) return;
+        btn.addEventListener('click', () => {
+            speakEnglishInBrowser(seg.en, () => {});
         });
-    }
+    });
 }
 
 function discoveryGo(delta) {
@@ -2913,26 +2999,7 @@ function initWordbankPanel() {
     document.getElementById('discovery-next')?.addEventListener('click', () => discoveryGo(1));
     document.getElementById('discovery-shuffle')?.addEventListener('click', () => discoveryShuffle());
 
-    const discoveryLevel = document.getElementById('discovery-level');
-    if (discoveryLevel) {
-        try {
-            const saved = localStorage.getItem(DISCOVERY_LEVEL_STORAGE_KEY);
-            if (saved !== null && [...discoveryLevel.options].some((o) => o.value === saved)) {
-                discoveryLevel.value = saved;
-            }
-        } catch (_) {
-            /* ignore */
-        }
-        discoveryLevel.addEventListener('change', () => {
-            try {
-                localStorage.setItem(DISCOVERY_LEVEL_STORAGE_KEY, discoveryLevel.value);
-            } catch (_) {
-                /* ignore */
-            }
-            discoveryIndex = 0;
-            loadDiscovery();
-        });
-    }
+    initDiscoveryLevelButtons();
 
     document.getElementById('wordbank-select-filtered')?.addEventListener('click', () => {
         for (const w of wbState.filtered) {

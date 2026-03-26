@@ -3030,29 +3030,67 @@ body {
     margin-bottom: 20px;
 }
 
-.discovery-level-row {
+.discovery-top-controls {
     justify-content: center;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 10px 14px;
 }
 
 .discovery-level-label {
     font-size: 0.9rem;
     font-weight: 700;
     color: var(--text-secondary);
+    width: 100%;
+    text-align: center;
 }
 
-.discovery-level-select {
-    min-width: 140px;
-    padding: 8px 12px;
-    font-size: 0.95rem;
-    font-weight: 600;
+@media (min-width: 420px) {
+    .discovery-top-controls .discovery-level-label {
+        width: auto;
+        text-align: left;
+    }
+}
+
+.discovery-level-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+}
+
+.discovery-level-btn {
+    padding: 8px 14px;
+    font-size: 0.88rem;
+    font-weight: 700;
     border: 2px solid var(--border);
     border-radius: var(--radius-md);
     background: var(--surface);
     color: var(--text-primary);
     cursor: pointer;
+    line-height: 1.2;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.discovery-level-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary-dark);
+}
+
+.discovery-level-btn.is-active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary-dark);
+}
+
+.discovery-level-btn.is-active:hover {
+    color: #fff;
+}
+
+.discovery-top-controls .discovery-shuffle-btn {
+    min-width: 112px;
+    width: auto;
+    max-width: none;
 }
 
 .discovery-empty {
@@ -3146,33 +3184,53 @@ body {
     opacity: 0.85;
 }
 
-.discovery-card-example {
+.discovery-examples {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+}
+
+.discovery-example-block {
     display: flex;
     align-items: flex-start;
     gap: 12px;
     margin: 0;
-    padding: 16px 18px;
-    text-align: left;
+    padding: 14px 16px;
     background: linear-gradient(135deg, #e8f7fe, #f5fcff);
     border-radius: var(--radius-md);
     border: 2px solid #9fdcf9;
 }
 
-.discovery-card-example-text {
-    margin: 0;
+.discovery-example-block-body {
     flex: 1;
-    font-size: 1.05rem;
+    min-width: 0;
+}
+
+.discovery-example-line {
+    margin: 0;
+    font-size: 1.02rem;
     font-weight: 600;
     line-height: 1.55;
-    color: var(--text-primary);
     word-break: break-word;
 }
 
-.discovery-card-example .btn-speak {
+.discovery-example-line--en {
+    color: var(--text-primary);
+}
+
+.discovery-example-line--cn {
+    margin-top: 8px;
+    font-size: 0.98rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.discovery-example-block .btn-speak {
     flex-shrink: 0;
 }
 
-.discovery-card-example .btn-speak:disabled {
+.discovery-example-block .btn-speak:disabled {
     opacity: 0.45;
     cursor: not-allowed;
     filter: grayscale(0.4);
@@ -3195,10 +3253,6 @@ body {
     align-items: center;
     justify-content: center;
     gap: 10px 12px;
-}
-
-.discovery-toolbar-row2 {
-    justify-content: center;
 }
 
 .discovery-nav-btn {

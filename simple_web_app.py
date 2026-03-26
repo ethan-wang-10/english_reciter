@@ -367,6 +367,26 @@ def lookup_csv_word(english: str) -> Optional[dict]:
     return None
 
 
+def examples_from_csv_row(row: Optional[dict]) -> List[dict]:
+    """从 CSV 行提取全部例句（英/中分行），供单词学习等展示。"""
+    if not row:
+        return []
+    out: List[dict] = []
+    for key in ("1", "2"):
+        ex_en = (row.get(f"example{key}") or "").strip()
+        ex_cn = (row.get(f"example{key}_cn") or "").strip()
+        if ex_en or ex_cn:
+            out.append({"en": ex_en, "cn": ex_cn})
+    return out
+
+
+def merged_example_from_pair(en: str, cn: str) -> str:
+    """与 csv_word_to_review_item 一致的合并串，供兼容旧字段 example。"""
+    if en and cn:
+        return f"{en}_{cn}"
+    return en or cn
+
+
 # ==================== 用户权限 ====================
 
 def get_user_plan(username: str) -> str:
@@ -1352,17 +1372,27 @@ def get_status(username):
                 csv_row = lookup_csv_word(w.english)
                 nd = w.next_review_date
                 is_co = nd < today_d
-                ex_text = ''
+                examples_list: List[dict] = []
                 if csv_row:
-                    picked = pick_example_for_word(csv_row)
-                    ex_text = (picked.get('example') or '').strip()
-                if not ex_text and getattr(w, 'example', None):
-                    ex_text = (w.example or '').strip()
+                    examples_list = examples_from_csv_row(csv_row)
+                if not examples_list and getattr(w, 'example', None):
+                    raw = (w.example or '').strip()
+                    if raw:
+                        if '_' in raw:
+                            a, b = raw.split('_', 1)
+                            examples_list = [{'en': a.strip(), 'cn': b.strip()}]
+                        else:
+                            examples_list = [{'en': raw, 'cn': ''}]
+                ex_text = ''
+                if examples_list:
+                    fe = examples_list[0]
+                    ex_text = merged_example_from_pair(fe.get('en', ''), fe.get('cn', ''))
                 all_words.append({
                     'english': w.english,
                     'chinese': w.chinese,
                     'phonetic': csv_row.get('phonetic', '') if csv_row else '',
                     'example': ex_text,
+                    'examples': examples_list,
                     'success_count': w.success_count,
                     'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
                     'review_round': w.review_round,
