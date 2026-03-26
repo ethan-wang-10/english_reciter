@@ -97,7 +97,13 @@
                     <span class="ng-checkin" id="ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
                 </div>
                 <div class="nav-user">
-                    <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
+                    <div class="nav-user-gear-cluster">
+                        <button type="button" id="pk-invite-btn" class="btn-nav-pk-invite" title="PK 邀约" aria-label="PK 邀约">
+                            <span class="btn-nav-pk-invite-icon" aria-hidden="true">💬</span>
+                            <span id="pk-invite-badge" class="pk-invite-badge" hidden aria-hidden="true"></span>
+                        </button>
+                        <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
+                    </div>
                     <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
                         <img id="nav-user-avatar-img" class="nav-user-avatar-img" alt="" width="32" height="32" loading="lazy" hidden />
                         <span id="nav-user-avatar-ph" class="nav-user-avatar-ph" aria-hidden="true">👤</span>
@@ -457,6 +463,18 @@
                     </div>
                     <p class="settings-message" id="settings-message" role="status"></p>
                 </div>
+            </div>
+        </div>
+
+        <!-- 1v1 PK 邀约（顶栏消息入口） -->
+        <div id="pk-invite-modal" class="pk-invite-modal" style="display: none;" aria-hidden="true">
+            <div class="pk-invite-backdrop" id="pk-invite-backdrop"></div>
+            <div class="pk-invite-card" role="dialog" aria-modal="true" aria-labelledby="pk-invite-title">
+                <div class="pk-invite-card-head">
+                    <h3 id="pk-invite-title">1v1 PK 邀约</h3>
+                    <button type="button" class="pk-invite-close" id="pk-invite-close" aria-label="关闭">×</button>
+                </div>
+                <div id="pk-invite-body" class="pk-invite-body"></div>
             </div>
         </div>
 

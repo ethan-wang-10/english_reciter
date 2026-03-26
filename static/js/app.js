@@ -36,6 +36,10 @@ let sessionSkippedRemedialAfterMain = false;
 /** 最近一次 GET /api/gamification 结果，用于成就展示 */
 let lastGamificationProfile = null;
 
+/** PK 邀约角标轮询（主界面登录后启动，登出/回登录页停止） */
+let pkInvitePollTimer = null;
+const PK_INVITE_POLL_MS = 3600000;
+
 // API 基础 URL
 const API_BASE = '/api';
 
@@ -357,6 +361,116 @@ function renderDuelRow(d, me) {
   </li>`;
 }
 
+function getPendingIncomingDuels(duels) {
+    if (!Array.isArray(duels) || !username) return [];
+    return duels.filter((d) => d.status === 'pending' && d.target_user === username);
+}
+
+function updatePkInviteBadgeFromDuels(duels) {
+    const badge = document.getElementById('pk-invite-badge');
+    const btn = document.getElementById('pk-invite-btn');
+    if (!badge || !btn) return;
+    const n = getPendingIncomingDuels(duels).length;
+    if (n > 0) {
+        badge.hidden = false;
+        badge.setAttribute('aria-hidden', 'false');
+        badge.textContent = n > 9 ? '9+' : String(n);
+        btn.setAttribute('aria-label', `PK 邀约，${n} 条待处理`);
+    } else {
+        badge.hidden = true;
+        badge.setAttribute('aria-hidden', 'true');
+        badge.textContent = '';
+        btn.setAttribute('aria-label', 'PK 邀约');
+    }
+}
+
+async function refreshPkInviteIndicator() {
+    if (!token || !username) {
+        updatePkInviteBadgeFromDuels([]);
+        return;
+    }
+    try {
+        const data = await apiRequest('/challenges');
+        updatePkInviteBadgeFromDuels(data.challenges || []);
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function stopPkInvitePolling() {
+    if (pkInvitePollTimer != null) {
+        clearInterval(pkInvitePollTimer);
+        pkInvitePollTimer = null;
+    }
+}
+
+function tickPkInvitePoll() {
+    if (!token || !username) return;
+    const main = document.getElementById('main-page');
+    if (!main || !main.classList.contains('active')) return;
+    if (document.hidden) return;
+    void refreshPkInviteIndicator();
+}
+
+function startPkInvitePolling() {
+    stopPkInvitePolling();
+    if (!token || !username) return;
+    pkInvitePollTimer = window.setInterval(tickPkInvitePoll, PK_INVITE_POLL_MS);
+}
+
+function renderPkInviteCard(d) {
+    const from = escapeHtml(d.from_user || '');
+    const wager = Number(d.wager_xp) || 0;
+    const id = escapeHtml(String(d.id || ''));
+    const exp =
+        d.expires_at && d.status === 'pending'
+            ? `<p class="pk-invite-expiry">邀约有效期至 ${escapeHtml(
+                  String(d.expires_at).replace('T', ' ').slice(0, 16),
+              )}</p>`
+            : '';
+    const wagerLabel = wager === 0 ? '无赌注' : `${wager} XP`;
+    return `<div class="pk-invite-item" data-duel-id="${id}">
+    <p class="pk-invite-lead"><strong>${from}</strong> 向你发起 1v1 打卡 PK</p>
+    <p class="pk-invite-meta">赌注：${escapeHtml(wagerLabel)}</p>
+    ${exp}
+    <div class="pk-invite-item-actions">
+      <button type="button" class="btn btn-secondary pk-invite-respond-btn" data-duel-id="${id}" data-duel-accept="0">拒绝</button>
+      <button type="button" class="btn btn-primary pk-invite-respond-btn" data-duel-id="${id}" data-duel-accept="1">同意</button>
+    </div>
+  </div>`;
+}
+
+function openPkInviteModal() {
+    const modal = document.getElementById('pk-invite-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+    }
+}
+
+function closePkInviteModal() {
+    const modal = document.getElementById('pk-invite-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+}
+
+async function loadPkInviteModalBody() {
+    const body = document.getElementById('pk-invite-body');
+    if (!body) return;
+    body.innerHTML = '<p class="pk-invite-loading">加载中…</p>';
+    const data = await apiRequest('/challenges');
+    const list = data.challenges || [];
+    updatePkInviteBadgeFromDuels(list);
+    const pending = getPendingIncomingDuels(list);
+    if (!pending.length) {
+        body.innerHTML = '<p class="pk-invite-empty">暂无待处理的 1v1 PK 邀约。</p>';
+        return;
+    }
+    body.innerHTML = pending.map((d) => renderPkInviteCard(d)).join('');
+}
+
 function renderUserSettingsPanel(s) {
     setSettingsMessage('');
     const prev = document.getElementById('settings-avatar-preview');
@@ -451,6 +565,8 @@ function renderUserSettingsPanel(s) {
             s.duel_opponents.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
         if (prev && s.duel_opponents.includes(prev)) duelSel.value = prev;
     }
+
+    updatePkInviteBadgeFromDuels(s.duels);
 }
 
 const AVATAR_CROP_VIEW = 280;
@@ -1682,6 +1798,9 @@ function showLoginPage() {
     if (gl) gl.style.display = '';
     document.querySelector('#main-page .nav-user')?.removeAttribute('aria-label');
     updateNavUserAvatar(null);
+    updatePkInviteBadgeFromDuels([]);
+    closePkInviteModal();
+    stopPkInvitePolling();
 }
 
 function showMainPage() {
@@ -1698,6 +1817,8 @@ function showMainPage() {
 
     loadStats();
     refreshNavUserAvatar();
+    void refreshPkInviteIndicator();
+    startPkInvitePolling();
     // 获取用户套餐
     loadUserPlan();
     // 默认展示「今日复习」区块；须拉取列表，否则会一直显示 index.html 里的占位词（如 apple）
@@ -3419,6 +3540,56 @@ document.addEventListener('DOMContentLoaded', function() {
         openSettings();
     });
 
+    document.getElementById('pk-invite-btn')?.addEventListener('click', () => {
+        void (async () => {
+            openPkInviteModal();
+            const body = document.getElementById('pk-invite-body');
+            if (body) body.innerHTML = '<p class="pk-invite-loading">加载中…</p>';
+            try {
+                await loadPkInviteModalBody();
+            } catch (err) {
+                if (body) {
+                    body.innerHTML = `<p class="pk-invite-empty" style="color:var(--error-dark)">${escapeHtml(
+                        err.message || '加载失败',
+                    )}</p>`;
+                }
+            }
+        })();
+    });
+    document.getElementById('pk-invite-backdrop')?.addEventListener('click', closePkInviteModal);
+    document.getElementById('pk-invite-close')?.addEventListener('click', closePkInviteModal);
+    document.getElementById('pk-invite-body')?.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.pk-invite-respond-btn[data-duel-id]');
+        if (!btn) return;
+        const id = btn.getAttribute('data-duel-id');
+        const accept = btn.getAttribute('data-duel-accept') === '1';
+        if (!id) return;
+        btn.disabled = true;
+        document.querySelectorAll('.pk-invite-respond-btn').forEach((b) => {
+            b.disabled = true;
+        });
+        try {
+            await apiRequest(`/challenges/${encodeURIComponent(id)}/respond`, {
+                method: 'POST',
+                body: JSON.stringify({ accept }),
+            });
+            showMainBanner(accept ? '已接受 PK 邀约' : '已拒绝 PK 邀约');
+            await refreshPkInviteIndicator();
+            if (isSettingsOverlayOpen()) await loadUserSettingsPanel();
+            await loadPkInviteModalBody();
+            const b = document.getElementById('pk-invite-body');
+            if (b && b.querySelector('.pk-invite-empty')) {
+                closePkInviteModal();
+            }
+        } catch (err) {
+            showMainBanner(err.message || '操作失败');
+        } finally {
+            document.querySelectorAll('.pk-invite-respond-btn').forEach((x) => {
+                x.disabled = false;
+            });
+        }
+    });
+
     document.getElementById('settings-backdrop')?.addEventListener('click', closeSettings);
     document.getElementById('settings-close')?.addEventListener('click', closeSettings);
     document.getElementById('settings-avatar-input')?.addEventListener('change', (e) => {
@@ -3516,6 +3687,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const crop = document.getElementById('avatar-crop-overlay');
         if (crop && crop.style.display !== 'none') {
             closeAvatarCropModal();
+            return;
+        }
+        const pkModal = document.getElementById('pk-invite-modal');
+        if (pkModal && pkModal.style.display !== 'none') {
+            closePkInviteModal();
             return;
         }
         const ov = document.getElementById('settings-overlay');
@@ -3718,6 +3894,14 @@ document.addEventListener('DOMContentLoaded', function() {
         showAdminNotice('');
     });
     
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        const main = document.getElementById('main-page');
+        if (!main || !main.classList.contains('active')) return;
+        if (!token || !username) return;
+        void refreshPkInviteIndicator();
+    });
+
     // 初始化页面
     if (token && username) {
         showMainPage();

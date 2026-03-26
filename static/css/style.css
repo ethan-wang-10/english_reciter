@@ -367,6 +367,55 @@ body {
     gap: 12px;
 }
 
+.nav-user-gear-cluster {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-nav-pk-invite {
+    position: relative;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s;
+    padding: 0;
+    font-family: inherit;
+}
+
+.btn-nav-pk-invite:hover {
+    background: #eef1f4;
+    border-color: var(--secondary-color);
+}
+
+.pk-invite-badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: var(--radius-pill);
+    background: var(--error-color);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 13px;
+    text-align: center;
+    border: 2px solid var(--surface);
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
 .nav-user > .nav-user-avatar-wrap {
     flex-shrink: 0;
     line-height: 0;
@@ -805,6 +854,126 @@ body {
 }
 
 .remedial-offer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* 顶栏 PK 邀约弹层 */
+.pk-invite-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2600;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: max(16px, env(safe-area-inset-top, 16px)) max(16px, env(safe-area-inset-right, 16px))
+        max(16px, env(safe-area-inset-bottom, 16px)) max(16px, env(safe-area-inset-left, 16px));
+}
+
+.pk-invite-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.48);
+}
+
+.pk-invite-card {
+    position: relative;
+    z-index: 1;
+    max-width: 420px;
+    width: 100%;
+    max-height: min(72vh, 520px);
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, #f0f9ff 0%, var(--surface) 38%);
+    border-radius: var(--radius-lg);
+    border: 2px solid var(--border);
+    box-shadow: 0 var(--tactile-depth) 0 var(--secondary-dark), 0 16px 48px rgba(0, 0, 0, 0.18);
+    padding: 0;
+    animation: modalPopIn 0.45s cubic-bezier(0.34, 1.35, 0.64, 1) both;
+}
+
+.pk-invite-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 20px 12px;
+    border-bottom: 2px solid var(--border);
+}
+
+.pk-invite-card-head h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--secondary-dark);
+}
+
+.pk-invite-close {
+    border: none;
+    background: #eef1f4;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.pk-invite-close:hover {
+    background: #e3e8ed;
+}
+
+.pk-invite-body {
+    padding: 16px 20px 22px;
+    overflow-y: auto;
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+}
+
+.pk-invite-loading,
+.pk-invite-empty {
+    margin: 0;
+    text-align: center;
+    font-weight: 700;
+    color: var(--text-secondary);
+    padding: 12px 4px;
+}
+
+.pk-invite-item {
+    padding: 14px 14px 16px;
+    margin-bottom: 12px;
+    background: var(--surface);
+    border: 2px solid #9fdcf9;
+    border-radius: var(--radius-md);
+}
+
+.pk-invite-item:last-child {
+    margin-bottom: 0;
+}
+
+.pk-invite-lead {
+    margin: 0 0 8px;
+    font-size: 1rem;
+}
+
+.pk-invite-meta {
+    margin: 0 0 6px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+}
+
+.pk-invite-expiry {
+    margin: 0 0 12px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.pk-invite-item-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
@@ -1582,6 +1751,23 @@ body {
         font-size: 1.05rem;
         border-radius: 8px;
         border-width: 1px;
+    }
+
+    .navbar .btn-nav-pk-invite {
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
+        border-radius: 8px;
+        border-width: 1px;
+    }
+
+    .navbar .pk-invite-badge {
+        min-width: 15px;
+        height: 15px;
+        font-size: 0.6rem;
+        line-height: 11px;
+        top: -2px;
+        right: -2px;
     }
 
     .nav-user .btn-secondary {
