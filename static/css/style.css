@@ -373,11 +373,6 @@ body {
     box-shadow: none;
 }
 
-/* 主导航：「排行榜」前略微留白，与左侧菜单组区分 */
-.nav-menu-desktop .nav-item[data-page='leaderboard'] {
-    margin-inline-start: 12px;
-}
-
 .nav-user {
     display: flex;
     align-items: center;
@@ -2285,11 +2280,12 @@ body {
     flex-shrink: 0;
 }
 
-/* 桌面顶栏：游戏化区可收缩，内部横向滚动而不把整行撑换行 */
+/* 桌面顶栏：游戏化区可收缩；与左侧菜单组之间留白（原「排行榜」前间距移至此） */
 @media (min-width: 769px) {
     .navbar .nav-gamification {
         flex: 1 1 auto;
         min-width: 0;
+        margin-inline-start: 12px;
     }
 }
 
