@@ -104,6 +104,12 @@ function formatNumber(n) {
     return x.toLocaleString('zh-CN');
 }
 
+/** 从例句字段中取英文部分（优先 `_` / `→` 前一段；与复习页朗读一致） */
+function englishFromExampleField(exampleText) {
+    if (!exampleText || exampleText === '暂无例句') return '';
+    return String(exampleText).split(' → ')[0].split('_')[0].trim();
+}
+
 function updateGamificationNav(g) {
     if (!g) return;
     const lv = document.getElementById('ng-level');
@@ -521,7 +527,8 @@ function clearUnderlineInput() {
 
 // 浏览器端朗读（远程访问时服务端 say 只在服务器出声，用户听不到）
 // Android Chrome：语音列表异步加载、合成队列常处于 paused，需 resume + voiceschanged 后再 speak
-function speakEnglishInBrowser(text) {
+/** @param {string} text @param {(() => void) | undefined} onEnd 朗读结束回调；省略时恢复复习输入框焦点 */
+function speakEnglishInBrowser(text, onEnd) {
     const raw = String(text || '').trim().slice(0, 500);
     if (!raw) return false;
     if (typeof window.speechSynthesis === 'undefined') {
@@ -565,8 +572,9 @@ function speakEnglishInBrowser(text) {
         const en = pickEnglishVoice();
         if (en) u.voice = en;
         u.rate = 0.95;
-        u.onend = () => focusWordCapture(0);
-        u.onerror = () => focusWordCapture(0);
+        const onDone = typeof onEnd === 'function' ? onEnd : () => focusWordCapture(0);
+        u.onend = onDone;
+        u.onerror = onDone;
         u.onstart = () => {
             try {
                 synth.resume();
@@ -614,13 +622,9 @@ async function speakExample() {
     if (!exampleText || exampleText === '暂无例句') {
         return;
     }
-    
-    // 提取英文部分（支持 _ 和 → 两种分隔符）
-    let enText = exampleText.split(' → ')[0].split('_')[0];
-    if (!enText) {
-        enText = exampleText;
-    }
-    enText = enText.trim();
+
+    let enText = englishFromExampleField(exampleText);
+    if (!enText) enText = String(exampleText).trim();
     if (!enText) return;
 
     if (speakEnglishInBrowser(enText)) {
@@ -1168,7 +1172,7 @@ function showSection(sectionId) {
     document.querySelectorAll(`.mobile-more-link[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
 
     const moreBtn = document.getElementById('mobile-more-btn');
-    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered')) {
+    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover')) {
         moreBtn.classList.add('active');
     }
 
@@ -1176,6 +1180,8 @@ function showSection(sectionId) {
 
     if (sectionId === 'review') {
         loadReviewList();
+    } else if (sectionId === 'discover') {
+        loadDiscovery();
     } else if (sectionId === 'progress') {
         loadProgress();
     } else if (sectionId === 'mastered') {
@@ -1197,6 +1203,10 @@ async function loadStats() {
 
         document.getElementById('mastered-count').textContent = data.stats.mastered_words;
         document.getElementById('round-count').textContent = data.stats.current_round + 1;
+
+        if (document.getElementById('progress-section')?.classList.contains('active')) {
+            renderLearningMap(data.stats.mastered_words);
+        }
     } catch (error) {
         showMainBanner('加载统计失败，请稍后重试');
     }
@@ -1812,12 +1822,78 @@ async function submitAnswer() {
     }
 }
 
+// ==================== 学习地图（按已掌握词数里程碑） ====================
+
+/** 里程碑：阈值 = 至少已掌握该数量的单词 */
+const LEARNING_MAP_MILESTONES = [
+    { n: 0, title: '启程', icon: '🌱' },
+    { n: 10, title: '词汇新星', icon: '⭐' },
+    { n: 25, title: '稳步积累', icon: '🌿' },
+    { n: 50, title: '扎实前行', icon: '🎯' },
+    { n: 100, title: '词汇能手', icon: '🏆' },
+    { n: 200, title: '卓越进阶', icon: '💎' },
+    { n: 500, title: '词汇大师', icon: '👑' },
+    { n: 1000, title: '词库传奇', icon: '🏅' },
+];
+
+function renderLearningMap(masteredWords) {
+    const root = document.getElementById('learning-map');
+    const hint = document.getElementById('learning-map-hint');
+    if (!root) return;
+
+    const m = Math.max(0, Number(masteredWords) || 0);
+
+    let nextGoal = null;
+    for (const ms of LEARNING_MAP_MILESTONES) {
+        if (ms.n > 0 && m < ms.n) {
+            nextGoal = ms;
+            break;
+        }
+    }
+
+    if (hint) {
+        if (nextGoal) {
+            const remain = nextGoal.n - m;
+            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 距离「${nextGoal.title}」（${formatNumber(
+                nextGoal.n,
+            )} 词）还需 ${formatNumber(remain)} 词`;
+        } else {
+            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 已解锁全部里程碑，继续保持！`;
+        }
+    }
+
+    const stepsHtml = LEARNING_MAP_MILESTONES.map((ms, i) => {
+        const unlocked = m >= ms.n;
+        const isNext = Boolean(nextGoal && ms.n === nextGoal.n);
+        const side = i % 2 === 0 ? 'left' : 'right';
+        const stateClass = unlocked ? 'learning-map-node--unlocked' : 'learning-map-node--locked';
+        const nextClass = isNext ? ' learning-map-node--next' : '';
+        const countLabel = ms.n === 0 ? '起点' : `${formatNumber(ms.n)} 词`;
+        const aria = `${ms.title}，目标 ${ms.n === 0 ? '0' : formatNumber(ms.n)} 词，${unlocked ? '已达成' : '未达成'}`;
+        return `
+            <div class="learning-map-step learning-map-step--${side}">
+                <div class="learning-map-node ${stateClass}${nextClass}" role="group" aria-label="${escapeHtml(aria)}">
+                    <div class="learning-map-node-bubble" aria-hidden="true">
+                        <span class="learning-map-node-icon">${ms.icon}</span>
+                    </div>
+                    <span class="learning-map-node-count">${countLabel}</span>
+                    <span class="learning-map-node-title">${escapeHtml(ms.title)}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    root.innerHTML = `<div class="learning-map-spine" aria-hidden="true"></div><div class="learning-map-steps">${stepsHtml}</div>`;
+}
+
 // ==================== 进度功能 ====================
 
 async function loadProgress() {
     try {
         const data = await apiRequest('/words/status');
-        
+
+        renderLearningMap(data.stats.mastered_words);
+
         // 显示统计
         const statsHtml = `
             <div class="stat-card">
@@ -1906,6 +1982,136 @@ async function loadMastered() {
     } catch (error) {
         showMainBanner('加载已掌握列表失败，请稍后重试');
     }
+}
+
+// ==================== 单词学习（Discovery Card） ====================
+
+let discoveryDeck = [];
+let discoveryIndex = 0;
+
+async function loadDiscovery() {
+    const emptyEl = document.getElementById('discovery-empty');
+    const rootEl = document.getElementById('discovery-root');
+    try {
+        const [st, mast] = await Promise.all([apiRequest('/words/status'), apiRequest('/words/mastered')]);
+        const byEn = new Map();
+        for (const w of st.words || []) {
+            byEn.set(String(w.english).toLowerCase(), {
+                english: w.english,
+                chinese: w.chinese,
+                phonetic: w.phonetic || '',
+                example: (w.example && String(w.example).trim()) || '',
+                source: 'pending',
+            });
+        }
+        for (const w of mast.words || []) {
+            const k = String(w.english).toLowerCase();
+            if (!byEn.has(k)) {
+                byEn.set(k, {
+                    english: w.english,
+                    chinese: w.chinese,
+                    phonetic: w.phonetic || '',
+                    example: (w.example && String(w.example).trim()) || '',
+                    source: 'mastered',
+                });
+            }
+        }
+        discoveryDeck = Array.from(byEn.values());
+        discoveryDeck.sort((a, b) => a.english.localeCompare(b.english, 'en'));
+        if (discoveryIndex >= discoveryDeck.length) discoveryIndex = 0;
+
+        if (discoveryDeck.length === 0) {
+            if (emptyEl) {
+                emptyEl.style.display = 'block';
+                emptyEl.innerHTML = '<p>暂无单词。请先到「导入单词」添加学习内容。</p>';
+            }
+            if (rootEl) rootEl.style.display = 'none';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+        if (rootEl) rootEl.style.display = 'block';
+        renderDiscoveryCard();
+    } catch (_) {
+        if (emptyEl) {
+            emptyEl.style.display = 'block';
+            emptyEl.innerHTML = '<p>加载失败，请稍后重试。</p>';
+        }
+        if (rootEl) rootEl.style.display = 'none';
+        showMainBanner('加载单词学习失败，请稍后重试');
+    }
+}
+
+function renderDiscoveryCard() {
+    const wrap = document.getElementById('discovery-card-wrap');
+    const counter = document.getElementById('discovery-counter');
+    if (!wrap) return;
+    if (discoveryDeck.length === 0) {
+        wrap.innerHTML = '';
+        if (counter) counter.textContent = '';
+        return;
+    }
+    if (discoveryIndex >= discoveryDeck.length) discoveryIndex = 0;
+    if (discoveryIndex < 0) discoveryIndex = discoveryDeck.length - 1;
+    const w = discoveryDeck[discoveryIndex];
+    const phon = (w.phonetic || '').trim();
+    const phonBlock =
+        phon.length > 0
+            ? `<p class="discovery-card-phonetic word-item-phonetic">${escapeHtml(phon)}</p>`
+            : '<p class="discovery-card-phonetic discovery-card-phonetic--empty">音标暂无</p>';
+    const exRaw = (w.example || '').trim();
+    const exEn = englishFromExampleField(exRaw);
+    const exampleBlock =
+        exRaw.length > 0
+            ? `<div class="discovery-card-example">
+            <p class="discovery-card-example-text">${escapeHtml(exRaw)}</p>
+            <button type="button" class="btn-speak discovery-speak-example" title="朗读例句" aria-label="朗读例句" ${
+                exEn ? '' : 'disabled'
+            }>🔊</button>
+          </div>`
+            : '<p class="discovery-card-na">暂无例句</p>';
+    const html = `
+      <article class="discovery-card" aria-label="单词卡片 ${escapeHtml(w.english)}">
+        <div class="discovery-card-body">
+          <div class="discovery-card-word-row">
+            <h3 class="discovery-card-word">${escapeHtml(w.english)}</h3>
+            <button type="button" class="btn-speak discovery-speak-word" title="朗读单词" aria-label="朗读 ${escapeHtml(w.english)}">🔊</button>
+          </div>
+          ${phonBlock}
+          ${exampleBlock}
+        </div>
+      </article>
+    `;
+    wrap.innerHTML = html;
+    if (counter) counter.textContent = `${discoveryIndex + 1} / ${discoveryDeck.length}`;
+
+    const speakBtn = wrap.querySelector('.discovery-speak-word');
+    if (speakBtn) {
+        speakBtn.addEventListener('click', () => {
+            speakEnglishInBrowser(w.english, () => {});
+        });
+    }
+    const exBtn = wrap.querySelector('.discovery-speak-example');
+    if (exBtn && exEn) {
+        exBtn.addEventListener('click', () => {
+            speakEnglishInBrowser(exEn, () => {});
+        });
+    }
+}
+
+function discoveryGo(delta) {
+    if (discoveryDeck.length === 0) return;
+    discoveryIndex = (discoveryIndex + delta + discoveryDeck.length) % discoveryDeck.length;
+    renderDiscoveryCard();
+}
+
+function discoveryShuffle() {
+    if (discoveryDeck.length < 2) return;
+    for (let i = discoveryDeck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [discoveryDeck[i], discoveryDeck[j]] = [discoveryDeck[j], discoveryDeck[i]];
+    }
+    discoveryIndex = 0;
+    renderDiscoveryCard();
 }
 
 // ==================== 系统词库（全局搜索，无难度tab） ====================
@@ -2051,6 +2257,10 @@ function initWordbankPanel() {
             }, 350);
         });
     }
+
+    document.getElementById('discovery-prev')?.addEventListener('click', () => discoveryGo(-1));
+    document.getElementById('discovery-next')?.addEventListener('click', () => discoveryGo(1));
+    document.getElementById('discovery-shuffle')?.addEventListener('click', () => discoveryShuffle());
 
     document.getElementById('wordbank-select-filtered')?.addEventListener('click', () => {
         for (const w of wbState.filtered) {

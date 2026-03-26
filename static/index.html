@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#58CC02">
     <title>智能英语背诵系统</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -84,6 +84,7 @@
                 </div>
                 <div class="nav-menu nav-menu-desktop">
                     <button class="nav-item active" data-page="review">今日复习</button>
+                    <button class="nav-item" data-page="discover">单词学习</button>
                     <button class="nav-item" data-page="progress">学习进度</button>
                     <button class="nav-item" data-page="import">导入单词</button>
                     <button class="nav-item" data-page="mastered">已掌握</button>
@@ -119,6 +120,7 @@
                         <span class="ng-xp" id="mobile-ng-xp">0 XP</span>
                         <span class="ng-streak" id="mobile-ng-streak" title="连续打卡天数">🔥 0</span>
                     </div>
+                    <button type="button" class="mobile-more-link" data-page="discover">单词学习</button>
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
                 </div>
@@ -244,6 +246,12 @@
             <div id="progress-section" class="section">
                 <div class="container">
                     <h2>学习进度</h2>
+                    <div class="learning-map-panel">
+                        <h3 class="learning-map-heading">学习地图</h3>
+                        <p class="learning-map-intro">路径上的节点由<strong>已掌握单词数量</strong>解锁；数字越大，里程碑越高。</p>
+                        <div id="learning-map" class="learning-map" aria-label="按已掌握词数解锁的学习地图"></div>
+                        <p id="learning-map-hint" class="learning-map-hint" role="status"></p>
+                    </div>
                     <div id="progress-stats" class="stats-grid"></div>
                     <div id="word-list" class="word-list"></div>
                 </div>
@@ -323,6 +331,26 @@
                 </div>
             </div>
             
+            <!-- 单词学习（Discovery Card） -->
+            <div id="discover-section" class="section">
+                <div class="container discover-page">
+                    <h2>单词学习</h2>
+                    <p class="discover-intro">展示单词、音标与例句，可朗读；仅供浏览，不参与复习计分。</p>
+                    <div id="discovery-empty" class="discovery-empty" style="display: none;" role="status"></div>
+                    <div id="discovery-root" class="discovery-root" style="display: none;">
+                        <div id="discovery-card-wrap" class="discovery-card-wrap"></div>
+                        <div class="discovery-toolbar">
+                            <button type="button" id="discovery-prev" class="btn btn-secondary discovery-nav-btn">← 上一词</button>
+                            <span id="discovery-counter" class="discovery-counter" aria-live="polite"></span>
+                            <button type="button" id="discovery-next" class="btn btn-secondary discovery-nav-btn">下一词 →</button>
+                        </div>
+                        <div class="discovery-toolbar discovery-toolbar-row2">
+                            <button type="button" id="discovery-shuffle" class="btn btn-primary discovery-shuffle-btn">乱序重排</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 已掌握页面 -->
             <div id="mastered-section" class="section">
                 <div class="container">

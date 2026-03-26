@@ -1053,10 +1053,17 @@ def get_status(username):
                 csv_row = lookup_csv_word(w.english)
                 nd = w.next_review_date
                 is_co = nd < today_d
+                ex_text = ''
+                if csv_row:
+                    picked = pick_example_for_word(csv_row)
+                    ex_text = (picked.get('example') or '').strip()
+                if not ex_text and getattr(w, 'example', None):
+                    ex_text = (w.example or '').strip()
                 all_words.append({
                     'english': w.english,
                     'chinese': w.chinese,
                     'phonetic': csv_row.get('phonetic', '') if csv_row else '',
+                    'example': ex_text,
                     'success_count': w.success_count,
                     'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
                     'review_round': w.review_round,
@@ -1707,10 +1714,17 @@ def get_mastered_words(username):
             words = []
             for w in reciter.mastered_words:
                 csv_row = lookup_csv_word(w.english)
+                ex_text = ''
+                if csv_row:
+                    picked = pick_example_for_word(csv_row)
+                    ex_text = (picked.get('example') or '').strip()
+                if not ex_text and getattr(w, 'example', None):
+                    ex_text = (w.example or '').strip()
                 words.append({
                     'english': w.english,
                     'chinese': w.chinese,
                     'phonetic': csv_row.get('phonetic', '') if csv_row else '',
+                    'example': ex_text,
                     'review_count': w.review_count,
                     'mastered_date': w.next_review_date.isoformat()
                 })

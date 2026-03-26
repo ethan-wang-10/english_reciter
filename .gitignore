@@ -46,3 +46,4 @@ Thumbs.db
 # --- Build / deploy artifacts ---
 *.tar.gz
 *.zip
+DESIGN.md
