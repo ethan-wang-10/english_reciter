@@ -316,6 +316,7 @@ body {
 /* 顶栏：始终只显示 📚 图标，完整名称由 .nav-brand[aria-label] 提供（读屏 / 悬停） */
 .navbar .nav-brand {
     gap: 0;
+    margin-inline-end: 12px;
 }
 
 .navbar .nav-brand .brand-name {
@@ -370,6 +371,11 @@ body {
 .nav-item.active:active {
     transform: translateY(var(--tactile-depth));
     box-shadow: none;
+}
+
+/* 主导航：「排行榜」前略微留白，与左侧菜单组区分 */
+.nav-menu-desktop .nav-item[data-page='leaderboard'] {
+    margin-inline-start: 12px;
 }
 
 .nav-user {
@@ -589,7 +595,9 @@ body {
     margin-bottom: 14px;
     min-width: 0;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: visible;
+    padding-block: 3px;
+    box-sizing: content-box;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
 }
@@ -2261,7 +2269,10 @@ body {
     min-width: 0;
     max-width: 100%;
     overflow-x: auto;
-    overflow-y: hidden;
+    /* visible：避免药丸底部 2px box-shadow 被裁切（勿用 overflow-y: hidden） */
+    overflow-y: visible;
+    padding-block: 3px;
+    box-sizing: content-box;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
 }
