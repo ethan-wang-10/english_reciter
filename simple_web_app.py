@@ -601,6 +601,10 @@ def _deepseek_chat(messages: List[dict], model: str = "deepseek-chat",
         return None
 
 
+# 词汇导入：每批发给 DeepSeek 的词数（与 max_tokens 估算、JSON 输出上限一致）。切勿与外层 range 步长错配。
+DEEPSEEK_VOCAB_BATCH_WORDS = 30
+
+
 def deepseek_extract_lemmas(text: str) -> Optional[List[str]]:
     """用 DeepSeek 从文章中提取单词原形列表。"""
     prompt = (
@@ -619,9 +623,13 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
     """
     用 DeepSeek 为单词列表生成词汇表条目（chinese, level, phonetic, examples）。
     返回 list of dict，每个 dict 含 CSV 字段。
+    单次调用词数不应超过 DEEPSEEK_VOCAB_BATCH_WORDS（由 import_vocab 分批保证）。
     """
     level_hint = f"，这批词汇难度级别为：{level}" if level else ""
-    words_str = "、".join(words[:30])  # 每批最多30词
+    words = list(words)[:DEEPSEEK_VOCAB_BATCH_WORDS]
+    if not words:
+        return None
+    words_str = "、".join(words)
     prompt = f"""请为以下英语单词生成词汇表条目{level_hint}。
 
 单词列表：{words_str}
@@ -647,7 +655,7 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
 - 例句难度要与level相符，小学/初中例句要简单易懂
 - example1_form 和 example2_form：只写在句子中实际出现的变形形式，如与原形完全相同则写空字符串
 """
-    wc = max(1, min(len(words), 30))
+    wc = max(1, len(words))
     # 多词时每条 JSON 较长，固定 3000 易截断导致解析失败；按词数放大，上限与 DeepSeek 输出上限对齐
     max_out = min(8192, max(2500, 700 + wc * 260))
     reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=max_out)
@@ -2516,8 +2524,8 @@ def import_vocab_to_csv(username):
     failed_surfaces: List[str] = []
 
     if to_generate:
-        for i in range(0, len(to_generate), 50):
-            batch = to_generate[i : i + 50]
+        for i in range(0, len(to_generate), DEEPSEEK_VOCAB_BATCH_WORDS):
+            batch = to_generate[i : i + DEEPSEEK_VOCAB_BATCH_WORDS]
             entries = deepseek_generate_word_entries(batch, level=level_hint)
             success = set()
             batch_lower = {b.lower() for b in batch}
