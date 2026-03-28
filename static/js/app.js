@@ -3300,11 +3300,19 @@ let articleImportPickMode = false;
 let articleImportWords = [];
 /** @type {Set<number>} */
 let articleImportSelectedIdx = new Set();
+/** 导入成功且结果对话框已打开时，finally 不再恢复「确认导入」按钮 */
+let articleImportResultModalPending = false;
 
 function resetArticleImportPickUI() {
     articleImportPickMode = false;
     articleImportWords = [];
     articleImportSelectedIdx.clear();
+    articleImportResultModalPending = false;
+    const modal = document.getElementById('article-import-result-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
     const ta = document.getElementById('import-article-textarea');
     const wrap = document.getElementById('import-article-pick-wrap');
     const pick = document.getElementById('import-article-pick');
@@ -3325,6 +3333,59 @@ function resetArticleImportPickUI() {
         resultDiv.style.display = 'none';
         resultDiv.innerHTML = '';
     }
+}
+
+function openArticleImportResultModal({ total, added, skipped, invalid, dupWords }) {
+    const modal = document.getElementById('article-import-result-modal');
+    const nSubmit = document.getElementById('article-import-result-n-submit');
+    const nAdded = document.getElementById('article-import-result-n-added');
+    const nDup = document.getElementById('article-import-result-n-dup');
+    const nInvalid = document.getElementById('article-import-result-n-invalid');
+    const dupList = document.getElementById('article-import-result-dup-list');
+    if (!modal || !nSubmit || !nAdded || !nDup || !nInvalid) return;
+    nSubmit.textContent = String(total);
+    nAdded.textContent = String(added);
+    nDup.textContent = String(skipped);
+    nInvalid.textContent = String(invalid);
+    if (dupList) {
+        if (dupWords && dupWords.length) {
+            dupList.hidden = false;
+            const show = dupWords.slice(0, 40);
+            dupList.textContent = `已在待复习列表中的词（示例）：${show.join('、')}${dupWords.length > 40 ? '…' : ''}`;
+        } else {
+            dupList.hidden = true;
+            dupList.textContent = '';
+        }
+    }
+    articleImportResultModalPending = true;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeArticleImportResultModal() {
+    resetArticleImportPickUI();
+    loadStats();
+}
+
+function initArticleImportResultModal() {
+    const ok = document.getElementById('article-import-result-ok');
+    const modal = document.getElementById('article-import-result-modal');
+    if (ok && !ok.dataset.bound) {
+        ok.dataset.bound = '1';
+        ok.addEventListener('click', () => closeArticleImportResultModal());
+    }
+    if (modal && !modal.dataset.bound) {
+        modal.dataset.bound = '1';
+        modal.addEventListener('click', (e) => {
+            if (e.target.classList.contains('article-import-result-backdrop')) {
+                closeArticleImportResultModal();
+            }
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || !articleImportResultModalPending) return;
+        closeArticleImportResultModal();
+    });
 }
 
 function renderArticleImportPick() {
@@ -3436,23 +3497,17 @@ async function confirmArticleImportFromPicks() {
             }
         }
         const dupUnique = [...new Set(dupWords)];
-        const parts = [];
-        if (added > 0) parts.push(`新加入 ${added} 个`);
-        if (skipped > 0) parts.push(`已有 ${skipped} 个在学习列表中（重复）`);
-        if (invalid > 0) parts.push(`${invalid} 条无效已忽略`);
-        let msg = parts.join('；') || '完成';
-        if (dupUnique.length) {
-            const show = dupUnique.slice(0, 28);
-            msg += `。重复词条：${show.join('、')}${dupUnique.length > 28 ? '…' : ''}`;
-        }
-        const msgType = added > 0 ? 'success' : 'info';
-        showMessage(msg, msgType, 6500);
-        resetArticleImportPickUI();
-        loadStats();
+        openArticleImportResultModal({
+            total: items.length,
+            added,
+            skipped,
+            invalid,
+            dupWords: dupUnique,
+        });
     } catch (error) {
         showMessage(error.message || '导入失败', 'error');
     } finally {
-        if (btn && articleImportPickMode) {
+        if (btn && articleImportPickMode && !articleImportResultModalPending) {
             btn.disabled = false;
             btn.textContent = '确认导入';
         }
@@ -3890,6 +3945,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     initImportNceLessonSelect();
     initImportArticlePickDelegation();
+    initArticleImportResultModal();
     const importArticleBtn = document.getElementById('import-article-btn');
     if (importArticleBtn) {
         importArticleBtn.addEventListener('click', importFromArticle);

@@ -362,6 +362,27 @@
                     </div>
 
                     <div id="import-message" class="message"></div>
+
+                    <div id="article-import-result-modal" class="article-import-result-modal" style="display: none;" aria-hidden="true">
+                        <div class="article-import-result-backdrop"></div>
+                        <div class="article-import-result-card" role="dialog" aria-modal="true" aria-labelledby="article-import-result-title">
+                            <h3 id="article-import-result-title">导入结果</h3>
+                            <dl class="article-import-result-dl">
+                                <dt>本次提交</dt>
+                                <dd id="article-import-result-n-submit">—</dd>
+                                <dt>新加入待复习</dt>
+                                <dd id="article-import-result-n-added">—</dd>
+                                <dt>已在待复习列表</dt>
+                                <dd id="article-import-result-n-dup">—</dd>
+                                <dt>无效 / 已忽略</dt>
+                                <dd id="article-import-result-n-invalid">—</dd>
+                            </dl>
+                            <p id="article-import-result-dup-list" class="article-import-result-dup-list" hidden></p>
+                            <div class="article-import-result-actions">
+                                <button type="button" class="btn btn-primary" id="article-import-result-ok">确定</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
