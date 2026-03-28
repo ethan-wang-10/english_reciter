@@ -27,7 +27,7 @@ from typing import Dict, Generator, List, Optional, Tuple
 from time import time
 import uuid
 
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -132,6 +132,16 @@ DEEPSEEK_API_KEY = ""  # 保持兼容，实际使用 get_deepseek_api_key()
 _CSV_FIELDS = ["english", "chinese", "level", "phonetic",
                "example1", "example1_form", "example1_cn",
                "example2", "example2_form", "example2_cn"]
+
+# 「单词学习」等场景仅需释义与例句，可省略 example*_form 以减小 JSON
+_WORDBANK_CSV_MINIMAL_FIELDS = (
+    "english", "chinese", "level", "phonetic",
+    "example1", "example1_cn", "example2", "example2_cn",
+)
+
+
+def _wordbank_csv_row_minimal(row: dict) -> dict:
+    return {k: str(row.get(k, "") or "") for k in _WORDBANK_CSV_MINIMAL_FIELDS}
 
 
 def _empty_community_doc() -> dict:
@@ -1828,12 +1838,40 @@ def textbooks_lesson(username):
 @app.route('/api/wordbank/csv', methods=['GET'])
 @token_required
 def get_wordbank_csv(username):
-    """返回 CSV 词汇表（所有词或按 level 过滤）。"""
+    """返回 CSV 词汇表（所有词或按 level 过滤）。
+
+    Query:
+    - level: 可选，按难度过滤
+    - fields: ``full``（默认）或 ``minimal``（省略 example*_form 等，供单词学习等场景）
+    支持 If-None-Match / ETag，内容未变时返回 304。
+    """
     level = request.args.get('level', '').strip()
+    fields_mode = request.args.get('fields', 'full').strip().lower()
+    if fields_mode not in ('full', 'minimal'):
+        fields_mode = 'full'
+
     rows = load_words_csv()
     if level:
         rows = [r for r in rows if r.get('level', '') == level]
-    return jsonify({'words': rows, 'count': len(rows)}), 200
+    count = len(rows)
+    try:
+        mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
+    except OSError:
+        mtime = 0.0
+    etag = f'W/"wbcsv-{mtime:.9f}-{level}-{fields_mode}-{count}"'
+    inm = (request.headers.get('If-None-Match') or '').strip()
+    if inm == etag:
+        resp = Response(status=304)
+        resp.headers['ETag'] = etag
+        return resp
+
+    if fields_mode == 'minimal':
+        out_rows = [_wordbank_csv_row_minimal(r) for r in rows]
+    else:
+        out_rows = rows
+    resp = jsonify({'words': out_rows, 'count': count})
+    resp.headers['ETag'] = etag
+    return resp, 200
 
 
 @app.route('/api/wordbank/csv/search', methods=['GET'])
