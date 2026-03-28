@@ -285,6 +285,19 @@
                 <div class="container">
                     <h2>导入单词</h2>
 
+                    <!-- 文章导入区块 -->
+                    <div class="import-article-panel">
+                        <h3 class="import-json-title">从文章导入</h3>
+                        <p class="import-json-desc">
+                            粘贴一篇英文文章，系统会提取其中的词汇并与词库匹配。
+                            <span id="article-plan-hint" class="plan-hint"></span>
+                        </p>
+                        <textarea id="import-article-textarea" class="import-json-textarea" rows="8"
+                            spellcheck="false" placeholder="在此粘贴英文文章…"></textarea>
+                        <button type="button" id="import-article-btn" class="btn btn-primary import-json-btn">从文章提取词汇</button>
+                        <div id="article-import-result" class="article-import-result" style="display:none;"></div>
+                    </div>
+
                     <!-- 词库搜索区块（重新设计：无难度tab，直接全局搜索） -->
                     <div class="wordbank-panel" id="wordbank-panel">
                         <h3 class="import-json-title">从词库搜索添加</h3>
@@ -305,19 +318,6 @@
                             </div>
                         </div>
                         <button type="button" id="wordbank-import-btn" class="btn btn-primary wordbank-import-btn">将选中的词加入待复习</button>
-                    </div>
-
-                    <!-- 文章导入区块 -->
-                    <div class="import-article-panel">
-                        <h3 class="import-json-title">从文章导入</h3>
-                        <p class="import-json-desc">
-                            粘贴一篇英文文章，系统会提取其中的词汇并与词库匹配。
-                            <span id="article-plan-hint" class="plan-hint"></span>
-                        </p>
-                        <textarea id="import-article-textarea" class="import-json-textarea" rows="8"
-                            spellcheck="false" placeholder="在此粘贴英文文章…"></textarea>
-                        <button type="button" id="import-article-btn" class="btn btn-primary import-json-btn">从文章提取词汇</button>
-                        <div id="article-import-result" class="article-import-result" style="display:none;"></div>
                     </div>
 
                     <!-- 词汇导入（仅付费版）区块 -->
