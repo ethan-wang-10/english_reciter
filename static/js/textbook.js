@@ -5,7 +5,7 @@ let textbookCatalogCache = null;
 /** @type {{ corpusId: string, jsonPath: string, title: string } | null} */
 let textbookReaderContext = null;
 const textbookWordCache = new Map();
-/** 本次会话内：隐式词形命中类型 plural / past / ing（用于气泡提示） */
+/** 本次会话内：隐式词形命中类型 plural / past / ing / contraction（用于气泡提示） */
 const textbookImplicitMorphHint = new Map();
 let textbookTooltipToken = null;
 /** 同一 lemma 整段导入流程互斥（含查词与 VIP 词汇导入） */
@@ -104,7 +104,11 @@ function showTextbookImportFeedback(anchorEl, message, variant) {
 }
 
 async function textbookLookupWord(lemma) {
-    const k = String(lemma || '').trim().toLowerCase();
+    const k = String(lemma || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\u2019/g, "'")
+        .replace(/\u2018/g, "'");
     if (!k || k.length < 2) return null;
     if (textbookWordCache.has(k)) return textbookWordCache.get(k);
     try {
@@ -115,11 +119,13 @@ async function textbookLookupWord(lemma) {
         const ip = data.implicit_plural_resolution || {};
         const ipt = data.implicit_past_resolution || {};
         const iing = data.implicit_ing_resolution || {};
+        const icon = data.implicit_contraction_resolution || {};
         // 命中与未命中均缓存（含已有映射仍无词条），避免同一词反复悬停打接口
         textbookWordCache.set(k, row);
         if (row) {
             if (ipt[k]) textbookImplicitMorphHint.set(k, 'past');
             else if (iing[k]) textbookImplicitMorphHint.set(k, 'ing');
+            else if (icon[k]) textbookImplicitMorphHint.set(k, 'contraction');
             else if (ip[k]) textbookImplicitMorphHint.set(k, 'plural');
             else textbookImplicitMorphHint.delete(k);
         } else {
@@ -131,23 +137,29 @@ async function textbookLookupWord(lemma) {
     }
 }
 
-/** 课文表面形与词库词条不一致时（管理员映射或隐式复数/过去式/-ing），第一行显示课文中的词，第二行显示 → 原形 */
+/** 课文表面形与词库词条不一致时（管理员映射或隐式复数/过去式/-ing/'s/'ve），第一行显示课文中的词，第二行显示 → 原形 */
 function buildTextbookTooltipHtmlFromRow(row, surfaceLemma, morphKind) {
     const en = String(row.english || '').trim();
-    const surf = String(surfaceLemma || '').trim().toLowerCase();
+    const normSurf = String(surfaceLemma || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\u2019/g, "'")
+        .replace(/\u2018/g, "'");
     const enL = en.toLowerCase();
     const ph = row.phonetic
         ? `<div class="tb-tip-meta">${escapeHtml(row.phonetic)} · ${escapeHtml(row.level || '')}</div>`
         : '';
-    if (surf && enL && surf !== enL) {
+    if (normSurf && enL && normSurf !== enL) {
         const implicitTag =
             morphKind === 'past'
                 ? '<span class="tb-tip-hint">（隐式过去式）</span>'
                 : morphKind === 'ing'
                   ? '<span class="tb-tip-hint">（隐式进行时）</span>'
-                  : morphKind === 'plural'
-                    ? '<span class="tb-tip-hint">（隐式去复数）</span>'
-                    : '';
+                  : morphKind === 'contraction'
+                    ? "<span class=\"tb-tip-hint\">（隐式 's / 've）</span>"
+                    : morphKind === 'plural'
+                      ? '<span class="tb-tip-hint">（隐式去复数）</span>'
+                      : '';
         return (
             `<div class="tb-tip-en">${escapeHtml(surfaceLemma)}</div>` +
             `<div class="tb-tip-meta">→ ${escapeHtml(en)}${implicitTag}</div>` +

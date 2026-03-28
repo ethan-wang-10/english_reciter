@@ -2074,6 +2074,33 @@ def _ing_stem_variants(term: str) -> List[str]:
     return [stem]
 
 
+def _normalize_apostrophe_token(term: str) -> str:
+    """统一弯引号为 ASCII 撇号，便于匹配 's / 've。"""
+    return (
+        term.replace('\u2019', "'")
+        .replace('\u2018', "'")
+        .replace('\u201b', "'")
+        .lower()
+    )
+
+
+def _contraction_stem_variants(term: str) -> List[str]:
+    """启发式：'s（所有格 / is、has 等）与 've（have）。"""
+    t = _normalize_apostrophe_token(term)
+    if not re.match(r"^[a-z']+$", t):
+        return []
+    out: List[str] = []
+    if t.endswith("'ve") and len(t) >= 4:
+        stem = t[:-3]
+        if len(stem) >= 1:
+            out.append(stem)
+    if t.endswith("'s") and len(t) > 3:
+        stem = t[:-2]
+        if len(stem) >= 1:
+            out.append(stem)
+    return _dedupe_preserve_order(out)
+
+
 def _iter_csv_lemma_candidates(surface: str, mappings: dict):
     """按优先级产出 (候选原形, 类别)；类别用于隐式映射展示。"""
     if surface in mappings:
@@ -2083,6 +2110,11 @@ def _iter_csv_lemma_candidates(surface: str, mappings: dict):
     if surface not in seen:
         seen.add(surface)
         yield surface, 'surface'
+    for stem in _contraction_stem_variants(surface):
+        x = mappings.get(stem, stem)
+        if x not in seen:
+            seen.add(x)
+            yield x, 'contraction'
     for stem in _plural_stem_variants(surface):
         x = mappings.get(stem, stem)
         if x not in seen:
@@ -2101,7 +2133,7 @@ def _iter_csv_lemma_candidates(surface: str, mappings: dict):
 
 
 def _csv_lemma_candidates_for_surface(surface: str, mappings: dict) -> List[str]:
-    """英文表面形 → 词库 english 候选（管理员映射优先，再复数、过去式、-ing）。"""
+    """英文表面形 → 词库 english 候选（管理员映射、's/'ve、复数、过去式、-ing）。"""
     return [c for c, _ in _iter_csv_lemma_candidates(surface, mappings)]
 
 
@@ -2120,9 +2152,12 @@ def _first_lemma_in_csv(surface: str, mappings: dict, csv_keys: set) -> Optional
 
 
 def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
-    """词库无该词时，用于生成/排队的目标 lemma（复数 / 过去式 / -ing 启发）。"""
+    """词库无该词时，用于生成/排队的目标 lemma（'s/'ve、复数、过去式、-ing 启发）。"""
     if surface in mappings:
         return mappings[surface]
+    cov = _contraction_stem_variants(surface)
+    if cov:
+        return mappings.get(cov[0], cov[0])
     stems = _plural_stem_variants(surface)
     if stems:
         return mappings.get(stems[0], stems[0])
@@ -2149,8 +2184,12 @@ def search_wordbank_csv(username):
             'implicit_plural_resolution': {},
             'implicit_past_resolution': {},
             'implicit_ing_resolution': {},
+            'implicit_contraction_resolution': {},
         }), 200
-    terms = [t.strip().lower() for t in re.split(r'[,，]', q) if t.strip()]
+    terms = [
+        _normalize_apostrophe_token(t.strip())
+        for t in re.split(r'[,，]', q) if t.strip()
+    ]
     mappings = get_wordbank_lemma_mappings()
     rows = load_words_csv()
     if level:
@@ -2160,6 +2199,7 @@ def search_wordbank_csv(username):
     implicit_plural_resolution: Dict[str, str] = {}
     implicit_past_resolution: Dict[str, str] = {}
     implicit_ing_resolution: Dict[str, str] = {}
+    implicit_contraction_resolution: Dict[str, str] = {}
     for term in terms:
         if re.match(r'[a-z]', term):
             hit, kind = _first_lemma_in_csv_with_kind(term, mappings, csv_row_keys)
@@ -2172,6 +2212,8 @@ def search_wordbank_csv(username):
                         implicit_past_resolution[term] = hit
                     elif kind == 'ing':
                         implicit_ing_resolution[term] = hit
+                    elif kind == 'contraction':
+                        implicit_contraction_resolution[term] = hit
     result = []
     seen = set()
     for row in rows:
@@ -2198,6 +2240,7 @@ def search_wordbank_csv(username):
         'implicit_plural_resolution': implicit_plural_resolution,
         'implicit_past_resolution': implicit_past_resolution,
         'implicit_ing_resolution': implicit_ing_resolution,
+        'implicit_contraction_resolution': implicit_contraction_resolution,
     }), 200
 
 
