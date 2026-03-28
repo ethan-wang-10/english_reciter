@@ -30,14 +30,31 @@ function hideTextbookTooltip() {
     textbookTooltipToken = null;
 }
 
-/** 将释义气泡锚定在单词下方（或上方若空间不足），避免相对鼠标偏移过大 */
+let textbookTooltipScrollBound = false;
+
+function ensureTextbookTooltipScrollReposition() {
+    if (textbookTooltipScrollBound) return;
+    textbookTooltipScrollBound = true;
+    window.addEventListener(
+        'scroll',
+        () => {
+            const tip = document.getElementById('textbook-word-tooltip');
+            if (!tip || tip.hidden || !textbookTooltipToken) return;
+            positionTextbookTooltipNearEl(textbookTooltipToken);
+        },
+        true,
+    );
+}
+
+/** 将释义气泡锚定在单词下方（或上方若空间不足）；坐标均为视口，气泡须挂在非 transform 的 section 外 */
 function positionTextbookTooltipNearEl(anchorEl) {
     const tip = document.getElementById('textbook-word-tooltip');
     if (!tip || tip.hidden || !anchorEl) return;
+    void tip.offsetWidth;
     const tr = tip.getBoundingClientRect();
     const r = anchorEl.getBoundingClientRect();
     const margin = 8;
-    const gap = 4;
+    const gap = 2;
     let left = r.left + r.width / 2 - tr.width / 2;
     let top = r.bottom + gap;
     if (left < margin) left = margin;
@@ -55,6 +72,7 @@ function positionTextbookTooltipNearEl(anchorEl) {
 function showTextbookTooltip(html, anchorEl) {
     const tip = document.getElementById('textbook-word-tooltip');
     if (!tip) return;
+    ensureTextbookTooltipScrollReposition();
     tip.innerHTML = html;
     tip.hidden = false;
     tip.style.left = '0';

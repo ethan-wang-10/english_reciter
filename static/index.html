@@ -408,7 +408,6 @@
                     </div>
                     <div id="textbook-reader" class="textbook-reader" style="display: none;" aria-live="polite"></div>
                 </div>
-                <div id="textbook-word-tooltip" class="textbook-word-tooltip" role="tooltip" hidden></div>
             </div>
 
             <!-- 已掌握页面 -->
@@ -436,6 +435,9 @@
                     <div id="achievements-grid" class="achievements-grid"></div>
                 </div>
             </div>
+
+            <!-- 课文单词释义气泡：须在 .section 外，否则 fixed 相对 transform 区块，与 getBoundingClientRect 视口坐标不一致 -->
+            <div id="textbook-word-tooltip" class="textbook-word-tooltip" role="tooltip" hidden></div>
 
             <!-- 须在 .section 外：section.active 的 transform 动画会使内部 fixed 相对区块而非视口；全站导入统一用此弹窗 -->
             <div id="import-result-modal" class="article-import-result-modal import-result-modal" style="display: none;" aria-hidden="true">
