@@ -612,14 +612,39 @@ function renderUserSettingsPanel(s) {
     updateSettingsCheckinHintFromProfile(s);
     updateSettingsMonthlyGoalBonusNotice(s);
     const dim = Number(s.month_days_in_month) || 31;
+    const suggested = Math.min(
+        dim,
+        Math.max(1, Number(s.monthly_checkin_goal_suggested_days) || dim)
+    );
+    const canEdit = s.monthly_checkin_goal_can_edit !== false;
     const input = document.getElementById('settings-month-goal');
+    const lockHint = document.getElementById('settings-month-goal-lock-hint');
+    const saveGoalBtn = document.getElementById('settings-month-goal-save');
     if (input) {
         input.max = String(dim);
-        input.placeholder = `1～${dim}`;
-        input.value =
-            s.monthly_checkin_goal != null && s.monthly_checkin_goal !== ''
-                ? String(s.monthly_checkin_goal)
-                : '';
+        input.placeholder = `默认 ${suggested}（今日至月末共 ${suggested} 天）`;
+        input.disabled = !canEdit;
+        const hasGoal =
+            s.monthly_checkin_goal != null && s.monthly_checkin_goal !== '';
+        if (hasGoal) {
+            input.value = String(s.monthly_checkin_goal);
+        } else if (canEdit) {
+            input.value = String(suggested);
+        } else {
+            input.value = '';
+        }
+    }
+    if (lockHint) {
+        if (!canEdit) {
+            lockHint.hidden = false;
+            lockHint.textContent = '本月打卡目标已修改过，每月仅可改一次，下月再调整。';
+        } else {
+            lockHint.hidden = true;
+            lockHint.textContent = '';
+        }
+    }
+    if (saveGoalBtn) {
+        saveGoalBtn.disabled = !canEdit;
     }
     const days = Number(s.month_valid_checkin_days) || 0;
     const goal = s.monthly_checkin_goal;

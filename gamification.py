@@ -63,6 +63,8 @@ def default_state() -> Dict[str, Any]:
         "mcheckin_goal_month": None,
         # 已为哪个月份发放过「完成打卡目标」一次性奖励（YYYY-MM）
         "mcheckin_goal_bonus_awarded_month": None,
+        # 自然月内是否已修改过打卡目标（YYYY-MM）；与 mcheckin_goal 不同月时视为新月份可改
+        "mcheckin_goal_edits_ym": None,
     }
 
 
@@ -100,6 +102,17 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
             base["mcheckin_goal"] = None
     if base.get("mcheckin_goal_bonus_awarded_month") is not None:
         base["mcheckin_goal_bonus_awarded_month"] = str(base["mcheckin_goal_bonus_awarded_month"])
+    if base.get("mcheckin_goal_edits_ym") is not None:
+        base["mcheckin_goal_edits_ym"] = str(base["mcheckin_goal_edits_ym"])
+    # 旧数据：本月已有目标但未记录「已编辑」时，视为已用掉当月一次修改机会
+    _ym = date.today().strftime("%Y-%m")
+    _gm = base.get("mcheckin_goal_month")
+    if (
+        base.get("mcheckin_goal_edits_ym") is None
+        and _gm == _ym
+        and base.get("mcheckin_goal") is not None
+    ):
+        base["mcheckin_goal_edits_ym"] = _ym
     return base
 
 
@@ -108,6 +121,13 @@ def save_state(data_dir: Path, username: str, state: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def days_inclusive_today_through_month_end(today: date) -> int:
+    """从今天到当月末日（含首尾）的天数，用于默认打卡目标建议值。"""
+    _, last_d = calendar.monthrange(today.year, today.month)
+    last = date(today.year, today.month, last_d)
+    return (last - today).days + 1
 
 
 def level_from_xp(total_xp: int) -> int:
@@ -472,6 +492,10 @@ def public_profile(data_dir: Path, username: str, *, mastered_words: int) -> Dic
 
     bonus_total = int(goal) * CHECKIN_GOAL_XP_PER_DAY if goal is not None else None
 
+    dim = calendar.monthrange(today.year, today.month)[1]
+    suggested_days = max(1, min(dim, days_inclusive_today_through_month_end(today)))
+    can_edit_goal = state.get("mcheckin_goal_edits_ym") != ym
+
     return {
         "total_xp": total_xp,
         "level": lv,
@@ -488,9 +512,11 @@ def public_profile(data_dir: Path, username: str, *, mastered_words: int) -> Dic
         "check_in_min_correct": CHECKIN_MIN_CORRECT,
         "month_key": ym,
         "month_valid_checkin_days": month_days,
-        "month_days_in_month": calendar.monthrange(today.year, today.month)[1],
+        "month_days_in_month": dim,
         "monthly_checkin_goal": goal,
         "monthly_checkin_goal_month": goal_month,
+        "monthly_checkin_goal_suggested_days": suggested_days,
+        "monthly_checkin_goal_can_edit": can_edit_goal,
         "monthly_goal_completion_bonus_xp": bonus_total,
         "monthly_goal_bonus_awarded_this_month": state.get("mcheckin_goal_bonus_awarded_month") == ym,
         "checkin_goal_xp_per_day": CHECKIN_GOAL_XP_PER_DAY,
@@ -511,15 +537,42 @@ def patch_settings(
     today = date.today()
     ym = today.strftime("%Y-%m")
     dim = calendar.monthrange(today.year, today.month)[1]
+
+    def _effective_goal_for_month() -> Optional[int]:
+        g = state.get("mcheckin_goal")
+        gm = state.get("mcheckin_goal_month")
+        if gm != ym or g is None:
+            return None
+        try:
+            return int(g)
+        except (TypeError, ValueError):
+            return None
+
+    goal_update = False
+    goal_new: Optional[int] = None
     if clear_monthly_goal:
-        state["mcheckin_goal"] = None
-        state["mcheckin_goal_month"] = None
+        goal_update = True
+        goal_new = None
     elif monthly_checkin_goal is not None:
         g = int(monthly_checkin_goal)
         if g < 1 or g > dim:
             raise ValueError(f"本月目标须在 1～{dim} 之间")
-        state["mcheckin_goal"] = g
-        state["mcheckin_goal_month"] = ym
+        goal_update = True
+        goal_new = g
+
+    if goal_update:
+        goal_old = _effective_goal_for_month()
+        if goal_old != goal_new:
+            if state.get("mcheckin_goal_edits_ym") == ym:
+                raise ValueError("本月已修改过打卡目标，下月再试。")
+            if goal_new is None:
+                state["mcheckin_goal"] = None
+                state["mcheckin_goal_month"] = None
+            else:
+                state["mcheckin_goal"] = goal_new
+                state["mcheckin_goal_month"] = ym
+            state["mcheckin_goal_edits_ym"] = ym
+
     save_state(data_dir, username, state)
     bonus_granted = try_grant_monthly_checkin_goal_bonus(data_dir, username)
     state = load_state(data_dir, username)

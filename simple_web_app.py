@@ -1141,6 +1141,7 @@ def patch_gamification_settings(username):
         return jsonify({**out, **{k: profile[k] for k in (
             'month_key', 'month_valid_checkin_days', 'month_days_in_month',
             'monthly_checkin_goal', 'monthly_checkin_goal_month',
+            'monthly_checkin_goal_suggested_days', 'monthly_checkin_goal_can_edit',
             'today_correct_count', 'check_in_done_today', 'check_in_min_correct',
             'monthly_goal_completion_bonus_xp',
             'monthly_goal_bonus_awarded_this_month', 'checkin_goal_xp_per_day',
