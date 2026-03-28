@@ -2055,6 +2055,19 @@ let textbookCatalogCache = null;
 let textbookReaderContext = null;
 const textbookWordCache = new Map();
 let textbookTooltipToken = null;
+/** 同一 lemma 整段导入流程互斥（含查词与付费导入） */
+const textbookLemmaImportBusy = new Set();
+/** 词库无该词时，限制重复点击/请求（毫秒时间戳） */
+const textbookLemmaMissNotBefore = new Map();
+
+/** 过滤 LRC 中的课次标题行（如 Lesson 3 / 第3课），非正文 */
+function isTextbookMetadataLine(line) {
+    const en = String(line.english || '').trim();
+    const zh = String(line.chinese || '').trim();
+    if (/^lesson\s+\d+!?\s*$/i.test(en)) return true;
+    if (/^第\d+课$/.test(zh) && /^lesson\s+\d+/i.test(en)) return true;
+    return false;
+}
 
 function hideTextbookTooltip() {
     const tip = document.getElementById('textbook-word-tooltip');
@@ -2066,27 +2079,38 @@ function hideTextbookTooltip() {
     textbookTooltipToken = null;
 }
 
-function positionTextbookTooltip(clientX, clientY) {
+/** 将释义气泡锚定在单词下方（或上方若空间不足），避免相对鼠标偏移过大 */
+function positionTextbookTooltipNearEl(anchorEl) {
     const tip = document.getElementById('textbook-word-tooltip');
-    if (!tip || tip.hidden) return;
-    const pad = 12;
-    const rect = tip.getBoundingClientRect();
-    let x = clientX + pad;
-    let y = clientY + pad;
-    if (x + rect.width > window.innerWidth - 8) x = window.innerWidth - rect.width - 8;
-    if (y + rect.height > window.innerHeight - 8) y = clientY - rect.height - pad;
-    if (x < 8) x = 8;
-    if (y < 8) y = 8;
-    tip.style.left = `${x}px`;
-    tip.style.top = `${y}px`;
+    if (!tip || tip.hidden || !anchorEl) return;
+    const tr = tip.getBoundingClientRect();
+    const r = anchorEl.getBoundingClientRect();
+    const margin = 8;
+    const gap = 4;
+    let left = r.left + r.width / 2 - tr.width / 2;
+    let top = r.bottom + gap;
+    if (left < margin) left = margin;
+    if (left + tr.width > window.innerWidth - margin) {
+        left = window.innerWidth - margin - tr.width;
+    }
+    if (top + tr.height > window.innerHeight - margin) {
+        top = r.top - tr.height - gap;
+    }
+    if (top < margin) top = margin;
+    tip.style.left = `${Math.round(left)}px`;
+    tip.style.top = `${Math.round(top)}px`;
 }
 
-function showTextbookTooltip(html, clientX, clientY) {
+function showTextbookTooltip(html, anchorEl) {
     const tip = document.getElementById('textbook-word-tooltip');
     if (!tip) return;
     tip.innerHTML = html;
     tip.hidden = false;
-    positionTextbookTooltip(clientX, clientY);
+    tip.style.left = '0';
+    tip.style.top = '0';
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => positionTextbookTooltipNearEl(anchorEl));
+    });
 }
 
 async function textbookLookupWord(lemma) {
@@ -2121,48 +2145,63 @@ async function importWordFromTextbookLemma(lemma) {
     const raw = String(lemma || '').trim();
     if (!raw) return;
     const k = raw.toLowerCase();
-    const row = await textbookLookupWord(k);
-    if (row) {
-        try {
-            const data = await apiRequest('/words/import-json', {
-                method: 'POST',
-                body: JSON.stringify([buildImportItemFromCsvRow(row)]),
-            });
-            const added = data.added || 0;
-            const skipped = data.skipped_duplicate || 0;
-            if (added > 0) {
-                showMainBanner(`「${row.english}」已加入待复习`);
-            } else if (skipped > 0) {
-                showMainBanner(`「${row.english}」已在学习列表中`);
-            } else {
-                showMainBanner(data.message || '导入完成');
+    if (textbookLemmaImportBusy.has(k)) return;
+
+    const missCooldownMs = 4500;
+
+    textbookLemmaImportBusy.add(k);
+    try {
+        const row = await textbookLookupWord(k);
+        if (row) {
+            try {
+                const data = await apiRequest('/words/import-json', {
+                    method: 'POST',
+                    body: JSON.stringify([buildImportItemFromCsvRow(row)]),
+                });
+                const added = data.added || 0;
+                const skipped = data.skipped_duplicate || 0;
+                if (added > 0) {
+                    showMainBanner(`「${row.english}」已加入待复习`);
+                } else if (skipped > 0) {
+                    showMainBanner(`「${row.english}」已在学习列表中`);
+                } else {
+                    showMainBanner(data.message || '导入完成');
+                }
+                loadStats();
+            } catch (e) {
+                showMainBanner(e.message || '导入失败');
             }
+            return;
+        }
+
+        const notBefore = textbookLemmaMissNotBefore.get(k) || 0;
+        if (Date.now() < notBefore) {
+            return;
+        }
+        textbookLemmaMissNotBefore.set(k, Date.now() + missCooldownMs);
+
+        if (userPlan !== 'paid') {
+            showMainBanner('该词不在现有词库中。升级付费版后可自动通过词汇导入加入词库与待复习。');
+            return;
+        }
+
+        try {
+            const data = await apiRequest('/wordbank/csv/import-words', {
+                method: 'POST',
+                body: JSON.stringify({
+                    words: k,
+                    also_add_to_queue: true,
+                }),
+            });
+            const msg = data.message || '已完成';
+            showMainBanner(msg);
+            textbookWordCache.delete(k);
             loadStats();
         } catch (e) {
-            showMainBanner(e.message || '导入失败');
+            showMainBanner(e.message || '词汇导入失败');
         }
-        return;
-    }
-
-    if (userPlan !== 'paid') {
-        showMainBanner('该词不在现有词库中。升级付费版后可自动通过词汇导入加入词库与待复习。');
-        return;
-    }
-
-    try {
-        const data = await apiRequest('/wordbank/csv/import-words', {
-            method: 'POST',
-            body: JSON.stringify({
-                words: k,
-                also_add_to_queue: true,
-            }),
-        });
-        const msg = data.message || '已完成';
-        showMainBanner(msg);
-        textbookWordCache.delete(k);
-        loadStats();
-    } catch (e) {
-        showMainBanner(e.message || '词汇导入失败');
+    } finally {
+        textbookLemmaImportBusy.delete(k);
     }
 }
 
@@ -2228,15 +2267,13 @@ function bindTextbookReaderInteractions(root) {
                         `<div class="tb-tip-en">${escapeHtml(row.english)}</div>` +
                             `<div class="tb-tip-zh">${escapeHtml(row.chinese)}</div>` +
                             ph,
-                        cx,
-                        cy,
+                        el,
                     );
                 } else {
                     showTextbookTooltip(
                         `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
                             `<div class="tb-tip-zh">词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需付费版）'}</div>`,
-                        cx,
-                        cy,
+                        el,
                     );
                 }
             }, 480);
@@ -2258,8 +2295,6 @@ function bindTextbookReaderInteractions(root) {
             el.classList.add('tb-token--active');
             textbookTooltipToken = el;
             const row = await textbookLookupWord(lemma);
-            const cx = ev.clientX;
-            const cy = ev.clientY;
             if (row) {
                 const ph = row.phonetic
                     ? `<div class="tb-tip-meta">${escapeHtml(row.phonetic)} · ${escapeHtml(row.level || '')}</div>`
@@ -2268,15 +2303,13 @@ function bindTextbookReaderInteractions(root) {
                     `<div class="tb-tip-en">${escapeHtml(row.english)}</div>` +
                         `<div class="tb-tip-zh">${escapeHtml(row.chinese)}</div>` +
                         ph,
-                    cx,
-                    cy,
+                    el,
                 );
             } else {
                 showTextbookTooltip(
                     `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
                         `<div class="tb-tip-zh">词库暂无，点击可尝试导入${userPlan === 'paid' ? '（付费自动 AI 生成）' : '（需付费版）'}</div>`,
-                    cx,
-                    cy,
+                    el,
                 );
             }
         });
@@ -2286,9 +2319,9 @@ function bindTextbookReaderInteractions(root) {
             if (textbookTooltipToken === el) hideTextbookTooltip();
         });
 
-        el.addEventListener('mousemove', (ev) => {
+        el.addEventListener('mousemove', () => {
             if (textbookTooltipToken === el && tip && !tip.hidden) {
-                positionTextbookTooltip(ev.clientX, ev.clientY);
+                positionTextbookTooltipNearEl(el);
             }
         });
 
@@ -2332,7 +2365,8 @@ function renderTextbookReader(data) {
     if (!reader || !catalogWrap) return;
 
     const title = escapeHtml(data.title || data.filename || '课文');
-    const lines = Array.isArray(data.lines) ? data.lines : [];
+    const rawLines = Array.isArray(data.lines) ? data.lines : [];
+    const lines = rawLines.filter((line) => !isTextbookMetadataLine(line));
 
     const blocks = lines
         .map((line, idx) => {

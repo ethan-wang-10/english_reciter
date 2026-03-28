@@ -4141,13 +4141,13 @@ body {
 
 /* 课文学习 */
 .textbook-page {
-    padding-bottom: 48px;
+    padding-bottom: 32px;
 }
 .textbook-intro {
     color: var(--text-secondary);
-    font-size: 0.95rem;
-    line-height: 1.55;
-    margin-bottom: 20px;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    margin-bottom: 14px;
     max-width: 52rem;
 }
 .textbook-catalog {
@@ -4205,14 +4205,19 @@ body {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 20px;
+    gap: 8px;
+    margin-bottom: 12px;
 }
 .textbook-reader-title {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 800;
     flex: 1;
     min-width: 0;
+}
+.textbook-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 .textbook-back-btn {
     font-family: inherit;
@@ -4228,8 +4233,8 @@ body {
     border-color: var(--secondary-color);
 }
 .textbook-line {
-    margin-bottom: 18px;
-    padding: 12px 14px;
+    margin-bottom: 0;
+    padding: 8px 10px;
     background: #fafafa;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
@@ -4237,42 +4242,44 @@ body {
 .textbook-line-row {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 8px;
 }
-.textbook-line-row .btn-speak {
-    width: 40px;
-    height: 40px;
-    font-size: 1rem;
-    margin-top: 2px;
+.textbook-line-row .btn-speak.textbook-speak-line {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    font-size: 0.72rem;
+    margin-top: 1px;
+    box-shadow: 0 2px 0 var(--secondary-dark);
 }
 .textbook-en-line {
     flex: 1;
-    font-size: 1.05rem;
+    font-size: 1rem;
     font-weight: 600;
-    line-height: 1.55;
+    line-height: 1.45;
     color: var(--text-primary);
 }
 .textbook-zh-wrap {
-    margin-top: 10px;
-    padding-left: 50px;
+    margin-top: 4px;
+    padding-left: 36px;
 }
 .textbook-zh-toggle {
     font-family: inherit;
-    font-size: 0.86rem;
+    font-size: 0.82rem;
     font-weight: 700;
     color: var(--secondary-dark);
     background: transparent;
     border: none;
     cursor: pointer;
-    padding: 4px 0;
+    padding: 2px 0;
     text-decoration: underline;
     text-underline-offset: 3px;
 }
 .textbook-zh-text {
-    margin-top: 6px;
-    font-size: 0.98rem;
+    margin-top: 4px;
+    font-size: 0.92rem;
     color: #444;
-    line-height: 1.5;
+    line-height: 1.45;
 }
 .textbook-token {
     display: inline;
