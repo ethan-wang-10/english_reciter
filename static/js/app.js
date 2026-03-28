@@ -1653,6 +1653,7 @@ async function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     clearWordbankCsvDiscoveryCache();
+    resetArticleImportPickUI();
 
     closeSettings();
     showLoginPage();
@@ -3256,6 +3257,10 @@ async function onImportNceLessonChange() {
     const raw = sel.value;
     if (!raw) return;
 
+    if (articleImportPickMode) {
+        resetArticleImportPickUI();
+    }
+
     const tab = raw.indexOf('\t');
     if (tab === -1) return;
     const corpusId = raw.slice(0, tab);
@@ -3290,7 +3295,175 @@ function initImportNceLessonSelect() {
     });
 }
 
+/** 文章提取后：气泡圈选，确认后再写入待复习 */
+let articleImportPickMode = false;
+let articleImportWords = [];
+/** @type {Set<number>} */
+let articleImportSelectedIdx = new Set();
+
+function resetArticleImportPickUI() {
+    articleImportPickMode = false;
+    articleImportWords = [];
+    articleImportSelectedIdx.clear();
+    const ta = document.getElementById('import-article-textarea');
+    const wrap = document.getElementById('import-article-pick-wrap');
+    const pick = document.getElementById('import-article-pick');
+    const btn = document.getElementById('import-article-btn');
+    if (ta) {
+        ta.value = '';
+        ta.style.display = '';
+        ta.disabled = false;
+    }
+    if (wrap) wrap.hidden = true;
+    if (pick) pick.innerHTML = '';
+    if (btn) {
+        btn.textContent = '从文章提取词汇';
+        btn.disabled = false;
+    }
+    const resultDiv = document.getElementById('article-import-result');
+    if (resultDiv) {
+        resultDiv.style.display = 'none';
+        resultDiv.innerHTML = '';
+    }
+}
+
+function renderArticleImportPick() {
+    const pick = document.getElementById('import-article-pick');
+    if (!pick) return;
+    pick.innerHTML = articleImportWords
+        .map((w, i) => {
+            const sel = articleImportSelectedIdx.has(i);
+            const cls = sel ? 'import-article-chip import-article-chip--selected' : 'import-article-chip';
+            return (
+                `<button type="button" class="${cls}" data-idx="${i}" aria-pressed="${sel ? 'true' : 'false'}">` +
+                `${escapeHtml(String(w.english || ''))}</button>`
+            );
+        })
+        .join('');
+}
+
+function initImportArticlePickDelegation() {
+    const pick = document.getElementById('import-article-pick');
+    if (!pick || pick.dataset.bound === '1') return;
+    pick.dataset.bound = '1';
+    pick.addEventListener('click', (e) => {
+        const b = e.target.closest('.import-article-chip');
+        if (!b || !pick.contains(b)) return;
+        const idx = parseInt(b.getAttribute('data-idx'), 10);
+        if (Number.isNaN(idx) || idx < 0 || idx >= articleImportWords.length) return;
+        if (articleImportSelectedIdx.has(idx)) articleImportSelectedIdx.delete(idx);
+        else articleImportSelectedIdx.add(idx);
+        renderArticleImportPick();
+    });
+}
+
+function applyArticleExtractResult(words, data) {
+    const ta = document.getElementById('import-article-textarea');
+    const wrap = document.getElementById('import-article-pick-wrap');
+    const btn = document.getElementById('import-article-btn');
+    const resultDiv = document.getElementById('article-import-result');
+    articleImportPickMode = true;
+    articleImportWords = words;
+    articleImportSelectedIdx = new Set(words.map((_, i) => i));
+    if (ta) {
+        ta.value = '';
+        ta.style.display = 'none';
+    }
+    if (wrap) wrap.hidden = false;
+    renderArticleImportPick();
+    if (btn) btn.textContent = '确认导入';
+    const method = data.method === 'deepseek' ? '（AI 提取）' : '（空格分词）';
+    if (resultDiv) {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `<p class="article-result-title">已提取 ${words.length} 个词库匹配词 ${method}。点击单词可取消圈选，确认后点击「确认导入」加入待复习。</p>`;
+    }
+    const st = data.stats;
+    if (st && typeof st.lemmas_total === 'number') {
+        const modeLabel = data.method === 'deepseek' ? 'AI 提取原形' : '按空格分词';
+        showMessage(
+            `从文章识别 ${st.lemmas_total} 个不重复英文词（${modeLabel}）；其中 ${st.matched_in_csv} 个在词库有词条。请在上方调整圈选后点「确认导入」。`,
+            'success',
+            6500
+        );
+    }
+}
+
+async function confirmArticleImportFromPicks() {
+    if (!articleImportSelectedIdx.size) {
+        showMessage('请至少圈选一个词', 'error');
+        return;
+    }
+    const items = [];
+    const ordered = [...articleImportSelectedIdx].sort((a, b) => a - b);
+    for (const i of ordered) {
+        const w = articleImportWords[i];
+        if (!w) continue;
+        const ex = w.example1 || w.example || '';
+        const exCn = w.example1_cn || '';
+        const example = ex ? (exCn ? `${ex}_${exCn}` : ex) : '';
+        items.push({
+            english: w.english,
+            chinese: w.chinese,
+            example: example || undefined,
+        });
+    }
+    if (!items.length) {
+        showMessage('没有可导入的词条', 'error');
+        return;
+    }
+    const btn = document.getElementById('import-article-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '导入中…';
+    }
+    const chunk = 500;
+    let added = 0;
+    let skipped = 0;
+    let invalid = 0;
+    const dupWords = [];
+    try {
+        for (let i = 0; i < items.length; i += chunk) {
+            const part = items.slice(i, i + chunk);
+            const res = await apiRequest('/words/import-json', {
+                method: 'POST',
+                body: JSON.stringify(part),
+            });
+            added += res.added || 0;
+            skipped += res.skipped_duplicate || 0;
+            invalid += res.skipped_invalid || 0;
+            if (Array.isArray(res.skipped_duplicate_words)) {
+                dupWords.push(...res.skipped_duplicate_words);
+            }
+        }
+        const dupUnique = [...new Set(dupWords)];
+        const parts = [];
+        if (added > 0) parts.push(`新加入 ${added} 个`);
+        if (skipped > 0) parts.push(`已有 ${skipped} 个在学习列表中（重复）`);
+        if (invalid > 0) parts.push(`${invalid} 条无效已忽略`);
+        let msg = parts.join('；') || '完成';
+        if (dupUnique.length) {
+            const show = dupUnique.slice(0, 28);
+            msg += `。重复词条：${show.join('、')}${dupUnique.length > 28 ? '…' : ''}`;
+        }
+        const msgType = added > 0 ? 'success' : 'info';
+        showMessage(msg, msgType, 6500);
+        resetArticleImportPickUI();
+        loadStats();
+    } catch (error) {
+        showMessage(error.message || '导入失败', 'error');
+    } finally {
+        if (btn && articleImportPickMode) {
+            btn.disabled = false;
+            btn.textContent = '确认导入';
+        }
+    }
+}
+
 async function importFromArticle() {
+    if (articleImportPickMode) {
+        await confirmArticleImportFromPicks();
+        return;
+    }
     const ta = document.getElementById('import-article-textarea');
     if (!ta) return;
     const text = ta.value.trim();
@@ -3308,11 +3481,10 @@ async function importFromArticle() {
     try {
         const data = await apiRequest('/words/import-from-article', {
             method: 'POST',
-            body: JSON.stringify({ text })
+            body: JSON.stringify({ text }),
         });
 
         const words = Array.isArray(data.words) ? data.words : [];
-        const method = data.method === 'deepseek' ? '（AI提取）' : '（空格分词）';
 
         if (words.length === 0) {
             const st = data.stats;
@@ -3325,54 +3497,7 @@ async function importFromArticle() {
             return;
         }
 
-        // 将提取到的词汇追加进选框，并自动全选（保留原有已选中的词）
-        const newKeys = new Set(words.map(w => wordbankKey(w.english)));
-        for (const w of words) {
-            const k = wordbankKey(w.english);
-            wbState.selected.add(k);
-            wbState.selectedMap.set(k, w);
-        }
-        // 合并显示列表：原有 filtered 中已选中的词 + 新导入的词（去重）
-        const existingSelected = wbState.filtered.filter(w => {
-            const k = wordbankKey(w.english);
-            return wbState.selected.has(k) && !newKeys.has(k);
-        });
-        wbState.filtered = [...existingSelected, ...words];
-        wbState.filter = `[文章导入：${words.length} 词]`;
-
-        // 同步更新搜索框显示，让用户知道当前列表来源
-        const searchInput = document.getElementById('wordbank-search');
-        if (searchInput) {
-            searchInput.value = '';
-            searchInput.placeholder = `已从文章导入 ${words.length} 个词，可继续搜索…`;
-        }
-
-        updateWordbankSelectedCount();
-        renderWordbankMeta();
-        renderWordbankList();
-
-        // 滚动到词库选框顶部
-        const panel = document.getElementById('wordbank-panel');
-        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-        // 显示提取结果摘要
-        if (resultDiv) {
-            resultDiv.style.display = 'block';
-            const totalSelected = wbState.selected.size;
-            const extraHint = totalSelected > words.length ? `（含之前已选的 ${totalSelected - words.length} 词，共 ${totalSelected} 词已勾选）` : '';
-            resultDiv.innerHTML =
-                `<p class="article-result-title">✓ 已提取 ${words.length} 个词汇 ${method}${extraHint}，请确认后点击「将选中的词加入待复习」。</p>`;
-        }
-        const st = data.stats;
-        if (st && typeof st.lemmas_total === 'number') {
-            const modeLabel = data.method === 'deepseek' ? 'AI 提取原形' : '按空格分词';
-            showMessage(
-                `已从文章得到 ${st.lemmas_total} 个不重复英文词（${modeLabel}）。其中 ${st.matched_in_csv} 个在系统词库中有词条；另有 ${st.not_in_csv} 个词库中暂无。当前已勾选 ${words.length} 条，确认后点击「将选中的词加入待复习」。`,
-                'success',
-                7000
-            );
-        }
-        ta.value = '';
+        applyArticleExtractResult(words, data);
     } catch (error) {
         showMessage(error.message || '提取失败', 'error');
         if (resultDiv) resultDiv.style.display = 'none';
@@ -3764,6 +3889,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 下划线输入框的Enter键已经在initializeUnderlineInput中处理
     
     initImportNceLessonSelect();
+    initImportArticlePickDelegation();
     const importArticleBtn = document.getElementById('import-article-btn');
     if (importArticleBtn) {
         importArticleBtn.addEventListener('click', importFromArticle);

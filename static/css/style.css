@@ -1707,6 +1707,70 @@ body {
     font-weight: 600;
 }
 
+.import-article-editor-area {
+    margin-bottom: 14px;
+}
+
+.import-article-editor-area .import-json-textarea {
+    margin-bottom: 0;
+}
+
+.import-article-pick-wrap {
+    min-height: 180px;
+    padding: 14px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    background: #fafbfc;
+    box-sizing: border-box;
+}
+
+.import-article-pick-lead {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 12px;
+    line-height: 1.45;
+}
+
+.import-article-pick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-content: flex-start;
+}
+
+button.import-article-chip {
+    margin: 0;
+    padding: 6px 12px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    font-family: inherit;
+    line-height: 1.25;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+}
+
+button.import-article-chip:hover {
+    border-color: #93c5fd;
+    color: var(--text-primary);
+}
+
+button.import-article-chip--selected {
+    background: #dbeafe;
+    border-color: #2563eb;
+    color: #1e40af;
+}
+
+button.import-article-chip--selected:hover {
+    background: #bfdbfe;
+    border-color: #1d4ed8;
+    color: #1e3a8a;
+}
+
 .import-json-textarea {
     width: 100%;
     padding: 14px;

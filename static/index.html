@@ -297,8 +297,14 @@
                             <option value="">— 新概念课文（可选）—</option>
                         </select>
                         <p id="import-nc-lesson-hint" class="import-nc-lesson-hint"></p>
-                        <textarea id="import-article-textarea" class="import-json-textarea" rows="8"
-                            spellcheck="false" placeholder="在此粘贴英文文章…"></textarea>
+                        <div class="import-article-editor-area">
+                            <textarea id="import-article-textarea" class="import-json-textarea" rows="8"
+                                spellcheck="false" placeholder="在此粘贴英文文章…"></textarea>
+                            <div id="import-article-pick-wrap" class="import-article-pick-wrap" hidden>
+                                <p class="import-article-pick-lead">以下为词库中匹配到的词，点击切换选中；蓝色为将导入。</p>
+                                <div id="import-article-pick" class="import-article-pick" role="group" aria-label="选择要导入的词"></div>
+                            </div>
+                        </div>
                         <button type="button" id="import-article-btn" class="btn btn-primary import-json-btn">从文章提取词汇</button>
                         <div id="article-import-result" class="article-import-result" style="display:none;"></div>
                     </div>
