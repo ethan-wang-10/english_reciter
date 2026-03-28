@@ -1014,6 +1014,30 @@ body {
     justify-content: flex-end;
 }
 
+.import-result-card.import-result-card--error {
+    border-color: var(--error-color);
+    background: linear-gradient(180deg, #fff8f8 0%, var(--surface) 42%);
+    box-shadow: 0 var(--tactile-depth) 0 var(--error-dark), 0 16px 48px rgba(0, 0, 0, 0.12);
+}
+
+.import-result-card--error h3#import-result-title {
+    color: var(--error-dark);
+}
+
+.import-result-text-wrap {
+    margin-bottom: 16px;
+}
+
+.import-result-text {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+    font-weight: 600;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 /* 顶栏 PK 邀约弹层 */
 .pk-invite-modal {
     position: fixed;

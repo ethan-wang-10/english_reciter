@@ -361,28 +361,6 @@
                         </div>
                     </div>
 
-                    <div id="import-message" class="message"></div>
-
-                    <div id="article-import-result-modal" class="article-import-result-modal" style="display: none;" aria-hidden="true">
-                        <div class="article-import-result-backdrop"></div>
-                        <div class="article-import-result-card" role="dialog" aria-modal="true" aria-labelledby="article-import-result-title">
-                            <h3 id="article-import-result-title">导入结果</h3>
-                            <dl class="article-import-result-dl">
-                                <dt>本次提交</dt>
-                                <dd id="article-import-result-n-submit">—</dd>
-                                <dt>新加入待复习</dt>
-                                <dd id="article-import-result-n-added">—</dd>
-                                <dt>已在待复习列表</dt>
-                                <dd id="article-import-result-n-dup">—</dd>
-                                <dt>无效 / 已忽略</dt>
-                                <dd id="article-import-result-n-invalid">—</dd>
-                            </dl>
-                            <p id="article-import-result-dup-list" class="article-import-result-dup-list" hidden></p>
-                            <div class="article-import-result-actions">
-                                <button type="button" class="btn btn-primary" id="article-import-result-ok">确定</button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
             
@@ -456,6 +434,33 @@
 
                     <h3 class="achievements-section-title">我的成就</h3>
                     <div id="achievements-grid" class="achievements-grid"></div>
+                </div>
+            </div>
+
+            <!-- 须在 .section 外：section.active 的 transform 动画会使内部 fixed 相对区块而非视口；全站导入统一用此弹窗 -->
+            <div id="import-result-modal" class="article-import-result-modal import-result-modal" style="display: none;" aria-hidden="true">
+                <div class="article-import-result-backdrop import-result-backdrop"></div>
+                <div id="import-result-card" class="article-import-result-card import-result-card" role="dialog" aria-modal="true" aria-labelledby="import-result-title">
+                    <h3 id="import-result-title">导入结果</h3>
+                    <div id="import-result-stats-wrap" class="import-result-stats-wrap">
+                        <dl class="article-import-result-dl">
+                            <dt>本次提交</dt>
+                            <dd id="import-result-n-submit">—</dd>
+                            <dt>新加入待复习</dt>
+                            <dd id="import-result-n-added">—</dd>
+                            <dt>已在待复习列表</dt>
+                            <dd id="import-result-n-dup">—</dd>
+                            <dt>无效 / 已忽略</dt>
+                            <dd id="import-result-n-invalid">—</dd>
+                        </dl>
+                        <p id="import-result-dup-list" class="article-import-result-dup-list" hidden></p>
+                    </div>
+                    <div id="import-result-text-wrap" class="import-result-text-wrap" hidden>
+                        <p id="import-result-text" class="import-result-text"></p>
+                    </div>
+                    <div class="article-import-result-actions">
+                        <button type="button" class="btn btn-primary" id="import-result-ok">确定</button>
+                    </div>
                 </div>
             </div>
         </div>

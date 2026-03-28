@@ -1170,18 +1170,6 @@ function showError(message) {
     }, 3000);
 }
 
-function showMessage(message, type = 'success', durationMs = 3000) {
-    const messageDiv = document.getElementById('import-message');
-    if (!messageDiv) return;
-    messageDiv.textContent = message;
-    messageDiv.className = `message ${type}`;
-    messageDiv.style.display = '';
-    setTimeout(() => {
-        messageDiv.className = 'message';
-        messageDiv.style.display = 'none';
-    }, durationMs);
-}
-
 /** 词汇导入（VIP）接口返回拼装成可读说明（在服务端 message 基础上补充词条明细） */
 function buildVocabImportFeedback(data) {
     let msg = data.message || '处理完成';
@@ -1208,6 +1196,118 @@ function buildVocabImportFeedback(data) {
         msg += ` AI 生成失败：${show.join('、')}${data.failed.length > 10 ? '…' : ''}`;
     }
     return msg;
+}
+
+let importResultModalPending = false;
+let importResultModalOnClose = null;
+
+function hideImportResultModalShell() {
+    const modal = document.getElementById('import-result-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    importResultModalPending = false;
+    const card = document.getElementById('import-result-card');
+    if (card) card.classList.remove('import-result-card--error');
+}
+
+function closeImportResultModal() {
+    const fn = importResultModalOnClose;
+    importResultModalOnClose = null;
+    hideImportResultModalShell();
+    if (typeof fn === 'function') fn();
+}
+
+/**
+ * 统一导入结果弹窗：variant=stats 为待复习导入统计；variant=text 为长文案（词汇导入、错误提示等）
+ */
+function openImportResultModal(opts) {
+    const {
+        title = '导入结果',
+        variant = 'stats',
+        stats = {},
+        text = '',
+        isError = false,
+        onClose = null,
+    } = opts || {};
+    const modal = document.getElementById('import-result-modal');
+    const titleEl = document.getElementById('import-result-title');
+    const statsWrap = document.getElementById('import-result-stats-wrap');
+    const textWrap = document.getElementById('import-result-text-wrap');
+    const textEl = document.getElementById('import-result-text');
+    const card = document.getElementById('import-result-card');
+    if (!modal) return;
+
+    if (titleEl) titleEl.textContent = title;
+    if (card) card.classList.toggle('import-result-card--error', !!isError);
+
+    if (variant === 'stats') {
+        if (statsWrap) statsWrap.hidden = false;
+        if (textWrap) textWrap.hidden = true;
+        const { total = 0, added = 0, skipped = 0, invalid = 0, dupWords = [] } = stats;
+        const nSubmit = document.getElementById('import-result-n-submit');
+        const nAdded = document.getElementById('import-result-n-added');
+        const nDup = document.getElementById('import-result-n-dup');
+        const nInvalid = document.getElementById('import-result-n-invalid');
+        const dupList = document.getElementById('import-result-dup-list');
+        if (nSubmit) nSubmit.textContent = String(total);
+        if (nAdded) nAdded.textContent = String(added);
+        if (nDup) nDup.textContent = String(skipped);
+        if (nInvalid) nInvalid.textContent = String(invalid);
+        if (dupList) {
+            if (dupWords && dupWords.length) {
+                dupList.hidden = false;
+                const show = dupWords.slice(0, 40);
+                dupList.textContent = `已在待复习列表中的词（示例）：${show.join('、')}${dupWords.length > 40 ? '…' : ''}`;
+            } else {
+                dupList.hidden = true;
+                dupList.textContent = '';
+            }
+        }
+    } else {
+        if (statsWrap) statsWrap.hidden = true;
+        if (textWrap) textWrap.hidden = false;
+        if (textEl) textEl.textContent = text;
+    }
+
+    importResultModalOnClose = typeof onClose === 'function' ? onClose : null;
+    importResultModalPending = true;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function showImportNotice(text, { title = '提示', isError = false } = {}) {
+    openImportResultModal({
+        variant: 'text',
+        title,
+        text: String(text || ''),
+        isError,
+    });
+}
+
+function initImportResultModal() {
+    const ok = document.getElementById('import-result-ok');
+    const modal = document.getElementById('import-result-modal');
+    if (ok && !ok.dataset.bound) {
+        ok.dataset.bound = '1';
+        ok.addEventListener('click', () => closeImportResultModal());
+    }
+    if (modal && !modal.dataset.bound) {
+        modal.dataset.bound = '1';
+        modal.addEventListener('click', (e) => {
+            if (
+                e.target.classList.contains('import-result-backdrop') ||
+                e.target.classList.contains('article-import-result-backdrop')
+            ) {
+                closeImportResultModal();
+            }
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || !importResultModalPending) return;
+        closeImportResultModal();
+    });
 }
 
 const REVIEW_PHONETIC_STORAGE_KEY = 'english_reciter_review_show_phonetic';
@@ -3067,7 +3167,7 @@ async function doWordbankSearch(q) {
         wbState.filtered = Array.isArray(data.words) ? data.words : [];
     } catch (e) {
         wbState.filtered = [];
-        showMessage(e.message || '搜索失败', 'error');
+        showImportNotice(e.message || '搜索失败', { isError: true });
     } finally {
         wbState.loading = false;
     }
@@ -3117,7 +3217,7 @@ function initWordbankPanel() {
 
 async function wordbankImportSelected() {
     if (!wbState.selected.size) {
-        showMessage('请先勾选单词', 'error');
+        showImportNotice('请先勾选单词', { isError: true });
         return;
     }
     const items = [];
@@ -3134,7 +3234,7 @@ async function wordbankImportSelected() {
     }
     // 如果 selectedMap 没有完整 word 对象（兼容旧逻辑），跳过
     if (!items.length) {
-        showMessage('没有可导入的词条（请重新搜索并勾选）', 'error');
+        showImportNotice('没有可导入的词条（请重新搜索并勾选）', { isError: true });
         return;
     }
     const importBtn = document.getElementById('wordbank-import-btn');
@@ -3162,27 +3262,33 @@ async function wordbankImportSelected() {
             }
         }
         const dupUnique = [...new Set(dupWords)];
-        const parts = [];
-        if (added > 0) parts.push(`新加入 ${added} 个`);
-        if (skipped > 0) parts.push(`已有 ${skipped} 个在学习列表中（重复）`);
-        if (invalid > 0) parts.push(`${invalid} 条无效已忽略`);
-        let msg = parts.join('；') || '完成';
-        if (dupUnique.length) {
-            const show = dupUnique.slice(0, 28);
-            msg += `。重复词条：${show.join('、')}${dupUnique.length > 28 ? '…' : ''}`;
-        }
-        const msgType = added > 0 ? 'success' : 'info';
-        showMessage(msg, msgType, 6500);
-        // 清空已选
-        wbState.selected.clear();
-        wbState.selectedMap.clear();
-        updateWordbankSelectedCount();
-        renderWordbankList();
-        loadStats();
+        openImportResultModal({
+            variant: 'stats',
+            title: '导入结果',
+            stats: {
+                total: items.length,
+                added,
+                skipped,
+                invalid,
+                dupWords: dupUnique,
+            },
+            onClose: () => {
+                wbState.selected.clear();
+                wbState.selectedMap.clear();
+                updateWordbankSelectedCount();
+                renderWordbankList();
+                loadStats();
+                const b = document.getElementById('wordbank-import-btn');
+                if (b) {
+                    b.disabled = false;
+                    b.textContent = '将选中的词加入待复习';
+                }
+            },
+        });
     } catch (error) {
-        showMessage(error.message, 'error');
+        showImportNotice(error.message || '导入失败', { isError: true });
     } finally {
-        if (importBtn) {
+        if (importBtn && !importResultModalPending) {
             importBtn.disabled = false;
             importBtn.textContent = '将选中的词加入待复习';
         }
@@ -3277,7 +3383,7 @@ async function onImportNceLessonChange() {
         const english = lines.map((l) => String(l.english || '').trim()).filter(Boolean);
         ta.value = english.join('\n');
     } catch (e) {
-        showMessage(e.message || '加载课文失败', 'error');
+        showImportNotice(e.message || '加载课文失败', { isError: true });
         ta.value = '';
     } finally {
         sel.disabled = false;
@@ -3301,18 +3407,12 @@ let articleImportWords = [];
 /** @type {Set<number>} */
 let articleImportSelectedIdx = new Set();
 /** 导入成功且结果对话框已打开时，finally 不再恢复「确认导入」按钮 */
-let articleImportResultModalPending = false;
-
 function resetArticleImportPickUI() {
     articleImportPickMode = false;
     articleImportWords = [];
     articleImportSelectedIdx.clear();
-    articleImportResultModalPending = false;
-    const modal = document.getElementById('article-import-result-modal');
-    if (modal) {
-        modal.style.display = 'none';
-        modal.setAttribute('aria-hidden', 'true');
-    }
+    importResultModalOnClose = null;
+    hideImportResultModalShell();
     const ta = document.getElementById('import-article-textarea');
     const wrap = document.getElementById('import-article-pick-wrap');
     const pick = document.getElementById('import-article-pick');
@@ -3333,59 +3433,6 @@ function resetArticleImportPickUI() {
         resultDiv.style.display = 'none';
         resultDiv.innerHTML = '';
     }
-}
-
-function openArticleImportResultModal({ total, added, skipped, invalid, dupWords }) {
-    const modal = document.getElementById('article-import-result-modal');
-    const nSubmit = document.getElementById('article-import-result-n-submit');
-    const nAdded = document.getElementById('article-import-result-n-added');
-    const nDup = document.getElementById('article-import-result-n-dup');
-    const nInvalid = document.getElementById('article-import-result-n-invalid');
-    const dupList = document.getElementById('article-import-result-dup-list');
-    if (!modal || !nSubmit || !nAdded || !nDup || !nInvalid) return;
-    nSubmit.textContent = String(total);
-    nAdded.textContent = String(added);
-    nDup.textContent = String(skipped);
-    nInvalid.textContent = String(invalid);
-    if (dupList) {
-        if (dupWords && dupWords.length) {
-            dupList.hidden = false;
-            const show = dupWords.slice(0, 40);
-            dupList.textContent = `已在待复习列表中的词（示例）：${show.join('、')}${dupWords.length > 40 ? '…' : ''}`;
-        } else {
-            dupList.hidden = true;
-            dupList.textContent = '';
-        }
-    }
-    articleImportResultModalPending = true;
-    modal.style.display = 'flex';
-    modal.setAttribute('aria-hidden', 'false');
-}
-
-function closeArticleImportResultModal() {
-    resetArticleImportPickUI();
-    loadStats();
-}
-
-function initArticleImportResultModal() {
-    const ok = document.getElementById('article-import-result-ok');
-    const modal = document.getElementById('article-import-result-modal');
-    if (ok && !ok.dataset.bound) {
-        ok.dataset.bound = '1';
-        ok.addEventListener('click', () => closeArticleImportResultModal());
-    }
-    if (modal && !modal.dataset.bound) {
-        modal.dataset.bound = '1';
-        modal.addEventListener('click', (e) => {
-            if (e.target.classList.contains('article-import-result-backdrop')) {
-                closeArticleImportResultModal();
-            }
-        });
-    }
-    document.addEventListener('keydown', (e) => {
-        if (e.key !== 'Escape' || !articleImportResultModalPending) return;
-        closeArticleImportResultModal();
-    });
 }
 
 function renderArticleImportPick() {
@@ -3438,20 +3485,11 @@ function applyArticleExtractResult(words, data) {
         resultDiv.style.display = 'block';
         resultDiv.innerHTML = `<p class="article-result-title">已提取 ${words.length} 个词库匹配词 ${method}。点击单词可取消圈选，确认后点击「确认导入」加入待复习。</p>`;
     }
-    const st = data.stats;
-    if (st && typeof st.lemmas_total === 'number') {
-        const modeLabel = data.method === 'deepseek' ? 'AI 提取原形' : '按空格分词';
-        showMessage(
-            `从文章识别 ${st.lemmas_total} 个不重复英文词（${modeLabel}）；其中 ${st.matched_in_csv} 个在词库有词条。请在上方调整圈选后点「确认导入」。`,
-            'success',
-            6500
-        );
-    }
 }
 
 async function confirmArticleImportFromPicks() {
     if (!articleImportSelectedIdx.size) {
-        showMessage('请至少圈选一个词', 'error');
+        showImportNotice('请至少圈选一个词', { isError: true });
         return;
     }
     const items = [];
@@ -3469,7 +3507,7 @@ async function confirmArticleImportFromPicks() {
         });
     }
     if (!items.length) {
-        showMessage('没有可导入的词条', 'error');
+        showImportNotice('没有可导入的词条', { isError: true });
         return;
     }
     const btn = document.getElementById('import-article-btn');
@@ -3497,17 +3535,25 @@ async function confirmArticleImportFromPicks() {
             }
         }
         const dupUnique = [...new Set(dupWords)];
-        openArticleImportResultModal({
-            total: items.length,
-            added,
-            skipped,
-            invalid,
-            dupWords: dupUnique,
+        openImportResultModal({
+            variant: 'stats',
+            title: '导入结果',
+            stats: {
+                total: items.length,
+                added,
+                skipped,
+                invalid,
+                dupWords: dupUnique,
+            },
+            onClose: () => {
+                resetArticleImportPickUI();
+                loadStats();
+            },
         });
     } catch (error) {
-        showMessage(error.message || '导入失败', 'error');
+        showImportNotice(error.message || '导入失败', { isError: true });
     } finally {
-        if (btn && articleImportPickMode && !articleImportResultModalPending) {
+        if (btn && articleImportPickMode && !importResultModalPending) {
             btn.disabled = false;
             btn.textContent = '确认导入';
         }
@@ -3523,7 +3569,7 @@ async function importFromArticle() {
     if (!ta) return;
     const text = ta.value.trim();
     if (!text) {
-        showMessage('请先粘贴文章内容', 'error');
+        showImportNotice('请先粘贴文章内容', { isError: true });
         return;
     }
     const btn = document.getElementById('import-article-btn');
@@ -3547,14 +3593,14 @@ async function importFromArticle() {
             if (st && typeof st.lemmas_total === 'number') {
                 hint += `（从文章识别 ${st.lemmas_total} 个不重复英文词，词库中均无匹配）`;
             }
-            showMessage(hint, 'error', 5500);
+            showImportNotice(hint, { title: '未匹配到词库', isError: true });
             if (resultDiv) resultDiv.style.display = 'none';
             return;
         }
 
         applyArticleExtractResult(words, data);
     } catch (error) {
-        showMessage(error.message || '提取失败', 'error');
+        showImportNotice(error.message || '提取失败', { isError: true });
         if (resultDiv) resultDiv.style.display = 'none';
     } finally {
         if (btn) btn.disabled = false;
@@ -3563,7 +3609,7 @@ async function importFromArticle() {
 
 async function importVocabToCSV() {
     if (userPlan !== 'paid') {
-        showMessage('词汇导入功能仅限 VIP 用户使用', 'error');
+        showImportNotice('词汇导入功能仅限 VIP 用户使用', { title: '无法导入', isError: true });
         return;
     }
     const ta = document.getElementById('import-vocab-textarea');
@@ -3572,7 +3618,7 @@ async function importVocabToCSV() {
     if (!ta) return;
     const raw = ta.value.trim();
     if (!raw) {
-        showMessage('请先输入单词列表', 'error');
+        showImportNotice('请先输入单词列表', { isError: true });
         return;
     }
     const level = levelSel ? levelSel.value : '';
@@ -3587,14 +3633,25 @@ async function importVocabToCSV() {
             method: 'POST',
             body: JSON.stringify({ words: raw, level, also_add_to_queue: alsoAddToQueue })
         });
-        showMessage(buildVocabImportFeedback(data), 'success', 9000);
+        openImportResultModal({
+            variant: 'text',
+            title: '词汇导入结果',
+            text: buildVocabImportFeedback(data),
+            onClose: () => {
+                loadStats();
+                const b = document.getElementById('import-vocab-btn');
+                if (b) {
+                    b.disabled = false;
+                    b.textContent = '词汇导入';
+                }
+            },
+        });
         ta.value = '';
         if (levelSel) levelSel.value = '';
-        loadStats();
     } catch (error) {
-        showMessage(error.message || '导入失败', 'error');
+        showImportNotice(error.message || '导入失败', { isError: true });
     } finally {
-        if (btn) {
+        if (btn && !importResultModalPending) {
             btn.disabled = false;
             btn.textContent = '词汇导入';
         }
@@ -3945,7 +4002,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     initImportNceLessonSelect();
     initImportArticlePickDelegation();
-    initArticleImportResultModal();
+    initImportResultModal();
     const importArticleBtn = document.getElementById('import-article-btn');
     if (importArticleBtn) {
         importArticleBtn.addEventListener('click', importFromArticle);
