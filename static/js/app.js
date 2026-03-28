@@ -1545,7 +1545,10 @@ async function fetchWordbankCsvForDiscovery(level) {
     if (cached.key === key && cached.etag && cached.data) {
         headers['If-None-Match'] = cached.etag;
     }
-    const response = await fetch(`${API_BASE}${path}`, { headers });
+    const response = await fetch(`${API_BASE}${path}`, {
+        headers,
+        cache: 'no-store',
+    });
     if (response.status === 304) {
         if (cached.data) return cached.data;
         clearWordbankCsvDiscoveryCache();

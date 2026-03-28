@@ -1858,7 +1858,10 @@ def get_wordbank_csv(username):
         mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
     except OSError:
         mtime = 0.0
-    etag = f'W/"wbcsv-{mtime:.9f}-{level}-{fields_mode}-{count}"'
+    # ETag 必须为 ASCII；level 可能含中文（小学、初中等），不可直接拼进响应头
+    _etag_seed = f"{mtime:.9f}\0{level}\0{fields_mode}\0{count}".encode("utf-8")
+    etag_digest = hashlib.sha256(_etag_seed).hexdigest()[:32]
+    etag = f'W/"wbcsv-{etag_digest}"'
     inm = (request.headers.get('If-None-Match') or '').strip()
     if inm == etag:
         resp = Response(status=304)
