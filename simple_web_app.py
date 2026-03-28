@@ -2234,6 +2234,8 @@ def import_vocab_to_csv(username):
     if len(input_surfaces) > 500:
         return jsonify({'error': '单次最多处理 500 个单词'}), 400
 
+    existing = get_csv_english_set()
+
     with _TROUBLES_LOCK:
         tdoc = _read_troubles_unlocked()
         mappings = dict(tdoc.get('mappings') or {})
@@ -2251,7 +2253,6 @@ def import_vocab_to_csv(username):
     for s, lem in surface_to_lemma.items():
         lemma_to_surfaces[lem].append(s)
 
-    existing = get_csv_english_set()
     already_in_csv = [s for s in input_surfaces if surface_to_lemma[s] in existing]
 
     new_lemmas_ordered: List[str] = []
