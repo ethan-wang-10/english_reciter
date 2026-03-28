@@ -110,12 +110,35 @@ async function textbookLookupWord(lemma) {
         const data = await apiRequest(`/wordbank/csv/search?${params}`);
         const words = Array.isArray(data.words) ? data.words : [];
         const row = words[0] || null;
+        // 命中与未命中均缓存（含已有映射仍无词条），避免同一词反复悬停打接口
         textbookWordCache.set(k, row);
         return row;
     } catch (_) {
-        textbookWordCache.set(k, null);
         return null;
     }
+}
+
+/** 课文表面形与词库词条不一致时（全局映射），第一行显示课文中的词，第二行显示 → 原形 */
+function buildTextbookTooltipHtmlFromRow(row, surfaceLemma) {
+    const en = String(row.english || '').trim();
+    const surf = String(surfaceLemma || '').trim().toLowerCase();
+    const enL = en.toLowerCase();
+    const ph = row.phonetic
+        ? `<div class="tb-tip-meta">${escapeHtml(row.phonetic)} · ${escapeHtml(row.level || '')}</div>`
+        : '';
+    if (surf && enL && surf !== enL) {
+        return (
+            `<div class="tb-tip-en">${escapeHtml(surfaceLemma)}</div>` +
+            `<div class="tb-tip-meta">→ ${escapeHtml(en)}</div>` +
+            `<div class="tb-tip-zh">${escapeHtml(row.chinese)}</div>` +
+            ph
+        );
+    }
+    return (
+        `<div class="tb-tip-en">${escapeHtml(en)}</div>` +
+        `<div class="tb-tip-zh">${escapeHtml(row.chinese)}</div>` +
+        ph
+    );
 }
 
 function buildImportItemFromCsvRow(w) {
@@ -267,15 +290,7 @@ function bindTextbookReaderInteractions(root) {
                 textbookTooltipToken = el;
                 const row = await textbookLookupWord(lemma);
                 if (row) {
-                    const ph = row.phonetic
-                        ? `<div class="tb-tip-meta">${escapeHtml(row.phonetic)} · ${escapeHtml(row.level || '')}</div>`
-                        : '';
-                    showTextbookTooltip(
-                        `<div class="tb-tip-en">${escapeHtml(row.english)}</div>` +
-                            `<div class="tb-tip-zh">${escapeHtml(row.chinese)}</div>` +
-                            ph,
-                        el,
-                    );
+                    showTextbookTooltip(buildTextbookTooltipHtmlFromRow(row, lemma), el);
                 } else {
                     let sub = `词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需 VIP）'}`;
                     try {
@@ -311,15 +326,7 @@ function bindTextbookReaderInteractions(root) {
             textbookTooltipToken = el;
             const row = await textbookLookupWord(lemma);
             if (row) {
-                const ph = row.phonetic
-                    ? `<div class="tb-tip-meta">${escapeHtml(row.phonetic)} · ${escapeHtml(row.level || '')}</div>`
-                    : '';
-                showTextbookTooltip(
-                    `<div class="tb-tip-en">${escapeHtml(row.english)}</div>` +
-                        `<div class="tb-tip-zh">${escapeHtml(row.chinese)}</div>` +
-                        ph,
-                    el,
-                );
+                showTextbookTooltip(buildTextbookTooltipHtmlFromRow(row, lemma), el);
             } else {
                 let sub = `词库暂无，点击可尝试导入${userPlan === 'paid' ? '（VIP 自动 AI 生成）' : '（需 VIP）'}`;
                 try {

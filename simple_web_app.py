@@ -2027,9 +2027,15 @@ def search_wordbank_csv(username):
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
     if not q:
-        return jsonify({'words': [], 'count': 0}), 200
+        return jsonify({'words': [], 'count': 0, 'lemma_resolution': {}}), 200
     terms = [t.strip().lower() for t in re.split(r'[,，]', q) if t.strip()]
     mappings = get_wordbank_lemma_mappings()
+    lemma_resolution = {}
+    for term in terms:
+        if re.match(r'[a-z]', term):
+            eff = mappings.get(term, term)
+            if eff != term:
+                lemma_resolution[term] = eff
     rows = load_words_csv()
     if level:
         rows = [r for r in rows if r.get('level', '') == level]
@@ -2051,7 +2057,11 @@ def search_wordbank_csv(username):
                     seen.add(en)
                     result.append(row)
                 break
-    return jsonify({'words': result, 'count': len(result)}), 200
+    return jsonify({
+        'words': result,
+        'count': len(result),
+        'lemma_resolution': lemma_resolution,
+    }), 200
 
 
 @app.route('/api/words/import-from-article', methods=['POST'])
@@ -2083,14 +2093,22 @@ def import_from_article(username):
         method = 'simple'
 
     csv_set = get_csv_english_set()
+    mappings = get_wordbank_lemma_mappings()
     unique_lemmas = list(dict.fromkeys(lemmas))
-    matched_keys = [w for w in unique_lemmas if w in csv_set]
+    matched_surfaces = [w for w in unique_lemmas if mappings.get(w, w) in csv_set]
+    matched_effective: List[str] = []
+    seen_eff = set()
+    for w in unique_lemmas:
+        eff = mappings.get(w, w)
+        if eff in csv_set and eff not in seen_eff:
+            seen_eff.add(eff)
+            matched_effective.append(eff)
     stats = {
         'lemmas_total': len(unique_lemmas),
-        'matched_in_csv': len(matched_keys),
-        'not_in_csv': len(unique_lemmas) - len(matched_keys),
+        'matched_in_csv': len(matched_surfaces),
+        'not_in_csv': len(unique_lemmas) - len(matched_surfaces),
     }
-    if not matched_keys:
+    if not matched_effective:
         return jsonify({
             'message': '未在词库中找到匹配词汇',
             'method': method,
@@ -2098,9 +2116,9 @@ def import_from_article(username):
             'stats': stats,
         }), 200
 
-    # 返回完整词条数据，供前端注入选框
+    # 返回完整词条数据，供前端注入选框（按管理员映射解析到词库原形）
     words = []
-    for en in matched_keys:
+    for en in matched_effective:
         row = lookup_csv_word(en)
         if row:
             words.append(row)
