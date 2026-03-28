@@ -14,6 +14,7 @@
     --accent-yellow: #ffc800;
     --accent-yellow-dark: #e5a400;
     --accent-orange: #ff9600;
+    --accent-orange-dark: #e08500;
     --error-color: #ff4b4b;
     --error-dark: #ea2b2b;
     --success-color: #58cc02;
@@ -472,6 +473,7 @@ body {
     background: var(--primary-light);
     border-radius: var(--radius-pill);
     border: 2px solid rgba(88, 204, 2, 0.35);
+    box-shadow: 0 2px 0 var(--primary-dark);
     font-family: inherit;
     font-size: inherit;
     cursor: default;
@@ -628,6 +630,7 @@ body {
     padding: 6px 12px;
     background: #fff0e8;
     border: 2px solid var(--accent-orange);
+    box-shadow: 0 2px 0 var(--accent-orange-dark);
     border-radius: var(--radius-pill);
     color: #b35c00;
 }
@@ -636,6 +639,7 @@ body {
     padding: 6px 12px;
     background: #f3f6f8;
     border: 2px solid var(--border);
+    box-shadow: 0 2px 0 #d0d0d0;
     border-radius: var(--radius-pill);
     color: var(--text-secondary);
     font-size: 0.78rem;
@@ -644,6 +648,7 @@ body {
 .mobile-more-gamification .ng-checkin.ng-checkin-done {
     background: #e8f8ec;
     border-color: var(--primary-color);
+    box-shadow: 0 2px 0 var(--primary-dark);
     color: var(--primary-dark);
 }
 
@@ -2315,6 +2320,7 @@ body {
     padding: 6px 12px;
     background: #fff0e8;
     border: 2px solid var(--accent-orange);
+    box-shadow: 0 2px 0 var(--accent-orange-dark);
     border-radius: var(--radius-pill);
     color: #b35c00;
 }
@@ -2323,6 +2329,7 @@ body {
     padding: 6px 10px;
     background: #f3f6f8;
     border: 2px solid var(--border);
+    box-shadow: 0 2px 0 #d0d0d0;
     border-radius: var(--radius-pill);
     color: var(--text-secondary);
     font-size: 0.8rem;
@@ -2331,6 +2338,7 @@ body {
 .nav-gamification .ng-checkin.ng-checkin-done {
     background: #e8f8ec;
     border-color: var(--primary-color);
+    box-shadow: 0 2px 0 var(--primary-dark);
     color: var(--primary-dark);
 }
 
