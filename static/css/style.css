@@ -1834,6 +1834,31 @@ body {
     line-height: 1.45;
 }
 
+.import-article-pick-toolbar {
+    display: flex;
+    align-items: center;
+    margin: 0 0 10px;
+    gap: 8px;
+}
+
+.import-article-select-all-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.import-article-select-all-label input {
+    width: 1.05rem;
+    height: 1.05rem;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 .import-article-pick {
     display: flex;
     flex-wrap: wrap;

@@ -3545,6 +3545,15 @@ function resetArticleImportPickUI() {
     }
 }
 
+function syncImportArticleSelectAllCheckbox() {
+    const cb = document.getElementById('import-article-select-all-cb');
+    if (!cb || !articleImportWords.length) return;
+    const n = articleImportSelectedIdx.size;
+    const total = articleImportWords.length;
+    cb.checked = n === total;
+    cb.indeterminate = n > 0 && n < total;
+}
+
 function renderArticleImportPick() {
     const pick = document.getElementById('import-article-pick');
     if (!pick) return;
@@ -3558,6 +3567,7 @@ function renderArticleImportPick() {
             );
         })
         .join('');
+    syncImportArticleSelectAllCheckbox();
 }
 
 function initImportArticlePickDelegation() {
@@ -3571,6 +3581,21 @@ function initImportArticlePickDelegation() {
         if (Number.isNaN(idx) || idx < 0 || idx >= articleImportWords.length) return;
         if (articleImportSelectedIdx.has(idx)) articleImportSelectedIdx.delete(idx);
         else articleImportSelectedIdx.add(idx);
+        renderArticleImportPick();
+    });
+}
+
+function initImportArticleSelectAllCheckbox() {
+    const cb = document.getElementById('import-article-select-all-cb');
+    if (!cb || cb.dataset.bound === '1') return;
+    cb.dataset.bound = '1';
+    cb.addEventListener('change', () => {
+        if (!articleImportWords.length) return;
+        if (cb.checked) {
+            articleImportSelectedIdx = new Set(articleImportWords.map((_, i) => i));
+        } else {
+            articleImportSelectedIdx.clear();
+        }
         renderArticleImportPick();
     });
 }
@@ -4137,6 +4162,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     initImportNceLessonSelect();
     initImportArticlePickDelegation();
+    initImportArticleSelectAllCheckbox();
     initImportResultModal();
     const importArticleBtn = document.getElementById('import-article-btn');
     if (importArticleBtn) {
