@@ -2395,18 +2395,23 @@ def import_from_article(username):
     csv_set = get_csv_english_set()
     mappings = get_wordbank_lemma_mappings()
     unique_lemmas = list(dict.fromkeys(lemmas))
-    matched_surfaces = [w for w in unique_lemmas if _first_lemma_in_csv(w, mappings, csv_set) is not None]
+    unmatched_lemmas: List[str] = []
     matched_effective: List[str] = []
     seen_eff = set()
+    matched_surface_count = 0
     for w in unique_lemmas:
         eff = _first_lemma_in_csv(w, mappings, csv_set)
-        if eff is not None and eff not in seen_eff:
-            seen_eff.add(eff)
-            matched_effective.append(eff)
+        if eff is None:
+            unmatched_lemmas.append(w)
+        else:
+            matched_surface_count += 1
+            if eff not in seen_eff:
+                seen_eff.add(eff)
+                matched_effective.append(eff)
     stats = {
         'lemmas_total': len(unique_lemmas),
-        'matched_in_csv': len(matched_surfaces),
-        'not_in_csv': len(unique_lemmas) - len(matched_surfaces),
+        'matched_in_csv': matched_surface_count,
+        'not_in_csv': len(unmatched_lemmas),
     }
     if not matched_effective:
         return jsonify({
@@ -2414,6 +2419,7 @@ def import_from_article(username):
             'method': method,
             'words': [],
             'stats': stats,
+            'unmatched_lemmas': unmatched_lemmas,
         }), 200
 
     # 返回完整词条数据，供前端注入选框（按管理员映射解析到词库原形）
@@ -2430,6 +2436,7 @@ def import_from_article(username):
         'method': method,
         'words': words,
         'stats': stats,
+        'unmatched_lemmas': unmatched_lemmas,
     }), 200
 
 

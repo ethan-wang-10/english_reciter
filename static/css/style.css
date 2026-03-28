@@ -1898,6 +1898,44 @@ button.import-article-chip--selected:hover {
     color: #1e3a8a;
 }
 
+.import-article-unmatched-wrap {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--border);
+    background: var(--surface);
+    box-sizing: border-box;
+}
+
+.import-article-unmatched-lead {
+    margin: 0 0 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.import-article-unmatched {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    align-content: flex-start;
+}
+
+.import-article-unmatched-chip {
+    display: inline-block;
+    padding: 4px 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: inherit;
+    line-height: 1.3;
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+    background: rgba(128, 128, 128, 0.12);
+    background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+    opacity: 0.92;
+}
+
 .import-json-textarea {
     width: 100%;
     padding: 14px;

@@ -3543,6 +3543,25 @@ function resetArticleImportPickUI() {
         resultDiv.style.display = 'none';
         resultDiv.innerHTML = '';
     }
+    renderArticleUnmatched([]);
+}
+
+function renderArticleUnmatched(lemmas) {
+    const wrap = document.getElementById('import-article-unmatched-wrap');
+    const el = document.getElementById('import-article-unmatched');
+    if (!wrap || !el) return;
+    const list = Array.isArray(lemmas)
+        ? lemmas.filter((x) => x != null && String(x).trim() !== '')
+        : [];
+    if (!list.length) {
+        wrap.hidden = true;
+        el.innerHTML = '';
+        return;
+    }
+    wrap.hidden = false;
+    el.innerHTML = list
+        .map((w) => `<span class="import-article-unmatched-chip">${escapeHtml(String(w))}</span>`)
+        .join('');
 }
 
 function syncImportArticleSelectAllCheckbox() {
@@ -3616,10 +3635,14 @@ function applyArticleExtractResult(words, data) {
     renderArticleImportPick();
     if (btn) btn.textContent = '确认导入';
     const method = data.method === 'deepseek' ? '（AI 提取）' : '（空格分词）';
+    const un = Array.isArray(data.unmatched_lemmas) ? data.unmatched_lemmas : [];
     if (resultDiv) {
         resultDiv.style.display = 'block';
-        resultDiv.innerHTML = `<p class="article-result-title">已提取 ${words.length} 个词库匹配词 ${method}。点击单词可取消圈选，确认后点击「确认导入」加入待复习。</p>`;
+        const extra =
+            un.length > 0 ? `另有 ${un.length} 个词库未匹配，见下方灰色列表。` : '';
+        resultDiv.innerHTML = `<p class="article-result-title">已提取 ${words.length} 个词库匹配词 ${method}。${extra}点击单词可取消圈选，确认后点击「确认导入」加入待复习。</p>`;
     }
+    renderArticleUnmatched(un);
 }
 
 async function confirmArticleImportFromPicks() {
@@ -3710,6 +3733,7 @@ async function importFromArticle() {
     const btn = document.getElementById('import-article-btn');
     if (btn) btn.disabled = true;
     const resultDiv = document.getElementById('article-import-result');
+    renderArticleUnmatched([]);
     if (resultDiv) {
         resultDiv.style.display = 'block';
         resultDiv.innerHTML = '<span class="loading-dots">正在提取词汇…</span>';
@@ -3723,6 +3747,7 @@ async function importFromArticle() {
         const words = Array.isArray(data.words) ? data.words : [];
 
         if (words.length === 0) {
+            renderArticleUnmatched(Array.isArray(data.unmatched_lemmas) ? data.unmatched_lemmas : []);
             const st = data.stats;
             let hint = data.message || '未在词库中找到匹配词汇';
             if (st && typeof st.lemmas_total === 'number') {
@@ -3735,6 +3760,7 @@ async function importFromArticle() {
 
         applyArticleExtractResult(words, data);
     } catch (error) {
+        renderArticleUnmatched([]);
         showImportNotice(error.message || '提取失败', { isError: true });
         if (resultDiv) resultDiv.style.display = 'none';
     } finally {
