@@ -3768,21 +3768,65 @@ async function importFromArticle() {
     }
 }
 
-/** 词汇导入：将逗号、空格、换行等分隔的单词整理为「, 」分隔。 */
-function normalizeVocabListInput(raw) {
-    if (raw == null || typeof raw !== 'string') return '';
-    const parts = raw
-        .split(/[\s,，;；、]+/u)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    return parts.join(', ');
+/**
+ * 词汇导入：根据输入形态解析为词条数组。
+ * - 多行：每行一条（可含空格词组，如 New York）；行内若有逗号则再按逗号拆。
+ * - 单行：有逗号/顿号等则按标点拆；否则按空白拆。
+ */
+function parseVocabImportTokens(raw) {
+    if (raw == null || typeof raw !== 'string') return [];
+    const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!text) return [];
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const delimInLine = /[,，;；、]/;
+    const pushFromLine = (line, out) => {
+        if (delimInLine.test(line)) {
+            line.split(/[,，;；、]+/).forEach((p) => {
+                const t = p.trim();
+                if (t) out.push(t);
+            });
+        } else {
+            line.split(/\s+/u).forEach((p) => {
+                const t = p.trim();
+                if (t) out.push(t);
+            });
+        }
+    };
+    const tokens = [];
+    if (lines.length === 1) {
+        pushFromLine(lines[0], tokens);
+    } else {
+        for (const line of lines) {
+            if (delimInLine.test(line)) {
+                line.split(/[,，;；、]+/).forEach((p) => {
+                    const t = p.trim();
+                    if (t) tokens.push(t);
+                });
+            } else if (line) {
+                tokens.push(line);
+            }
+        }
+    }
+    return tokens;
+}
+
+/** 文本框展示：一词/词组一行 */
+function formatVocabImportTextarea(tokens) {
+    return Array.isArray(tokens) ? tokens.join('\n') : '';
+}
+
+/** 后端 /wordbank/csv/import-words 仍按中英文逗号切分，与 DeepSeek 批处理入参一致 */
+function vocabImportWordsForApi(tokens) {
+    return tokens.join(', ');
 }
 
 function applyImportVocabTextareaNormalize() {
     const ta = document.getElementById('import-vocab-textarea');
     if (!ta) return;
-    const n = normalizeVocabListInput(ta.value);
-    if (n !== ta.value) ta.value = n;
+    const tokens = parseVocabImportTokens(ta.value);
+    const n = formatVocabImportTextarea(tokens);
+    const cur = ta.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (cur !== n) ta.value = n;
 }
 
 function initImportVocabTextareaNormalize() {
@@ -3805,11 +3849,12 @@ async function importVocabToCSV() {
     const addToQueueCb = document.getElementById('import-vocab-add-to-queue');
     if (!ta) return;
     applyImportVocabTextareaNormalize();
-    const raw = ta.value.trim();
-    if (!raw) {
+    const tokens = parseVocabImportTokens(ta.value);
+    if (!tokens.length) {
         showImportNotice('请先输入单词列表', { isError: true });
         return;
     }
+    const wordsPayload = vocabImportWordsForApi(tokens);
     const level = levelSel ? levelSel.value : '';
     const alsoAddToQueue = addToQueueCb ? !!addToQueueCb.checked : true;
     const btn = document.getElementById('import-vocab-btn');
@@ -3820,7 +3865,7 @@ async function importVocabToCSV() {
     try {
         const data = await apiRequest('/wordbank/csv/import-words', {
             method: 'POST',
-            body: JSON.stringify({ words: raw, level, also_add_to_queue: alsoAddToQueue })
+            body: JSON.stringify({ words: wordsPayload, level, also_add_to_queue: alsoAddToQueue })
         });
         openImportResultModal({
             variant: 'text',
