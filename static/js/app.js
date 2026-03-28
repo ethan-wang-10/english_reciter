@@ -3768,6 +3768,33 @@ async function importFromArticle() {
     }
 }
 
+/** 词汇导入：将逗号、空格、换行等分隔的单词整理为「, 」分隔。 */
+function normalizeVocabListInput(raw) {
+    if (raw == null || typeof raw !== 'string') return '';
+    const parts = raw
+        .split(/[\s,，;；、]+/u)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    return parts.join(', ');
+}
+
+function applyImportVocabTextareaNormalize() {
+    const ta = document.getElementById('import-vocab-textarea');
+    if (!ta) return;
+    const n = normalizeVocabListInput(ta.value);
+    if (n !== ta.value) ta.value = n;
+}
+
+function initImportVocabTextareaNormalize() {
+    const ta = document.getElementById('import-vocab-textarea');
+    if (!ta || ta.dataset.vocabNormalizeBound === '1') return;
+    ta.dataset.vocabNormalizeBound = '1';
+    ta.addEventListener('blur', () => applyImportVocabTextareaNormalize());
+    ta.addEventListener('paste', () => {
+        setTimeout(() => applyImportVocabTextareaNormalize(), 0);
+    });
+}
+
 async function importVocabToCSV() {
     if (userPlan !== 'paid') {
         showImportNotice('词汇导入功能仅限 VIP 用户使用', { title: '无法导入', isError: true });
@@ -3777,6 +3804,7 @@ async function importVocabToCSV() {
     const levelSel = document.getElementById('import-vocab-level');
     const addToQueueCb = document.getElementById('import-vocab-add-to-queue');
     if (!ta) return;
+    applyImportVocabTextareaNormalize();
     const raw = ta.value.trim();
     if (!raw) {
         showImportNotice('请先输入单词列表', { isError: true });
@@ -4194,6 +4222,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (importArticleBtn) {
         importArticleBtn.addEventListener('click', importFromArticle);
     }
+    initImportVocabTextareaNormalize();
     const importVocabBtn = document.getElementById('import-vocab-btn');
     if (importVocabBtn) {
         importVocabBtn.addEventListener('click', importVocabToCSV);
