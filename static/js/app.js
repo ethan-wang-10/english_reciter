@@ -1193,7 +1193,11 @@ function buildVocabImportFeedback(data) {
     }
     if (Array.isArray(data.failed) && data.failed.length) {
         const show = data.failed.slice(0, 10);
-        msg += ` AI 生成失败：${show.join('、')}${data.failed.length > 10 ? '…' : ''}`;
+        msg += ` AI 生成失败（已记入疑难词）：${show.join('、')}${data.failed.length > 10 ? '…' : ''}`;
+    }
+    if (Array.isArray(data.blocked_surfaces) && data.blocked_surfaces.length) {
+        const show = data.blocked_surfaces.slice(0, 12);
+        msg += ` 疑难词（未调 AI）：${show.join('、')}${data.blocked_surfaces.length > 12 ? '…' : ''}`;
     }
     return msg;
 }

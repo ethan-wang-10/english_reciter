@@ -263,6 +263,145 @@ async function adminDeleteUserWords(englishList) {
     }
 }
 
+let adminTroublesHandlersBound = false;
+
+function bindAdminTroublesOnce() {
+    if (adminTroublesHandlersBound) return;
+    adminTroublesHandlersBound = true;
+    document.getElementById('admin-troubles-refresh')?.addEventListener('click', () => {
+        void loadAdminTroubles();
+    });
+    document.getElementById('admin-lemma-map-save')?.addEventListener('click', () => {
+        void adminSaveLemmaMapping();
+    });
+    document.getElementById('admin-troubles-difficult-tbody')?.addEventListener('click', async (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('[data-remove-difficult]');
+        if (!btn) return;
+        const surface = btn.getAttribute('data-surface');
+        if (!surface) return;
+        if (!window.confirm(`从疑难词列表中移除「${surface}」？（不添加映射时用户可能再次触发 AI）`)) return;
+        showAdminNotice('');
+        try {
+            await apiAdminRequest('/admin/wordbank/troubles/difficult', {
+                method: 'DELETE',
+                body: JSON.stringify({ surface }),
+            });
+            await loadAdminTroubles();
+        } catch (err) {
+            showAdminNotice(err.message || '删除失败');
+        }
+    });
+    document.getElementById('admin-troubles-mapping-tbody')?.addEventListener('click', async (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('[data-remove-mapping]');
+        if (!btn) return;
+        const surface = btn.getAttribute('data-surface');
+        if (!surface) return;
+        if (!window.confirm(`删除映射「${surface}」？`)) return;
+        showAdminNotice('');
+        try {
+            await apiAdminRequest('/admin/wordbank/troubles/mapping', {
+                method: 'DELETE',
+                body: JSON.stringify({ surface }),
+            });
+            await loadAdminTroubles();
+        } catch (err) {
+            showAdminNotice(err.message || '删除失败');
+        }
+    });
+}
+
+function renderAdminTroublesDifficult(items) {
+    const tbody = document.getElementById('admin-troubles-difficult-tbody');
+    const emptyEl = document.getElementById('admin-troubles-difficult-empty');
+    if (!tbody) return;
+    if (!items || !items.length) {
+        tbody.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    tbody.innerHTML = items.map((it) => {
+        const s = escapeHtml(it.surface || '');
+        return `
+            <tr>
+                <td>${s}</td>
+                <td>${escapeHtml(String(it.attempts != null ? it.attempts : '—'))}</td>
+                <td>${escapeHtml(it.last_attempt || it.added_at || '—')}</td>
+                <td>
+                    <button type="button" class="btn btn-secondary" data-fill-map="${s}">填入映射表单</button>
+                    <button type="button" class="btn btn-danger-outline" data-remove-difficult data-surface="${s}">移除</button>
+                </td>
+            </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-fill-map]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const surf = btn.getAttribute('data-fill-map');
+            const i1 = document.getElementById('admin-lemma-map-surface');
+            const i2 = document.getElementById('admin-lemma-map-canonical');
+            if (i1) i1.value = surf || '';
+            if (i2) i2.value = '';
+            i2 && i2.focus();
+        });
+    });
+}
+
+function renderAdminTroublesMapping(items) {
+    const tbody = document.getElementById('admin-troubles-mapping-tbody');
+    const emptyEl = document.getElementById('admin-troubles-mapping-empty');
+    if (!tbody) return;
+    if (!items || !items.length) {
+        tbody.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    tbody.innerHTML = items.map((it) => {
+        const s = escapeHtml(it.surface || '');
+        return `
+            <tr>
+                <td>${s}</td>
+                <td>${escapeHtml(it.lemma || '')}</td>
+                <td><button type="button" class="btn btn-danger-outline" data-remove-mapping data-surface="${s}">删除映射</button></td>
+            </tr>`;
+    }).join('');
+}
+
+async function adminSaveLemmaMapping() {
+    const i1 = document.getElementById('admin-lemma-map-surface');
+    const i2 = document.getElementById('admin-lemma-map-canonical');
+    const surface = (i1 && i1.value || '').trim();
+    const lemma = (i2 && i2.value || '').trim();
+    if (!surface || !lemma) {
+        showAdminNotice('请填写表面形与词汇原形');
+        return;
+    }
+    showAdminNotice('');
+    try {
+        await apiAdminRequest('/admin/wordbank/troubles/mapping', {
+            method: 'POST',
+            body: JSON.stringify({ surface, lemma }),
+        });
+        if (i1) i1.value = '';
+        if (i2) i2.value = '';
+        await loadAdminTroubles();
+        showAdminNotice('映射已保存');
+    } catch (e) {
+        showAdminNotice(e.message || '保存失败');
+    }
+}
+
+async function loadAdminTroubles() {
+    bindAdminTroublesOnce();
+    try {
+        const data = await apiAdminRequest('/admin/wordbank/troubles');
+        renderAdminTroublesDifficult(data.difficult || []);
+        renderAdminTroublesMapping(data.mappings || []);
+    } catch (e) {
+        showAdminNotice(e.message || '加载疑难词失败');
+    }
+}
+
 async function loadAdminDashboard() {
     const [usersRes, invRes, cfgRes] = await Promise.all([
         apiAdminRequest('/admin/users'),
@@ -274,6 +413,7 @@ async function loadAdminDashboard() {
     renderAdminDeepseekStatus(cfgRes);
     populateAdminWordsUserSelect(usersRes.users);
     await loadAdminUserWords();
+    await loadAdminTroubles();
     showAdminDashboardPanel();
 }
 

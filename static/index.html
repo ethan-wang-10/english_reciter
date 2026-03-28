@@ -661,6 +661,61 @@
                     </div>
                     </details>
 
+                    <details class="admin-words-details">
+                        <summary class="admin-words-details-summary">
+                            <span class="admin-subtitle">疑难词与词形映射</span>
+                        </summary>
+                    <div class="admin-config-section" id="admin-troubles-panel">
+                        <p class="admin-hint">词汇 AI 导入失败或列为疑难后不再重复调用 DeepSeek；在此填写<strong>表面形 → 词汇原形</strong>并保存后，该词会从疑难列表移除并进入映射表，全站查词与导入时先按映射解析再查 CSV。</p>
+                        <div class="admin-troubles-toolbar">
+                            <button type="button" id="admin-troubles-refresh" class="btn btn-secondary">刷新列表</button>
+                        </div>
+                        <h4 class="admin-subtitle">疑难词</h4>
+                        <div class="admin-table-wrap">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>表面形</th>
+                                        <th>尝试次数</th>
+                                        <th>最近记录</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-troubles-difficult-tbody"></tbody>
+                            </table>
+                        </div>
+                        <p class="admin-hint" id="admin-troubles-difficult-empty" style="display:none;">暂无疑难词。</p>
+
+                        <h4 class="admin-subtitle">新增映射</h4>
+                        <div class="admin-troubles-map-form">
+                            <div class="form-group admin-config-group">
+                                <label for="admin-lemma-map-surface">表面形（课文中的词）</label>
+                                <input type="text" id="admin-lemma-map-surface" placeholder="如 minds" autocomplete="off" />
+                            </div>
+                            <div class="form-group admin-config-group">
+                                <label for="admin-lemma-map-canonical">词汇原形</label>
+                                <input type="text" id="admin-lemma-map-canonical" placeholder="如 mind" autocomplete="off" />
+                            </div>
+                            <button type="button" id="admin-lemma-map-save" class="btn btn-primary">保存映射</button>
+                        </div>
+
+                        <h4 class="admin-subtitle">已有映射</h4>
+                        <div class="admin-table-wrap">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>表面形</th>
+                                        <th>词汇原形</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-troubles-mapping-tbody"></tbody>
+                            </table>
+                        </div>
+                        <p class="admin-hint" id="admin-troubles-mapping-empty" style="display:none;">暂无映射。</p>
+                    </div>
+                    </details>
+
                     <h3 class="admin-subtitle">用户</h3>
                     <div class="admin-table-wrap">
                         <table class="admin-table">

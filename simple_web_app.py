@@ -205,6 +205,149 @@ def _write_community_file_atomic(data: dict) -> None:
         raise
 
 
+# 疑难词（AI 导入失败）与管理员维护的词形映射（表面形 -> 词汇原形）
+WORDBANK_TROUBLES_FILE = SHARED_DATA_DIR / "wordbank_troubles.json"
+_TROUBLES_LOCK = threading.Lock()
+_TROUBLES_SCHEMA = "english_reciter.wordbank.troubles/v1"
+
+
+def _empty_troubles_doc() -> dict:
+    return {"schema": _TROUBLES_SCHEMA, "difficult": {}, "mappings": {}}
+
+
+def _read_troubles_unlocked() -> dict:
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not WORDBANK_TROUBLES_FILE.exists():
+        data = _empty_troubles_doc()
+        _write_troubles_file_atomic(data)
+        return data
+    try:
+        with open(WORDBANK_TROUBLES_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("疑难词文件损坏，将重建: %s", e)
+        data = _empty_troubles_doc()
+        _write_troubles_file_atomic(data)
+        return data
+    if not isinstance(raw, dict):
+        raw = _empty_troubles_doc()
+    diff = raw.get("difficult")
+    maps = raw.get("mappings")
+    if not isinstance(diff, dict):
+        diff = {}
+    if not isinstance(maps, dict):
+        maps = {}
+    raw["difficult"] = {str(k).strip().lower(): v for k, v in diff.items() if str(k).strip()}
+    raw["mappings"] = {
+        str(k).strip().lower(): str(v).strip().lower()
+        for k, v in maps.items()
+        if str(k).strip() and str(v).strip()
+    }
+    raw.setdefault("schema", _TROUBLES_SCHEMA)
+    return raw
+
+
+def _write_troubles_file_atomic(data: dict) -> None:
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path = WORDBANK_TROUBLES_FILE
+    data = dict(data)
+    diff = data.get("difficult")
+    maps = data.get("mappings")
+    if not isinstance(diff, dict):
+        diff = {}
+    if not isinstance(maps, dict):
+        maps = {}
+    data["difficult"] = diff
+    data["mappings"] = maps
+    data.setdefault("schema", _TROUBLES_SCHEMA)
+    fd, tmp_name = tempfile.mkstemp(suffix=".json", dir=str(SHARED_DATA_DIR), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def get_wordbank_lemma_mappings() -> dict:
+    """表面形 -> 词汇原形（小写），供查词与导入解析。"""
+    with _TROUBLES_LOCK:
+        doc = _read_troubles_unlocked()
+    return dict(doc.get("mappings") or {})
+
+
+def record_surfaces_to_difficult(surfaces: List[str]) -> None:
+    """将 AI 未能写入词库的表面形记入疑难词（已有映射的跳过）。"""
+    if not surfaces:
+        return
+    now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _TROUBLES_LOCK:
+        data = _read_troubles_unlocked()
+        diff = data.setdefault("difficult", {})
+        maps = data.setdefault("mappings", {})
+        for raw_s in surfaces:
+            s = str(raw_s or "").strip().lower()
+            if not s or s in maps:
+                continue
+            prev = diff.get(s)
+            if isinstance(prev, dict):
+                entry = dict(prev)
+            else:
+                entry = {}
+            entry["attempts"] = int(entry.get("attempts") or 0) + 1
+            entry["last_attempt"] = now
+            if not entry.get("added_at"):
+                entry["added_at"] = now
+            diff[s] = entry
+        _write_troubles_file_atomic(data)
+    logger.info("疑难词记录: %s", surfaces)
+
+
+def set_wordbank_surface_mapping(surface: str, lemma: str) -> None:
+    """管理员设置映射：写入 mapping，并从疑难词中移除该表面形。"""
+    s = str(surface or "").strip().lower()
+    lem = str(lemma or "").strip().lower()
+    if not s or not lem:
+        raise ValueError("surface 与 lemma 不能为空")
+    with _TROUBLES_LOCK:
+        data = _read_troubles_unlocked()
+        data.setdefault("mappings", {})[s] = lem
+        data.setdefault("difficult", {}).pop(s, None)
+        _write_troubles_file_atomic(data)
+
+
+def delete_wordbank_mapping(surface: str) -> bool:
+    s = str(surface or "").strip().lower()
+    if not s:
+        return False
+    with _TROUBLES_LOCK:
+        data = _read_troubles_unlocked()
+        maps = data.setdefault("mappings", {})
+        if s not in maps:
+            return False
+        del maps[s]
+        _write_troubles_file_atomic(data)
+    return True
+
+
+def delete_wordbank_difficult(surface: str) -> bool:
+    s = str(surface or "").strip().lower()
+    if not s:
+        return False
+    with _TROUBLES_LOCK:
+        data = _read_troubles_unlocked()
+        diff = data.setdefault("difficult", {})
+        if s not in diff:
+            return False
+        del diff[s]
+        _write_troubles_file_atomic(data)
+    return True
+
+
 def load_system_wordbank_english_lower() -> set:
     """主词库 ``static/wordbanks/words.csv`` 中的英文（小写），用于「共享词库」与家长导入去重。"""
     return get_csv_english_set()
@@ -1886,6 +2029,7 @@ def search_wordbank_csv(username):
     if not q:
         return jsonify({'words': [], 'count': 0}), 200
     terms = [t.strip().lower() for t in re.split(r'[,，]', q) if t.strip()]
+    mappings = get_wordbank_lemma_mappings()
     rows = load_words_csv()
     if level:
         rows = [r for r in rows if r.get('level', '') == level]
@@ -1895,9 +2039,10 @@ def search_wordbank_csv(username):
         en = row.get('english', '').lower()
         zh = row.get('chinese', '')
         for term in terms:
-            # 英文字段：整词精确匹配（搜 run 不匹配 running/return）
+            # 英文字段：整词精确匹配；管理员映射（如 minds -> mind）先解析到原形再匹配
             if re.match(r'[a-z]', term):
-                matched = (en == term)
+                effective = mappings.get(term, term)
+                matched = (en == effective)
             else:
                 # 中文搜索：包含匹配
                 matched = term in zh
@@ -1970,65 +2115,111 @@ def import_from_article(username):
     }), 200
 
 
+def _dedupe_preserve_order(items: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
 @app.route('/api/wordbank/csv/import-words', methods=['POST'])
 @token_required
 def import_vocab_to_csv(username):
     """
     词汇导入功能（仅 VIP）：
     - 接收逗号分隔的单词列表
-    - 查找 CSV 中没有的词
-    - 用 DeepSeek 生成完整词条
-    - append 到 CSV
+    - 管理员映射（表面形 -> 原形）优先解析后再查 CSV
+    - 疑难词（AI 曾失败）不再重复调用 DeepSeek，直至管理员配置映射或删除记录
+    - 查找 CSV 中没有的词，用 DeepSeek 生成完整词条并 append 到 CSV
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
     if not is_paid_user(username):
         return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
 
-    data = request.get_json(silent=True) or {}
-    raw = str(data.get('words', '')).strip()
-    level_hint = str(data.get('level', '')).strip()  # 用户指定的level（可选）
-    also_queue = bool(data.get('also_add_to_queue', True))
+    body = request.get_json(silent=True) or {}
+    raw = str(body.get('words', '')).strip()
+    level_hint = str(body.get('level', '')).strip()  # 用户指定的level（可选）
+    also_queue = bool(body.get('also_add_to_queue', True))
 
     if not raw:
         return jsonify({'error': '单词列表不能为空'}), 400
 
     # 解析逗号分隔（支持 a,b 和 a, b）
-    input_words = [w.strip().lower() for w in re.split(r'[,，]', raw) if w.strip()]
-    if not input_words:
+    input_surfaces = [w.strip().lower() for w in re.split(r'[,，]', raw) if w.strip()]
+    if not input_surfaces:
         return jsonify({'error': '未解析到有效单词'}), 400
-    if len(input_words) > 500:
+    if len(input_surfaces) > 500:
         return jsonify({'error': '单次最多处理 500 个单词'}), 400
 
-    if not get_deepseek_api_key():
+    with _TROUBLES_LOCK:
+        tdoc = _read_troubles_unlocked()
+        mappings = dict(tdoc.get('mappings') or {})
+        difficult = dict(tdoc.get('difficult') or {})
+
+    surface_to_lemma: Dict[str, str] = {}
+    for s in input_surfaces:
+        surface_to_lemma[s] = mappings.get(s, s)
+
+    lemma_to_surfaces: Dict[str, List[str]] = defaultdict(list)
+    for s, lem in surface_to_lemma.items():
+        lemma_to_surfaces[lem].append(s)
+
+    existing = get_csv_english_set()
+    already_in_csv = [s for s in input_surfaces if surface_to_lemma[s] in existing]
+
+    new_lemmas_ordered: List[str] = []
+    seen_lemma = set()
+    for s in input_surfaces:
+        lem = surface_to_lemma[s]
+        if lem in existing:
+            continue
+        if lem not in seen_lemma:
+            seen_lemma.add(lem)
+            new_lemmas_ordered.append(lem)
+
+    blocked_lemmas: List[str] = []
+    to_generate: List[str] = []
+    for lem in new_lemmas_ordered:
+        surfs = lemma_to_surfaces[lem]
+        if any(s in difficult for s in surfs):
+            blocked_lemmas.append(lem)
+        else:
+            to_generate.append(lem)
+
+    if to_generate and not get_deepseek_api_key():
         return jsonify({'error': '服务端未配置 DEEPSEEK_API_KEY，无法使用此功能'}), 503
 
-    # 查找哪些不在 CSV 中
-    existing = get_csv_english_set()
-    new_words = [w for w in input_words if w not in existing]
-    already_in_csv = [w for w in input_words if w in existing]
+    generated_entries: List[dict] = []
+    failed_surfaces: List[str] = []
 
-    generated_entries = []
-    failed_words = []
-
-    if new_words:
-        # 分批调用 DeepSeek（每批最多 50 个）
-        for i in range(0, len(new_words), 50):
-            batch = new_words[i : i + 50]
+    if to_generate:
+        for i in range(0, len(to_generate), 50):
+            batch = to_generate[i : i + 50]
             entries = deepseek_generate_word_entries(batch, level=level_hint)
+            success = set()
+            batch_lower = {b.lower() for b in batch}
             if entries:
-                # 验证和清理返回数据
                 for entry in entries:
                     if not isinstance(entry, dict):
                         continue
                     en = str(entry.get('english', '')).strip().lower()
-                    if not en or en not in [w.lower() for w in batch]:
+                    if not en or en not in batch_lower:
                         continue
-                    # 如果用户指定了level，覆盖DeepSeek生成的level
                     if level_hint:
                         entry['level'] = level_hint
                     generated_entries.append(entry)
-            else:
-                failed_words.extend(batch)
+                    success.add(en)
+            miss_lemmas = list(batch) if not entries else [b for b in batch if b.lower() not in success]
+            for lem in miss_lemmas:
+                for surf in lemma_to_surfaces.get(lem, [lem]):
+                    failed_surfaces.append(surf)
+
+        failed_surfaces = _dedupe_preserve_order(failed_surfaces)
+        if failed_surfaces:
+            record_surfaces_to_difficult(failed_surfaces)
 
         if generated_entries:
             try:
@@ -2038,13 +2229,19 @@ def import_vocab_to_csv(username):
                 logger.error("写入CSV失败: %s", e)
                 return jsonify({'error': f'写入词库失败: {e}'}), 500
 
+    blocked_surfaces: List[str] = []
+    for lem in blocked_lemmas:
+        for surf in lemma_to_surfaces.get(lem, []):
+            blocked_surfaces.append(surf)
+    blocked_surfaces = _dedupe_preserve_order(blocked_surfaces)
+
     # 加入待复习
     queue_result = None
     if also_queue:
         items_to_queue = []
-        # 已在CSV的词
-        for en in already_in_csv:
-            row = lookup_csv_word(en)
+        for s in already_in_csv:
+            lem = surface_to_lemma[s]
+            row = lookup_csv_word(lem)
             if row:
                 picked = pick_example_for_word(row)
                 items_to_queue.append({
@@ -2052,7 +2249,6 @@ def import_vocab_to_csv(username):
                     'chinese': picked['chinese'],
                     'example': picked['example'],
                 })
-        # 新生成的词
         for entry in generated_entries:
             picked = pick_example_for_word(entry)
             items_to_queue.append({
@@ -2067,11 +2263,13 @@ def import_vocab_to_csv(username):
             except Exception as e:
                 logger.error("加入待复习失败: %s", e)
 
-    msg = f"处理 {len(input_words)} 个单词：{len(generated_entries)} 个新词已写入词库"
+    msg = f"处理 {len(input_surfaces)} 个单词：{len(generated_entries)} 个新词已写入词库"
     if already_in_csv:
         msg += f"，{len(already_in_csv)} 个已在词库中"
-    if failed_words:
-        msg += f"，{len(failed_words)} 个生成失败"
+    if blocked_surfaces:
+        msg += f"，{len(blocked_surfaces)} 个疑难词（已跳过 AI 生成）"
+    if failed_surfaces:
+        msg += f"，{len(failed_surfaces)} 个生成失败已记入疑难词"
     if queue_result:
         msg += f"；已加入待复习 {queue_result.get('added', 0)} 个"
     elif not also_queue:
@@ -2082,9 +2280,40 @@ def import_vocab_to_csv(username):
         'new_in_csv': len(generated_entries),
         'already_in_csv': len(already_in_csv),
         'already_in_csv_words': already_in_csv,
-        'failed': failed_words,
+        'failed': failed_surfaces,
+        'blocked_surfaces': blocked_surfaces,
         'queue_result': queue_result,
         'also_add_to_queue': also_queue,
+    }), 200
+
+
+@app.route('/api/wordbank/csv/trouble-status', methods=['GET'])
+@token_required
+def wordbank_trouble_status(username):
+    """
+    课文/导入前查询：某表面形是否被疑难词拦截、是否已有管理员映射。
+    """
+    q = request.args.get('q', '').strip().lower()
+    if not q:
+        return jsonify({
+            'blocked': False,
+            'mapped_to': None,
+            'in_difficult': False,
+            'in_csv': False,
+        }), 200
+    with _TROUBLES_LOCK:
+        tdoc = _read_troubles_unlocked()
+        mappings = dict(tdoc.get('mappings') or {})
+        difficult = dict(tdoc.get('difficult') or {})
+    lemma = mappings.get(q, q)
+    in_csv = lemma in get_csv_english_set()
+    blocked = (q in difficult) and not in_csv
+    return jsonify({
+        'blocked': blocked,
+        'mapped_to': lemma if lemma != q else None,
+        'in_difficult': q in difficult,
+        'in_csv': in_csv,
+        'resolved_lemma': lemma,
     }), 200
 
 
@@ -2555,6 +2784,71 @@ def admin_list_invites():
         })
     rows.sort(key=lambda x: x.get('created_at') or '', reverse=True)
     return jsonify({'invites': rows}), 200
+
+
+@app.route('/api/admin/wordbank/troubles', methods=['GET'])
+@admin_required
+def admin_list_wordbank_troubles():
+    """疑难词列表 + 表面形到词汇原形的映射（管理员）。"""
+    with _TROUBLES_LOCK:
+        data = _read_troubles_unlocked()
+    difficult = data.get('difficult') or {}
+    mappings = data.get('mappings') or {}
+    diff_list = []
+    for surf in sorted(difficult.keys()):
+        meta = difficult.get(surf)
+        if not isinstance(meta, dict):
+            meta = {}
+        diff_list.append({
+            'surface': surf,
+            'added_at': meta.get('added_at'),
+            'last_attempt': meta.get('last_attempt'),
+            'attempts': int(meta.get('attempts') or 0),
+        })
+    map_list = [{'surface': k, 'lemma': v} for k, v in sorted(mappings.items())]
+    return jsonify({'difficult': diff_list, 'mappings': map_list}), 200
+
+
+@app.route('/api/admin/wordbank/troubles/mapping', methods=['POST'])
+@admin_required
+def admin_add_wordbank_mapping():
+    """设置映射：表面形 -> 词汇原形；该表面形从疑难词中移除并进入映射表。"""
+    body = request.get_json(silent=True) or {}
+    surface = str(body.get('surface', '')).strip()
+    lemma = str(body.get('lemma', '')).strip()
+    try:
+        set_wordbank_surface_mapping(surface, lemma)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    logger.info("管理员设置词形映射: %s -> %s", surface, lemma)
+    return jsonify({'message': '映射已保存，疑难词中已移除该表面形（若有）'}), 200
+
+
+@app.route('/api/admin/wordbank/troubles/mapping', methods=['DELETE'])
+@admin_required
+def admin_remove_wordbank_mapping():
+    body = request.get_json(silent=True) or {}
+    surface = str(body.get('surface', '')).strip()
+    if not surface:
+        return jsonify({'error': '缺少 surface'}), 400
+    if not delete_wordbank_mapping(surface):
+        return jsonify({'error': '映射不存在'}), 404
+    logger.info("管理员删除词形映射: %s", surface)
+    return jsonify({'message': '已删除映射'}), 200
+
+
+@app.route('/api/admin/wordbank/troubles/difficult', methods=['DELETE'])
+@admin_required
+def admin_remove_wordbank_difficult():
+    """从疑难词列表中移除一条（不添加映射时由管理员清理误记）。"""
+    body = request.get_json(silent=True) or {}
+    surface = str(body.get('surface', '')).strip()
+    if not surface:
+        return jsonify({'error': '缺少 surface'}), 400
+    if not delete_wordbank_difficult(surface):
+        return jsonify({'error': '疑难词不存在'}), 404
+    logger.info("管理员删除疑难词记录: %s", surface)
+    return jsonify({'message': '已移除'}), 200
 
 
 # ==================== 健康检查 ====================

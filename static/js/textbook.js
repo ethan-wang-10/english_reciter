@@ -179,6 +179,20 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
         }
 
         try {
+            const ts = await apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(k)}`);
+            if (ts && ts.blocked) {
+                showTextbookImportFeedback(
+                    anchorEl,
+                    '该词已列入疑难词库，暂不再调用 AI 生成；请等待管理员配置「表面形→词汇原形」映射后再试。',
+                    'warn',
+                );
+                return;
+            }
+        } catch (_) {
+            /* 继续尝试导入 */
+        }
+
+        try {
             const data = await apiRequest('/wordbank/csv/import-words', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -263,9 +277,17 @@ function bindTextbookReaderInteractions(root) {
                         el,
                     );
                 } else {
+                    let sub = `词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需 VIP）'}`;
+                    try {
+                        const ts = await apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(lemma)}`);
+                        if (ts && ts.blocked) {
+                            sub = '词库暂无；该词已列入疑难词，请联系管理员配置映射';
+                        }
+                    } catch (_) {
+                        /* ignore */
+                    }
                     showTextbookTooltip(
-                        `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
-                            `<div class="tb-tip-zh">词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需 VIP）'}</div>`,
+                        `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` + `<div class="tb-tip-zh">${escapeHtml(sub)}</div>`,
                         el,
                     );
                 }
@@ -299,9 +321,17 @@ function bindTextbookReaderInteractions(root) {
                     el,
                 );
             } else {
+                let sub = `词库暂无，点击可尝试导入${userPlan === 'paid' ? '（VIP 自动 AI 生成）' : '（需 VIP）'}`;
+                try {
+                    const ts = await apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(lemma)}`);
+                    if (ts && ts.blocked) {
+                        sub = '词库暂无；该词已列入疑难词，请联系管理员配置映射';
+                    }
+                } catch (_) {
+                    /* ignore */
+                }
                 showTextbookTooltip(
-                    `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
-                        `<div class="tb-tip-zh">词库暂无，点击可尝试导入${userPlan === 'paid' ? '（VIP 自动 AI 生成）' : '（需 VIP）'}</div>`,
+                    `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` + `<div class="tb-tip-zh">${escapeHtml(sub)}</div>`,
                     el,
                 );
             }
