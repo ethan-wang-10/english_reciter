@@ -2553,13 +2553,19 @@ const LEARNING_MAP_MILESTONES = [
     { level: 12, n: 4000, title: '词海终极', icon: '🌟' },
 ];
 
+/** 学习地图里程碑（与 XP 的 Lv. 区分，使用「阶」） */
+function learningMapStageLabel(level) {
+    return `${level} 阶`;
+}
+
 function learningMapRenderNode(ms, m, nextGoal) {
     const unlocked = m >= ms.n;
     const isNext = Boolean(nextGoal && ms.n === nextGoal.n);
     const stateClass = unlocked ? 'learning-map-node--unlocked' : 'learning-map-node--locked';
     const nextClass = isNext ? ' learning-map-node--next' : '';
     const countLabel = ms.n === 0 ? '起点' : `${formatNumber(ms.n)} 词`;
-    const aria = `Lv.${ms.level} ${ms.title}，目标 ${ms.n === 0 ? '0' : formatNumber(ms.n)} 词，${
+    const stage = learningMapStageLabel(ms.level);
+    const aria = `第 ${ms.level} 阶 ${ms.title}，目标 ${ms.n === 0 ? '0' : formatNumber(ms.n)} 词，${
         unlocked ? '已达成' : '未达成'
     }`;
     const veilHtml = unlocked
@@ -2568,7 +2574,7 @@ function learningMapRenderNode(ms, m, nextGoal) {
     return `
         <div class="learning-map-node ${stateClass}${nextClass}" role="group" aria-label="${escapeHtml(aria)}">
             <div class="learning-map-node-box">
-                <span class="learning-map-node-level">Lv.${ms.level}</span>
+                <span class="learning-map-node-level">${stage}</span>
                 <div class="learning-map-node-bubble" aria-hidden="true">
                     <span class="learning-map-node-icon">${ms.icon}</span>
                 </div>
@@ -2598,13 +2604,15 @@ function renderLearningMap(masteredWords) {
     if (hint) {
         if (nextGoal) {
             const remain = nextGoal.n - m;
-            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 下一目标 Lv.${nextGoal.level}「${nextGoal.title}」（${formatNumber(
-                nextGoal.n,
-            )} 词）还需 ${formatNumber(remain)} 词 · 终极 Lv.12 为 ${formatNumber(4000)} 词`;
+            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 下一目标 ${learningMapStageLabel(
+                nextGoal.level,
+            )}「${nextGoal.title}」（${formatNumber(nextGoal.n)} 词）还需 ${formatNumber(remain)} 词 · 终极 ${learningMapStageLabel(
+                12,
+            )} 为 ${formatNumber(4000)} 词`;
         } else {
-            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 已达成 Lv.12 词海终极（${formatNumber(
-                4000,
-            )} 词），继续保持！`;
+            hint.textContent = `当前已掌握 ${formatNumber(m)} 词 · 已达成 ${learningMapStageLabel(
+                12,
+            )} 词海终极（${formatNumber(4000)} 词），继续保持！`;
         }
     }
 

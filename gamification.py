@@ -35,12 +35,30 @@ ACHIEVEMENT_DEFS: Dict[str, Dict[str, str]] = {
     "first_step": {"title": "第一步", "desc": "首次答对单词", "icon": "👣"},
     "streak_3": {"title": "三连击", "desc": "连续打卡 3 天", "icon": "🔥"},
     "streak_7": {"title": "一周坚持", "desc": "连续打卡 7 天", "icon": "⭐"},
+    "streak_14": {"title": "双周之约", "desc": "连续打卡 14 天", "icon": "🌙"},
     "streak_30": {"title": "月度冠军", "desc": "连续打卡 30 天", "icon": "🏆"},
+    "streak_60": {"title": "季度恒心", "desc": "连续打卡 60 天", "icon": "🗓️"},
+    "streak_100": {"title": "百日筑基", "desc": "连续打卡 100 天", "icon": "💠"},
     "word_master_1": {"title": "初窥门径", "desc": "累计掌握 1 个单词", "icon": "📗"},
     "word_master_10": {"title": "词汇积累", "desc": "累计掌握 10 个单词", "icon": "📚"},
     "word_master_50": {"title": "单词达人", "desc": "累计掌握 50 个单词", "icon": "🎓"},
+    "word_master_100": {"title": "百词在手", "desc": "累计掌握 100 个单词", "icon": "📖"},
+    "word_master_300": {"title": "三百成章", "desc": "累计掌握 300 个单词", "icon": "📘"},
+    "word_master_600": {"title": "六百精进", "desc": "累计掌握 600 个单词", "icon": "📙"},
+    "word_master_1000": {"title": "千词在胸", "desc": "累计掌握 1000 个单词", "icon": "📕"},
+    "word_master_2000": {"title": "两千纵横", "desc": "累计掌握 2000 个单词", "icon": "🗂️"},
+    "word_master_4000": {"title": "词海纵横", "desc": "累计掌握 4000 个单词", "icon": "🌊"},
     "xp_1k": {"title": "千分学者", "desc": "累计获得 1000 XP", "icon": "💎"},
     "xp_10k": {"title": "万分传奇", "desc": "累计获得 10000 XP", "icon": "🌟"},
+    "xp_25k": {"title": "二万五千里", "desc": "累计获得 25000 XP", "icon": "✨"},
+    "xp_50k": {"title": "五万星辰", "desc": "累计获得 50000 XP", "icon": "🌌"},
+    "xp_100k": {"title": "十万伏特", "desc": "累计获得 100000 XP", "icon": "⚡"},
+    "correct_100": {"title": "百答不倦", "desc": "累计答对 100 次", "icon": "✅"},
+    "correct_500": {"title": "五百回合", "desc": "累计答对 500 次", "icon": "🎯"},
+    "correct_2000": {"title": "两千连击", "desc": "累计答对 2000 次", "icon": "🎪"},
+    "correct_10000": {"title": "万次笃行", "desc": "累计答对 10000 次", "icon": "🎖️"},
+    "daily_xp_cap": {"title": "满载而归", "desc": "单日获得 XP 达到当日软上限", "icon": "📈"},
+    "monthly_goal_met": {"title": "月度守约", "desc": "本月有效打卡天数达到所设目标", "icon": "🤝"},
 }
 
 
@@ -243,18 +261,70 @@ def _unlock_achievements(
         grant("streak_3")
     if streak >= 7:
         grant("streak_7")
+    if streak >= 14:
+        grant("streak_14")
     if streak >= 30:
         grant("streak_30")
+    if streak >= 60:
+        grant("streak_60")
+    if streak >= 100:
+        grant("streak_100")
     if mastered_words >= 1:
         grant("word_master_1")
     if mastered_words >= 10:
         grant("word_master_10")
     if mastered_words >= 50:
         grant("word_master_50")
+    if mastered_words >= 100:
+        grant("word_master_100")
+    if mastered_words >= 300:
+        grant("word_master_300")
+    if mastered_words >= 600:
+        grant("word_master_600")
+    if mastered_words >= 1000:
+        grant("word_master_1000")
+    if mastered_words >= 2000:
+        grant("word_master_2000")
+    if mastered_words >= 4000:
+        grant("word_master_4000")
     if total_xp >= 1000:
         grant("xp_1k")
     if total_xp >= 10000:
         grant("xp_10k")
+    if total_xp >= 25000:
+        grant("xp_25k")
+    if total_xp >= 50000:
+        grant("xp_50k")
+    if total_xp >= 100000:
+        grant("xp_100k")
+    if total_correct >= 100:
+        grant("correct_100")
+    if total_correct >= 500:
+        grant("correct_500")
+    if total_correct >= 2000:
+        grant("correct_2000")
+    if total_correct >= 10000:
+        grant("correct_10000")
+
+    dx = state.get("daily_xp") or {}
+    if isinstance(dx, dict):
+        for v in dx.values():
+            try:
+                if int(v) >= DAILY_XP_SOFT_CAP:
+                    grant("daily_xp_cap")
+                    break
+            except (TypeError, ValueError):
+                continue
+
+    today = date.today()
+    ym = today.strftime("%Y-%m")
+    if state.get("mcheckin_goal_month") == ym and state.get("mcheckin_goal") is not None:
+        try:
+            goal_n = int(state["mcheckin_goal"])
+        except (TypeError, ValueError):
+            goal_n = 0
+        if goal_n >= 1 and valid_checkin_days_in_month(state, ym) >= goal_n:
+            grant("monthly_goal_met")
 
     return new_list
 
