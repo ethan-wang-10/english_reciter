@@ -1713,6 +1713,22 @@ def _corpus_root_from_manifest_relative(manifest_rel: str) -> Optional[Path]:
     return full.parent
 
 
+# 课文学习：普通用户每册仅可打开前 N 篇（与前端列表一致）；VIP（paid）不限
+TEXTBOOK_FREE_UNITS_PER_BOOK = 10
+
+
+def _textbooks_unit_index_for_path(manifest: dict, rel_path: str) -> Optional[int]:
+    """在 manifest 的 books[].units 中查找 json 路径，返回该册内 units 的下标；未找到返回 None。"""
+    rel_norm = rel_path.strip().replace("\\", "/")
+    for b in manifest.get("books") or []:
+        units = b.get("units") or []
+        for ui, u in enumerate(units):
+            jp = str(u.get("json", "")).strip().replace("\\", "/")
+            if jp == rel_norm:
+                return ui
+    return None
+
+
 def _textbooks_resolve_lesson_file(corpus_root: Path, rel_path: str) -> Optional[Path]:
     rel = rel_path.strip().replace("\\", "/")
     if not rel or ".." in rel or rel.startswith("/"):
@@ -1767,6 +1783,7 @@ def textbooks_lesson(username):
 
     idx = _textbooks_load_index()
     corpus_root: Optional[Path] = None
+    manifest_rel: str = ""
     for c in idx.get("corpora") or []:
         if str(c.get("id", "")).strip() != corpus_id:
             continue
@@ -1781,6 +1798,22 @@ def textbooks_lesson(username):
     lesson_path = _textbooks_resolve_lesson_file(corpus_root, rel_path)
     if lesson_path is None:
         return jsonify({"error": "无效的课文路径"}), 400
+
+    if not is_paid_user(username) and manifest_rel:
+        mp = (STATIC_WB_DIR / manifest_rel).resolve()
+        if str(mp).startswith(str(STATIC_WB_DIR.resolve())) and mp.is_file():
+            try:
+                with open(mp, "r", encoding="utf-8") as f:
+                    manifest_data = json.load(f)
+                uidx = _textbooks_unit_index_for_path(manifest_data, rel_path)
+                if uidx is not None and uidx >= TEXTBOOK_FREE_UNITS_PER_BOOK:
+                    return jsonify(
+                        {
+                            "error": f"普通用户每册仅可学习前 {TEXTBOOK_FREE_UNITS_PER_BOOK} 篇课文，升级 VIP 后可查看全部",
+                        }
+                    ), 403
+            except Exception as e:
+                logger.warning("课文权限校验读取 manifest 失败: %s", e)
 
     try:
         with open(lesson_path, "r", encoding="utf-8") as f:

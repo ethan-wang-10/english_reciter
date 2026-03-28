@@ -4153,6 +4153,20 @@ body {
 .textbook-catalog {
     margin-top: 8px;
 }
+.textbook-catalog-hint {
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: #f5f9f7;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+.textbook-catalog-hint strong {
+    color: var(--primary-dark);
+    font-weight: 800;
+}
 .textbook-corpus-block {
     margin-bottom: 28px;
 }

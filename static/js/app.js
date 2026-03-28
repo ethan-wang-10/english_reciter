@@ -2008,6 +2008,9 @@ function updatePlanUI() {
             if (vocabBtn) vocabBtn.style.display = 'none';
         }
     }
+    if (textbookCatalogCache && document.getElementById('textbook-section')?.classList.contains('active')) {
+        renderTextbookCatalog(textbookCatalogCache);
+    }
 }
 
 function showSection(sectionId) {
@@ -2458,6 +2461,9 @@ async function openTextbookLesson(corpusId, jsonPath) {
     }
 }
 
+/** 普通用户每册课文列表最多展示篇数；VIP（paid）展示全部 */
+const TEXTBOOK_FREE_UNITS_PER_BOOK = 10;
+
 function renderTextbookCatalog(corpora) {
     const root = document.getElementById('textbook-catalog');
     if (!root) return;
@@ -2466,6 +2472,12 @@ function renderTextbookCatalog(corpora) {
         root.innerHTML = '<p class="textbook-catalog-empty">暂无教材数据。可在 static/wordbanks/textbooks/index.json 中配置。</p>';
         return;
     }
+
+    const isVip = userPlan === 'paid';
+    const hintTop =
+        !isVip
+            ? `<p class="textbook-catalog-hint" role="note">普通用户每册仅展示前 ${TEXTBOOK_FREE_UNITS_PER_BOOK} 篇课文；<strong>VIP</strong> 可查看全部。</p>`
+            : '';
 
     const html = corpora
         .map((c) => {
@@ -2476,7 +2488,8 @@ function renderTextbookCatalog(corpora) {
                     const key = escapeHtml(b.key || '');
                     const label = `${escapeHtml(b.bookName || '')} ${escapeHtml(b.bookLevel || '')}`.trim() || key;
                     const units = Array.isArray(b.units) ? b.units : [];
-                    const unitBtns = units
+                    const unitsShown = isVip ? units : units.slice(0, TEXTBOOK_FREE_UNITS_PER_BOOK);
+                    const unitBtns = unitsShown
                         .map((u) => {
                             const jp = String(u.json || '').trim();
                             if (!jp) return '';
@@ -2503,7 +2516,7 @@ function renderTextbookCatalog(corpora) {
         })
         .join('');
 
-    root.innerHTML = html;
+    root.innerHTML = hintTop + html;
 
     root.querySelectorAll('.textbook-unit-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
