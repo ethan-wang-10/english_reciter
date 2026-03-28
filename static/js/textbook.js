@@ -5,6 +5,8 @@ let textbookCatalogCache = null;
 /** @type {{ corpusId: string, jsonPath: string, title: string } | null} */
 let textbookReaderContext = null;
 const textbookWordCache = new Map();
+/** 本次会话内：该词是否通过隐式去复数命中词库（用于气泡提示） */
+const textbookImplicitPluralHint = new Map();
 let textbookTooltipToken = null;
 /** 同一 lemma 整段导入流程互斥（含查词与 VIP 词汇导入） */
 const textbookLemmaImportBusy = new Set();
@@ -110,16 +112,19 @@ async function textbookLookupWord(lemma) {
         const data = await apiRequest(`/wordbank/csv/search?${params}`);
         const words = Array.isArray(data.words) ? data.words : [];
         const row = words[0] || null;
+        const ip = data.implicit_plural_resolution || {};
         // 命中与未命中均缓存（含已有映射仍无词条），避免同一词反复悬停打接口
         textbookWordCache.set(k, row);
+        if (row && ip[k]) textbookImplicitPluralHint.set(k, true);
+        else textbookImplicitPluralHint.delete(k);
         return row;
     } catch (_) {
         return null;
     }
 }
 
-/** 课文表面形与词库词条不一致时（全局映射），第一行显示课文中的词，第二行显示 → 原形 */
-function buildTextbookTooltipHtmlFromRow(row, surfaceLemma) {
+/** 课文表面形与词库词条不一致时（管理员映射或隐式去复数），第一行显示课文中的词，第二行显示 → 原形 */
+function buildTextbookTooltipHtmlFromRow(row, surfaceLemma, implicitPlural) {
     const en = String(row.english || '').trim();
     const surf = String(surfaceLemma || '').trim().toLowerCase();
     const enL = en.toLowerCase();
@@ -127,9 +132,12 @@ function buildTextbookTooltipHtmlFromRow(row, surfaceLemma) {
         ? `<div class="tb-tip-meta">${escapeHtml(row.phonetic)} · ${escapeHtml(row.level || '')}</div>`
         : '';
     if (surf && enL && surf !== enL) {
+        const implicitTag = implicitPlural
+            ? '<span class="tb-tip-hint">（隐式去复数）</span>'
+            : '';
         return (
             `<div class="tb-tip-en">${escapeHtml(surfaceLemma)}</div>` +
-            `<div class="tb-tip-meta">→ ${escapeHtml(en)}</div>` +
+            `<div class="tb-tip-meta">→ ${escapeHtml(en)}${implicitTag}</div>` +
             `<div class="tb-tip-zh">${escapeHtml(row.chinese)}</div>` +
             ph
         );
@@ -226,6 +234,7 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
             const msg = data.message || '已完成';
             showTextbookImportFeedback(anchorEl, msg, 'ok');
             textbookWordCache.delete(k);
+            textbookImplicitPluralHint.delete(k);
             loadStats();
         } catch (e) {
             showTextbookImportFeedback(anchorEl, e.message || '词汇导入失败', 'error');
@@ -290,7 +299,10 @@ function bindTextbookReaderInteractions(root) {
                 textbookTooltipToken = el;
                 const row = await textbookLookupWord(lemma);
                 if (row) {
-                    showTextbookTooltip(buildTextbookTooltipHtmlFromRow(row, lemma), el);
+                    showTextbookTooltip(
+                        buildTextbookTooltipHtmlFromRow(row, lemma, !!textbookImplicitPluralHint.get(lemma.toLowerCase())),
+                        el,
+                    );
                 } else {
                     let sub = `词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需 VIP）'}`;
                     try {
@@ -326,7 +338,10 @@ function bindTextbookReaderInteractions(root) {
             textbookTooltipToken = el;
             const row = await textbookLookupWord(lemma);
             if (row) {
-                showTextbookTooltip(buildTextbookTooltipHtmlFromRow(row, lemma), el);
+                showTextbookTooltip(
+                    buildTextbookTooltipHtmlFromRow(row, lemma, !!textbookImplicitPluralHint.get(lemma.toLowerCase())),
+                    el,
+                );
             } else {
                 let sub = `词库暂无，点击可尝试导入${userPlan === 'paid' ? '（VIP 自动 AI 生成）' : '（需 VIP）'}`;
                 try {

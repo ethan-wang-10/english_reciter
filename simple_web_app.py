@@ -2020,6 +2020,67 @@ def get_wordbank_csv(username):
     return resp, 200
 
 
+def _dedupe_preserve_order(items: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def _plural_stem_variants(term: str) -> List[str]:
+    """启发式去复数：-es、-s（非完备形态学；ss 结尾不剥 s）。"""
+    if len(term) < 4 or not re.match(r'^[a-z]+$', term):
+        return []
+    stems: List[str] = []
+    if term.endswith('es') and len(term) > 3:
+        stem = term[:-2]
+        if len(stem) >= 2:
+            stems.append(stem)
+    if term.endswith('s') and not term.endswith('ss') and len(term) > 3:
+        stem = term[:-1]
+        if len(stem) >= 2:
+            stems.append(stem)
+    return _dedupe_preserve_order(stems)
+
+
+def _csv_lemma_candidates_for_surface(surface: str, mappings: dict) -> List[str]:
+    """英文表面形 → 词库 english 候选（管理员映射优先，再试去复数 s/es）。"""
+    if surface in mappings:
+        return [mappings[surface]]
+    cands: List[str] = []
+    seen = set()
+
+    def add(x: str) -> None:
+        if x not in seen:
+            seen.add(x)
+            cands.append(x)
+
+    add(surface)
+    for stem in _plural_stem_variants(surface):
+        add(mappings.get(stem, stem))
+    return cands
+
+
+def _first_lemma_in_csv(surface: str, mappings: dict, csv_keys: set) -> Optional[str]:
+    for c in _csv_lemma_candidates_for_surface(surface, mappings):
+        if c in csv_keys:
+            return c
+    return None
+
+
+def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
+    """词库无该词时，用于生成/排队的目标 lemma（优先单数原形）。"""
+    if surface in mappings:
+        return mappings[surface]
+    stems = _plural_stem_variants(surface)
+    if stems:
+        return mappings.get(stems[0], stems[0])
+    return surface
+
+
 @app.route('/api/wordbank/csv/search', methods=['GET'])
 @token_required
 def search_wordbank_csv(username):
@@ -2027,30 +2088,40 @@ def search_wordbank_csv(username):
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
     if not q:
-        return jsonify({'words': [], 'count': 0, 'lemma_resolution': {}}), 200
+        return jsonify({
+            'words': [],
+            'count': 0,
+            'lemma_resolution': {},
+            'implicit_plural_resolution': {},
+        }), 200
     terms = [t.strip().lower() for t in re.split(r'[,，]', q) if t.strip()]
     mappings = get_wordbank_lemma_mappings()
-    lemma_resolution = {}
-    for term in terms:
-        if re.match(r'[a-z]', term):
-            eff = mappings.get(term, term)
-            if eff != term:
-                lemma_resolution[term] = eff
     rows = load_words_csv()
     if level:
         rows = [r for r in rows if r.get('level', '') == level]
+    csv_row_keys = {str(r.get('english', '') or '').lower() for r in rows}
+    lemma_resolution: Dict[str, str] = {}
+    implicit_plural_resolution: Dict[str, str] = {}
+    for term in terms:
+        if re.match(r'[a-z]', term):
+            hit = _first_lemma_in_csv(term, mappings, csv_row_keys)
+            if hit is not None and hit != term:
+                lemma_resolution[term] = hit
+                if term not in mappings:
+                    implicit_plural_resolution[term] = hit
     result = []
     seen = set()
     for row in rows:
         en = row.get('english', '').lower()
         zh = row.get('chinese', '')
         for term in terms:
-            # 英文字段：整词精确匹配；管理员映射（如 minds -> mind）先解析到原形再匹配
             if re.match(r'[a-z]', term):
-                effective = mappings.get(term, term)
-                matched = (en == effective)
+                matched = False
+                for cand in _csv_lemma_candidates_for_surface(term, mappings):
+                    if en == cand:
+                        matched = True
+                        break
             else:
-                # 中文搜索：包含匹配
                 matched = term in zh
             if matched:
                 if en not in seen:
@@ -2061,6 +2132,7 @@ def search_wordbank_csv(username):
         'words': result,
         'count': len(result),
         'lemma_resolution': lemma_resolution,
+        'implicit_plural_resolution': implicit_plural_resolution,
     }), 200
 
 
@@ -2095,12 +2167,12 @@ def import_from_article(username):
     csv_set = get_csv_english_set()
     mappings = get_wordbank_lemma_mappings()
     unique_lemmas = list(dict.fromkeys(lemmas))
-    matched_surfaces = [w for w in unique_lemmas if mappings.get(w, w) in csv_set]
+    matched_surfaces = [w for w in unique_lemmas if _first_lemma_in_csv(w, mappings, csv_set) is not None]
     matched_effective: List[str] = []
     seen_eff = set()
     for w in unique_lemmas:
-        eff = mappings.get(w, w)
-        if eff in csv_set and eff not in seen_eff:
+        eff = _first_lemma_in_csv(w, mappings, csv_set)
+        if eff is not None and eff not in seen_eff:
             seen_eff.add(eff)
             matched_effective.append(eff)
     stats = {
@@ -2131,16 +2203,6 @@ def import_from_article(username):
         'words': words,
         'stats': stats,
     }), 200
-
-
-def _dedupe_preserve_order(items: List[str]) -> List[str]:
-    seen = set()
-    out = []
-    for x in items:
-        if x not in seen:
-            seen.add(x)
-            out.append(x)
-    return out
 
 
 @app.route('/api/wordbank/csv/import-words', methods=['POST'])
@@ -2179,7 +2241,11 @@ def import_vocab_to_csv(username):
 
     surface_to_lemma: Dict[str, str] = {}
     for s in input_surfaces:
-        surface_to_lemma[s] = mappings.get(s, s)
+        hit = _first_lemma_in_csv(s, mappings, existing)
+        if hit is not None:
+            surface_to_lemma[s] = hit
+        else:
+            surface_to_lemma[s] = _lemma_for_vocab_not_in_csv(s, mappings)
 
     lemma_to_surfaces: Dict[str, List[str]] = defaultdict(list)
     for s, lem in surface_to_lemma.items():
@@ -2318,20 +2384,29 @@ def wordbank_trouble_status(username):
             'mapped_to': None,
             'in_difficult': False,
             'in_csv': False,
+            'resolved_lemma': None,
         }), 200
     with _TROUBLES_LOCK:
         tdoc = _read_troubles_unlocked()
         mappings = dict(tdoc.get('mappings') or {})
         difficult = dict(tdoc.get('difficult') or {})
-    lemma = mappings.get(q, q)
-    in_csv = lemma in get_csv_english_set()
+    csv_set = get_csv_english_set()
+    hit = _first_lemma_in_csv(q, mappings, csv_set)
+    if hit is not None:
+        in_csv = True
+        resolved_lemma = hit
+        mapped_to = hit if hit != q else None
+    else:
+        in_csv = False
+        resolved_lemma = mappings.get(q, q)
+        mapped_to = resolved_lemma if resolved_lemma != q else None
     blocked = (q in difficult) and not in_csv
     return jsonify({
         'blocked': blocked,
-        'mapped_to': lemma if lemma != q else None,
+        'mapped_to': mapped_to,
         'in_difficult': q in difficult,
         'in_csv': in_csv,
-        'resolved_lemma': lemma,
+        'resolved_lemma': resolved_lemma,
     }), 200
 
 
