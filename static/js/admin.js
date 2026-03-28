@@ -79,9 +79,9 @@ function renderAdminUsers(users) {
                 <td>${planLabel}</td>
                 <td>${en ? '正常' : '已禁用'}</td>
                 <td>
-                    <label class="admin-toggle" title="登录名为 用户名_parent，默认密码 123123">
+                    <label class="admin-toggle" title="勾选后家长可用「用户名_parent」登录（默认密码见开通提示），仅查看孩子进度与导入等">
                         <input type="checkbox" data-admin-parent="${escapeHtml(u.username)}" ${pchk} ${en ? '' : 'disabled'} />
-                        开启
+                        开通家长登录
                     </label>
                     <span class="admin-parent-login-hint" style="font-size:12px;color:#666;display:block;margin-top:4px;">${parentLogin}</span>
                     <button type="button" class="btn btn-secondary btn-admin-parent-pw" style="margin-top:6px;font-size:12px;padding:4px 8px;"
@@ -89,9 +89,9 @@ function renderAdminUsers(users) {
                         ${u.parent_account_enabled && en ? '' : 'disabled'}>家长密码</button>
                 </td>
                 <td>
-                    <label class="admin-toggle">
+                    <label class="admin-toggle" title="关闭后该学生无法登录本系统（家长登录一并关闭）">
                         <input type="checkbox" data-admin-user="${escapeHtml(u.username)}" ${chk} />
-                        启用
+                        允许学生登录
                     </label>
                 </td>
                 <td>
