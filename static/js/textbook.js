@@ -5,8 +5,8 @@ let textbookCatalogCache = null;
 /** @type {{ corpusId: string, jsonPath: string, title: string } | null} */
 let textbookReaderContext = null;
 const textbookWordCache = new Map();
-/** 本次会话内：该词是否通过隐式去复数命中词库（用于气泡提示） */
-const textbookImplicitPluralHint = new Map();
+/** 本次会话内：隐式词形命中类型 plural / past / ing（用于气泡提示） */
+const textbookImplicitMorphHint = new Map();
 let textbookTooltipToken = null;
 /** 同一 lemma 整段导入流程互斥（含查词与 VIP 词汇导入） */
 const textbookLemmaImportBusy = new Set();
@@ -113,18 +113,26 @@ async function textbookLookupWord(lemma) {
         const words = Array.isArray(data.words) ? data.words : [];
         const row = words[0] || null;
         const ip = data.implicit_plural_resolution || {};
+        const ipt = data.implicit_past_resolution || {};
+        const iing = data.implicit_ing_resolution || {};
         // 命中与未命中均缓存（含已有映射仍无词条），避免同一词反复悬停打接口
         textbookWordCache.set(k, row);
-        if (row && ip[k]) textbookImplicitPluralHint.set(k, true);
-        else textbookImplicitPluralHint.delete(k);
+        if (row) {
+            if (ipt[k]) textbookImplicitMorphHint.set(k, 'past');
+            else if (iing[k]) textbookImplicitMorphHint.set(k, 'ing');
+            else if (ip[k]) textbookImplicitMorphHint.set(k, 'plural');
+            else textbookImplicitMorphHint.delete(k);
+        } else {
+            textbookImplicitMorphHint.delete(k);
+        }
         return row;
     } catch (_) {
         return null;
     }
 }
 
-/** 课文表面形与词库词条不一致时（管理员映射或隐式去复数），第一行显示课文中的词，第二行显示 → 原形 */
-function buildTextbookTooltipHtmlFromRow(row, surfaceLemma, implicitPlural) {
+/** 课文表面形与词库词条不一致时（管理员映射或隐式复数/过去式/-ing），第一行显示课文中的词，第二行显示 → 原形 */
+function buildTextbookTooltipHtmlFromRow(row, surfaceLemma, morphKind) {
     const en = String(row.english || '').trim();
     const surf = String(surfaceLemma || '').trim().toLowerCase();
     const enL = en.toLowerCase();
@@ -132,9 +140,14 @@ function buildTextbookTooltipHtmlFromRow(row, surfaceLemma, implicitPlural) {
         ? `<div class="tb-tip-meta">${escapeHtml(row.phonetic)} · ${escapeHtml(row.level || '')}</div>`
         : '';
     if (surf && enL && surf !== enL) {
-        const implicitTag = implicitPlural
-            ? '<span class="tb-tip-hint">（隐式去复数）</span>'
-            : '';
+        const implicitTag =
+            morphKind === 'past'
+                ? '<span class="tb-tip-hint">（隐式过去式）</span>'
+                : morphKind === 'ing'
+                  ? '<span class="tb-tip-hint">（隐式进行时）</span>'
+                  : morphKind === 'plural'
+                    ? '<span class="tb-tip-hint">（隐式去复数）</span>'
+                    : '';
         return (
             `<div class="tb-tip-en">${escapeHtml(surfaceLemma)}</div>` +
             `<div class="tb-tip-meta">→ ${escapeHtml(en)}${implicitTag}</div>` +
@@ -234,7 +247,7 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
             const msg = data.message || '已完成';
             showTextbookImportFeedback(anchorEl, msg, 'ok');
             textbookWordCache.delete(k);
-            textbookImplicitPluralHint.delete(k);
+            textbookImplicitMorphHint.delete(k);
             loadStats();
         } catch (e) {
             showTextbookImportFeedback(anchorEl, e.message || '词汇导入失败', 'error');
@@ -300,7 +313,7 @@ function bindTextbookReaderInteractions(root) {
                 const row = await textbookLookupWord(lemma);
                 if (row) {
                     showTextbookTooltip(
-                        buildTextbookTooltipHtmlFromRow(row, lemma, !!textbookImplicitPluralHint.get(lemma.toLowerCase())),
+                        buildTextbookTooltipHtmlFromRow(row, lemma, textbookImplicitMorphHint.get(lemma.toLowerCase()) || null),
                         el,
                     );
                 } else {
@@ -339,7 +352,7 @@ function bindTextbookReaderInteractions(root) {
             const row = await textbookLookupWord(lemma);
             if (row) {
                 showTextbookTooltip(
-                    buildTextbookTooltipHtmlFromRow(row, lemma, !!textbookImplicitPluralHint.get(lemma.toLowerCase())),
+                    buildTextbookTooltipHtmlFromRow(row, lemma, textbookImplicitMorphHint.get(lemma.toLowerCase()) || null),
                     el,
                 );
             } else {

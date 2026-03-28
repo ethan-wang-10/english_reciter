@@ -2046,38 +2046,92 @@ def _plural_stem_variants(term: str) -> List[str]:
     return _dedupe_preserve_order(stems)
 
 
-def _csv_lemma_candidates_for_surface(surface: str, mappings: dict) -> List[str]:
-    """英文表面形 → 词库 english 候选（管理员映射优先，再试去复数 s/es）。"""
-    if surface in mappings:
-        return [mappings[surface]]
-    cands: List[str] = []
-    seen = set()
+def _past_tense_stem_variants(term: str) -> List[str]:
+    """启发式由 -ed 过去式还原原形（双写辅音等；非完备形态学）。"""
+    if len(term) < 5 or not re.match(r'^[a-z]+$', term):
+        return []
+    if not term.endswith('ed'):
+        return []
+    stem = term[:-2]
+    if len(stem) < 3:
+        return []
+    if len(stem) >= 2 and stem[-1] == stem[-2] and stem[-1] not in 'aeiou':
+        return [stem[:-1]]
+    return [stem]
 
-    def add(x: str) -> None:
+
+def _ing_stem_variants(term: str) -> List[str]:
+    """启发式由 -ing 还原原形（双写辅音等；非完备形态学）。"""
+    if len(term) < 5 or not re.match(r'^[a-z]+$', term):
+        return []
+    if not term.endswith('ing'):
+        return []
+    stem = term[:-3]
+    if len(stem) < 2:
+        return []
+    if len(stem) >= 2 and stem[-1] == stem[-2] and stem[-1] not in 'aeiou':
+        return [stem[:-1]]
+    return [stem]
+
+
+def _iter_csv_lemma_candidates(surface: str, mappings: dict):
+    """按优先级产出 (候选原形, 类别)；类别用于隐式映射展示。"""
+    if surface in mappings:
+        yield mappings[surface], 'admin'
+        return
+    seen = set()
+    if surface not in seen:
+        seen.add(surface)
+        yield surface, 'surface'
+    for stem in _plural_stem_variants(surface):
+        x = mappings.get(stem, stem)
         if x not in seen:
             seen.add(x)
-            cands.append(x)
+            yield x, 'plural'
+    for stem in _past_tense_stem_variants(surface):
+        x = mappings.get(stem, stem)
+        if x not in seen:
+            seen.add(x)
+            yield x, 'past'
+    for stem in _ing_stem_variants(surface):
+        x = mappings.get(stem, stem)
+        if x not in seen:
+            seen.add(x)
+            yield x, 'ing'
 
-    add(surface)
-    for stem in _plural_stem_variants(surface):
-        add(mappings.get(stem, stem))
-    return cands
+
+def _csv_lemma_candidates_for_surface(surface: str, mappings: dict) -> List[str]:
+    """英文表面形 → 词库 english 候选（管理员映射优先，再复数、过去式、-ing）。"""
+    return [c for c, _ in _iter_csv_lemma_candidates(surface, mappings)]
+
+
+def _first_lemma_in_csv_with_kind(
+    surface: str, mappings: dict, csv_keys: set,
+) -> Tuple[Optional[str], Optional[str]]:
+    for c, kind in _iter_csv_lemma_candidates(surface, mappings):
+        if c in csv_keys:
+            return c, kind
+    return None, None
 
 
 def _first_lemma_in_csv(surface: str, mappings: dict, csv_keys: set) -> Optional[str]:
-    for c in _csv_lemma_candidates_for_surface(surface, mappings):
-        if c in csv_keys:
-            return c
-    return None
+    h, _ = _first_lemma_in_csv_with_kind(surface, mappings, csv_keys)
+    return h
 
 
 def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
-    """词库无该词时，用于生成/排队的目标 lemma（优先单数原形）。"""
+    """词库无该词时，用于生成/排队的目标 lemma（复数 / 过去式 / -ing 启发）。"""
     if surface in mappings:
         return mappings[surface]
     stems = _plural_stem_variants(surface)
     if stems:
         return mappings.get(stems[0], stems[0])
+    pst = _past_tense_stem_variants(surface)
+    if pst:
+        return mappings.get(pst[0], pst[0])
+    ing = _ing_stem_variants(surface)
+    if ing:
+        return mappings.get(ing[0], ing[0])
     return surface
 
 
@@ -2093,6 +2147,8 @@ def search_wordbank_csv(username):
             'count': 0,
             'lemma_resolution': {},
             'implicit_plural_resolution': {},
+            'implicit_past_resolution': {},
+            'implicit_ing_resolution': {},
         }), 200
     terms = [t.strip().lower() for t in re.split(r'[,，]', q) if t.strip()]
     mappings = get_wordbank_lemma_mappings()
@@ -2102,13 +2158,20 @@ def search_wordbank_csv(username):
     csv_row_keys = {str(r.get('english', '') or '').lower() for r in rows}
     lemma_resolution: Dict[str, str] = {}
     implicit_plural_resolution: Dict[str, str] = {}
+    implicit_past_resolution: Dict[str, str] = {}
+    implicit_ing_resolution: Dict[str, str] = {}
     for term in terms:
         if re.match(r'[a-z]', term):
-            hit = _first_lemma_in_csv(term, mappings, csv_row_keys)
+            hit, kind = _first_lemma_in_csv_with_kind(term, mappings, csv_row_keys)
             if hit is not None and hit != term:
                 lemma_resolution[term] = hit
                 if term not in mappings:
-                    implicit_plural_resolution[term] = hit
+                    if kind == 'plural':
+                        implicit_plural_resolution[term] = hit
+                    elif kind == 'past':
+                        implicit_past_resolution[term] = hit
+                    elif kind == 'ing':
+                        implicit_ing_resolution[term] = hit
     result = []
     seen = set()
     for row in rows:
@@ -2133,6 +2196,8 @@ def search_wordbank_csv(username):
         'count': len(result),
         'lemma_resolution': lemma_resolution,
         'implicit_plural_resolution': implicit_plural_resolution,
+        'implicit_past_resolution': implicit_past_resolution,
+        'implicit_ing_resolution': implicit_ing_resolution,
     }), 200
 
 
