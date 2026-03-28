@@ -1718,6 +1718,16 @@ function updatePlanUI() {
             hint.className = 'plan-hint free';
         }
     }
+    const importNcHint = document.getElementById('import-nc-lesson-hint');
+    if (importNcHint) {
+        importNcHint.style.display = '';
+        if (userPlan === 'paid') {
+            importNcHint.textContent = '选择课文后，课文英文全文将填入下方文本框；再次选择其它课文会替换当前内容。';
+        } else {
+            importNcHint.textContent =
+                '下拉列表与「课文学习」一致：非 VIP 每册仅列出前 10 篇。选择后课文英文全文会填入下方；再次选择会替换当前内容。';
+        }
+    }
     const vocabPanel = document.getElementById('import-vocab-panel');
     const vocabLocked = document.getElementById('import-vocab-locked');
     const vocabBtn = document.getElementById('import-vocab-btn');
@@ -1732,6 +1742,9 @@ function updatePlanUI() {
     }
     if (textbookCatalogCache && document.getElementById('textbook-section')?.classList.contains('active')) {
         renderTextbookCatalog(textbookCatalogCache);
+    }
+    if (document.getElementById('import-section')?.classList.contains('active')) {
+        void ensureImportNceLessonOptions();
     }
 }
 
@@ -1769,6 +1782,8 @@ function showSection(sectionId) {
         loadMastered();
     } else if (sectionId === 'leaderboard') {
         loadLeaderboardSection();
+    } else if (sectionId === 'import') {
+        void ensureImportNceLessonOptions();
     }
 }
 
@@ -3175,6 +3190,106 @@ async function wordbankImportSelected() {
 
 // ==================== 导入功能 ====================
 
+/** 与课文学习页一致：非 VIP 每册仅列出前 N 篇课文 */
+const IMPORT_NCE_FREE_UNITS_PER_BOOK = 10;
+
+let importNceCatalogLoaded = false;
+let importNceCatalogPlan = null;
+
+async function ensureImportNceLessonOptions() {
+    const sel = document.getElementById('import-nc-lesson-select');
+    if (!sel) return;
+    if (importNceCatalogLoaded && importNceCatalogPlan === userPlan) return;
+
+    sel.innerHTML = '<option value="">加载课文中…</option>';
+    sel.disabled = true;
+    try {
+        const data = await apiRequest('/textbooks/catalog');
+        const corpora = Array.isArray(data.corpora) ? data.corpora : [];
+        const isVip = userPlan === 'paid';
+        const frag = document.createDocumentFragment();
+        const def = document.createElement('option');
+        def.value = '';
+        def.textContent = '— 新概念课文（可选）—';
+        frag.appendChild(def);
+
+        for (const c of corpora) {
+            const manifest = c.manifest || {};
+            const books = Array.isArray(manifest.books) ? manifest.books : [];
+            for (const b of books) {
+                const bookLabel = `${b.bookName || ''} ${b.bookLevel || ''}`.trim() || String(b.key || '');
+                const units = Array.isArray(b.units) ? b.units : [];
+                const unitsShown = isVip ? units : units.slice(0, IMPORT_NCE_FREE_UNITS_PER_BOOK);
+                for (const u of unitsShown) {
+                    const jp = String(u.json || '').trim();
+                    if (!jp) continue;
+                    const opt = document.createElement('option');
+                    opt.value = `${c.id}\t${jp}`;
+                    const title = u.title || u.filename || jp;
+                    opt.textContent = `${bookLabel} · ${title}`;
+                    frag.appendChild(opt);
+                }
+            }
+        }
+
+        sel.innerHTML = '';
+        sel.appendChild(frag);
+        importNceCatalogLoaded = true;
+        importNceCatalogPlan = userPlan;
+    } catch (e) {
+        sel.innerHTML = '';
+        const err = document.createElement('option');
+        err.value = '';
+        err.textContent = '（教材目录加载失败）';
+        sel.appendChild(err);
+        showMainBanner(e.message || '教材目录加载失败');
+        importNceCatalogLoaded = false;
+    } finally {
+        sel.disabled = false;
+    }
+}
+
+async function onImportNceLessonChange() {
+    const sel = document.getElementById('import-nc-lesson-select');
+    const ta = document.getElementById('import-article-textarea');
+    if (!sel || !ta) return;
+    const raw = sel.value;
+    if (!raw) return;
+
+    const tab = raw.indexOf('\t');
+    if (tab === -1) return;
+    const corpusId = raw.slice(0, tab);
+    const path = raw.slice(tab + 1);
+    if (!corpusId || !path) return;
+
+    ta.value = '';
+    sel.disabled = true;
+    ta.disabled = true;
+    try {
+        const params = new URLSearchParams({ corpus: corpusId, path });
+        const data = await apiRequest(`/textbooks/lesson?${params}`);
+        const lines = Array.isArray(data.lines) ? data.lines : [];
+        const english = lines.map((l) => String(l.english || '').trim()).filter(Boolean);
+        ta.value = english.join('\n');
+    } catch (e) {
+        showMessage(e.message || '加载课文失败', 'error');
+        ta.value = '';
+    } finally {
+        sel.disabled = false;
+        ta.disabled = false;
+        sel.value = '';
+    }
+}
+
+function initImportNceLessonSelect() {
+    const sel = document.getElementById('import-nc-lesson-select');
+    if (!sel || sel.dataset.bound === '1') return;
+    sel.dataset.bound = '1';
+    sel.addEventListener('change', () => {
+        void onImportNceLessonChange();
+    });
+}
+
 async function importFromArticle() {
     const ta = document.getElementById('import-article-textarea');
     if (!ta) return;
@@ -3648,6 +3763,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 下划线输入框的Enter键已经在initializeUnderlineInput中处理
     
+    initImportNceLessonSelect();
     const importArticleBtn = document.getElementById('import-article-btn');
     if (importArticleBtn) {
         importArticleBtn.addEventListener('click', importFromArticle);
