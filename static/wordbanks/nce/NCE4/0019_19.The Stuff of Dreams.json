@@ -1,0 +1,145 @@
+{
+  "bookKey": "NCE4",
+  "title": "19.The Stuff of Dreams",
+  "filename": "19.The Stuff of Dreams",
+  "lines": [
+    {
+      "time": 0.29000000000000004,
+      "english": "Lesson 19",
+      "chinese": "第19课",
+      "raw": "Lesson 19 | 第19课"
+    },
+    {
+      "time": 2.2,
+      "english": "The stuff of dreams",
+      "chinese": "梦的本质",
+      "raw": "The stuff of dreams | 梦的本质"
+    },
+    {
+      "time": 10.36,
+      "english": "What is going on when a person experiences rapid eye-movements during sleep?",
+      "chinese": "一个人在睡眠中经历快速眼动时发生了什么？",
+      "raw": "What is going on when a person experiences rapid eye-movements during sleep? | 一个人在睡眠中经历快速眼动时发生了什么？"
+    },
+    {
+      "time": 17.87,
+      "english": "It is fairly clear that the sleeping period must have some function, and because there is so much of it the function would seem to be important.",
+      "chinese": "很清楚，睡眠期一定有某种功能，而且由于睡眠期很长，这种功能似乎很重要。",
+      "raw": "It is fairly clear that the sleeping period must have some function, and because there is so much of it the function would seem to be important. | 很清楚，睡眠期一定有某种功能，而且由于睡眠期很长，这种功能似乎很重要。"
+    },
+    {
+      "time": 28.21,
+      "english": "Speculations about its nature have been going on for literally thousands of years,",
+      "chinese": "关于其本质的猜测已经持续了几千年，",
+      "raw": "Speculations about its nature have been going on for literally thousands of years, | 关于其本质的猜测已经持续了几千年，"
+    },
+    {
+      "time": 34.66,
+      "english": "and one odd finding that makes the problem puzzling is that it looks very much as if sleeping is not simply a matter of giving the body a rest.",
+      "chinese": "一个令人困惑的奇怪发现是，睡眠似乎不仅仅是让身体休息。",
+      "raw": "and one odd finding that makes the problem puzzling is that it looks very much as if sleeping is not simply a matter of giving the body a rest. | 一个令人困惑的奇怪发现是，睡眠似乎不仅仅是让身体休息。"
+    },
+    {
+      "time": 44.86,
+      "english": "'Rest', in terms of muscle relaxation and so on, can be achieved by a brief period lying, or even sitting down.",
+      "chinese": "从肌肉放松等方面来看，“休息”可以通过短暂的躺卧，甚至坐下来实现。",
+      "raw": "'Rest', in terms of muscle relaxation and so on, can be achieved by a brief period lying, or even sitting down. | 从肌肉放松等方面来看，“休息”可以通过短暂的躺卧，甚至坐下来实现。"
+    },
+    {
+      "time": 55.25,
+      "english": "The body's tissues are self-repairing and self-restoring to a degree, and function best when more or less continuously active.",
+      "chinese": "身体的组织在一定程度上是自我修复和自我恢复的，并且在或多或少持续活动时功能最佳。",
+      "raw": "The body's tissues are self-repairing and self-restoring to a degree, and function best when more or less continuously active. | 身体的组织在一定程度上是自我修复和自我恢复的，并且在或多或少持续活动时功能最佳。"
+    },
+    {
+      "time": 65.77,
+      "english": "In fact a basic amount of movement occurs during sleep which is specifically concerned with preventing muscle inactivity.",
+      "chinese": "事实上，在睡眠期间会发生一定程度的运动，这尤其旨在防止肌肉不活动。",
+      "raw": "In fact a basic amount of movement occurs during sleep which is specifically concerned with preventing muscle inactivity. | 事实上，在睡眠期间会发生一定程度的运动，这尤其旨在防止肌肉不活动。"
+    },
+    {
+      "time": 75.16,
+      "english": "If it is not a question of resting the body, then perhaps it is the brain that needs resting?",
+      "chinese": "如果不是身体休息的问题，那么也许是大脑需要休息？",
+      "raw": "If it is not a question of resting the body, then perhaps it is the brain that needs resting? | 如果不是身体休息的问题，那么也许是大脑需要休息？"
+    },
+    {
+      "time": 83.15,
+      "english": "This might be a plausible hypothesis were it not for two factors.",
+      "chinese": "要不是有两个因素，这可能是一个合理的假设。",
+      "raw": "This might be a plausible hypothesis were it not for two factors. | 要不是有两个因素，这可能是一个合理的假设。"
+    },
+    {
+      "time": 88.87,
+      "english": "First the electroencephalograph (which is simply a device for recording the electrical activity of the brain by attaching electrodes to the scalp)",
+      "chinese": "首先，脑电图仪（它只是一种通过将电极连接到头皮来记录大脑电活动的设备）",
+      "raw": "First the electroencephalograph (which is simply a device for recording the electrical activity of the brain by attaching electrodes to the scalp) | 首先，脑电图仪（它只是一种通过将电极连接到头皮来记录大脑电活动的设备）"
+    },
+    {
+      "time": 100.25,
+      "english": "shows that while there is a change in the pattern of activity during sleep,",
+      "chinese": "表明虽然睡眠期间的活动模式有所变化，",
+      "raw": "shows that while there is a change in the pattern of activity during sleep, | 表明虽然睡眠期间的活动模式有所变化，"
+    },
+    {
+      "time": 105.3,
+      "english": "there is no evidence that the total amount of activity is any less.",
+      "chinese": "但没有证据表明总活动量有所减少。",
+      "raw": "there is no evidence that the total amount of activity is any less. | 但没有证据表明总活动量有所减少。"
+    },
+    {
+      "time": 110.86,
+      "english": "The second factor is more interesting and more fundamental.",
+      "chinese": "第二个因素更有趣也更具根本性。",
+      "raw": "The second factor is more interesting and more fundamental. | 第二个因素更有趣也更具根本性。"
+    },
+    {
+      "time": 115.5,
+      "english": "Some years ago an American psychiatrist named William Dement published experiments dealing with the recording of eye-movements during sleep.",
+      "chinese": "几年前，一位名叫威廉·德门特的美国精神病学家发表了关于记录睡眠期间眼球运动的实验。",
+      "raw": "Some years ago an American psychiatrist named William Dement published experiments dealing with the recording of eye-movements during sleep. | 几年前，一位名叫威廉·德门特的美国精神病学家发表了关于记录睡眠期间眼球运动的实验。"
+    },
+    {
+      "time": 126.41,
+      "english": "He showed that the average individual's sleep cycle is punctuated with peculiar bursts of eye-movements, some drifting and slow, others jerky and rapid.",
+      "chinese": "他表明，普通人的睡眠周期会伴随着奇特的眼球运动爆发，有些是漂移而缓慢的，有些是抽搐而快速的。",
+      "raw": "He showed that the average individual's sleep cycle is punctuated with peculiar bursts of eye-movements, some drifting and slow, others jerky and rapid. | 他表明，普通人的睡眠周期会伴随着奇特的眼球运动爆发，有些是漂移而缓慢的，有些是抽搐而快速的。"
+    },
+    {
+      "time": 139.83,
+      "english": "People woken during these periods of eye-movements generally reported that they had been dreaming.",
+      "chinese": "在这些眼球运动期间被唤醒的人通常报告说他们一直在做梦。",
+      "raw": "People woken during these periods of eye-movements generally reported that they had been dreaming. | 在这些眼球运动期间被唤醒的人通常报告说他们一直在做梦。"
+    },
+    {
+      "time": 146.41,
+      "english": "When woken at other times they reported no dreams.",
+      "chinese": "而在其他时候被唤醒时，他们报告说没有做梦。",
+      "raw": "When woken at other times they reported no dreams. | 而在其他时候被唤醒时，他们报告说没有做梦。"
+    },
+    {
+      "time": 150.35,
+      "english": "If one group of people were disturbed from their eye-movement sleep for several nights on end,",
+      "chinese": "如果一组人在连续几个晚上被从眼动睡眠中打扰，",
+      "raw": "If one group of people were disturbed from their eye-movement sleep for several nights on end, | 如果一组人在连续几个晚上被从眼动睡眠中打扰，"
+    },
+    {
+      "time": 155.8,
+      "english": "and another group were disturbed for an equal period of time but when they were not exhibiting eye-movements,",
+      "chinese": "而另一组人在相同的时间内被打扰，但当时他们没有表现出眼球运动，",
+      "raw": "and another group were disturbed for an equal period of time but when they were not exhibiting eye-movements, | 而另一组人在相同的时间内被打扰，但当时他们没有表现出眼球运动，"
+    },
+    {
+      "time": 164.94,
+      "english": "the first group began to show some personality disorders while the others seemed more or less unaffected.",
+      "chinese": "第一组人开始表现出一些人格障碍，而其他人则或多或少地未受影响。",
+      "raw": "the first group began to show some personality disorders while the others seemed more or less unaffected. | 第一组人开始表现出一些人格障碍，而其他人则或多或少地未受影响。"
+    },
+    {
+      "time": 174.38,
+      "english": "The implications of all this were that it was not the disturbance of sleep that mattered, but the disturbance of dreaming.",
+      "chinese": "所有这些都表明，重要的不是睡眠受到干扰，而是做梦受到干扰。",
+      "raw": "The implications of all this were that it was not the disturbance of sleep that mattered, but the disturbance of dreaming. | 所有这些都表明，重要的不是睡眠受到干扰，而是做梦受到干扰。"
+    }
+  ]
+}

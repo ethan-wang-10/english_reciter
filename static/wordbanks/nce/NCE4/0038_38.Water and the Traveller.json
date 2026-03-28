@@ -1,0 +1,181 @@
+{
+  "bookKey": "NCE4",
+  "title": "38.Water and the Traveller",
+  "filename": "38.Water and the Traveller",
+  "lines": [
+    {
+      "time": 0.040000000000000036,
+      "english": "Lesson 38",
+      "chinese": "第38课",
+      "raw": "Lesson 38 | 第38课"
+    },
+    {
+      "time": 1.9100000000000001,
+      "english": "Water and the traveller",
+      "chinese": "水与旅行者",
+      "raw": "Water and the traveller | 水与旅行者"
+    },
+    {
+      "time": 9.09,
+      "english": "What does this text describe?",
+      "chinese": "本文描述了什么？",
+      "raw": "What does this text describe? | 本文描述了什么？"
+    },
+    {
+      "time": 13.0,
+      "english": "Contamination of water supplies is usually due to poor sanitation close to water sources,",
+      "chinese": "供水污染通常是由于水源附近卫生条件差，",
+      "raw": "Contamination of water supplies is usually due to poor sanitation close to water sources, | 供水污染通常是由于水源附近卫生条件差，"
+    },
+    {
+      "time": 20.8,
+      "english": "sewage disposal into the sources themselves, leakage of sewage into distribution systems or contamination with industrial or farm waste.",
+      "chinese": "污水直接排入水源，污水泄漏进入分配系统，或受到工业或农业废物的污染。",
+      "raw": "sewage disposal into the sources themselves, leakage of sewage into distribution systems or contamination with industrial or farm waste. | 污水直接排入水源，污水泄漏进入分配系统，或受到工业或农业废物的污染。"
+    },
+    {
+      "time": 31.67,
+      "english": "Even if a piped water supply is safe at its source, it is not always safe by the time it reaches the tap.",
+      "chinese": "即使管道供水在其源头是安全的，但当它到达水龙头时，也并非总是安全的。",
+      "raw": "Even if a piped water supply is safe at its source, it is not always safe by the time it reaches the tap. | 即使管道供水在其源头是安全的，但当它到达水龙头时，也并非总是安全的。"
+    },
+    {
+      "time": 39.22,
+      "english": "Intermittent tap-water supplies should be regarded as particularly suspect.",
+      "chinese": "间歇性自来水供应应被视为特别可疑。",
+      "raw": "Intermittent tap-water supplies should be regarded as particularly suspect. | 间歇性自来水供应应被视为特别可疑。"
+    },
+    {
+      "time": 45.26,
+      "english": "Travellers on short trips to areas with water supplies of uncertain quality",
+      "chinese": "短途旅行到水质不确定地区的旅行者",
+      "raw": "Travellers on short trips to areas with water supplies of uncertain quality | 短途旅行到水质不确定地区的旅行者"
+    },
+    {
+      "time": 50.58,
+      "english": "should avoid drinking tap-water, or untreated water from any other source.",
+      "chinese": "应避免饮用自来水，或任何其他来源的未经处理的水。",
+      "raw": "should avoid drinking tap-water, or untreated water from any other source. | 应避免饮用自来水，或任何其他来源的未经处理的水。"
+    },
+    {
+      "time": 56.45,
+      "english": "It is best to keep to hot drinks, bottled or canned drinks of well-known brand names-international standard of water treatment are usually followed at bottling plants.",
+      "chinese": "最好只喝热饮、知名品牌的瓶装或罐装饮料——瓶装厂通常会遵循国际水处理标准。",
+      "raw": "It is best to keep to hot drinks, bottled or canned drinks of well-known brand names-international standard of water treatment are usually followed at bottling plants. | 最好只喝热饮、知名品牌的瓶装或罐装饮料——瓶装厂通常会遵循国际水处理标准。"
+    },
+    {
+      "time": 67.77,
+      "english": "Carbonated drinks are acidic, and slightly safer.",
+      "chinese": "碳酸饮料呈酸性，稍微安全一些。",
+      "raw": "Carbonated drinks are acidic, and slightly safer. | 碳酸饮料呈酸性，稍微安全一些。"
+    },
+    {
+      "time": 71.74,
+      "english": "Make sure that all bottles are opened in your presence, and that their rims are clean and dry.",
+      "chinese": "确保所有瓶子都是在你面前打开的，并且瓶口清洁干燥。",
+      "raw": "Make sure that all bottles are opened in your presence, and that their rims are clean and dry. | 确保所有瓶子都是在你面前打开的，并且瓶口清洁干燥。"
+    },
+    {
+      "time": 78.64,
+      "english": "Boiling is always a good way of treating water.",
+      "chinese": "煮沸始终是处理水的好方法。",
+      "raw": "Boiling is always a good way of treating water. | 煮沸始终是处理水的好方法。"
+    },
+    {
+      "time": 81.86,
+      "english": "Some hotels supply boiled water on request and this can be used for drinking, or for brushing teeth.",
+      "chinese": "有些酒店应要求提供开水，可用于饮用或刷牙。",
+      "raw": "Some hotels supply boiled water on request and this can be used for drinking, or for brushing teeth. | 有些酒店应要求提供开水，可用于饮用或刷牙。"
+    },
+    {
+      "time": 88.99,
+      "english": "Portable boiling elements that can boil small quantities of water are useful when the right voltage of electricity is available.",
+      "chinese": "当有合适的电压时，能烧开少量水的便携式电热棒会很有用。",
+      "raw": "Portable boiling elements that can boil small quantities of water are useful when the right voltage of electricity is available. | 当有合适的电压时，能烧开少量水的便携式电热棒会很有用。"
+    },
+    {
+      "time": 97.36,
+      "english": "Refuse politely any cold drink from an unknown source.",
+      "chinese": "礼貌地拒绝任何来源不明的冷饮。",
+      "raw": "Refuse politely any cold drink from an unknown source. | 礼貌地拒绝任何来源不明的冷饮。"
+    },
+    {
+      "time": 102.72,
+      "english": "Ice is only as safe as the water from which it is made,",
+      "chinese": "冰的安全性取决于制作它的水，",
+      "raw": "Ice is only as safe as the water from which it is made, | 冰的安全性取决于制作它的水，"
+    },
+    {
+      "time": 106.29,
+      "english": "and should not be put in drinks unless it is known to be safe.",
+      "chinese": "除非已知其安全，否则不应将其放入饮料中。",
+      "raw": "and should not be put in drinks unless it is known to be safe. | 除非已知其安全，否则不应将其放入饮料中。"
+    },
+    {
+      "time": 111.3,
+      "english": "Drinks can be cooled by placing them on ice rather than adding ice to them.",
+      "chinese": "饮料可以通过放在冰块上冷却，而不是将冰块加入饮料中。",
+      "raw": "Drinks can be cooled by placing them on ice rather than adding ice to them. | 饮料可以通过放在冰块上冷却，而不是将冰块加入饮料中。"
+    },
+    {
+      "time": 117.67,
+      "english": "Alcohol may be a medical disinfectant, but should not be relied upon to sterilize water.",
+      "chinese": "酒精可能是医用消毒剂，但不应指望它能给水消毒。",
+      "raw": "Alcohol may be a medical disinfectant, but should not be relied upon to sterilize water. | 酒精可能是医用消毒剂，但不应指望它能给水消毒。"
+    },
+    {
+      "time": 125.07,
+      "english": "Ethanol is more effective at a concentration of 50-70 percent;",
+      "chinese": "乙醇在50-70%的浓度下更有效；",
+      "raw": "Ethanol is more effective at a concentration of 50-70 percent; | 乙醇在50-70%的浓度下更有效；"
+    },
+    {
+      "time": 130.22,
+      "english": "below 20 per cent, its bactericidal action is negligible.",
+      "chinese": "低于20%时，其杀菌作用微乎其微。",
+      "raw": "below 20 per cent, its bactericidal action is negligible. | 低于20%时，其杀菌作用微乎其微。"
+    },
+    {
+      "time": 135.41,
+      "english": "Spirits labelled 95 proof contain only about 47 per cent alcohol.",
+      "chinese": "标示为95度的烈酒只含有大约47%的酒精。",
+      "raw": "Spirits labelled 95 proof contain only about 47 per cent alcohol. | 标示为95度的烈酒只含有大约47%的酒精。"
+    },
+    {
+      "time": 142.13,
+      "english": "Beware of methylated alcohol,",
+      "chinese": "警惕工业酒精（甲醇变性酒精），",
+      "raw": "Beware of methylated alcohol, | 警惕工业酒精（甲醇变性酒精），"
+    },
+    {
+      "time": 144.39,
+      "english": "which is very poisonous and should never be added to drinking water.",
+      "chinese": "它剧毒，绝不应加入饮用水中。",
+      "raw": "which is very poisonous and should never be added to drinking water. | 它剧毒，绝不应加入饮用水中。"
+    },
+    {
+      "time": 150.21,
+      "english": "If no other safe water supply can be obtained,",
+      "chinese": "如果无法获得其他安全水源，",
+      "raw": "If no other safe water supply can be obtained, | 如果无法获得其他安全水源，"
+    },
+    {
+      "time": 153.95,
+      "english": "tap water that is too hot to touch can be left to cool and is generally safe to drink.",
+      "chinese": "热得烫手的自来水可以放凉后饮用，通常是安全的。",
+      "raw": "tap water that is too hot to touch can be left to cool and is generally safe to drink. | 热得烫手的自来水可以放凉后饮用，通常是安全的。"
+    },
+    {
+      "time": 161.0,
+      "english": "Those planning a trip to remote areas, or intending to live in countries where drinking water is not readily available,",
+      "chinese": "计划去偏远地区旅行，或打算生活在饮用水不易获得的国家的人，",
+      "raw": "Those planning a trip to remote areas, or intending to live in countries where drinking water is not readily available, | 计划去偏远地区旅行，或打算生活在饮用水不易获得的国家的人，"
+    },
+    {
+      "time": 168.79,
+      "english": "should know about the various possible methods for making water safe.",
+      "chinese": "应该了解使水安全可饮用的各种可能方法。",
+      "raw": "should know about the various possible methods for making water safe. | 应该了解使水安全可饮用的各种可能方法。"
+    }
+  ]
+}

@@ -1,0 +1,428 @@
+{
+  "key": "NCE3",
+  "bookName": "NCE",
+  "bookLevel": "3st Level",
+  "bookPath": "https://nce.mleo.site/NCE3",
+  "units": [
+    {
+      "title": "01.A Puma at Large",
+      "filename": "01.A Puma at Large",
+      "markdown": "NCE3/0001_01.A Puma at Large.md",
+      "json": "NCE3/0001_01.A Puma at Large.json",
+      "lineCount": 24
+    },
+    {
+      "title": "02.Thirteen Equals One",
+      "filename": "02.Thirteen Equals One",
+      "markdown": "NCE3/0002_02.Thirteen Equals One.md",
+      "json": "NCE3/0002_02.Thirteen Equals One.json",
+      "lineCount": 23
+    },
+    {
+      "title": "03.An Unknown Goddess",
+      "filename": "03.An Unknown Goddess",
+      "markdown": "NCE3/0003_03.An Unknown Goddess.md",
+      "json": "NCE3/0003_03.An Unknown Goddess.json",
+      "lineCount": 20
+    },
+    {
+      "title": "04.The Double Life of Alfred Bloggs",
+      "filename": "04.The Double Life of Alfred Bloggs",
+      "markdown": "NCE3/0004_04.The Double Life of Alfred Bloggs.md",
+      "json": "NCE3/0004_04.The Double Life of Alfred Bloggs.json",
+      "lineCount": 17
+    },
+    {
+      "title": "05.The Facts",
+      "filename": "05.The Facts",
+      "markdown": "NCE3/0005_05.The Facts.md",
+      "json": "NCE3/0005_05.The Facts.json",
+      "lineCount": 17
+    },
+    {
+      "title": "06.Smash-and-Grab",
+      "filename": "06.Smash-and-Grab",
+      "markdown": "NCE3/0006_06.Smash-and-Grab.md",
+      "json": "NCE3/0006_06.Smash-and-Grab.json",
+      "lineCount": 22
+    },
+    {
+      "title": "07.Mutilated Ladies",
+      "filename": "07.Mutilated Ladies",
+      "markdown": "NCE3/0007_07.Mutilated Ladies.md",
+      "json": "NCE3/0007_07.Mutilated Ladies.json",
+      "lineCount": 20
+    },
+    {
+      "title": "08.A Famous Monastery",
+      "filename": "08.A Famous Monastery",
+      "markdown": "NCE3/0008_08.A Famous Monastery.md",
+      "json": "NCE3/0008_08.A Famous Monastery.json",
+      "lineCount": 27
+    },
+    {
+      "title": "09.Flying Cats",
+      "filename": "09.Flying Cats",
+      "markdown": "NCE3/0009_09.Flying Cats.md",
+      "json": "NCE3/0009_09.Flying Cats.json",
+      "lineCount": 23
+    },
+    {
+      "title": "10.The Loss of the Titanic",
+      "filename": "10.The Loss of the Titanic",
+      "markdown": "NCE3/0010_10.The Loss of the Titanic.md",
+      "json": "NCE3/0010_10.The Loss of the Titanic.json",
+      "lineCount": 20
+    },
+    {
+      "title": "11.Not Guilty",
+      "filename": "11.Not Guilty",
+      "markdown": "NCE3/0011_11.Not Guilty.md",
+      "json": "NCE3/0011_11.Not Guilty.json",
+      "lineCount": 30
+    },
+    {
+      "title": "12.Life on a Desert Island",
+      "filename": "12.Life on a Desert Island",
+      "markdown": "NCE3/0012_12.Life on a Desert Island.md",
+      "json": "NCE3/0012_12.Life on a Desert Island.json",
+      "lineCount": 20
+    },
+    {
+      "title": "13.It's Only Me",
+      "filename": "13.It's Only Me",
+      "markdown": "NCE3/0013_13.It's Only Me.md",
+      "json": "NCE3/0013_13.It's Only Me.json",
+      "lineCount": 20
+    },
+    {
+      "title": "14.A Noble Gangster",
+      "filename": "14.A Noble Gangster",
+      "markdown": "NCE3/0014_14.A Noble Gangster.md",
+      "json": "NCE3/0014_14.A Noble Gangster.json",
+      "lineCount": 14
+    },
+    {
+      "title": "15.Fifty Pence Worth of Trouble",
+      "filename": "15.Fifty Pence Worth of Trouble",
+      "markdown": "NCE3/0015_15.Fifty Pence Worth of Trouble.md",
+      "json": "NCE3/0015_15.Fifty Pence Worth of Trouble.json",
+      "lineCount": 20
+    },
+    {
+      "title": "16.Mary Had a Little Lamb",
+      "filename": "16.Mary Had a Little Lamb",
+      "markdown": "NCE3/0016_16.Mary Had a Little Lamb.md",
+      "json": "NCE3/0016_16.Mary Had a Little Lamb.json",
+      "lineCount": 21
+    },
+    {
+      "title": "17.The Longest Suspension Bridge in the World",
+      "filename": "17.The Longest Suspension Bridge in the World",
+      "markdown": "NCE3/0017_17.The Longest Suspension Bridge in the World.md",
+      "json": "NCE3/0017_17.The Longest Suspension Bridge in the World.json",
+      "lineCount": 21
+    },
+    {
+      "title": "18.Electric Currents in Modern Art",
+      "filename": "18.Electric Currents in Modern Art",
+      "markdown": "NCE3/0018_18.Electric Currents in Modern Art.md",
+      "json": "NCE3/0018_18.Electric Currents in Modern Art.json",
+      "lineCount": 22
+    },
+    {
+      "title": "19.A Very Dear Cat",
+      "filename": "19.A Very Dear Cat",
+      "markdown": "NCE3/0019_19.A Very Dear Cat.md",
+      "json": "NCE3/0019_19.A Very Dear Cat.json",
+      "lineCount": 22
+    },
+    {
+      "title": "20.Pioneer Pilots",
+      "filename": "20.Pioneer Pilots",
+      "markdown": "NCE3/0020_20.Pioneer Pilots.md",
+      "json": "NCE3/0020_20.Pioneer Pilots.json",
+      "lineCount": 22
+    },
+    {
+      "title": "21.Daniel Mendoza",
+      "filename": "21.Daniel Mendoza",
+      "markdown": "NCE3/0021_21.Daniel Mendoza.md",
+      "json": "NCE3/0021_21.Daniel Mendoza.json",
+      "lineCount": 28
+    },
+    {
+      "title": "22.By Heart",
+      "filename": "22.By Heart",
+      "markdown": "NCE3/0022_22.By Heart.md",
+      "json": "NCE3/0022_22.By Heart.json",
+      "lineCount": 26
+    },
+    {
+      "title": "23.One Man's Meat is Another Man's Poison",
+      "filename": "23.One Man's Meat is Another Man's Poison",
+      "markdown": "NCE3/0023_23.One Man's Meat is Another Man's Poison.md",
+      "json": "NCE3/0023_23.One Man's Meat is Another Man's Poison.json",
+      "lineCount": 26
+    },
+    {
+      "title": "24.A Skeleton in the Cupboard",
+      "filename": "24.A Skeleton in the Cupboard",
+      "markdown": "NCE3/0024_24.A Skeleton in the Cupboard.md",
+      "json": "NCE3/0024_24.A Skeleton in the Cupboard.json",
+      "lineCount": 28
+    },
+    {
+      "title": "25.The Cutty Sark",
+      "filename": "25.The Cutty Sark",
+      "markdown": "NCE3/0025_25.The Cutty Sark.md",
+      "json": "NCE3/0025_25.The Cutty Sark.json",
+      "lineCount": 29
+    },
+    {
+      "title": "26.Wanted a Large Biscuit Tin",
+      "filename": "26.Wanted a Large Biscuit Tin",
+      "markdown": "NCE3/0026_26.Wanted a Large Biscuit Tin.md",
+      "json": "NCE3/0026_26.Wanted a Large Biscuit Tin.json",
+      "lineCount": 29
+    },
+    {
+      "title": "27.Nothing to Sell and Nothing to Buy",
+      "filename": "27.Nothing to Sell and Nothing to Buy",
+      "markdown": "NCE3/0027_27.Nothing to Sell and Nothing to Buy.md",
+      "json": "NCE3/0027_27.Nothing to Sell and Nothing to Buy.json",
+      "lineCount": 27
+    },
+    {
+      "title": "28.Five Pounds Too Dear",
+      "filename": "28.Five Pounds Too Dear",
+      "markdown": "NCE3/0028_28.Five Pounds Too Dear.md",
+      "json": "NCE3/0028_28.Five Pounds Too Dear.json",
+      "lineCount": 30
+    },
+    {
+      "title": "29.Funny or Not",
+      "filename": "29.Funny or Not",
+      "markdown": "NCE3/0029_29.Funny or Not.md",
+      "json": "NCE3/0029_29.Funny or Not.json",
+      "lineCount": 30
+    },
+    {
+      "title": "30.The Death of a Ghost",
+      "filename": "30.The Death of a Ghost",
+      "markdown": "NCE3/0030_30.The Death of a Ghost.md",
+      "json": "NCE3/0030_30.The Death of a Ghost.json",
+      "lineCount": 31
+    },
+    {
+      "title": "31.A Lovable Eccentric",
+      "filename": "31.A Lovable Eccentric",
+      "markdown": "NCE3/0031_31.A Lovable Eccentric.md",
+      "json": "NCE3/0031_31.A Lovable Eccentric.json",
+      "lineCount": 29
+    },
+    {
+      "title": "32.A Lost Ship",
+      "filename": "32.A Lost Ship",
+      "markdown": "NCE3/0032_32.A Lost Ship.md",
+      "json": "NCE3/0032_32.A Lost Ship.json",
+      "lineCount": 27
+    },
+    {
+      "title": "33.A Day to Remember",
+      "filename": "33.A Day to Remember",
+      "markdown": "NCE3/0033_33.A Day to Remember.md",
+      "json": "NCE3/0033_33.A Day to Remember.json",
+      "lineCount": 31
+    },
+    {
+      "title": "34.A Happy Discovery",
+      "filename": "34.A Happy Discovery",
+      "markdown": "NCE3/0034_34.A Happy Discovery.md",
+      "json": "NCE3/0034_34.A Happy Discovery.json",
+      "lineCount": 28
+    },
+    {
+      "title": "35.Justice was Done",
+      "filename": "35.Justice was Done",
+      "markdown": "NCE3/0035_35.Justice was Done.md",
+      "json": "NCE3/0035_35.Justice was Done.json",
+      "lineCount": 31
+    },
+    {
+      "title": "36.A Chance in a Million",
+      "filename": "36.A Chance in a Million",
+      "markdown": "NCE3/0036_36.A Chance in a Million.md",
+      "json": "NCE3/0036_36.A Chance in a Million.json",
+      "lineCount": 32
+    },
+    {
+      "title": "37.The Westhaven Express",
+      "filename": "37.The Westhaven Express",
+      "markdown": "NCE3/0037_37.The Westhaven Express.md",
+      "json": "NCE3/0037_37.The Westhaven Express.json",
+      "lineCount": 28
+    },
+    {
+      "title": "38.The First Calendar",
+      "filename": "38.The First Calendar",
+      "markdown": "NCE3/0038_38.The First Calendar.md",
+      "json": "NCE3/0038_38.The First Calendar.json",
+      "lineCount": 24
+    },
+    {
+      "title": "39.Nothing to Worry About",
+      "filename": "39.Nothing to Worry About",
+      "markdown": "NCE3/0039_39.Nothing to Worry About.md",
+      "json": "NCE3/0039_39.Nothing to Worry About.json",
+      "lineCount": 27
+    },
+    {
+      "title": "40.Who's Who",
+      "filename": "40.Who's Who",
+      "markdown": "NCE3/0040_40.Who's Who.md",
+      "json": "NCE3/0040_40.Who's Who.json",
+      "lineCount": 26
+    },
+    {
+      "title": "41.Illusions of Pastoral Peace",
+      "filename": "41.Illusions of Pastoral Peace",
+      "markdown": "NCE3/0041_41.Illusions of Pastoral Peace.md",
+      "json": "NCE3/0041_41.Illusions of Pastoral Peace.json",
+      "lineCount": 36
+    },
+    {
+      "title": "42.Modern Cavemen",
+      "filename": "42.Modern Cavemen",
+      "markdown": "NCE3/0042_42.Modern Cavemen.md",
+      "json": "NCE3/0042_42.Modern Cavemen.json",
+      "lineCount": 36
+    },
+    {
+      "title": "43.Fully Insured",
+      "filename": "43.Fully Insured",
+      "markdown": "NCE3/0043_43.Fully Insured.md",
+      "json": "NCE3/0043_43.Fully Insured.json",
+      "lineCount": 32
+    },
+    {
+      "title": "44.Speed and Comfort",
+      "filename": "44.Speed and Comfort",
+      "markdown": "NCE3/0044_44.Speed and Comfort.md",
+      "json": "NCE3/0044_44.Speed and Comfort.json",
+      "lineCount": 38
+    },
+    {
+      "title": "45.The Power of the Press",
+      "filename": "45.The Power of the Press",
+      "markdown": "NCE3/0045_45.The Power of the Press.md",
+      "json": "NCE3/0045_45.The Power of the Press.json",
+      "lineCount": 31
+    },
+    {
+      "title": "46.Do It Yourself",
+      "filename": "46.Do It Yourself",
+      "markdown": "NCE3/0046_46.Do It Yourself.md",
+      "json": "NCE3/0046_46.Do It Yourself.json",
+      "lineCount": 40
+    },
+    {
+      "title": "47.Too High a Price",
+      "filename": "47.Too High a Price",
+      "markdown": "NCE3/0047_47.Too High a Price.md",
+      "json": "NCE3/0047_47.Too High a Price.json",
+      "lineCount": 37
+    },
+    {
+      "title": "48.The Silent Village",
+      "filename": "48.The Silent Village",
+      "markdown": "NCE3/0048_48.The Silent Village.md",
+      "json": "NCE3/0048_48.The Silent Village.json",
+      "lineCount": 39
+    },
+    {
+      "title": "49.The Ideal Servant",
+      "filename": "49.The Ideal Servant",
+      "markdown": "NCE3/0049_49.The Ideal Servant.md",
+      "json": "NCE3/0049_49.The Ideal Servant.json",
+      "lineCount": 41
+    },
+    {
+      "title": "50.New Year Resolutions",
+      "filename": "50.New Year Resolutions",
+      "markdown": "NCE3/0050_50.New Year Resolutions.md",
+      "json": "NCE3/0050_50.New Year Resolutions.json",
+      "lineCount": 39
+    },
+    {
+      "title": "51.Predicting the Future",
+      "filename": "51.Predicting the Future",
+      "markdown": "NCE3/0051_51.Predicting the Future.md",
+      "json": "NCE3/0051_51.Predicting the Future.json",
+      "lineCount": 37
+    },
+    {
+      "title": "52.Mud is Mud",
+      "filename": "52.Mud is Mud",
+      "markdown": "NCE3/0052_52.Mud is Mud.md",
+      "json": "NCE3/0052_52.Mud is Mud.json",
+      "lineCount": 37
+    },
+    {
+      "title": "53.In the Public Interest",
+      "filename": "53.In the Public Interest",
+      "markdown": "NCE3/0053_53.In the Public Interest.md",
+      "json": "NCE3/0053_53.In the Public Interest.json",
+      "lineCount": 34
+    },
+    {
+      "title": "54.Instinct or Cleverness",
+      "filename": "54.Instinct or Cleverness",
+      "markdown": "NCE3/0054_54.Instinct or Cleverness.md",
+      "json": "NCE3/0054_54.Instinct or Cleverness.json",
+      "lineCount": 37
+    },
+    {
+      "title": "55.From the Earth Greetings",
+      "filename": "55.From the Earth Greetings",
+      "markdown": "NCE3/0055_55.From the Earth Greetings.md",
+      "json": "NCE3/0055_55.From the Earth Greetings.json",
+      "lineCount": 35
+    },
+    {
+      "title": "56.Our Neighbour, the River",
+      "filename": "56.Our Neighbour, the River",
+      "markdown": "NCE3/0056_56.Our Neighbour, the River.md",
+      "json": "NCE3/0056_56.Our Neighbour, the River.json",
+      "lineCount": 36
+    },
+    {
+      "title": "57.Back in the Old Country",
+      "filename": "57.Back in the Old Country",
+      "markdown": "NCE3/0057_57.Back in the Old Country.md",
+      "json": "NCE3/0057_57.Back in the Old Country.json",
+      "lineCount": 40
+    },
+    {
+      "title": "58.A Spot of Bother",
+      "filename": "58.A Spot of Bother",
+      "markdown": "NCE3/0058_58.A Spot of Bother.md",
+      "json": "NCE3/0058_58.A Spot of Bother.json",
+      "lineCount": 33
+    },
+    {
+      "title": "59.Collecting",
+      "filename": "59.Collecting",
+      "markdown": "NCE3/0059_59.Collecting.md",
+      "json": "NCE3/0059_59.Collecting.json",
+      "lineCount": 35
+    },
+    {
+      "title": "60.Too Early and Too Late",
+      "filename": "60.Too Early and Too Late",
+      "markdown": "NCE3/0060_60.Too Early and Too Late.md",
+      "json": "NCE3/0060_60.Too Early and Too Late.json",
+      "lineCount": 40
+    }
+  ]
+}

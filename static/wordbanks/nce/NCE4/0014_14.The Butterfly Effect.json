@@ -1,0 +1,157 @@
+{
+  "bookKey": "NCE4",
+  "title": "14.The Butterfly Effect",
+  "filename": "14.The Butterfly Effect",
+  "lines": [
+    {
+      "time": -0.09999999999999998,
+      "english": "Lesson 14",
+      "chinese": "第14课",
+      "raw": "Lesson 14 | 第14课"
+    },
+    {
+      "time": 1.3399999999999999,
+      "english": "The Butterfly Effect",
+      "chinese": "蝴蝶效应",
+      "raw": "The Butterfly Effect | 蝴蝶效应"
+    },
+    {
+      "time": 7.75,
+      "english": "Why do small errors make it impossible to predict the weather system with a high degree of accuracy?",
+      "chinese": "为什么小的误差会使得准确预测天气系统变得不可能？",
+      "raw": "Why do small errors make it impossible to predict the weather system with a high degree of accuracy? | 为什么小的误差会使得准确预测天气系统变得不可能？"
+    },
+    {
+      "time": 16.96,
+      "english": "Beyond two or three days, the world's best weather forecasts are speculative,",
+      "chinese": "超过两三天，世界上最好的天气预报都是推测性的，",
+      "raw": "Beyond two or three days, the world's best weather forecasts are speculative, | 超过两三天，世界上最好的天气预报都是推测性的，"
+    },
+    {
+      "time": 22.7,
+      "english": "and beyond six or seven they are worthless.",
+      "chinese": "超过六七天，它们就毫无价值了。",
+      "raw": "and beyond six or seven they are worthless. | 超过六七天，它们就毫无价值了。"
+    },
+    {
+      "time": 26.34,
+      "english": "The Butterfly Effect is the reason.",
+      "chinese": "蝴蝶效应就是原因。",
+      "raw": "The Butterfly Effect is the reason. | 蝴蝶效应就是原因。"
+    },
+    {
+      "time": 29.52,
+      "english": "For small pieces of weather--",
+      "chinese": "对于局部天气——",
+      "raw": "For small pieces of weather-- | 对于局部天气——"
+    },
+    {
+      "time": 31.57,
+      "english": "and to a global forecaster, small can mean thunderstorms and blizzards--",
+      "chinese": "对于全球预报员来说，局部可能意味着雷暴和暴风雪——",
+      "raw": "and to a global forecaster, small can mean thunderstorms and blizzards-- | 对于全球预报员来说，局部可能意味着雷暴和暴风雪——"
+    },
+    {
+      "time": 36.63,
+      "english": "any prediction deteriorates rapidly.",
+      "chinese": "任何预测都会迅速恶化。",
+      "raw": "any prediction deteriorates rapidly. | 任何预测都会迅速恶化。"
+    },
+    {
+      "time": 39.85,
+      "english": "Errors and uncertainties multiply, cascading upward through a chain of turbulent features,",
+      "chinese": "误差和不确定性倍增，通过一系列湍流特征向上级联，",
+      "raw": "Errors and uncertainties multiply, cascading upward through a chain of turbulent features, | 误差和不确定性倍增，通过一系列湍流特征向上级联，"
+    },
+    {
+      "time": 46.21,
+      "english": "from dust devils and squalls up to continent-size eddies that only satellites can see.",
+      "chinese": "从尘卷风和飑线直到只有卫星才能看到的洲际大小的涡流。",
+      "raw": "from dust devils and squalls up to continent-size eddies that only satellites can see. | 从尘卷风和飑线直到只有卫星才能看到的洲际大小的涡流。"
+    },
+    {
+      "time": 53.41,
+      "english": "The modern weather models work with a grid of points of the order of sixty miles apart,",
+      "chinese": "现代天气模型采用相距约六十英里的网格点，",
+      "raw": "The modern weather models work with a grid of points of the order of sixty miles apart, | 现代天气模型采用相距约六十英里的网格点，"
+    },
+    {
+      "time": 59.42,
+      "english": "and even so, some starting data has to be guessed,",
+      "chinese": "即便如此，一些初始数据也必须是猜测的，",
+      "raw": "and even so, some starting data has to be guessed, | 即便如此，一些初始数据也必须是猜测的，"
+    },
+    {
+      "time": 63.58,
+      "english": "since ground stations and satellites cannot see everywhere.",
+      "chinese": "因为地面站和卫星无法看到所有地方。",
+      "raw": "since ground stations and satellites cannot see everywhere. | 因为地面站和卫星无法看到所有地方。"
+    },
+    {
+      "time": 68.19,
+      "english": "But suppose the earth could be covered with sensors spaced one foot apart,",
+      "chinese": "但是假设地球可以被间隔一英尺的传感器覆盖，",
+      "raw": "But suppose the earth could be covered with sensors spaced one foot apart, | 但是假设地球可以被间隔一英尺的传感器覆盖，"
+    },
+    {
+      "time": 72.91,
+      "english": "rising at one-foot intervals all the way to the top of the atmosphere.",
+      "chinese": "并以一英尺的间隔一直上升到大气的顶端。",
+      "raw": "rising at one-foot intervals all the way to the top of the atmosphere. | 并以一英尺的间隔一直上升到大气的顶端。"
+    },
+    {
+      "time": 78.5,
+      "english": "Suppose every sensor gives perfectly accurate readings of temperature,",
+      "chinese": "假设每个传感器都能提供完全准确的温度读数，",
+      "raw": "Suppose every sensor gives perfectly accurate readings of temperature, | 假设每个传感器都能提供完全准确的温度读数，"
+    },
+    {
+      "time": 83.63,
+      "english": "pressure, humidity, and any other quantity a meteorologist would want.",
+      "chinese": "压力、湿度以及气象学家想要的任何其他量。",
+      "raw": "pressure, humidity, and any other quantity a meteorologist would want. | 压力、湿度以及气象学家想要的任何其他量。"
+    },
+    {
+      "time": 90.11,
+      "english": "Precisely at noon an infinitely powerful computer takes all the data and calculates what will happen at each point",
+      "chinese": "正午时分，一台无限强大的计算机获取所有数据，并计算出每个点将发生什么，",
+      "raw": "Precisely at noon an infinitely powerful computer takes all the data and calculates what will happen at each point | 正午时分，一台无限强大的计算机获取所有数据，并计算出每个点将发生什么，"
+    },
+    {
+      "time": 98.75,
+      "english": "at 12.01, then 12.02, then 12.03...",
+      "chinese": "在12点01分，然后12点02分，然后12点03分……",
+      "raw": "at 12.01, then 12.02, then 12.03... | 在12点01分，然后12点02分，然后12点03分……"
+    },
+    {
+      "time": 104.88,
+      "english": "The computer will still be unable to predict whether Princeton, New Jersey, will have sun or rain on a day one month away.",
+      "chinese": "这台计算机仍然无法预测一个月后新泽西州普林斯顿是晴天还是雨天。",
+      "raw": "The computer will still be unable to predict whether Princeton, New Jersey, will have sun or rain on a day one month away. | 这台计算机仍然无法预测一个月后新泽西州普林斯顿是晴天还是雨天。"
+    },
+    {
+      "time": 113.92,
+      "english": "At noon the spaces between the sensors will hide fluctuations that the computer will not know about,",
+      "chinese": "中午时，传感器之间的空间会隐藏计算机不知道的波动，",
+      "raw": "At noon the spaces between the sensors will hide fluctuations that the computer will not know about, | 中午时，传感器之间的空间会隐藏计算机不知道的波动，"
+    },
+    {
+      "time": 121.02,
+      "english": "tiny deviations from the average.",
+      "chinese": "那些与平均值微小的偏差。",
+      "raw": "tiny deviations from the average. | 那些与平均值微小的偏差。"
+    },
+    {
+      "time": 123.87,
+      "english": "By 12.01, those fluctuations will already have created small errors one foot away.",
+      "chinese": "到12点01分，这些波动就已经在离传感器一英尺的地方造成了小误差。",
+      "raw": "By 12.01, those fluctuations will already have created small errors one foot away. | 到12点01分，这些波动就已经在离传感器一英尺的地方造成了小误差。"
+    },
+    {
+      "time": 131.44,
+      "english": "Soon the errors will have multiplied to the ten-foot scale, and so on up to the size of the globe.",
+      "chinese": "很快，这些误差将倍增到十英尺的尺度，并以此类推，直到全球范围。",
+      "raw": "Soon the errors will have multiplied to the ten-foot scale, and so on up to the size of the globe. | 很快，这些误差将倍增到十英尺的尺度，并以此类推，直到全球范围。"
+    }
+  ]
+}

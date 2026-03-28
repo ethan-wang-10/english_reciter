@@ -85,6 +85,7 @@
                 <div class="nav-menu nav-menu-desktop">
                     <button class="nav-item active" data-page="review">今日复习</button>
                     <button class="nav-item" data-page="discover">单词学习</button>
+                    <button class="nav-item" data-page="textbook">课文学习</button>
                     <button class="nav-item" data-page="progress">学习进度</button>
                     <button class="nav-item" data-page="import">导入单词</button>
                     <button class="nav-item" data-page="mastered">已掌握</button>
@@ -141,6 +142,7 @@
                         </button>
                     </div>
                     <button type="button" class="mobile-more-link" data-page="discover">单词学习</button>
+                    <button type="button" class="mobile-more-link" data-page="textbook">课文学习</button>
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
                     <button type="button" class="mobile-more-link" id="mobile-open-settings">用户设置</button>
@@ -381,6 +383,21 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- 课文学习 -->
+            <div id="textbook-section" class="section">
+                <div class="container textbook-page">
+                    <h2>课文学习</h2>
+                    <p class="textbook-intro">
+                        从词库中的教材朗读课文：一句英文、一句中文翻译（点击显示）。点击单词可加入待复习；词库中没有的词，付费账号将自动使用词汇导入生成词条并加入学习。
+                    </p>
+                    <div id="textbook-catalog-wrap">
+                        <div id="textbook-catalog" class="textbook-catalog" role="navigation" aria-label="课文列表"></div>
+                    </div>
+                    <div id="textbook-reader" class="textbook-reader" style="display: none;" aria-live="polite"></div>
+                </div>
+                <div id="textbook-word-tooltip" class="textbook-word-tooltip" role="tooltip" hidden></div>
             </div>
 
             <!-- 已掌握页面 -->

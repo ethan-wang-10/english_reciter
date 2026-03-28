@@ -1,0 +1,73 @@
+{
+  "bookKey": "NCE1",
+  "title": "001&002.Excuse Me",
+  "filename": "001&002.Excuse Me",
+  "lines": [
+    {
+      "time": 0.10999999999999999,
+      "english": "Lesson 1",
+      "chinese": "第1课",
+      "raw": "Lesson 1 | 第1课"
+    },
+    {
+      "time": 2.21,
+      "english": "Excuse me!",
+      "chinese": "打扰一下！",
+      "raw": "Excuse me! | 打扰一下！"
+    },
+    {
+      "time": 5.11,
+      "english": "Listen to the tape then answer this question.",
+      "chinese": "听录音，然后回答这个问题。",
+      "raw": "Listen to the tape then answer this question. | 听录音，然后回答这个问题。"
+    },
+    {
+      "time": 10.3,
+      "english": "Whose handbag is it?",
+      "chinese": "这是谁的手提包？",
+      "raw": "Whose handbag is it? | 这是谁的手提包？"
+    },
+    {
+      "time": 14.61,
+      "english": "Excuse me!",
+      "chinese": "请问！",
+      "raw": "Excuse me! | 请问！"
+    },
+    {
+      "time": 16.16,
+      "english": "Yes?",
+      "chinese": "怎么了？",
+      "raw": "Yes? | 怎么了？"
+    },
+    {
+      "time": 17.76,
+      "english": "Is this your handbag?",
+      "chinese": "这是你的手提包吗？",
+      "raw": "Is this your handbag? | 这是你的手提包吗？"
+    },
+    {
+      "time": 20.94,
+      "english": "Pardon?",
+      "chinese": "抱歉？",
+      "raw": "Pardon? | 抱歉？"
+    },
+    {
+      "time": 22.67,
+      "english": "Is this your handbag?",
+      "chinese": "这是你的手提包吗？",
+      "raw": "Is this your handbag? | 这是你的手提包吗？"
+    },
+    {
+      "time": 26.23,
+      "english": "Yes it is.",
+      "chinese": "是的，是我的。",
+      "raw": "Yes it is. | 是的，是我的。"
+    },
+    {
+      "time": 28.99,
+      "english": "Thank you very much.",
+      "chinese": "非常感谢。",
+      "raw": "Thank you very much. | 非常感谢。"
+    }
+  ]
+}

@@ -4138,3 +4138,182 @@ body {
     66%  { content: '..'; }
     100% { content: '...'; }
 }
+
+/* 课文学习 */
+.textbook-page {
+    padding-bottom: 48px;
+}
+.textbook-intro {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.55;
+    margin-bottom: 20px;
+    max-width: 52rem;
+}
+.textbook-catalog {
+    margin-top: 8px;
+}
+.textbook-corpus-block {
+    margin-bottom: 28px;
+}
+.textbook-corpus-title {
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+.textbook-book-block {
+    margin-bottom: 18px;
+    padding-left: 12px;
+    border-left: 3px solid var(--primary-color);
+}
+.textbook-book-label {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+.textbook-unit-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.textbook-unit-btn {
+    font-family: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border);
+    background: #fff;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    max-width: 100%;
+    transition: border-color 0.15s, background 0.15s;
+}
+.textbook-unit-btn:hover {
+    border-color: var(--secondary-color);
+    background: #f0fbff;
+}
+.textbook-catalog-loading,
+.textbook-catalog-empty {
+    color: var(--text-secondary);
+    padding: 16px 0;
+}
+.textbook-reader-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.textbook-reader-title {
+    font-size: 1.2rem;
+    font-weight: 800;
+    flex: 1;
+    min-width: 0;
+}
+.textbook-back-btn {
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+}
+.textbook-back-btn:hover {
+    border-color: var(--secondary-color);
+}
+.textbook-line {
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    background: #fafafa;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+}
+.textbook-line-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+.textbook-line-row .btn-speak {
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+    margin-top: 2px;
+}
+.textbook-en-line {
+    flex: 1;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.55;
+    color: var(--text-primary);
+}
+.textbook-zh-wrap {
+    margin-top: 10px;
+    padding-left: 50px;
+}
+.textbook-zh-toggle {
+    font-family: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--secondary-dark);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+.textbook-zh-text {
+    margin-top: 6px;
+    font-size: 0.98rem;
+    color: #444;
+    line-height: 1.5;
+}
+.textbook-token {
+    display: inline;
+    border-radius: 6px;
+    padding: 1px 2px;
+    margin: 0 -2px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.textbook-token--word:hover,
+.textbook-token--word.tb-token--active {
+    background: rgba(28, 176, 246, 0.28);
+    box-shadow: 0 0 0 1px rgba(28, 176, 246, 0.35);
+}
+.textbook-token--word:focus-visible {
+    outline: 2px solid var(--secondary-color);
+    outline-offset: 1px;
+}
+.textbook-word-tooltip {
+    position: fixed;
+    z-index: 9000;
+    max-width: min(320px, calc(100vw - 24px));
+    padding: 10px 12px;
+    background: #1a2330;
+    color: #f0f4f8;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+    pointer-events: none;
+}
+.textbook-word-tooltip .tb-tip-en {
+    font-weight: 700;
+    color: #9fdcf9;
+    margin-bottom: 4px;
+}
+.textbook-word-tooltip .tb-tip-zh {
+    color: #e8eef5;
+}
+.textbook-word-tooltip .tb-tip-meta {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: #9aa8b8;
+}

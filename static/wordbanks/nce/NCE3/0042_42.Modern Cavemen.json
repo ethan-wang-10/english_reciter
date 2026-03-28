@@ -1,0 +1,223 @@
+{
+  "bookKey": "NCE3",
+  "title": "42.Modern Cavemen",
+  "filename": "42.Modern Cavemen",
+  "lines": [
+    {
+      "time": -0.3,
+      "english": "Lesson 42",
+      "chinese": "第42课",
+      "raw": "Lesson 42 | 第42课"
+    },
+    {
+      "time": 1.7000000000000002,
+      "english": "Modern cavemen",
+      "chinese": "现代穴居人",
+      "raw": "Modern cavemen | 现代穴居人"
+    },
+    {
+      "time": 8.96,
+      "english": "With what does the writer compare the Gouffre Berger?",
+      "chinese": "作者把贝杰深洞与什么作比较？",
+      "raw": "With what does the writer compare the Gouffre Berger? | 作者把贝杰深洞与什么作比较？"
+    },
+    {
+      "time": 14.81,
+      "english": "Cave exploration, or pot-holing, as it has come to be known, is a relatively new sport.",
+      "chinese": "洞穴探险，即人们所知的“探洞”，是一项比较新的运动。",
+      "raw": "Cave exploration, or pot-holing, as it has come to be known, is a relatively new sport. | 洞穴探险，即人们所知的“探洞”，是一项比较新的运动。"
+    },
+    {
+      "time": 22.84,
+      "english": "Perhaps it is the desire for solitude or the chance of making an unexpected discovery that lures people down to the depths of the earth.",
+      "chinese": "也许是出于对孤独的渴望，或是想作一次意想不到的发现，把人们引到地下去的。",
+      "raw": "Perhaps it is the desire for solitude or the chance of making an unexpected discovery that lures people down to the depths of the earth. | 也许是出于对孤独的渴望，或是想作一次意想不到的发现，把人们引到地下去的。"
+    },
+    {
+      "time": 33.92,
+      "english": "It is impossible to give a satisfactory explanation for a pot-holer's motives.",
+      "chinese": "想对探洞者的动机作出满意的解释是不可能的。",
+      "raw": "It is impossible to give a satisfactory explanation for a pot-holer's motives. | 想对探洞者的动机作出满意的解释是不可能的。"
+    },
+    {
+      "time": 40.42,
+      "english": "For him, caves have the same peculiar fascination which high mountains have for the climber.",
+      "chinese": "对于他来说，洞穴有着与高山对于登山者一样的奇异魅力。",
+      "raw": "For him, caves have the same peculiar fascination which high mountains have for the climber. | 对于他来说，洞穴有着与高山对于登山者一样的奇异魅力。"
+    },
+    {
+      "time": 48.49,
+      "english": "They arouse instincts which can only be dimly understood.",
+      "chinese": "它们唤起人们只能模模糊糊感知到的本能。",
+      "raw": "They arouse instincts which can only be dimly understood. | 它们唤起人们只能模模糊糊感知到的本能。"
+    },
+    {
+      "time": 53.92,
+      "english": "Exploring really deep caves is not a task for the Sunday afternoon rambler.",
+      "chinese": "勘探真正深的洞穴并非是周日下午散步者所能胜任的。",
+      "raw": "Exploring really deep caves is not a task for the Sunday afternoon rambler. | 勘探真正深的洞穴并非是周日下午散步者所能胜任的。"
+    },
+    {
+      "time": 59.69,
+      "english": "Such undertakings require the precise planning and foresight of military operations.",
+      "chinese": "这种活动需要像军事行动一样精确的计划和预见性。",
+      "raw": "Such undertakings require the precise planning and foresight of military operations. | 这种活动需要像军事行动一样精确的计划和预见性。"
+    },
+    {
+      "time": 67.54,
+      "english": "It can take as long as eight days to rig up rope ladders and to establish supply bases before a descent can be made into a very deep cave.",
+      "chinese": "在下到一个很深的洞穴之前，光是架设绳梯和建立补给站就可能需要长达8天的时间。",
+      "raw": "It can take as long as eight days to rig up rope ladders and to establish supply bases before a descent can be made into a very deep cave. | 在下到一个很深的洞穴之前，光是架设绳梯和建立补给站就可能需要长达8天的时间。"
+    },
+    {
+      "time": 80.11,
+      "english": "Precautions of this sort are necessary, for it is impossible to foretell the exact nature of the difficulties which will confront the pot-holer.",
+      "chinese": "这种预防是必要的，因为无法预知探洞者将会遇到的困难究竟是什么性质。",
+      "raw": "Precautions of this sort are necessary, for it is impossible to foretell the exact nature of the difficulties which will confront the pot-holer. | 这种预防是必要的，因为无法预知探洞者将会遇到的困难究竟是什么性质。"
+    },
+    {
+      "time": 91.56,
+      "english": "The deepest known cave in the world is the Gouffre Berger near Grenoble.",
+      "chinese": "世界上已知最深的洞穴是格勒诺布尔附近的贝杰深洞。",
+      "raw": "The deepest known cave in the world is the Gouffre Berger near Grenoble. | 世界上已知最深的洞穴是格勒诺布尔附近的贝杰深洞。"
+    },
+    {
+      "time": 98.16,
+      "english": "It extends to a depth of 3, 723 feet.",
+      "chinese": "它深达3723英尺。",
+      "raw": "It extends to a depth of 3, 723 feet. | 它深达3723英尺。"
+    },
+    {
+      "time": 103.83,
+      "english": "This immense chasm has been formed by an underground stream which has tunnelled a course through a flaw in the rocks.",
+      "chinese": "这个巨大的深渊是由一条地下河形成的，这条河在岩石的裂缝中开凿出一条通道。",
+      "raw": "This immense chasm has been formed by an underground stream which has tunnelled a course through a flaw in the rocks. | 这个巨大的深渊是由一条地下河形成的，这条河在岩石的裂缝中开凿出一条通道。"
+    },
+    {
+      "time": 113.15,
+      "english": "The entrance to the cave is on a plateau in the Dauphine Alps.",
+      "chinese": "洞口位于多芬阿尔卑斯山脉的一个高原上。",
+      "raw": "The entrance to the cave is on a plateau in the Dauphine Alps. | 洞口位于多芬阿尔卑斯山脉的一个高原上。"
+    },
+    {
+      "time": 119.63,
+      "english": "As it is only six feet across, it is barely noticeable.",
+      "chinese": "由于洞口只有6英尺宽，所以几乎难以察觉。",
+      "raw": "As it is only six feet across, it is barely noticeable. | 由于洞口只有6英尺宽，所以几乎难以察觉。"
+    },
+    {
+      "time": 124.89,
+      "english": "The cave might never have been discovered had not the entrance been spotted by the distinguished French pot-holer, Berger.",
+      "chinese": "如果不是杰出的法国探洞者贝杰发现了洞口，这个洞穴可能永远也不会被发现。",
+      "raw": "The cave might never have been discovered had not the entrance been spotted by the distinguished French pot-holer, Berger. | 如果不是杰出的法国探洞者贝杰发现了洞口，这个洞穴可能永远也不会被发现。"
+    },
+    {
+      "time": 134.5,
+      "english": "Since its discovery, it has become a sort of pot-holers' Everest.",
+      "chinese": "自从被发现以来，它已成为探洞者们的一种“珠穆朗玛峰”。",
+      "raw": "Since its discovery, it has become a sort of pot-holers' Everest. | 自从被发现以来，它已成为探洞者们的一种“珠穆朗玛峰”。"
+    },
+    {
+      "time": 140.16,
+      "english": "Though a number of descents have been made, much of it still remains to be explored.",
+      "chinese": "尽管已经进行过多次下降探险，但其中大部分仍有待勘探。",
+      "raw": "Though a number of descents have been made, much of it still remains to be explored. | 尽管已经进行过多次下降探险，但其中大部分仍有待勘探。"
+    },
+    {
+      "time": 147.35,
+      "english": "A team of pot-holers recently went down the Gouffre Berger.",
+      "chinese": "一队探洞者最近下到了贝杰深洞。",
+      "raw": "A team of pot-holers recently went down the Gouffre Berger. | 一队探洞者最近下到了贝杰深洞。"
+    },
+    {
+      "time": 152.77,
+      "english": "After entering the narrow gap on the plateau,",
+      "chinese": "他们进入高原上的那个狭窄的缝隙后，",
+      "raw": "After entering the narrow gap on the plateau, | 他们进入高原上的那个狭窄的缝隙后，"
+    },
+    {
+      "time": 156.46,
+      "english": "they climbed down the steep sides of the cave until they came to a narrow corridor.",
+      "chinese": "沿着洞穴陡峭的侧壁向下攀爬，直到来到一条狭窄的通道。",
+      "raw": "they climbed down the steep sides of the cave until they came to a narrow corridor. | 沿着洞穴陡峭的侧壁向下攀爬，直到来到一条狭窄的通道。"
+    },
+    {
+      "time": 163.12,
+      "english": "They had to edge their way along this,",
+      "chinese": "他们不得不侧身沿着这条通道前行，",
+      "raw": "They had to edge their way along this, | 他们不得不侧身沿着这条通道前行，"
+    },
+    {
+      "time": 165.79,
+      "english": "sometimes wading across shallow streams, or swimming across deep pools.",
+      "chinese": "有时涉过浅浅的小溪，有时游过深深的水潭。",
+      "raw": "sometimes wading across shallow streams, or swimming across deep pools. | 有时涉过浅浅的小溪，有时游过深深的水潭。"
+    },
+    {
+      "time": 172.12,
+      "english": "Suddenly they came to a waterfall which dropped into an underground lake at the bottom of the cave.",
+      "chinese": "突然，他们来到一个瀑布，瀑布落入洞穴底部的一个地下湖中。",
+      "raw": "Suddenly they came to a waterfall which dropped into an underground lake at the bottom of the cave. | 突然，他们来到一个瀑布，瀑布落入洞穴底部的一个地下湖中。"
+    },
+    {
+      "time": 180.19,
+      "english": "They plunged into the lake, and after loading their gear on an inflatable rubber dinghy, let the current carry them to the other side.",
+      "chinese": "他们跳入湖中，把装备装到一艘充气橡皮艇上，然后让水流把他们带到对岸。",
+      "raw": "They plunged into the lake, and after loading their gear on an inflatable rubber dinghy, let the current carry them to the other side. | 他们跳入湖中，把装备装到一艘充气橡皮艇上，然后让水流把他们带到对岸。"
+    },
+    {
+      "time": 191.17,
+      "english": "To protect themselves from the icy water, they had to wear special rubber suits.",
+      "chinese": "为了保护自己不受冰冷湖水的侵袭，他们不得不穿上特制的橡胶衣。",
+      "raw": "To protect themselves from the icy water, they had to wear special rubber suits. | 为了保护自己不受冰冷湖水的侵袭，他们不得不穿上特制的橡胶衣。"
+    },
+    {
+      "time": 198.08,
+      "english": "At the far end of the lake, they came to huge piles of rubble which had been washed up by the water.",
+      "chinese": "在湖的远端，他们遇到了被水冲刷而成的巨大碎石堆。",
+      "raw": "At the far end of the lake, they came to huge piles of rubble which had been washed up by the water. | 在湖的远端，他们遇到了被水冲刷而成的巨大碎石堆。"
+    },
+    {
+      "time": 206.37,
+      "english": "In this part of the cave, they could hear an insistent booming sound",
+      "chinese": "在洞穴的这部分，他们能听到一种持续不断的轰鸣声，",
+      "raw": "In this part of the cave, they could hear an insistent booming sound | 在洞穴的这部分，他们能听到一种持续不断的轰鸣声，"
+    },
+    {
+      "time": 211.67,
+      "english": "which they found was caused by a small waterspout shooting down into a pool from the roof of the cave.",
+      "chinese": "他们发现这是由一股小小的水柱从洞顶射入水潭所引起的。",
+      "raw": "which they found was caused by a small waterspout shooting down into a pool from the roof of the cave. | 他们发现这是由一股小小的水柱从洞顶射入水潭所引起的。"
+    },
+    {
+      "time": 219.92,
+      "english": "Squeezing through a cleft in the rocks, the pot-holers arrived at an enormous cavern, the size of a huge concert hall.",
+      "chinese": "探洞者们挤过岩石中的一道裂缝，来到一个巨大的洞穴，其大小相当于一个巨大的音乐厅。",
+      "raw": "Squeezing through a cleft in the rocks, the pot-holers arrived at an enormous cavern, the size of a huge concert hall. | 探洞者们挤过岩石中的一道裂缝，来到一个巨大的洞穴，其大小相当于一个巨大的音乐厅。"
+    },
+    {
+      "time": 229.22,
+      "english": "After switching on powerful arc lights,",
+      "chinese": "打开强光弧光灯后，",
+      "raw": "After switching on powerful arc lights, | 打开强光弧光灯后，"
+    },
+    {
+      "time": 232.5,
+      "english": "they saw great stalagmites--some of them over forty feet high--rising up like tree-trunks to meet the stalactites suspended from the roof.",
+      "chinese": "他们看到了巨大的石笋——其中一些高达40多英尺——像树干一样向上生长，与悬挂在洞顶的钟乳石相接。",
+      "raw": "they saw great stalagmites--some of them over forty feet high--rising up like tree-trunks to meet the stalactites suspended from the roof. | 他们看到了巨大的石笋——其中一些高达40多英尺——像树干一样向上生长，与悬挂在洞顶的钟乳石相接。"
+    },
+    {
+      "time": 244.93,
+      "english": "Round about, piles of limestone glistened in all the colours of the rainbow.",
+      "chinese": "四周，一堆堆的石灰石闪耀着彩虹般的光芒。",
+      "raw": "Round about, piles of limestone glistened in all the colours of the rainbow. | 四周，一堆堆的石灰石闪耀着彩虹般的光芒。"
+    },
+    {
+      "time": 251.64,
+      "english": "In the eerie silence of the cavern, the only sound that could be heard was made by water which dripped continuously from the high dome above them.",
+      "chinese": "在洞穴诡异的寂静中，唯一能听到的声音是头顶高高的拱顶不断滴落的水声。",
+      "raw": "In the eerie silence of the cavern, the only sound that could be heard was made by water which dripped continuously from the high dome above them. | 在洞穴诡异的寂静中，唯一能听到的声音是头顶高高的拱顶不断滴落的水声。"
+    }
+  ]
+}

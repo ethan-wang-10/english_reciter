@@ -1,0 +1,109 @@
+{
+  "bookKey": "NCE3",
+  "title": "05.The Facts",
+  "filename": "05.The Facts",
+  "lines": [
+    {
+      "time": 0.17000000000000004,
+      "english": "Lesson 5",
+      "chinese": "第5课",
+      "raw": "Lesson 5 | 第5课"
+    },
+    {
+      "time": 1.62,
+      "english": "The facts",
+      "chinese": "事实真相",
+      "raw": "The facts | 事实真相"
+    },
+    {
+      "time": 8.18,
+      "english": "What was the consequence of the editor's insistence on facts and statistics?",
+      "chinese": "编辑坚持事实和统计数据的后果是什么？",
+      "raw": "What was the consequence of the editor's insistence on facts and statistics? | 编辑坚持事实和统计数据的后果是什么？"
+    },
+    {
+      "time": 16.15,
+      "english": "Editors of newspapers and magazines often go to extremes to provide their readers with unimportant facts and statistics.",
+      "chinese": "报纸杂志的编辑们常常不厌其烦地向读者提供一些无关紧要的事实和统计数字。",
+      "raw": "Editors of newspapers and magazines often go to extremes to provide their readers with unimportant facts and statistics. | 报纸杂志的编辑们常常不厌其烦地向读者提供一些无关紧要的事实和统计数字。"
+    },
+    {
+      "time": 24.51,
+      "english": "Last year a journalist had been instructed by a well-known magazine to write an article on the president's palace in a new African republic.",
+      "chinese": "去年，一家有名的杂志派一名记者去撰写一篇有关一个非洲新共和国总统府的稿件。",
+      "raw": "Last year a journalist had been instructed by a well-known magazine to write an article on the president's palace in a new African republic. | 去年，一家有名的杂志派一名记者去撰写一篇有关一个非洲新共和国总统府的稿件。"
+    },
+    {
+      "time": 34.59,
+      "english": "When the article arrived, the editor read the first sentence and then refused to publish it.",
+      "chinese": "稿件寄来后，编辑看了第一句话就拒绝发表。",
+      "raw": "When the article arrived, the editor read the first sentence and then refused to publish it. | 稿件寄来后，编辑看了第一句话就拒绝发表。"
+    },
+    {
+      "time": 41.93,
+      "english": "The article began:'Hundreds of steps lead to the high wall which surrounds the president's palace.'",
+      "chinese": "文章的开头是这样的：“几百级台阶通向总统府四周的高墙。”",
+      "raw": "The article began:'Hundreds of steps lead to the high wall which surrounds the president's palace.' | 文章的开头是这样的：“几百级台阶通向总统府四周的高墙。”"
+    },
+    {
+      "time": 49.74,
+      "english": "The editor at once sent the journalist a fax instructing him to find out the exact number of steps and the height of the wall.",
+      "chinese": "编辑立即给记者发了一份传真，指示他查明台阶的确切数字和围墙的高度。",
+      "raw": "The editor at once sent the journalist a fax instructing him to find out the exact number of steps and the height of the wall. | 编辑立即给记者发了一份传真，指示他查明台阶的确切数字和围墙的高度。"
+    },
+    {
+      "time": 60.78,
+      "english": "The journalist immediately set out to obtain these important facts, but he took a long time to send them.",
+      "chinese": "记者立即动身去搜集这些重要的事实，但过了很久才把材料寄来。",
+      "raw": "The journalist immediately set out to obtain these important facts, but he took a long time to send them. | 记者立即动身去搜集这些重要的事实，但过了很久才把材料寄来。"
+    },
+    {
+      "time": 68.16,
+      "english": "Meanwhile, the editor was getting impatient, for the magazine would soon go to press.",
+      "chinese": "与此同时，编辑等得不耐烦了，因为杂志很快就要付印。",
+      "raw": "Meanwhile, the editor was getting impatient, for the magazine would soon go to press. | 与此同时，编辑等得不耐烦了，因为杂志很快就要付印。"
+    },
+    {
+      "time": 73.74,
+      "english": "He sent the journalist two more faxes, but received no reply.",
+      "chinese": "他又给记者发了两份传真，但没有任何回音。",
+      "raw": "He sent the journalist two more faxes, but received no reply. | 他又给记者发了两份传真，但没有任何回音。"
+    },
+    {
+      "time": 78.94,
+      "english": "He sent yet another fax informing the journalist that if he did not reply soon he would be fired.",
+      "chinese": "他又发了一份传真，通知记者说如果再不迅速回复，他就将被解雇。",
+      "raw": "He sent yet another fax informing the journalist that if he did not reply soon he would be fired. | 他又发了一份传真，通知记者说如果再不迅速回复，他就将被解雇。"
+    },
+    {
+      "time": 86.31,
+      "english": "When the journalist again failed to reply, the editor reluctantly published the article as it had originally been written.",
+      "chinese": "记者还是没有回复，编辑只好不情愿地按原样发表了那篇文章。",
+      "raw": "When the journalist again failed to reply, the editor reluctantly published the article as it had originally been written. | 记者还是没有回复，编辑只好不情愿地按原样发表了那篇文章。"
+    },
+    {
+      "time": 95.11,
+      "english": "A week later, the editor at last received a fax from the journalist.",
+      "chinese": "一周后，编辑终于接到了记者的一份传真。",
+      "raw": "A week later, the editor at last received a fax from the journalist. | 一周后，编辑终于接到了记者的一份传真。"
+    },
+    {
+      "time": 100.48,
+      "english": "Not only had the poor man been arrested, but he had been sent to prison as well.",
+      "chinese": "那可怜的记者不仅被捕了，而且还被送进了监狱。",
+      "raw": "Not only had the poor man been arrested, but he had been sent to prison as well. | 那可怜的记者不仅被捕了，而且还被送进了监狱。"
+    },
+    {
+      "time": 106.69,
+      "english": "However, he had at last been allowed to send a fax in which he informed the editor that he had been arrested",
+      "chinese": "然而，他最终获准发了一份传真，在传真中他告诉编辑，他被捕了，",
+      "raw": "However, he had at last been allowed to send a fax in which he informed the editor that he had been arrested | 然而，他最终获准发了一份传真，在传真中他告诉编辑，他被捕了，"
+    },
+    {
+      "time": 115.49,
+      "english": "while counting the 1, 084 steps leading to the 15th foot wall which surrounded the president's palace.",
+      "chinese": "因为他正在数通向总统府的1084级台阶和围绕总统府15英尺高的围墙。",
+      "raw": "while counting the 1, 084 steps leading to the 15th foot wall which surrounded the president's palace. | 因为他正在数通向总统府的1084级台阶和围绕总统府15英尺高的围墙。"
+    }
+  ]
+}

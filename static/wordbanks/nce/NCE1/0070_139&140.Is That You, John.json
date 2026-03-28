@@ -1,0 +1,139 @@
+{
+  "bookKey": "NCE1",
+  "title": "139&140.Is That You, John",
+  "filename": "139&140.Is That You, John",
+  "lines": [
+    {
+      "time": 0.09999999999999998,
+      "english": "Lesson 139",
+      "chinese": "第139课",
+      "raw": "Lesson 139 | 第139课"
+    },
+    {
+      "time": 3.04,
+      "english": "Is that you, John?",
+      "chinese": "是你吗，约翰？",
+      "raw": "Is that you, John? | 是你吗，约翰？"
+    },
+    {
+      "time": 6.35,
+      "english": "Listen to the tape then answer this question.",
+      "chinese": "听录音，然后回答这个问题。",
+      "raw": "Listen to the tape then answer this question. | 听录音，然后回答这个问题。"
+    },
+    {
+      "time": 12.03,
+      "english": "Which John Smith does Graham Turner think he is talking to?",
+      "chinese": "格雷厄姆·特纳认为他正在和哪位约翰·史密斯通话？",
+      "raw": "Which John Smith does Graham Turner think he is talking to? | 格雷厄姆·特纳认为他正在和哪位约翰·史密斯通话？"
+    },
+    {
+      "time": 19.79,
+      "english": "Is that you, John?",
+      "chinese": "是你吗，约翰？",
+      "raw": "Is that you, John? | 是你吗，约翰？"
+    },
+    {
+      "time": 22.2,
+      "english": "Yes, speaking.",
+      "chinese": "是的，我就是。",
+      "raw": "Yes, speaking. | 是的，我就是。"
+    },
+    {
+      "time": 24.3,
+      "english": "Tell Mary we'll be late for dinner this evening.",
+      "chinese": "告诉玛丽，我们今晚晚饭会迟到。",
+      "raw": "Tell Mary we'll be late for dinner this evening. | 告诉玛丽，我们今晚晚饭会迟到。"
+    },
+    {
+      "time": 28.82,
+      "english": "I'm afraid I don't understand.",
+      "chinese": "恐怕我不明白。",
+      "raw": "I'm afraid I don't understand. | 恐怕我不明白。"
+    },
+    {
+      "time": 32.73,
+      "english": "Hasn't Mary told you?",
+      "chinese": "玛丽没告诉你吗？",
+      "raw": "Hasn't Mary told you? | 玛丽没告诉你吗？"
+    },
+    {
+      "time": 35.62,
+      "english": "She invited Charlotte and me to dinner this evening.",
+      "chinese": "她邀请夏洛特和我今晚吃饭。",
+      "raw": "She invited Charlotte and me to dinner this evening. | 她邀请夏洛特和我今晚吃饭。"
+    },
+    {
+      "time": 40.98,
+      "english": "I said I would be at your house at six o'clock, but the boss wants me to do some extra work.",
+      "chinese": "我说我六点钟会到你家，但老板要我加班。",
+      "raw": "I said I would be at your house at six o'clock, but the boss wants me to do some extra work. | 我说我六点钟会到你家，但老板要我加班。"
+    },
+    {
+      "time": 50.96,
+      "english": "I'll have to stay at the office.",
+      "chinese": "我得留在办公室。",
+      "raw": "I'll have to stay at the office. | 我得留在办公室。"
+    },
+    {
+      "time": 54.22,
+      "english": "I don't know when I'll finish.",
+      "chinese": "我不知道什么时候能完。",
+      "raw": "I don't know when I'll finish. | 我不知道什么时候能完。"
+    },
+    {
+      "time": 57.61,
+      "english": "Oh, and by the way, my wife wants to know if Mary needs any help.",
+      "chinese": "哦，顺便说一下，我妻子想知道玛丽是否需要帮忙。",
+      "raw": "Oh, and by the way, my wife wants to know if Mary needs any help. | 哦，顺便说一下，我妻子想知道玛丽是否需要帮忙。"
+    },
+    {
+      "time": 65.66,
+      "english": "I don't know what you're talking about.",
+      "chinese": "我不知道你在说什么。",
+      "raw": "I don't know what you're talking about. | 我不知道你在说什么。"
+    },
+    {
+      "time": 70.17,
+      "english": "That is John Smith, isn't it?",
+      "chinese": "你是约翰·史密斯，对吗？",
+      "raw": "That is John Smith, isn't it? | 你是约翰·史密斯，对吗？"
+    },
+    {
+      "time": 73.93,
+      "english": "Yes, I'm John Smith.",
+      "chinese": "是的，我就是约翰·史密斯。",
+      "raw": "Yes, I'm John Smith. | 是的，我就是约翰·史密斯。"
+    },
+    {
+      "time": 76.72,
+      "english": "You are John Smith, the engineer, aren't you?",
+      "chinese": "你是工程师约翰·史密斯，对吗？",
+      "raw": "You are John Smith, the engineer, aren't you? | 你是工程师约翰·史密斯，对吗？"
+    },
+    {
+      "time": 81.84,
+      "english": "That's right.",
+      "chinese": "没错。",
+      "raw": "That's right. | 没错。"
+    },
+    {
+      "time": 83.84,
+      "english": "You work for the Overseas Engineering Company, don't you?",
+      "chinese": "你在海外工程公司工作，对吗？",
+      "raw": "You work for the Overseas Engineering Company, don't you? | 你在海外工程公司工作，对吗？"
+    },
+    {
+      "time": 89.63,
+      "english": "No, I don't.",
+      "chinese": "不，我不是。",
+      "raw": "No, I don't. | 不，我不是。"
+    },
+    {
+      "time": 91.46,
+      "english": "I'm John Smith the telephone engineer and I'm repairing your telephone line.",
+      "chinese": "我是电话工程师约翰·史密斯，我正在修理你的电话线。",
+      "raw": "I'm John Smith the telephone engineer and I'm repairing your telephone line. | 我是电话工程师约翰·史密斯，我正在修理你的电话线。"
+    }
+  ]
+}

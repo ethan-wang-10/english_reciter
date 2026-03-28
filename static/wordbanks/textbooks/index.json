@@ -1,0 +1,10 @@
+{
+  "schema": "english_reciter.textbooks/v1",
+  "corpora": [
+    {
+      "id": "nce",
+      "title": "新概念英语",
+      "manifestRelativePath": "nce/manifest.json"
+    }
+  ]
+}

@@ -1,0 +1,229 @@
+{
+  "bookKey": "NCE3",
+  "title": "51.Predicting the Future",
+  "filename": "51.Predicting the Future",
+  "lines": [
+    {
+      "time": -0.15999999999999998,
+      "english": "Lesson 51",
+      "chinese": "第51课",
+      "raw": "Lesson 51 | 第51课"
+    },
+    {
+      "time": 3.0300000000000002,
+      "english": "Predicting the future",
+      "chinese": "预测未来",
+      "raw": "Predicting the future | 预测未来"
+    },
+    {
+      "time": 9.76,
+      "english": "What was the 'future' electronic development that Leon Bagrit wasn't able to foresee?",
+      "chinese": "莱昂·巴格里特未能预见到的“未来”电子发展是什么？",
+      "raw": "What was the 'future' electronic development that Leon Bagrit wasn't able to foresee? | 莱昂·巴格里特未能预见到的“未来”电子发展是什么？"
+    },
+    {
+      "time": 18.9,
+      "english": "Predicting the future is notoriously difficult.",
+      "chinese": "预测未来是出了名的困难。",
+      "raw": "Predicting the future is notoriously difficult. | 预测未来是出了名的困难。"
+    },
+    {
+      "time": 22.71,
+      "english": "Who could have imagined, in the mid 1970s, for example,",
+      "chinese": "举例来说，在20世纪70年代中期，谁能想到，",
+      "raw": "Who could have imagined, in the mid 1970s, for example, | 举例来说，在20世纪70年代中期，谁能想到，"
+    },
+    {
+      "time": 27.83,
+      "english": "that by the end of the 20th century, computers would be as common in people's homes as TV sets?",
+      "chinese": "到20世纪末，电脑在人们家中会像电视机一样普及？",
+      "raw": "that by the end of the 20th century, computers would be as common in people's homes as TV sets? | 到20世纪末，电脑在人们家中会像电视机一样普及？"
+    },
+    {
+      "time": 35.73,
+      "english": "In the 1970s, computers were common enough,",
+      "chinese": "在20世纪70年代，电脑已经很常见了，",
+      "raw": "In the 1970s, computers were common enough, | 在20世纪70年代，电脑已经很常见了，"
+    },
+    {
+      "time": 40.33,
+      "english": "but only in big business, government departments and large organizations.",
+      "chinese": "但只存在于大企业、政府部门和大型机构中。",
+      "raw": "but only in big business, government departments and large organizations. | 但只存在于大企业、政府部门和大型机构中。"
+    },
+    {
+      "time": 46.7,
+      "english": "These were the so-called mainframe machines.",
+      "chinese": "这些就是所谓的“大型机”。",
+      "raw": "These were the so-called mainframe machines. | 这些就是所谓的“大型机”。"
+    },
+    {
+      "time": 51.56,
+      "english": "Mainframe computers were very large indeed often occupying whole air-conditioned rooms,",
+      "chinese": "大型机确实非常大，常常占据整个空调房间，",
+      "raw": "Mainframe computers were very large indeed often occupying whole air-conditioned rooms, | 大型机确实非常大，常常占据整个空调房间，"
+    },
+    {
+      "time": 58.58,
+      "english": "employing full-time technicians and run on specially-written software.",
+      "chinese": "雇用全职技术人员，并运行专门编写的软件。",
+      "raw": "employing full-time technicians and run on specially-written software. | 雇用全职技术人员，并运行专门编写的软件。"
+    },
+    {
+      "time": 64.61,
+      "english": "Though these large machines still exist,",
+      "chinese": "尽管这些大型机器仍然存在，",
+      "raw": "Though these large machines still exist, | 尽管这些大型机器仍然存在，"
+    },
+    {
+      "time": 67.64,
+      "english": "many of their functions have been taken over by small powerful personal computers, commonly known as PCs.",
+      "chinese": "但它们的许多功能已被小型、强大的个人电脑（通常称为PC）所取代。",
+      "raw": "many of their functions have been taken over by small powerful personal computers, commonly known as PCs. | 但它们的许多功能已被小型、强大的个人电脑（通常称为PC）所取代。"
+    },
+    {
+      "time": 77.62,
+      "english": "In 1975, a primitive machine called the Altair, was launched in the USA.",
+      "chinese": "1975年，一台名为Altair的原始机器在美国问世。",
+      "raw": "In 1975, a primitive machine called the Altair, was launched in the USA. | 1975年，一台名为Altair的原始机器在美国问世。"
+    },
+    {
+      "time": 86.04,
+      "english": "It can properly be described as the first 'home computer' and it pointed the way to the future.",
+      "chinese": "它完全可以被称为第一台“家用电脑”，它指明了未来的方向。",
+      "raw": "It can properly be described as the first 'home computer' and it pointed the way to the future. | 它完全可以被称为第一台“家用电脑”，它指明了未来的方向。"
+    },
+    {
+      "time": 93.08,
+      "english": "This was followed, at the end of the 1970s, by a machine called an Apple.",
+      "chinese": "随后，在20世纪70年代末，一台名为Apple的机器问世。",
+      "raw": "This was followed, at the end of the 1970s, by a machine called an Apple. | 随后，在20世纪70年代末，一台名为Apple的机器问世。"
+    },
+    {
+      "time": 100.59,
+      "english": "In the early 1980s, the computer giant, IBM produced the world's first Personal Computer.",
+      "chinese": "在20世纪80年代初，电脑巨头IBM生产了世界上第一台个人电脑。",
+      "raw": "In the early 1980s, the computer giant, IBM produced the world's first Personal Computer. | 在20世纪80年代初，电脑巨头IBM生产了世界上第一台个人电脑。"
+    },
+    {
+      "time": 109.26,
+      "english": "This ran on an 'operating system' called DOS,",
+      "chinese": "它运行在一个名为DOS的“操作系统”上，",
+      "raw": "This ran on an 'operating system' called DOS, | 它运行在一个名为DOS的“操作系统”上，"
+    },
+    {
+      "time": 113.65,
+      "english": "produced by a then small company named Microsoft.",
+      "chinese": "由当时一家名为微软的小公司开发。",
+      "raw": "produced by a then small company named Microsoft. | 由当时一家名为微软的小公司开发。"
+    },
+    {
+      "time": 118.69,
+      "english": "The IBM Personal Computer was widely copied.",
+      "chinese": "IBM个人电脑被广泛复制。",
+      "raw": "The IBM Personal Computer was widely copied. | IBM个人电脑被广泛复制。"
+    },
+    {
+      "time": 123.25,
+      "english": "From those humble beginnings,",
+      "chinese": "从这些不起眼的开端，",
+      "raw": "From those humble beginnings, | 从这些不起眼的开端，"
+    },
+    {
+      "time": 125.61,
+      "english": "we have seen the development of the user-friendly home computers and multimedia machines which are in common use today.",
+      "chinese": "我们看到了今天普遍使用的用户友好的家用电脑和多媒体机器的发展。",
+      "raw": "we have seen the development of the user-friendly home computers and multimedia machines which are in common use today. | 我们看到了今天普遍使用的用户友好的家用电脑和多媒体机器的发展。"
+    },
+    {
+      "time": 135.82,
+      "english": "Considering how recent these developments are, it is even more remarkable that as long ago as the 1960s, an Englishman,",
+      "chinese": "考虑到这些发展是如此之新，更令人称奇的是，早在20世纪60年代，一位名叫",
+      "raw": "Considering how recent these developments are, it is even more remarkable that as long ago as the 1960s, an Englishman, | 考虑到这些发展是如此之新，更令人称奇的是，早在20世纪60年代，一位名叫"
+    },
+    {
+      "time": 147.02,
+      "english": "Leon Bagrit, was able to predict some of the uses of computers which we know today.",
+      "chinese": "莱昂·巴格里特的英国人就能预言我们今天所知道的一些电脑用途。",
+      "raw": "Leon Bagrit, was able to predict some of the uses of computers which we know today. | 莱昂·巴格里特的英国人就能预言我们今天所知道的一些电脑用途。"
+    },
+    {
+      "time": 154.48,
+      "english": "Bagrit dismissed the idea that computers would learn to 'think' for themselves and would 'rule the world', which people liked to believe in those days.",
+      "chinese": "巴格里特驳斥了电脑会学会“独立思考”并“统治世界”的观点，这在当时是人们喜欢相信的。",
+      "raw": "Bagrit dismissed the idea that computers would learn to 'think' for themselves and would 'rule the world', which people liked to believe in those days. | 巴格里特驳斥了电脑会学会“独立思考”并“统治世界”的观点，这在当时是人们喜欢相信的。"
+    },
+    {
+      "time": 165.26,
+      "english": "Bagrit foresaw a time when computers would be small enough to hold in the hand,",
+      "chinese": "巴格里特预见到一个时代，那时电脑会小到可以手持，",
+      "raw": "Bagrit foresaw a time when computers would be small enough to hold in the hand, | 巴格里特预见到一个时代，那时电脑会小到可以手持，"
+    },
+    {
+      "time": 171.28,
+      "english": "when they would be capable of providing information about traffic jams and suggesting alterative routes,",
+      "chinese": "能够提供交通堵塞信息并建议替代路线，",
+      "raw": "when they would be capable of providing information about traffic jams and suggesting alterative routes, | 能够提供交通堵塞信息并建议替代路线，"
+    },
+    {
+      "time": 179.38,
+      "english": "when they would be used in hospitals to help doctors to diagnose illnesses,",
+      "chinese": "在医院里用来帮助医生诊断疾病，",
+      "raw": "when they would be used in hospitals to help doctors to diagnose illnesses, | 在医院里用来帮助医生诊断疾病，"
+    },
+    {
+      "time": 185.28,
+      "english": "when they would relieve office workers and accountants of dull, repetitive clerical work.",
+      "chinese": "解放办公室职员和会计师们枯燥、重复的文书工作。",
+      "raw": "when they would relieve office workers and accountants of dull, repetitive clerical work. | 解放办公室职员和会计师们枯燥、重复的文书工作。"
+    },
+    {
+      "time": 193.14,
+      "english": "All these computer uses have become commonplace.",
+      "chinese": "所有这些电脑用途都已变得司空见惯。",
+      "raw": "All these computer uses have become commonplace. | 所有这些电脑用途都已变得司空见惯。"
+    },
+    {
+      "time": 197.46,
+      "english": "Of course, Leon Bagrit couldn't possibly have foreseen the development of the Internet,",
+      "chinese": "当然，莱昂·巴格里特不可能预见到互联网的发展，",
+      "raw": "Of course, Leon Bagrit couldn't possibly have foreseen the development of the Internet, | 当然，莱昂·巴格里特不可能预见到互联网的发展，"
+    },
+    {
+      "time": 203.8,
+      "english": "the worldwide system that enables us to communicate instantly with anyone in any part of the world by using computers linked to telephone networks.",
+      "chinese": "这个全球性的系统使我们能够通过连接到电话网络的电脑与世界任何地方的任何人即时交流。",
+      "raw": "the worldwide system that enables us to communicate instantly with anyone in any part of the world by using computers linked to telephone networks. | 这个全球性的系统使我们能够通过连接到电话网络的电脑与世界任何地方的任何人即时交流。"
+    },
+    {
+      "time": 216.99,
+      "english": "Nor could he have foreseen how we could use the Internet to obtain information on every known subject,",
+      "chinese": "他也无法预见到我们如何利用互联网获取所有已知主题的信息，",
+      "raw": "Nor could he have foreseen how we could use the Internet to obtain information on every known subject, | 他也无法预见到我们如何利用互联网获取所有已知主题的信息，"
+    },
+    {
+      "time": 224.29,
+      "english": "so we can read it on a screen in our homes and even print it as well if we want to.",
+      "chinese": "以便我们可以在家中屏幕上阅读，如果需要甚至可以打印出来。",
+      "raw": "so we can read it on a screen in our homes and even print it as well if we want to. | 以便我们可以在家中屏幕上阅读，如果需要甚至可以打印出来。"
+    },
+    {
+      "time": 231.37,
+      "english": "Computers have become smaller and smaller, more and more powerful and cheaper and cheaper.",
+      "chinese": "电脑变得越来越小，越来越强大，也越来越便宜。",
+      "raw": "Computers have become smaller and smaller, more and more powerful and cheaper and cheaper. | 电脑变得越来越小，越来越强大，也越来越便宜。"
+    },
+    {
+      "time": 239.05,
+      "english": "This is what makes Leon Bagrit's predictions particularly remarkable.",
+      "chinese": "这就是莱昂·巴格里特的预测显得格外引人注目的原因。",
+      "raw": "This is what makes Leon Bagrit's predictions particularly remarkable. | 这就是莱昂·巴格里特的预测显得格外引人注目的原因。"
+    },
+    {
+      "time": 244.41,
+      "english": "If he, or someone like him, were alive today, he might be able to tell us what to expect in the next fifty years.",
+      "chinese": "如果他，或者像他一样的人，今天还活着，他或许能告诉我们未来五十年会发生什么。",
+      "raw": "If he, or someone like him, were alive today, he might be able to tell us what to expect in the next fifty years. | 如果他，或者像他一样的人，今天还活着，他或许能告诉我们未来五十年会发生什么。"
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "bookKey": "NCE2",
+  "title": "29.Taxi",
+  "filename": "29.Taxi",
+  "lines": [
+    {
+      "time": 8.78,
+      "english": "Does Captain Fawcett think any trip is too dangerous?",
+      "chinese": "福西特上尉认为有哪次飞行会太危险吗？",
+      "raw": "Does Captain Fawcett think any trip is too dangerous? | 福西特上尉认为有哪次飞行会太危险吗？"
+    },
+    {
+      "time": 15.19,
+      "english": "Captain Ben Fawcett has bought an unusual taxi and has begun a new service.",
+      "chinese": "本·福西特上尉购买了一架不同寻常的“出租车”，并开始了一项新业务。",
+      "raw": "Captain Ben Fawcett has bought an unusual taxi and has begun a new service. | 本·福西特上尉购买了一架不同寻常的“出租车”，并开始了一项新业务。"
+    },
+    {
+      "time": 22.84,
+      "english": "The 'taxi' is a small Swiss aeroplane called a 'Pilatus Porter'.",
+      "chinese": "这架“出租车”是一架名为“皮拉图斯搬运工”的瑞士小型飞机。",
+      "raw": "The 'taxi' is a small Swiss aeroplane called a 'Pilatus Porter'. | 这架“出租车”是一架名为“皮拉图斯搬运工”的瑞士小型飞机。"
+    },
+    {
+      "time": 29.19,
+      "english": "This wonderful plane can carry seven passengers.",
+      "chinese": "这架奇妙的飞机能载七名乘客。",
+      "raw": "This wonderful plane can carry seven passengers. | 这架奇妙的飞机能载七名乘客。"
+    },
+    {
+      "time": 33.9,
+      "english": "The most surprising thing about it, however, is that it can land anywhere: on snow, water, or even on a ploughed field.",
+      "chinese": "然而，它最令人惊讶的地方是它能降落在任何地方：雪地、水面，甚至是一块耕过的田地。",
+      "raw": "The most surprising thing about it, however, is that it can land anywhere: on snow, water, or even on a ploughed field. | 然而，它最令人惊讶的地方是它能降落在任何地方：雪地、水面，甚至是一块耕过的田地。"
+    },
+    {
+      "time": 46.61,
+      "english": "Captain Fawcett's first passenger was a doctor who flew from Birmingham to a lonely village in the Welsh mountains.",
+      "chinese": "福西特上尉的第一位乘客是一位医生，他从伯明翰飞到威尔士山区的一个偏僻村庄。",
+      "raw": "Captain Fawcett's first passenger was a doctor who flew from Birmingham to a lonely village in the Welsh mountains. | 福西特上尉的第一位乘客是一位医生，他从伯明翰飞到威尔士山区的一个偏僻村庄。"
+    },
+    {
+      "time": 56.39,
+      "english": "Since then, Captain Fawcett has flown passengers to many unusual places.",
+      "chinese": "从那以后，福西特上尉已载送乘客去过许多不寻常的地方。",
+      "raw": "Since then, Captain Fawcett has flown passengers to many unusual places. | 从那以后，福西特上尉已载送乘客去过许多不寻常的地方。"
+    },
+    {
+      "time": 63.980000000000004,
+      "english": "Once he landed on the roof of a block of flats and on another occasion, he landed in a deserted car park.",
+      "chinese": "他曾有一次降落在公寓楼的屋顶上，还有一次降落在废弃的停车场里。",
+      "raw": "Once he landed on the roof of a block of flats and on another occasion, he landed in a deserted car park. | 他曾有一次降落在公寓楼的屋顶上，还有一次降落在废弃的停车场里。"
+    },
+    {
+      "time": 74.36,
+      "english": "Captain Fawcett has just refused a strange request from a businessman.",
+      "chinese": "福西特上尉刚刚拒绝了一位商人提出的一个奇怪请求。",
+      "raw": "Captain Fawcett has just refused a strange request from a businessman. | 福西特上尉刚刚拒绝了一位商人提出的一个奇怪请求。"
+    },
+    {
+      "time": 80.67,
+      "english": "The man wanted to fly to Rockall, a lonely island in the Atlantic Ocean,",
+      "chinese": "那位商人想飞到大西洋中的一座孤岛——罗科尔岛，",
+      "raw": "The man wanted to fly to Rockall, a lonely island in the Atlantic Ocean, | 那位商人想飞到大西洋中的一座孤岛——罗科尔岛，"
+    },
+    {
+      "time": 87.77,
+      "english": "but Captain Fawcett did not take him because the trip was too dangerous.",
+      "chinese": "但福西特上尉没有载他，因为那次飞行太危险了。",
+      "raw": "but Captain Fawcett did not take him because the trip was too dangerous. | 但福西特上尉没有载他，因为那次飞行太危险了。"
+    }
+  ]
+}

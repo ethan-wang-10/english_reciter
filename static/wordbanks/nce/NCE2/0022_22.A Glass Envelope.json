@@ -1,0 +1,55 @@
+{
+  "bookKey": "NCE2",
+  "title": "22.A Glass Envelope",
+  "filename": "22.A Glass Envelope",
+  "lines": [
+    {
+      "time": 10.29,
+      "english": "How did Jane receive a letter from a stranger?",
+      "chinese": "简是如何收到陌生人的来信的？",
+      "raw": "How did Jane receive a letter from a stranger? | 简是如何收到陌生人的来信的？"
+    },
+    {
+      "time": 16.29,
+      "english": "My daughter, Jane, never dreamed of receiving a letter from a girl of her own age in Holland.",
+      "chinese": "我的女儿简从未想过会收到一个荷兰同龄女孩的来信。",
+      "raw": "My daughter, Jane, never dreamed of receiving a letter from a girl of her own age in Holland. | 我的女儿简从未想过会收到一个荷兰同龄女孩的来信。"
+    },
+    {
+      "time": 26.37,
+      "english": "Last year, we were travelling across the Channel and Jane put a piece of paper with her name and address on it into a bottle.",
+      "chinese": "去年，我们渡海旅行，简把一张写有她姓名和地址的纸条放进了一个瓶子里。",
+      "raw": "Last year, we were travelling across the Channel and Jane put a piece of paper with her name and address on it into a bottle. | 去年，我们渡海旅行，简把一张写有她姓名和地址的纸条放进了一个瓶子里。"
+    },
+    {
+      "time": 37.21,
+      "english": "She threw the bottle into the sea.",
+      "chinese": "她把瓶子扔进了海里。",
+      "raw": "She threw the bottle into the sea. | 她把瓶子扔进了海里。"
+    },
+    {
+      "time": 40.69,
+      "english": "She never thought of it again, but ten months later, she received a letter from a girl in Holland.",
+      "chinese": "她再也没想起这件事，但十个月后，她收到了一个荷兰女孩的来信。",
+      "raw": "She never thought of it again, but ten months later, she received a letter from a girl in Holland. | 她再也没想起这件事，但十个月后，她收到了一个荷兰女孩的来信。"
+    },
+    {
+      "time": 49.43,
+      "english": "Both girls write to each other regularly now.",
+      "chinese": "现在两个女孩定期通信。",
+      "raw": "Both girls write to each other regularly now. | 现在两个女孩定期通信。"
+    },
+    {
+      "time": 53.69,
+      "english": "However, they have decided to use the post office.",
+      "chinese": "然而，她们决定使用邮局。",
+      "raw": "However, they have decided to use the post office. | 然而，她们决定使用邮局。"
+    },
+    {
+      "time": 59.22,
+      "english": "Letters will cost a little more, but they will certainly travel faster.",
+      "chinese": "信件会贵一点，但肯定会更快到达。",
+      "raw": "Letters will cost a little more, but they will certainly travel faster. | 信件会贵一点，但肯定会更快到达。"
+    }
+  ]
+}

@@ -82,6 +82,7 @@ _COMMUNITY_SCHEMA = "english_reciter.wordbank.community/v1"
 
 # 新 CSV 词汇表路径
 WORDS_CSV_FILE = STATIC_WB_DIR / "words.csv"
+TEXTBOOKS_INDEX_PATH = STATIC_WB_DIR / "textbooks" / "index.json"
 _words_csv_lock = threading.Lock()
 _words_csv_cache: Optional[List[dict]] = None
 _words_csv_cache_mtime: float = 0.0
@@ -1685,6 +1686,109 @@ def import_words_json(username):
 def get_user_plan_api(username):
     """获取当前用户套餐类型。"""
     return jsonify({'plan': get_user_plan(username)}), 200
+
+
+def _textbooks_load_index() -> dict:
+    if not TEXTBOOKS_INDEX_PATH.is_file():
+        return {"schema": "", "corpora": []}
+    try:
+        with open(TEXTBOOKS_INDEX_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("读取 textbooks/index.json 失败: %s", e)
+        return {"schema": "", "corpora": []}
+
+
+def _corpus_root_from_manifest_relative(manifest_rel: str) -> Optional[Path]:
+    rel = manifest_rel.strip().replace("\\", "/")
+    if not rel or ".." in rel or rel.startswith("/"):
+        return None
+    full = (STATIC_WB_DIR / rel).resolve()
+    root = STATIC_WB_DIR.resolve()
+    if not str(full).startswith(str(root)):
+        return None
+    if not full.is_file():
+        return None
+    return full.parent
+
+
+def _textbooks_resolve_lesson_file(corpus_root: Path, rel_path: str) -> Optional[Path]:
+    rel = rel_path.strip().replace("\\", "/")
+    if not rel or ".." in rel or rel.startswith("/"):
+        return None
+    full = (corpus_root / rel).resolve()
+    if not str(full).startswith(str(corpus_root.resolve())):
+        return None
+    if not full.is_file() or full.suffix.lower() != ".json":
+        return None
+    return full
+
+
+@app.route('/api/textbooks/catalog', methods=['GET'])
+@token_required
+def textbooks_catalog(username):
+    """课文学习：返回教材索引及各套 manifest（如 nce/manifest.json）。"""
+    idx = _textbooks_load_index()
+    corpora_out: List[dict] = []
+    for c in idx.get("corpora") or []:
+        cid = str(c.get("id", "")).strip()
+        title = str(c.get("title", "")).strip()
+        manifest_rel = str(c.get("manifestRelativePath", "")).strip()
+        if not cid or not manifest_rel:
+            continue
+        mp = (STATIC_WB_DIR / manifest_rel).resolve()
+        if not str(mp).startswith(str(STATIC_WB_DIR.resolve())) or not mp.is_file():
+            continue
+        try:
+            with open(mp, "r", encoding="utf-8") as f:
+                mdata = json.load(f)
+        except Exception as e:
+            logger.warning("读取教材 manifest %s 失败: %s", manifest_rel, e)
+            mdata = {}
+        corpora_out.append(
+            {
+                "id": cid,
+                "title": title or cid,
+                "manifest": mdata,
+            }
+        )
+    return jsonify({"schema": idx.get("schema"), "corpora": corpora_out}), 200
+
+
+@app.route('/api/textbooks/lesson', methods=['GET'])
+@token_required
+def textbooks_lesson(username):
+    """课文学习：按 corpus id + 相对于该教材根目录的 json 路径返回课文。"""
+    corpus_id = request.args.get("corpus", "").strip()
+    rel_path = request.args.get("path", "").strip()
+    if not corpus_id or not rel_path:
+        return jsonify({"error": "缺少 corpus 或 path 参数"}), 400
+
+    idx = _textbooks_load_index()
+    corpus_root: Optional[Path] = None
+    for c in idx.get("corpora") or []:
+        if str(c.get("id", "")).strip() != corpus_id:
+            continue
+        manifest_rel = str(c.get("manifestRelativePath", "")).strip()
+        if manifest_rel:
+            corpus_root = _corpus_root_from_manifest_relative(manifest_rel)
+        break
+
+    if corpus_root is None:
+        return jsonify({"error": "无效的教材"}), 400
+
+    lesson_path = _textbooks_resolve_lesson_file(corpus_root, rel_path)
+    if lesson_path is None:
+        return jsonify({"error": "无效的课文路径"}), 400
+
+    try:
+        with open(lesson_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.warning("读取课文 JSON 失败: %s", e)
+        return jsonify({"error": "课文读取失败"}), 500
+
+    return jsonify(data), 200
 
 
 @app.route('/api/wordbank/csv', methods=['GET'])

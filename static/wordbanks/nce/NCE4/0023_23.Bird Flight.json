@@ -1,0 +1,217 @@
+{
+  "bookKey": "NCE4",
+  "title": "23.Bird Flight",
+  "filename": "23.Bird Flight",
+  "lines": [
+    {
+      "time": 0.5,
+      "english": "Lesson 23",
+      "chinese": "第23课",
+      "raw": "Lesson 23 | 第23课"
+    },
+    {
+      "time": 2.48,
+      "english": "Bird flight",
+      "chinese": "鸟的飞行",
+      "raw": "Bird flight | 鸟的飞行"
+    },
+    {
+      "time": 10.02,
+      "english": "What are the two main types of bird flight described by the author?",
+      "chinese": "作者描述的鸟类飞行的两种主要类型是什么？",
+      "raw": "What are the two main types of bird flight described by the author? | 作者描述的鸟类飞行的两种主要类型是什么？"
+    },
+    {
+      "time": 17.49,
+      "english": "No two sorts of birds practise quite the same sort of flight;",
+      "chinese": "没有两种鸟的飞行方式是完全相同的；",
+      "raw": "No two sorts of birds practise quite the same sort of flight; | 没有两种鸟的飞行方式是完全相同的；"
+    },
+    {
+      "time": 22.97,
+      "english": "the varieties are infinite; but two classes may be roughly seen.",
+      "chinese": "种类是无限的；但大致可分为两类。",
+      "raw": "the varieties are infinite; but two classes may be roughly seen. | 种类是无限的；但大致可分为两类。"
+    },
+    {
+      "time": 28.95,
+      "english": "Any ship that crosses the Pacific",
+      "chinese": "任何一艘横渡太平洋的船只",
+      "raw": "Any ship that crosses the Pacific | 任何一艘横渡太平洋的船只"
+    },
+    {
+      "time": 31.09,
+      "english": "is accompanied for many days by the smaller albatross,",
+      "chinese": "会有较小的信天翁伴随数日，",
+      "raw": "is accompanied for many days by the smaller albatross, | 会有较小的信天翁伴随数日，"
+    },
+    {
+      "time": 36.35,
+      "english": "which may keep company with the vessel for an hour",
+      "chinese": "它们可以陪伴船只一个小时",
+      "raw": "which may keep company with the vessel for an hour | 它们可以陪伴船只一个小时"
+    },
+    {
+      "time": 39.6,
+      "english": "without visible or more than occasional movement of wing.",
+      "chinese": "翅膀几乎不动或只是偶尔动一下。",
+      "raw": "without visible or more than occasional movement of wing. | 翅膀几乎不动或只是偶尔动一下。"
+    },
+    {
+      "time": 45.21,
+      "english": "The currents of air that the walls of the ship direct upwards,",
+      "chinese": "船体向上引导的气流，",
+      "raw": "The currents of air that the walls of the ship direct upwards, | 船体向上引导的气流，"
+    },
+    {
+      "time": 49.61,
+      "english": "as well as in the line of its course,",
+      "chinese": "以及沿其航线的气流，",
+      "raw": "as well as in the line of its course, | 以及沿其航线的气流，"
+    },
+    {
+      "time": 53.28,
+      "english": "are enough to give the great bird with its immense wings",
+      "chinese": "足以为这种有着巨大翅膀的大鸟",
+      "raw": "are enough to give the great bird with its immense wings | 足以为这种有着巨大翅膀的大鸟"
+    },
+    {
+      "time": 56.95,
+      "english": "sufficient sustenance and progress.",
+      "chinese": "提供足够的升力和前进动力。",
+      "raw": "sufficient sustenance and progress. | 提供足够的升力和前进动力。"
+    },
+    {
+      "time": 60.34,
+      "english": "The albatross is the king of the gliders,",
+      "chinese": "信天翁是滑翔之王，",
+      "raw": "The albatross is the king of the gliders, | 信天翁是滑翔之王，"
+    },
+    {
+      "time": 63.8,
+      "english": "the class of fliers which harness the air to their purpose,",
+      "chinese": "这类飞行者利用空气达到目的，",
+      "raw": "the class of fliers which harness the air to their purpose, | 这类飞行者利用空气达到目的，"
+    },
+    {
+      "time": 67.72,
+      "english": "but must yield to its opposition.",
+      "chinese": "但也必须屈服于空气的阻力。",
+      "raw": "but must yield to its opposition. | 但也必须屈服于空气的阻力。"
+    },
+    {
+      "time": 71.11,
+      "english": "In the contrary school, the duck is supreme.",
+      "chinese": "在相反的学派中，鸭子是至高无上的。",
+      "raw": "In the contrary school, the duck is supreme. | 在相反的学派中，鸭子是至高无上的。"
+    },
+    {
+      "time": 75.72,
+      "english": "It comes nearer to the engines with which man has 'conquered' the air, as he boasts.",
+      "chinese": "它更接近于人类声称“征服”天空的发动机。",
+      "raw": "It comes nearer to the engines with which man has 'conquered' the air, as he boasts. | 它更接近于人类声称“征服”天空的发动机。"
+    },
+    {
+      "time": 82.29,
+      "english": "Duck, and like them the pigeons, are endowed with steel-like muscles,",
+      "chinese": "鸭子，以及像它们一样的鸽子，都拥有钢铁般的肌肉，",
+      "raw": "Duck, and like them the pigeons, are endowed with steel-like muscles, | 鸭子，以及像它们一样的鸽子，都拥有钢铁般的肌肉，"
+    },
+    {
+      "time": 89.74,
+      "english": "that are a good part of the weight of the bird,",
+      "chinese": "这些肌肉占据了鸟类体重很大一部分，",
+      "raw": "that are a good part of the weight of the bird, | 这些肌肉占据了鸟类体重很大一部分，"
+    },
+    {
+      "time": 92.82,
+      "english": "and these will ply the short wings with such irresistible power",
+      "chinese": "它们以不可抗拒的力量挥动短小的翅膀，",
+      "raw": "and these will ply the short wings with such irresistible power | 它们以不可抗拒的力量挥动短小的翅膀，"
+    },
+    {
+      "time": 97.98,
+      "english": "that they can bore for long distances through an opposing gale",
+      "chinese": "可以在逆风中飞行很长的距离",
+      "raw": "that they can bore for long distances through an opposing gale | 可以在逆风中飞行很长的距离"
+    },
+    {
+      "time": 102.54,
+      "english": "before exhaustion follows.",
+      "chinese": "而不致精疲力尽。",
+      "raw": "before exhaustion follows. | 而不致精疲力尽。"
+    },
+    {
+      "time": 105.24,
+      "english": "Their humbler followers, such as partridges,",
+      "chinese": "它们较小的追随者，例如鹧鸪，",
+      "raw": "Their humbler followers, such as partridges, | 它们较小的追随者，例如鹧鸪，"
+    },
+    {
+      "time": 109.14,
+      "english": "have a like power of strong propulsion, but soon tire.",
+      "chinese": "也有类似的强大推进力，但很快就会疲劳。",
+      "raw": "have a like power of strong propulsion, but soon tire. | 也有类似的强大推进力，但很快就会疲劳。"
+    },
+    {
+      "time": 113.8,
+      "english": "You may pick them up in utter exhaustion,",
+      "chinese": "你可能会发现它们筋疲力尽，",
+      "raw": "You may pick them up in utter exhaustion, | 你可能会发现它们筋疲力尽，"
+    },
+    {
+      "time": 117.02,
+      "english": "if wind over the sea has driven them to a long journey.",
+      "chinese": "如果海上的风迫使它们长途跋涉。",
+      "raw": "if wind over the sea has driven them to a long journey. | 如果海上的风迫使它们长途跋涉。"
+    },
+    {
+      "time": 121.28,
+      "english": "The swallow shares the virtues of both schools in highest measure.",
+      "chinese": "燕子则兼具这两种飞行的优点，而且达到了最高境界。",
+      "raw": "The swallow shares the virtues of both schools in highest measure. | 燕子则兼具这两种飞行的优点，而且达到了最高境界。"
+    },
+    {
+      "time": 126.03,
+      "english": "It tires not, nor does it boast of its power; but belongs to the air",
+      "chinese": "它不疲倦，也不炫耀自己的力量；它属于天空，",
+      "raw": "It tires not, nor does it boast of its power; but belongs to the air | 它不疲倦，也不炫耀自己的力量；它属于天空，"
+    },
+    {
+      "time": 132.51,
+      "english": "travelling it may be six thousand miles to and from its northern nesting home,",
+      "chinese": "也许飞行六千英里往返于它的北方巢穴，",
+      "raw": "travelling it may be six thousand miles to and from its northern nesting home, | 也许飞行六千英里往返于它的北方巢穴，"
+    },
+    {
+      "time": 138.45,
+      "english": "feeding its flown young as it flies, and slipping through a medium",
+      "chinese": "边飞边喂养已经出巢的幼鸟，滑过介质",
+      "raw": "feeding its flown young as it flies, and slipping through a medium | 边飞边喂养已经出巢的幼鸟，滑过介质"
+    },
+    {
+      "time": 142.87,
+      "english": "that seems to help its passage even when the wind is adverse.",
+      "chinese": "即使逆风，这介质似乎也在帮助它通过。",
+      "raw": "that seems to help its passage even when the wind is adverse. | 即使逆风，这介质似乎也在帮助它通过。"
+    },
+    {
+      "time": 148.28,
+      "english": "Such birds do us good,",
+      "chinese": "这样的鸟对我们有益，",
+      "raw": "Such birds do us good, | 这样的鸟对我们有益，"
+    },
+    {
+      "time": 150.41,
+      "english": "though we no longer take omens from their flight on this side and that;",
+      "chinese": "尽管我们不再从它们飞行的方向来卜吉凶；",
+      "raw": "though we no longer take omens from their flight on this side and that; | 尽管我们不再从它们飞行的方向来卜吉凶；"
+    },
+    {
+      "time": 155.79,
+      "english": "and even the most superstitious villagers no longer take off their hats to the magpie and wish it good-morning.",
+      "chinese": "甚至最迷信的村民也不再向喜鹊脱帽致意并祝它早上好。",
+      "raw": "and even the most superstitious villagers no longer take off their hats to the magpie and wish it good-morning. | 甚至最迷信的村民也不再向喜鹊脱帽致意并祝它早上好。"
+    }
+  ]
+}

@@ -1,0 +1,247 @@
+{
+  "bookKey": "NCE3",
+  "title": "57.Back in the Old Country",
+  "filename": "57.Back in the Old Country",
+  "lines": [
+    {
+      "time": -0.22999999999999998,
+      "english": "Lesson 57",
+      "chinese": "第57课",
+      "raw": "Lesson 57 | 第57课"
+    },
+    {
+      "time": 1.7999999999999998,
+      "english": "Back in the old country",
+      "chinese": "回到故乡",
+      "raw": "Back in the old country | 回到故乡"
+    },
+    {
+      "time": 9.07,
+      "english": "Did the narrater find his mother's grave?",
+      "chinese": "叙述者找到他母亲的坟墓了吗？",
+      "raw": "Did the narrater find his mother's grave? | 叙述者找到他母亲的坟墓了吗？"
+    },
+    {
+      "time": 13.48,
+      "english": "I stopped to let the car cool off and to study the map.",
+      "chinese": "我停车让车冷却下来，并研究地图。",
+      "raw": "I stopped to let the car cool off and to study the map. | 我停车让车冷却下来，并研究地图。"
+    },
+    {
+      "time": 17.78,
+      "english": "I had expected to be near my objective by now, but everything still seemed alien to me.",
+      "chinese": "我本以为现在应该离目的地很近了，但周围的一切对我来说仍然很陌生。",
+      "raw": "I had expected to be near my objective by now, but everything still seemed alien to me. | 我本以为现在应该离目的地很近了，但周围的一切对我来说仍然很陌生。"
+    },
+    {
+      "time": 25.23,
+      "english": "I was only five when my father had taken me abroad, and that was eighteen years ago.",
+      "chinese": "我父亲带我出国时我才五岁，那已经是十八年前的事了。",
+      "raw": "I was only five when my father had taken me abroad, and that was eighteen years ago. | 我父亲带我出国时我才五岁，那已经是十八年前的事了。"
+    },
+    {
+      "time": 31.85,
+      "english": "When my mother had died after a tragic accident, he did not quickly recover from the shock and loneliness.",
+      "chinese": "母亲在一场悲惨的事故中去世后，他未能很快从震惊和孤独中恢复过来。",
+      "raw": "When my mother had died after a tragic accident, he did not quickly recover from the shock and loneliness. | 母亲在一场悲惨的事故中去世后，他未能很快从震惊和孤独中恢复过来。"
+    },
+    {
+      "time": 39.87,
+      "english": "Everything around him was full of her presence, continually reopening the wound.",
+      "chinese": "他周围的一切都充满了她的气息，不断地撕开他的伤口。",
+      "raw": "Everything around him was full of her presence, continually reopening the wound. | 他周围的一切都充满了她的气息，不断地撕开他的伤口。"
+    },
+    {
+      "time": 45.52,
+      "english": "So he decided to emigrate.",
+      "chinese": "所以他决定移民。",
+      "raw": "So he decided to emigrate. | 所以他决定移民。"
+    },
+    {
+      "time": 47.91,
+      "english": "In the new country he became absorbed in making a new life for the two of us, so that he gradually ceased to grieve.",
+      "chinese": "在新的国家，他全心投入为我们俩创造新生活，于是他渐渐停止了悲伤。",
+      "raw": "In the new country he became absorbed in making a new life for the two of us, so that he gradually ceased to grieve. | 在新的国家，他全心投入为我们俩创造新生活，于是他渐渐停止了悲伤。"
+    },
+    {
+      "time": 56.54,
+      "english": "He did not marry again and I was brought up without a woman's care; but I lacked for nothing, for he was both father and mother to me.",
+      "chinese": "他没有再婚，我是在没有女性关爱的情况下长大的；但我什么都不缺，因为他既是我的父亲也是我的母亲。",
+      "raw": "He did not marry again and I was brought up without a woman's care; but I lacked for nothing, for he was both father and mother to me. | 他没有再婚，我是在没有女性关爱的情况下长大的；但我什么都不缺，因为他既是我的父亲也是我的母亲。"
+    },
+    {
+      "time": 66.4,
+      "english": "He always meant to go back one day, but not to stay.",
+      "chinese": "他一直打算有一天回去，但不是为了留下。",
+      "raw": "He always meant to go back one day, but not to stay. | 他一直打算有一天回去，但不是为了留下。"
+    },
+    {
+      "time": 70.15,
+      "english": "His roots and mine had become too firmly embedded in the new land.",
+      "chinese": "他和我的根基都已在新土地上扎得太深了。",
+      "raw": "His roots and mine had become too firmly embedded in the new land. | 他和我的根基都已在新土地上扎得太深了。"
+    },
+    {
+      "time": 75.04,
+      "english": "But he wanted to see the old folk again and to visit my mother's grave.",
+      "chinese": "但他想再见见老乡们，并去我母亲的坟墓看看。",
+      "raw": "But he wanted to see the old folk again and to visit my mother's grave. | 但他想再见见老乡们，并去我母亲的坟墓看看。"
+    },
+    {
+      "time": 79.82,
+      "english": "He became mortally ill a few months before we had planned to go and, when he knew that he was dying, he made me promise to go on my own.",
+      "chinese": "在我们计划动身前的几个月，他得了绝症，当他知道自己快要去世时，他让我答应独自前往。",
+      "raw": "He became mortally ill a few months before we had planned to go and, when he knew that he was dying, he made me promise to go on my own. | 在我们计划动身前的几个月，他得了绝症，当他知道自己快要去世时，他让我答应独自前往。"
+    },
+    {
+      "time": 90.94,
+      "english": "I hired a car the day after landing and bought a comprehensive book of maps,",
+      "chinese": "降落的第二天，我租了一辆车，买了一本详尽的地图册，",
+      "raw": "I hired a car the day after landing and bought a comprehensive book of maps, | 降落的第二天，我租了一辆车，买了一本详尽的地图册，"
+    },
+    {
+      "time": 96.43,
+      "english": "which I found most helpful on the cross-country journey, but which I did not think I should need on the last stage.",
+      "chinese": "我发现这本地图册在跨国旅途中非常有用，但我不认为在最后一段路程中我还需要它。",
+      "raw": "which I found most helpful on the cross-country journey, but which I did not think I should need on the last stage. | 我发现这本地图册在跨国旅途中非常有用，但我不认为在最后一段路程中我还需要它。"
+    },
+    {
+      "time": 104.12,
+      "english": "It was not that I actually remembered anything at all.",
+      "chinese": "并不是我真的记得任何东西。",
+      "raw": "It was not that I actually remembered anything at all. | 并不是我真的记得任何东西。"
+    },
+    {
+      "time": 108.06,
+      "english": "But my father had described over and over again what we should see at every milestone after leaving the nearest town,",
+      "chinese": "但父亲曾一遍又一遍地描述，离开最近的城镇后，每过一个里程碑我们会看到什么，",
+      "raw": "But my father had described over and over again what we should see at every milestone after leaving the nearest town, | 但父亲曾一遍又一遍地描述，离开最近的城镇后，每过一个里程碑我们会看到什么，"
+    },
+    {
+      "time": 117.16,
+      "english": "so that I was positive I should recognize it as familiar territory.",
+      "chinese": "所以我确信我会认出那是熟悉的土地。",
+      "raw": "so that I was positive I should recognize it as familiar territory. | 所以我确信我会认出那是熟悉的土地。"
+    },
+    {
+      "time": 122.43,
+      "english": "Well, I had been wrong, for I was now lost.",
+      "chinese": "嗯，我错了，因为我现在迷路了。",
+      "raw": "Well, I had been wrong, for I was now lost. | 嗯，我错了，因为我现在迷路了。"
+    },
+    {
+      "time": 127.24,
+      "english": "I looked at the map and then at the milometer.",
+      "chinese": "我看了看地图，然后看了看里程表。",
+      "raw": "I looked at the map and then at the milometer. | 我看了看地图，然后看了看里程表。"
+    },
+    {
+      "time": 130.83,
+      "english": "I had come ten miles since leaving the town and at this point, according to my father,",
+      "chinese": "我离开城镇已经走了十英里，按照我父亲的说法，在这个地方，",
+      "raw": "I had come ten miles since leaving the town and at this point, according to my father, | 我离开城镇已经走了十英里，按照我父亲的说法，在这个地方，"
+    },
+    {
+      "time": 137.89,
+      "english": "I should be looking at farms and cottages in a valley,",
+      "chinese": "我应该能看到山谷里的农场和小屋，",
+      "raw": "I should be looking at farms and cottages in a valley, | 我应该能看到山谷里的农场和小屋，"
+    },
+    {
+      "time": 141.98,
+      "english": "with the spire of the church of our village showing in the far distance.",
+      "chinese": "远处还能看到我们村教堂的尖顶。",
+      "raw": "with the spire of the church of our village showing in the far distance. | 远处还能看到我们村教堂的尖顶。"
+    },
+    {
+      "time": 147.13,
+      "english": "I could see no valley, no farms, no cottages and no church spire-only a lake.",
+      "chinese": "我看不到山谷，看不到农场，看不到小屋，也看不到教堂尖顶——只有一片湖。",
+      "raw": "I could see no valley, no farms, no cottages and no church spire-only a lake. | 我看不到山谷，看不到农场，看不到小屋，也看不到教堂尖顶——只有一片湖。"
+    },
+    {
+      "time": 154.38,
+      "english": "I decided that I must have taken a wrong turning somewhere.",
+      "chinese": "我断定我一定是在某个地方拐错了弯。",
+      "raw": "I decided that I must have taken a wrong turning somewhere. | 我断定我一定是在某个地方拐错了弯。"
+    },
+    {
+      "time": 158.69,
+      "english": "So I drove back to the town and began to retrace the route, taking frequent glances at the map.",
+      "chinese": "于是我开车回到城镇，开始按原路返回，并不时地看一眼地图。",
+      "raw": "So I drove back to the town and began to retrace the route, taking frequent glances at the map. | 于是我开车回到城镇，开始按原路返回，并不时地看一眼地图。"
+    },
+    {
+      "time": 165.94,
+      "english": "I landed up at the same corner.",
+      "chinese": "我最终还是回到了同一个路口。",
+      "raw": "I landed up at the same corner. | 我最终还是回到了同一个路口。"
+    },
+    {
+      "time": 168.68,
+      "english": "The curious thing was that the lake was not marked on the map.",
+      "chinese": "奇怪的是，地图上并没有标示这片湖。",
+      "raw": "The curious thing was that the lake was not marked on the map. | 奇怪的是，地图上并没有标示这片湖。"
+    },
+    {
+      "time": 172.77,
+      "english": "I felt as if I had stumbled into a nightmare country, as you sometimes do in dreams.",
+      "chinese": "我感觉自己好像偶然闯入了一个噩梦般的国度，就像你在梦中有时会遇到的那样。",
+      "raw": "I felt as if I had stumbled into a nightmare country, as you sometimes do in dreams. | 我感觉自己好像偶然闯入了一个噩梦般的国度，就像你在梦中有时会遇到的那样。"
+    },
+    {
+      "time": 179.05,
+      "english": "And, as in a nightmare, there was nobody in sight to help me.",
+      "chinese": "就像在噩梦中一样，四周没有人能帮助我。",
+      "raw": "And, as in a nightmare, there was nobody in sight to help me. | 就像在噩梦中一样，四周没有人能帮助我。"
+    },
+    {
+      "time": 183.93,
+      "english": "Fortunately for me, as I was wondering what to do next,",
+      "chinese": "幸运的是，正当我不知下一步该怎么办的时候，",
+      "raw": "Fortunately for me, as I was wondering what to do next, | 幸运的是，正当我不知下一步该怎么办的时候，"
+    },
+    {
+      "time": 188.02,
+      "english": "there appeared on the horizon a man on horseback, riding in my direction.",
+      "chinese": "地平线上出现了一位骑马的人，正朝我这个方向骑来。",
+      "raw": "there appeared on the horizon a man on horseback, riding in my direction. | 地平线上出现了一位骑马的人，正朝我这个方向骑来。"
+    },
+    {
+      "time": 193.51,
+      "english": "I waited till he came near, then I asked him the way to our old village.",
+      "chinese": "我等到他走近，然后问他去我们那个老村子的路。",
+      "raw": "I waited till he came near, then I asked him the way to our old village. | 我等到他走近，然后问他去我们那个老村子的路。"
+    },
+    {
+      "time": 198.95,
+      "english": "He said that there was now no village.",
+      "chinese": "他说现在已经没有那个村子了。",
+      "raw": "He said that there was now no village. | 他说现在已经没有那个村子了。"
+    },
+    {
+      "time": 202.01,
+      "english": "I thought he must have misunderstood me, so I repeated its name.",
+      "chinese": "我以为他一定是误解了我的意思，所以我又重复了一遍村子的名字。",
+      "raw": "I thought he must have misunderstood me, so I repeated its name. | 我以为他一定是误解了我的意思，所以我又重复了一遍村子的名字。"
+    },
+    {
+      "time": 207.58,
+      "english": "This time he pointed to the lake.",
+      "chinese": "这次他指向了湖面。",
+      "raw": "This time he pointed to the lake. | 这次他指向了湖面。"
+    },
+    {
+      "time": 210.65,
+      "english": "The village no longer existed because it had been submerged, and all the valley too.",
+      "chinese": "那个村子已经不复存在了，因为它连同整个山谷都被淹没了。",
+      "raw": "The village no longer existed because it had been submerged, and all the valley too. | 那个村子已经不复存在了，因为它连同整个山谷都被淹没了。"
+    },
+    {
+      "time": 217.99,
+      "english": "The lake was not a natural one, but a man-made reservoir.",
+      "chinese": "那片湖不是天然形成的，而是一个人工水库。",
+      "raw": "The lake was not a natural one, but a man-made reservoir. | 那片湖不是天然形成的，而是一个人工水库。"
+    }
+  ]
+}

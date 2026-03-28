@@ -1,0 +1,91 @@
+{
+  "bookKey": "NCE2",
+  "title": "03.Please Send Me a Card",
+  "filename": "03.Please Send Me a Card",
+  "lines": [
+    {
+      "time": 10.55,
+      "english": "How many cards did the writer send?",
+      "chinese": "作者寄了多少张明信片？",
+      "raw": "How many cards did the writer send? | 作者寄了多少张明信片？"
+    },
+    {
+      "time": 15.670000000000002,
+      "english": "Postcards always spoil my holidays.",
+      "chinese": "明信片总是破坏我的假期。",
+      "raw": "Postcards always spoil my holidays. | 明信片总是破坏我的假期。"
+    },
+    {
+      "time": 20.51,
+      "english": "Last summer, I went to Italy.",
+      "chinese": "去年夏天，我去了意大利。",
+      "raw": "Last summer, I went to Italy. | 去年夏天，我去了意大利。"
+    },
+    {
+      "time": 23.76,
+      "english": "I visited museums and sat in public gardens.",
+      "chinese": "我参观了博物馆，并坐在公共花园里。",
+      "raw": "I visited museums and sat in public gardens. | 我参观了博物馆，并坐在公共花园里。"
+    },
+    {
+      "time": 28.45,
+      "english": "A friendly waiter taught me a few words of Italian.",
+      "chinese": "一位友好的服务员教了我几句意大利语。",
+      "raw": "A friendly waiter taught me a few words of Italian. | 一位友好的服务员教了我几句意大利语。"
+    },
+    {
+      "time": 32.95,
+      "english": "Then he lent me a book.",
+      "chinese": "然后他借给我一本书。",
+      "raw": "Then he lent me a book. | 然后他借给我一本书。"
+    },
+    {
+      "time": 35.6,
+      "english": "I read a few lines, but I did not understand a word.",
+      "chinese": "我读了几行，但一个字也看不懂。",
+      "raw": "I read a few lines, but I did not understand a word. | 我读了几行，但一个字也看不懂。"
+    },
+    {
+      "time": 41.28,
+      "english": "Everyday I thought about postcards.",
+      "chinese": "每天我都想着明信片。",
+      "raw": "Everyday I thought about postcards. | 每天我都想着明信片。"
+    },
+    {
+      "time": 45.58,
+      "english": "My holidays passed quickly,",
+      "chinese": "我的假期过得很快，",
+      "raw": "My holidays passed quickly, | 我的假期过得很快，"
+    },
+    {
+      "time": 48.34,
+      "english": "but I did not send cards to my friends.",
+      "chinese": "但我没有给朋友们寄明信片。",
+      "raw": "but I did not send cards to my friends. | 但我没有给朋友们寄明信片。"
+    },
+    {
+      "time": 52.48,
+      "english": "On the last day I made a big decision.",
+      "chinese": "在最后一天，我做了一个重大决定。",
+      "raw": "On the last day I made a big decision. | 在最后一天，我做了一个重大决定。"
+    },
+    {
+      "time": 56.99,
+      "english": "I got up early and bought thirty-seven cards.",
+      "chinese": "我起得很早，买了三十七张明信片。",
+      "raw": "I got up early and bought thirty-seven cards. | 我起得很早，买了三十七张明信片。"
+    },
+    {
+      "time": 62.58,
+      "english": "I spent the whole day in my room,",
+      "chinese": "我在房间里待了一整天，",
+      "raw": "I spent the whole day in my room, | 我在房间里待了一整天，"
+    },
+    {
+      "time": 66.05,
+      "english": "but I did not write a single card!",
+      "chinese": "但我一张明信片也没写！",
+      "raw": "but I did not write a single card! | 但我一张明信片也没写！"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+wordbanks/ 目录说明
+==================
+
+words.csv
+  词库（CSV），供背单词等功能使用。
+
+textbooks/
+  课文学习总索引，便于以后增加多套教材而不绑定固定子目录结构。
+
+  textbooks/index.json
+    schema english_reciter.textbooks/v1：corpora[] 每项含 id、title、manifestRelativePath
+    （相对 wordbanks/，如 nce/manifest.json）。应用通过 /api/textbooks/catalog 与
+    /api/textbooks/lesson 读取，勿在浏览器中硬编码 nce 路径。
+
+nce/
+  新概念英语第 1–4 册课文文本（中英对照），由 scripts/fetch_nce_corpus.py 从与
+  nce.ichochy.com 同源的数据源拉取。教材版权归原出版社；仅供个人学习。
+
+  nce/manifest.json
+    总索引：四册元数据及每课对应的相对路径（markdown / json）。
+
+  nce/NCE1 | NCE2 | NCE3 | NCE4/
+    book_meta.json
+      该册书名、级别、单元列表（与 manifest 中该书条目一致）。
+
+    NNNN_<课文标题>.md
+      可读课文：英文一行，中文一行（斜体），按 LRC 时间顺序。
+
+    NNNN_<课文标题>.json
+      机器可读：bookKey、title、filename、lines[]（time, english, chinese, raw）。
+
+  命名：NNNN 为册内序号（0001 起）；标题中的非法文件名字符已替换为下划线。

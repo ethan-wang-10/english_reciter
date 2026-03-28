@@ -1,0 +1,115 @@
+{
+  "bookKey": "NCE2",
+  "title": "92.Asking for Trouble",
+  "filename": "92.Asking for Trouble",
+  "lines": [
+    {
+      "time": 9.9,
+      "english": "Why did the policeman ask the writer to come to the police station?",
+      "chinese": "警察为什么要叫这位作者到警察局去？",
+      "raw": "Why did the policeman ask the writer to come to the police station? | 警察为什么要叫这位作者到警察局去？"
+    },
+    {
+      "time": 16.91,
+      "english": "It must have been about two in the morning when I returned home.",
+      "chinese": "我回到家时，大约是凌晨两点钟。",
+      "raw": "It must have been about two in the morning when I returned home. | 我回到家时，大约是凌晨两点钟。"
+    },
+    {
+      "time": 22.27,
+      "english": "I tried to wake up my wife by ringing the doorbell,",
+      "chinese": "我按门铃想叫醒我的妻子，",
+      "raw": "I tried to wake up my wife by ringing the doorbell, | 我按门铃想叫醒我的妻子，"
+    },
+    {
+      "time": 26.33,
+      "english": "but she was fast asleep,",
+      "chinese": "但她睡得很熟，",
+      "raw": "but she was fast asleep, | 但她睡得很熟，"
+    },
+    {
+      "time": 28.75,
+      "english": "so I got a ladder from the shed in the garden, put it against the wall,",
+      "chinese": "于是我从花园的小屋里搬来一架梯子，把它靠在墙上，",
+      "raw": "so I got a ladder from the shed in the garden, put it against the wall, | 于是我从花园的小屋里搬来一架梯子，把它靠在墙上，"
+    },
+    {
+      "time": 34.21,
+      "english": "and began climbing towards the bedroom window.",
+      "chinese": "开始朝着卧室的窗户爬去。",
+      "raw": "and began climbing towards the bedroom window. | 开始朝着卧室的窗户爬去。"
+    },
+    {
+      "time": 38.1,
+      "english": "I was almost there when a sarcastic voice below said.",
+      "chinese": "我快爬到窗户时，下面传来一个挖苦人的声音：",
+      "raw": "I was almost there when a sarcastic voice below said. | 我快爬到窗户时，下面传来一个挖苦人的声音："
+    },
+    {
+      "time": 43.86,
+      "english": "'I don't think the windows need cleaning at this time of the night.'",
+      "chinese": "“我认为窗户在夜间这个时候不需要擦洗。”",
+      "raw": "'I don't think the windows need cleaning at this time of the night.' | “我认为窗户在夜间这个时候不需要擦洗。”"
+    },
+    {
+      "time": 49.57,
+      "english": "I looked down and nearly fell off the ladder when I saw a policeman.",
+      "chinese": "我向下看去，当看到一个警察时，我差点从梯子上掉下来。",
+      "raw": "I looked down and nearly fell off the ladder when I saw a policeman. | 我向下看去，当看到一个警察时，我差点从梯子上掉下来。"
+    },
+    {
+      "time": 55.95,
+      "english": "I immediately regretted answering in the way I did, but I said, 'I enjoy cleaning windows at night.'",
+      "chinese": "我马上后悔不该那样回答，但我还是说：“我喜欢在夜间擦洗窗户。”",
+      "raw": "I immediately regretted answering in the way I did, but I said, 'I enjoy cleaning windows at night.' | 我马上后悔不该那样回答，但我还是说：“我喜欢在夜间擦洗窗户。”"
+    },
+    {
+      "time": 67.36,
+      "english": "'So do I,' answered the policeman in the same tone.",
+      "chinese": "“我也喜欢，”警察用同样的声调回答说。",
+      "raw": "'So do I,' answered the policeman in the same tone. | “我也喜欢，”警察用同样的声调回答说。"
+    },
+    {
+      "time": 72.86,
+      "english": "Excuse my interrupting you.",
+      "chinese": "“请原谅我打断你一下。",
+      "raw": "Excuse my interrupting you. | “请原谅我打断你一下。"
+    },
+    {
+      "time": 75.7,
+      "english": "I hate to interrupt a man when he's busy working, but would you mind coming with me to the station?'",
+      "chinese": "我不愿意打断一个正在忙碌的人，但你介意跟我到警察局去一趟吗？”",
+      "raw": "I hate to interrupt a man when he's busy working, but would you mind coming with me to the station?' | 我不愿意打断一个正在忙碌的人，但你介意跟我到警察局去一趟吗？”"
+    },
+    {
+      "time": 85.32,
+      "english": "'Well, I'd prefer to stay here,' I said.",
+      "chinese": "“嗯，我宁愿呆在这儿，”我说。",
+      "raw": "'Well, I'd prefer to stay here,' I said. | “嗯，我宁愿呆在这儿，”我说。"
+    },
+    {
+      "time": 90.14,
+      "english": "'You see, I've forgotten my key.'",
+      "chinese": "“您瞧，我忘了带钥匙。”",
+      "raw": "'You see, I've forgotten my key.' | “您瞧，我忘了带钥匙。”"
+    },
+    {
+      "time": 93.62,
+      "english": "'Your what?' he called.",
+      "chinese": "“你的什么？”他大声问。",
+      "raw": "'Your what?' he called. | “你的什么？”他大声问。"
+    },
+    {
+      "time": 96.61,
+      "english": "'My key,' I shouted.",
+      "chinese": "“我的钥匙！”我喊道。",
+      "raw": "'My key,' I shouted. | “我的钥匙！”我喊道。"
+    },
+    {
+      "time": 100.71,
+      "english": "Fortunately, the shouting woke up my wife who opened the window just as the policeman had started to climb towards me.",
+      "chinese": "幸运的是，我的喊叫声把妻子吵醒了，她打开窗户，而此时那个警察刚开始向我爬过来。",
+      "raw": "Fortunately, the shouting woke up my wife who opened the window just as the policeman had started to climb towards me. | 幸运的是，我的喊叫声把妻子吵醒了，她打开窗户，而此时那个警察刚开始向我爬过来。"
+    }
+  ]
+}

@@ -1,0 +1,313 @@
+{
+  "bookKey": "NCE4",
+  "title": "44.Patterns of Culture",
+  "filename": "44.Patterns of Culture",
+  "lines": [
+    {
+      "time": 0.28,
+      "english": "Lesson 44",
+      "chinese": "第44课",
+      "raw": "Lesson 44 | 第44课"
+    },
+    {
+      "time": 2.12,
+      "english": "Patterns of culture",
+      "chinese": "文化的模式",
+      "raw": "Patterns of culture | 文化的模式"
+    },
+    {
+      "time": 9.38,
+      "english": "What influences us from the moment of birth?",
+      "chinese": "从我们出生那一刻起，什么在影响着我们？",
+      "raw": "What influences us from the moment of birth? | 从我们出生那一刻起，什么在影响着我们？"
+    },
+    {
+      "time": 14.96,
+      "english": "Custom has not commonly been regarded as a subject of any great moment.",
+      "chinese": "习俗通常不被认为是一个举足轻重的问题。",
+      "raw": "Custom has not commonly been regarded as a subject of any great moment. | 习俗通常不被认为是一个举足轻重的问题。"
+    },
+    {
+      "time": 20.31,
+      "english": "The inner workings of our own brains we feel to be uniquely worthy of investigation,",
+      "chinese": "我们认为我们自己大脑的内部运作是独一无二地值得研究的，",
+      "raw": "The inner workings of our own brains we feel to be uniquely worthy of investigation, | 我们认为我们自己大脑的内部运作是独一无二地值得研究的，"
+    },
+    {
+      "time": 26.32,
+      "english": "but custom, we have a way of thinking, is behaviour at is most commonplace.",
+      "chinese": "但我们有一种想法，认为习俗是最常见的行为。",
+      "raw": "but custom, we have a way of thinking, is behaviour at is most commonplace. | 但我们有一种想法，认为习俗是最常见的行为。"
+    },
+    {
+      "time": 32.85,
+      "english": "As a matter of fact, it is the other way around.",
+      "chinese": "事实上，情况恰恰相反。",
+      "raw": "As a matter of fact, it is the other way around. | 事实上，情况恰恰相反。"
+    },
+    {
+      "time": 36.38,
+      "english": "Traditional custom, taken the world over,",
+      "chinese": "传统的习俗，遍布世界各地，",
+      "raw": "Traditional custom, taken the world over, | 传统的习俗，遍布世界各地，"
+    },
+    {
+      "time": 39.46,
+      "english": "is a mass of detailed behaviour more astonishing than what any one person can ever evolve in individual actions,",
+      "chinese": "是一堆详细的行为，比任何个人在单独行动中所能演变出的行为都更令人惊讶，",
+      "raw": "is a mass of detailed behaviour more astonishing than what any one person can ever evolve in individual actions, | 是一堆详细的行为，比任何个人在单独行动中所能演变出的行为都更令人惊讶，"
+    },
+    {
+      "time": 48.03,
+      "english": "no matter how aberrant.",
+      "chinese": "无论多么反常。",
+      "raw": "no matter how aberrant. | 无论多么反常。"
+    },
+    {
+      "time": 50.23,
+      "english": "Yet that is a rather trivial aspect of the matter.",
+      "chinese": "然而，这只是问题的微不足道的一面。",
+      "raw": "Yet that is a rather trivial aspect of the matter. | 然而，这只是问题的微不足道的一面。"
+    },
+    {
+      "time": 54.2,
+      "english": "The fact of first-rate importance is the predominant role that custom plays in experience and in belief,",
+      "chinese": "最重要的事实是习俗在经验和信仰中扮演的主导角色，",
+      "raw": "The fact of first-rate importance is the predominant role that custom plays in experience and in belief, | 最重要的事实是习俗在经验和信仰中扮演的主导角色，"
+    },
+    {
+      "time": 62.02,
+      "english": "and the very great varieties it may manifest.",
+      "chinese": "以及它可能表现出的巨大多样性。",
+      "raw": "and the very great varieties it may manifest. | 以及它可能表现出的巨大多样性。"
+    },
+    {
+      "time": 66.78,
+      "english": "No man ever looks at the world with pristine eyes.",
+      "chinese": "没有人能以纯粹的眼光看待世界。",
+      "raw": "No man ever looks at the world with pristine eyes. | 没有人能以纯粹的眼光看待世界。"
+    },
+    {
+      "time": 70.95,
+      "english": "He sees it edited by a definite set of customs and institutions and ways of thinking.",
+      "chinese": "他看到的世界是由一套明确的习俗、制度和思维方式所塑造的。",
+      "raw": "He sees it edited by a definite set of customs and institutions and ways of thinking. | 他看到的世界是由一套明确的习俗、制度和思维方式所塑造的。"
+    },
+    {
+      "time": 77.65,
+      "english": "Even in his philosophical probings he cannot go behind these stereotypes;",
+      "chinese": "即使在他的哲学探索中，他也无法超越这些刻板印象；",
+      "raw": "Even in his philosophical probings he cannot go behind these stereotypes; | 即使在他的哲学探索中，他也无法超越这些刻板印象；"
+    },
+    {
+      "time": 83.16,
+      "english": "his very concepts of the true and the false will still have reference to his particular traditional customs.",
+      "chinese": "他对真与假的观念仍然会与他特定的传统习俗相关联。",
+      "raw": "his very concepts of the true and the false will still have reference to his particular traditional customs. | 他对真与假的观念仍然会与他特定的传统习俗相关联。"
+    },
+    {
+      "time": 91.0,
+      "english": "John Dewey has said in all seriousness that the part played by custom in shaping the behaviour of the individual,",
+      "chinese": "约翰·杜威曾非常严肃地说，习俗在塑造个人行为中所起的作用，",
+      "raw": "John Dewey has said in all seriousness that the part played by custom in shaping the behaviour of the individual, | 约翰·杜威曾非常严肃地说，习俗在塑造个人行为中所起的作用，"
+    },
+    {
+      "time": 98.86,
+      "english": "as against any way in which he can affect traditional custom,",
+      "chinese": "与他能够影响传统习俗的任何方式相比，",
+      "raw": "as against any way in which he can affect traditional custom, | 与他能够影响传统习俗的任何方式相比，"
+    },
+    {
+      "time": 103.15,
+      "english": "is as the proportion of the total vocabulary of his mother tongue",
+      "chinese": "就像他母语的全部词汇量，",
+      "raw": "is as the proportion of the total vocabulary of his mother tongue | 就像他母语的全部词汇量，"
+    },
+    {
+      "time": 108.14,
+      "english": "against those words of his own baby talk that are taken up into the vernacular of his family.",
+      "chinese": "与他自己咿呀学语中被家庭口语采纳的词语之比。",
+      "raw": "against those words of his own baby talk that are taken up into the vernacular of his family. | 与他自己咿呀学语中被家庭口语采纳的词语之比。"
+    },
+    {
+      "time": 115.67,
+      "english": "When one seriously studies the social orders that have had the opportunity to develop autonomously,",
+      "chinese": "当人们认真研究那些有机会自主发展的社会秩序时，",
+      "raw": "When one seriously studies the social orders that have had the opportunity to develop autonomously, | 当人们认真研究那些有机会自主发展的社会秩序时，"
+    },
+    {
+      "time": 123.08,
+      "english": "the figure becomes no more than an exact and matter-of-fact observation.",
+      "chinese": "这个比喻就成了精确而实际的观察。",
+      "raw": "the figure becomes no more than an exact and matter-of-fact observation. | 这个比喻就成了精确而实际的观察。"
+    },
+    {
+      "time": 128.62,
+      "english": "The life history of the individual is first and foremost an accommodation",
+      "chinese": "个体的生命历程首先是一种适应，",
+      "raw": "The life history of the individual is first and foremost an accommodation | 个体的生命历程首先是一种适应，"
+    },
+    {
+      "time": 133.92,
+      "english": "to the patterns and standards traditionally handed down in his community.",
+      "chinese": "适应其社区中世代相传的模式和标准。",
+      "raw": "to the patterns and standards traditionally handed down in his community. | 适应其社区中世代相传的模式和标准。"
+    },
+    {
+      "time": 139.71,
+      "english": "From the moment of his birth,",
+      "chinese": "从他出生那一刻起，",
+      "raw": "From the moment of his birth, | 从他出生那一刻起，"
+    },
+    {
+      "time": 141.7,
+      "english": "the customs into which he is born shape his experience and behaviour.",
+      "chinese": "他所降生的习俗塑造了他的经验和行为。",
+      "raw": "the customs into which he is born shape his experience and behaviour. | 他所降生的习俗塑造了他的经验和行为。"
+    },
+    {
+      "time": 147.03,
+      "english": "By the time he can talk, he is the little creature of his culture,",
+      "chinese": "等到他会说话时，他已是其文化的小小产物，",
+      "raw": "By the time he can talk, he is the little creature of his culture, | 等到他会说话时，他已是其文化的小小产物，"
+    },
+    {
+      "time": 151.88,
+      "english": "and by the time he is grown and able to take part in its activities,",
+      "chinese": "等到他长大成人并能参与其活动时，",
+      "raw": "and by the time he is grown and able to take part in its activities, | 等到他长大成人并能参与其活动时，"
+    },
+    {
+      "time": 156.8,
+      "english": "its habits are his habits, its beliefs his beliefs, its impossibilities his impossibilities.",
+      "chinese": "它的习惯是他的习惯，它的信仰是他的信仰，它的不可能之事是他的不可能之事。",
+      "raw": "its habits are his habits, its beliefs his beliefs, its impossibilities his impossibilities. | 它的习惯是他的习惯，它的信仰是他的信仰，它的不可能之事是他的不可能之事。"
+    },
+    {
+      "time": 165.42,
+      "english": "Every child that is born into his group will share them with him,",
+      "chinese": "每一个出生在他群体中的孩子都会与他分享这些，",
+      "raw": "Every child that is born into his group will share them with him, | 每一个出生在他群体中的孩子都会与他分享这些，"
+    },
+    {
+      "time": 169.88,
+      "english": "and no child born into one on the opposite side of the globe can ever achieve the thousandth part.",
+      "chinese": "而出生在地球另一边的孩子连千分之一也无法做到。",
+      "raw": "and no child born into one on the opposite side of the globe can ever achieve the thousandth part. | 而出生在地球另一边的孩子连千分之一也无法做到。"
+    },
+    {
+      "time": 177.14,
+      "english": "There is no social problem it is more incumbent upon us to understand than this of the role of custom.",
+      "chinese": "没有比理解习俗的作用更重要的社会问题了。",
+      "raw": "There is no social problem it is more incumbent upon us to understand than this of the role of custom. | 没有比理解习俗的作用更重要的社会问题了。"
+    },
+    {
+      "time": 185.23,
+      "english": "Until we are intelligent as to its laws and varieties,",
+      "chinese": "在我们对其规律和多样性有充分了解之前，",
+      "raw": "Until we are intelligent as to its laws and varieties, | 在我们对其规律和多样性有充分了解之前，"
+    },
+    {
+      "time": 189.28,
+      "english": "the main complicating facts of human life must remain unintelligible.",
+      "chinese": "人类生活的主要复杂事实必然是难以理解的。",
+      "raw": "the main complicating facts of human life must remain unintelligible. | 人类生活的主要复杂事实必然是难以理解的。"
+    },
+    {
+      "time": 195.49,
+      "english": "The study of custom can be profitable only after certain preliminary propositions have been accepted,",
+      "chinese": "对习俗的研究只有在某些初步命题被接受之后才能有所裨益，",
+      "raw": "The study of custom can be profitable only after certain preliminary propositions have been accepted, | 对习俗的研究只有在某些初步命题被接受之后才能有所裨益，"
+    },
+    {
+      "time": 203.18,
+      "english": "and some of these propositions have been violently opposed.",
+      "chinese": "而其中一些命题曾遭到强烈反对。",
+      "raw": "and some of these propositions have been violently opposed. | 而其中一些命题曾遭到强烈反对。"
+    },
+    {
+      "time": 207.99,
+      "english": "In the first place, any scientific study requires that there be no",
+      "chinese": "首先，任何科学研究都要求，",
+      "raw": "In the first place, any scientific study requires that there be no | 首先，任何科学研究都要求，"
+    },
+    {
+      "time": 212.88,
+      "english": "preferential weighting of one or another of the items in the series it selects for its consideration.",
+      "chinese": "在它所选择的系列项目进行考量时，不应对其中任何一项有偏向性地加权。",
+      "raw": "preferential weighting of one or another of the items in the series it selects for its consideration. | 在它所选择的系列项目进行考量时，不应对其中任何一项有偏向性地加权。"
+    },
+    {
+      "time": 220.38,
+      "english": "In all the less controversial fields, like the study of cacti or termites or the nature of nebulae,",
+      "chinese": "在所有争议较少的领域，比如研究仙人掌、白蚁或星云的性质，",
+      "raw": "In all the less controversial fields, like the study of cacti or termites or the nature of nebulae, | 在所有争议较少的领域，比如研究仙人掌、白蚁或星云的性质，"
+    },
+    {
+      "time": 227.71,
+      "english": "the necessary method of study is to group the relevant material and to take note of all possible variant forms and conditions.",
+      "chinese": "必要的研究方法是将相关材料分组，并记录所有可能的变体形式和条件。",
+      "raw": "the necessary method of study is to group the relevant material and to take note of all possible variant forms and conditions. | 必要的研究方法是将相关材料分组，并记录所有可能的变体形式和条件。"
+    },
+    {
+      "time": 236.25,
+      "english": "In this way, we have learned all that we know of the laws of astronomy, or of the habits of the social insects, let us say.",
+      "chinese": "通过这种方式，我们掌握了天文学的所有规律，或者说，掌握了群居昆虫的习性。",
+      "raw": "In this way, we have learned all that we know of the laws of astronomy, or of the habits of the social insects, let us say. | 通过这种方式，我们掌握了天文学的所有规律，或者说，掌握了群居昆虫的习性。"
+    },
+    {
+      "time": 245.51,
+      "english": "It is only in the study of man himself that the major social sciences",
+      "chinese": "只有在研究人类自身时，主要的社会科学才",
+      "raw": "It is only in the study of man himself that the major social sciences | 只有在研究人类自身时，主要的社会科学才"
+    },
+    {
+      "time": 250.69,
+      "english": "have substituted the study of one local variation, that of Western civilization.",
+      "chinese": "将对西方文明这一地方性变体的研究取而代之。",
+      "raw": "have substituted the study of one local variation, that of Western civilization. | 将对西方文明这一地方性变体的研究取而代之。"
+    },
+    {
+      "time": 257.71,
+      "english": "Anthropology was by definition impossible,",
+      "chinese": "人类学按定义来说是不可能的，",
+      "raw": "Anthropology was by definition impossible, | 人类学按定义来说是不可能的，"
+    },
+    {
+      "time": 261.08,
+      "english": "as long as these distinctions between ourselves and the primitive,",
+      "chinese": "只要我们与原始人、",
+      "raw": "as long as these distinctions between ourselves and the primitive, | 只要我们与原始人、"
+    },
+    {
+      "time": 265.64,
+      "english": "ourselves and the barbarian, ourselves and the pagan, held sway over people's minds.",
+      "chinese": "我们与野蛮人、我们与异教徒之间的这些区别仍然主宰着人们的思想。",
+      "raw": "ourselves and the barbarian, ourselves and the pagan, held sway over people's minds. | 我们与野蛮人、我们与异教徒之间的这些区别仍然主宰着人们的思想。"
+    },
+    {
+      "time": 272.15,
+      "english": "It was necessary first to arrive at that degree of sophistication",
+      "chinese": "首先，有必要达到那种成熟程度，",
+      "raw": "It was necessary first to arrive at that degree of sophistication | 首先，有必要达到那种成熟程度，"
+    },
+    {
+      "time": 276.92,
+      "english": "where we no longer set our own belief against our neighbour's superstition.",
+      "chinese": "即我们不再将自己的信仰与邻居的迷信对立起来。",
+      "raw": "where we no longer set our own belief against our neighbour's superstition. | 即我们不再将自己的信仰与邻居的迷信对立起来。"
+    },
+    {
+      "time": 281.92,
+      "english": "It was necessary to recognize that these institutions which are based on the same premises, let us say the supernatural,",
+      "chinese": "有必要认识到，这些基于相同前提的制度，比方说超自然现象，",
+      "raw": "It was necessary to recognize that these institutions which are based on the same premises, let us say the supernatural, | 有必要认识到，这些基于相同前提的制度，比方说超自然现象，"
+    },
+    {
+      "time": 291.24,
+      "english": "must be considered together, our own among the rest.",
+      "chinese": "必须被一并考虑，包括我们自己的。",
+      "raw": "must be considered together, our own among the rest. | 必须被一并考虑，包括我们自己的。"
+    }
+  ]
+}

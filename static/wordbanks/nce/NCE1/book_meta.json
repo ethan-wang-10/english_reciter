@@ -1,0 +1,512 @@
+{
+  "key": "NCE1",
+  "bookName": "NCE",
+  "bookLevel": "1st Level",
+  "bookPath": "https://nce.mleo.site/NCE1",
+  "units": [
+    {
+      "title": "001&002.Excuse Me",
+      "filename": "001&002.Excuse Me",
+      "markdown": "NCE1/0001_001&002.Excuse Me.md",
+      "json": "NCE1/0001_001&002.Excuse Me.json",
+      "lineCount": 11
+    },
+    {
+      "title": "003&004.Sorry, Sir",
+      "filename": "003&004.Sorry, Sir",
+      "markdown": "NCE1/0002_003&004.Sorry, Sir.md",
+      "json": "NCE1/0002_003&004.Sorry, Sir.json",
+      "lineCount": 16
+    },
+    {
+      "title": "005&006.Nice to Meet You",
+      "filename": "005&006.Nice to Meet You",
+      "markdown": "NCE1/0003_005&006.Nice to Meet You.md",
+      "json": "NCE1/0003_005&006.Nice to Meet You.json",
+      "lineCount": 20
+    },
+    {
+      "title": "007&008.Are You a Teacher",
+      "filename": "007&008.Are You a Teacher",
+      "markdown": "NCE1/0004_007&008.Are You a Teacher.md",
+      "json": "NCE1/0004_007&008.Are You a Teacher.json",
+      "lineCount": 20
+    },
+    {
+      "title": "009&010.How Are You Today",
+      "filename": "009&010.How Are You Today",
+      "markdown": "NCE1/0005_009&010.How Are You Today.md",
+      "json": "NCE1/0005_009&010.How Are You Today.json",
+      "lineCount": 18
+    },
+    {
+      "title": "011&012.Is This Your Shirt",
+      "filename": "011&012.Is This Your Shirt",
+      "markdown": "NCE1/0006_011&012.Is This Your Shirt.md",
+      "json": "NCE1/0006_011&012.Is This Your Shirt.json",
+      "lineCount": 20
+    },
+    {
+      "title": "013&014.A New Dress",
+      "filename": "013&014.A New Dress",
+      "markdown": "NCE1/0007_013&014.A New Dress.md",
+      "json": "NCE1/0007_013&014.A New Dress.json",
+      "lineCount": 17
+    },
+    {
+      "title": "015&016.Your Passports, Please",
+      "filename": "015&016.Your Passports, Please",
+      "markdown": "NCE1/0008_015&016.Your Passports, Please.md",
+      "json": "NCE1/0008_015&016.Your Passports, Please.json",
+      "lineCount": 22
+    },
+    {
+      "title": "017&018.How do you do",
+      "filename": "017&018.How do you do",
+      "markdown": "NCE1/0009_017&018.How do you do.md",
+      "json": "NCE1/0009_017&018.How do you do.json",
+      "lineCount": 22
+    },
+    {
+      "title": "019&020.Tired and Thirsty",
+      "filename": "019&020.Tired and Thirsty",
+      "markdown": "NCE1/0010_019&020.Tired and Thirsty.md",
+      "json": "NCE1/0010_019&020.Tired and Thirsty.json",
+      "lineCount": 18
+    },
+    {
+      "title": "021&022.Which Book",
+      "filename": "021&022.Which Book",
+      "markdown": "NCE1/0011_021&022.Which Book.md",
+      "json": "NCE1/0011_021&022.Which Book.json",
+      "lineCount": 12
+    },
+    {
+      "title": "023&024.Which Glasses",
+      "filename": "023&024.Which Glasses",
+      "markdown": "NCE1/0012_023&024.Which Glasses.md",
+      "json": "NCE1/0012_023&024.Which Glasses.json",
+      "lineCount": 13
+    },
+    {
+      "title": "025&026.Mrs. Smith's Kitchen",
+      "filename": "025&026.Mrs. Smith's Kitchen",
+      "markdown": "NCE1/0013_025&026.Mrs. Smith's Kitchen.md",
+      "json": "NCE1/0013_025&026.Mrs. Smith's Kitchen.json",
+      "lineCount": 16
+    },
+    {
+      "title": "027&028.Mrs. Smith's Living Room",
+      "filename": "027&028.Mrs. Smith's Living Room",
+      "markdown": "NCE1/0014_027&028.Mrs. Smith's Living Room.md",
+      "json": "NCE1/0014_027&028.Mrs. Smith's Living Room.json",
+      "lineCount": 17
+    },
+    {
+      "title": "029&030.Come In, Amy",
+      "filename": "029&030.Come In, Amy",
+      "markdown": "NCE1/0015_029&030.Come In, Amy.md",
+      "json": "NCE1/0015_029&030.Come In, Amy.json",
+      "lineCount": 13
+    },
+    {
+      "title": "031&032.Where's Sally",
+      "filename": "031&032.Where's Sally",
+      "markdown": "NCE1/0016_031&032.Where's Sally.md",
+      "json": "NCE1/0016_031&032.Where's Sally.json",
+      "lineCount": 18
+    },
+    {
+      "title": "033&034.A Fine Day",
+      "filename": "033&034.A Fine Day",
+      "markdown": "NCE1/0017_033&034.A Fine Day.md",
+      "json": "NCE1/0017_033&034.A Fine Day.json",
+      "lineCount": 15
+    },
+    {
+      "title": "035&036.Our Village",
+      "filename": "035&036.Our Village",
+      "markdown": "NCE1/0018_035&036.Our Village.md",
+      "json": "NCE1/0018_035&036.Our Village.json",
+      "lineCount": 19
+    },
+    {
+      "title": "037&038.Making a Bookcase",
+      "filename": "037&038.Making a Bookcase",
+      "markdown": "NCE1/0019_037&038.Making a Bookcase.md",
+      "json": "NCE1/0019_037&038.Making a Bookcase.json",
+      "lineCount": 22
+    },
+    {
+      "title": "039&040.Don't Drop It",
+      "filename": "039&040.Don't Drop It",
+      "markdown": "NCE1/0020_039&040.Don't Drop It.md",
+      "json": "NCE1/0020_039&040.Don't Drop It.json",
+      "lineCount": 16
+    },
+    {
+      "title": "041&042.Penny's Bag",
+      "filename": "041&042.Penny's Bag",
+      "markdown": "NCE1/0021_041&042.Penny's Bag.md",
+      "json": "NCE1/0021_041&042.Penny's Bag.json",
+      "lineCount": 20
+    },
+    {
+      "title": "043&044.Hurry Up",
+      "filename": "043&044.Hurry Up",
+      "markdown": "NCE1/0022_043&044.Hurry Up.md",
+      "json": "NCE1/0022_043&044.Hurry Up.json",
+      "lineCount": 21
+    },
+    {
+      "title": "045&046.The Boss's Letter",
+      "filename": "045&046.The Boss's Letter",
+      "markdown": "NCE1/0023_045&046.The Boss's Letter.md",
+      "json": "NCE1/0023_045&046.The Boss's Letter.json",
+      "lineCount": 22
+    },
+    {
+      "title": "047&048.A Cup of Coffee",
+      "filename": "047&048.A Cup of Coffee",
+      "markdown": "NCE1/0024_047&048.A Cup of Coffee.md",
+      "json": "NCE1/0024_047&048.A Cup of Coffee.json",
+      "lineCount": 18
+    },
+    {
+      "title": "049&050.At the Butcher's",
+      "filename": "049&050.At the Butcher's",
+      "markdown": "NCE1/0025_049&050.At the Butcher's.md",
+      "json": "NCE1/0025_049&050.At the Butcher's.json",
+      "lineCount": 21
+    },
+    {
+      "title": "051&052.A Pleasant Climate",
+      "filename": "051&052.A Pleasant Climate",
+      "markdown": "NCE1/0026_051&052.A Pleasant Climate.md",
+      "json": "NCE1/0026_051&052.A Pleasant Climate.json",
+      "lineCount": 20
+    },
+    {
+      "title": "053&054.An Interesting Climate",
+      "filename": "053&054.An Interesting Climate",
+      "markdown": "NCE1/0027_053&054.An Interesting Climate.md",
+      "json": "NCE1/0027_053&054.An Interesting Climate.json",
+      "lineCount": 19
+    },
+    {
+      "title": "055&056.The Sawyer Family",
+      "filename": "055&056.The Sawyer Family",
+      "markdown": "NCE1/0028_055&056.The Sawyer Family.md",
+      "json": "NCE1/0028_055&056.The Sawyer Family.json",
+      "lineCount": 19
+    },
+    {
+      "title": "057&058.An Unusual Day",
+      "filename": "057&058.An Unusual Day",
+      "markdown": "NCE1/0029_057&058.An Unusual Day.md",
+      "json": "NCE1/0029_057&058.An Unusual Day.json",
+      "lineCount": 21
+    },
+    {
+      "title": "059&060.Is That All",
+      "filename": "059&060.Is That All",
+      "markdown": "NCE1/0030_059&060.Is That All.md",
+      "json": "NCE1/0030_059&060.Is That All.json",
+      "lineCount": 23
+    },
+    {
+      "title": "061&062.A Bad Cold",
+      "filename": "061&062.A Bad Cold",
+      "markdown": "NCE1/0031_061&062.A Bad Cold.md",
+      "json": "NCE1/0031_061&062.A Bad Cold.json",
+      "lineCount": 20
+    },
+    {
+      "title": "063&064.Thank You, Doctor",
+      "filename": "063&064.Thank You, Doctor",
+      "markdown": "NCE1/0032_063&064.Thank You, Doctor.md",
+      "json": "NCE1/0032_063&064.Thank You, Doctor.json",
+      "lineCount": 24
+    },
+    {
+      "title": "065&066.Not a Baby",
+      "filename": "065&066.Not a Baby",
+      "markdown": "NCE1/0033_065&066.Not a Baby.md",
+      "json": "NCE1/0033_065&066.Not a Baby.json",
+      "lineCount": 26
+    },
+    {
+      "title": "067&068.The Weekend",
+      "filename": "067&068.The Weekend",
+      "markdown": "NCE1/0034_067&068.The Weekend.md",
+      "json": "NCE1/0034_067&068.The Weekend.json",
+      "lineCount": 20
+    },
+    {
+      "title": "069&070.The Car Race",
+      "filename": "069&070.The Car Race",
+      "markdown": "NCE1/0035_069&070.The Car Race.md",
+      "json": "NCE1/0035_069&070.The Car Race.json",
+      "lineCount": 19
+    },
+    {
+      "title": "071&072.He's Awful",
+      "filename": "071&072.He's Awful",
+      "markdown": "NCE1/0036_071&072.He's Awful.md",
+      "json": "NCE1/0036_071&072.He's Awful.json",
+      "lineCount": 23
+    },
+    {
+      "title": "073&074.The Way to King Street",
+      "filename": "073&074.The Way to King Street",
+      "markdown": "NCE1/0037_073&074.The Way to King Street.md",
+      "json": "NCE1/0037_073&074.The Way to King Street.json",
+      "lineCount": 19
+    },
+    {
+      "title": "075&076.Uncomfortable Shoes",
+      "filename": "075&076.Uncomfortable Shoes",
+      "markdown": "NCE1/0038_075&076.Uncomfortable Shoes.md",
+      "json": "NCE1/0038_075&076.Uncomfortable Shoes.json",
+      "lineCount": 23
+    },
+    {
+      "title": "077&078.Terrible Toothache",
+      "filename": "077&078.Terrible Toothache",
+      "markdown": "NCE1/0039_077&078.Terrible Toothache.md",
+      "json": "NCE1/0039_077&078.Terrible Toothache.json",
+      "lineCount": 23
+    },
+    {
+      "title": "079&080.Carol's Shopping List",
+      "filename": "079&080.Carol's Shopping List",
+      "markdown": "NCE1/0040_079&080.Carol's Shopping List.md",
+      "json": "NCE1/0040_079&080.Carol's Shopping List.json",
+      "lineCount": 22
+    },
+    {
+      "title": "081&082.Roast Beef and Potatoes",
+      "filename": "081&082.Roast Beef and Potatoes",
+      "markdown": "NCE1/0041_081&082.Roast Beef and Potatoes.md",
+      "json": "NCE1/0041_081&082.Roast Beef and Potatoes.json",
+      "lineCount": 27
+    },
+    {
+      "title": "083&084.Going on Holiday",
+      "filename": "083&084.Going on Holiday",
+      "markdown": "NCE1/0042_083&084.Going on Holiday.md",
+      "json": "NCE1/0042_083&084.Going on Holiday.json",
+      "lineCount": 28
+    },
+    {
+      "title": "085&086.Paris in the Spring",
+      "filename": "085&086.Paris in the Spring",
+      "markdown": "NCE1/0043_085&086.Paris in the Spring.md",
+      "json": "NCE1/0043_085&086.Paris in the Spring.json",
+      "lineCount": 22
+    },
+    {
+      "title": "087&088.A Car Crash",
+      "filename": "087&088.A Car Crash",
+      "markdown": "NCE1/0044_087&088.A Car Crash.md",
+      "json": "NCE1/0044_087&088.A Car Crash.json",
+      "lineCount": 22
+    },
+    {
+      "title": "089&090.For Sale",
+      "filename": "089&090.For Sale",
+      "markdown": "NCE1/0045_089&090.For Sale.md",
+      "json": "NCE1/0045_089&090.For Sale.json",
+      "lineCount": 25
+    },
+    {
+      "title": "091&092.Poor Ian",
+      "filename": "091&092.Poor Ian",
+      "markdown": "NCE1/0046_091&092.Poor Ian.md",
+      "json": "NCE1/0046_091&092.Poor Ian.json",
+      "lineCount": 24
+    },
+    {
+      "title": "093&094.Our New Neighbour",
+      "filename": "093&094.Our New Neighbour",
+      "markdown": "NCE1/0047_093&094.Our New Neighbour.md",
+      "json": "NCE1/0047_093&094.Our New Neighbour.json",
+      "lineCount": 17
+    },
+    {
+      "title": "095&096.Tickets, Please",
+      "filename": "095&096.Tickets, Please",
+      "markdown": "NCE1/0048_095&096.Tickets, Please.md",
+      "json": "NCE1/0048_095&096.Tickets, Please.json",
+      "lineCount": 26
+    },
+    {
+      "title": "097&098.A Small Blue Case",
+      "filename": "097&098.A Small Blue Case",
+      "markdown": "NCE1/0049_097&098.A Small Blue Case.md",
+      "json": "NCE1/0049_097&098.A Small Blue Case.json",
+      "lineCount": 24
+    },
+    {
+      "title": "099&100.Ow",
+      "filename": "099&100.Ow",
+      "markdown": "NCE1/0050_099&100.Ow.md",
+      "json": "NCE1/0050_099&100.Ow.json",
+      "lineCount": 20
+    },
+    {
+      "title": "101&102.A Card From Jimmy",
+      "filename": "101&102.A Card From Jimmy",
+      "markdown": "NCE1/0051_101&102.A Card From Jimmy.md",
+      "json": "NCE1/0051_101&102.A Card From Jimmy.json",
+      "lineCount": 24
+    },
+    {
+      "title": "103&104.The French Test",
+      "filename": "103&104.The French Test",
+      "markdown": "NCE1/0052_103&104.The French Test.md",
+      "json": "NCE1/0052_103&104.The French Test.json",
+      "lineCount": 25
+    },
+    {
+      "title": "105&106.Full of Mistakes",
+      "filename": "105&106.Full of Mistakes",
+      "markdown": "NCE1/0053_105&106.Full of Mistakes.md",
+      "json": "NCE1/0053_105&106.Full of Mistakes.json",
+      "lineCount": 25
+    },
+    {
+      "title": "107&108.It's Too Small",
+      "filename": "107&108.It's Too Small",
+      "markdown": "NCE1/0054_107&108.It's Too Small.md",
+      "json": "NCE1/0054_107&108.It's Too Small.json",
+      "lineCount": 22
+    },
+    {
+      "title": "109&110.A Good Idea",
+      "filename": "109&110.A Good Idea",
+      "markdown": "NCE1/0055_109&110.A Good Idea.md",
+      "json": "NCE1/0055_109&110.A Good Idea.json",
+      "lineCount": 27
+    },
+    {
+      "title": "111&112.The Most Expensive Model",
+      "filename": "111&112.The Most Expensive Model",
+      "markdown": "NCE1/0056_111&112.The Most Expensive Model.md",
+      "json": "NCE1/0056_111&112.The Most Expensive Model.json",
+      "lineCount": 24
+    },
+    {
+      "title": "113&114.Small Change",
+      "filename": "113&114.Small Change",
+      "markdown": "NCE1/0057_113&114.Small Change.md",
+      "json": "NCE1/0057_113&114.Small Change.json",
+      "lineCount": 26
+    },
+    {
+      "title": "115&116.Knock, Knock",
+      "filename": "115&116.Knock, Knock",
+      "markdown": "NCE1/0058_115&116.Knock, Knock.md",
+      "json": "NCE1/0058_115&116.Knock, Knock.json",
+      "lineCount": 27
+    },
+    {
+      "title": "117&118.Tommy's Breakfast",
+      "filename": "117&118.Tommy's Breakfast",
+      "markdown": "NCE1/0059_117&118.Tommy's Breakfast.md",
+      "json": "NCE1/0059_117&118.Tommy's Breakfast.json",
+      "lineCount": 18
+    },
+    {
+      "title": "119&120.A True Story",
+      "filename": "119&120.A True Story",
+      "markdown": "NCE1/0060_119&120.A True Story.md",
+      "json": "NCE1/0060_119&120.A True Story.json",
+      "lineCount": 22
+    },
+    {
+      "title": "121&122.The Man in a Hat",
+      "filename": "121&122.The Man in a Hat",
+      "markdown": "NCE1/0061_121&122.The Man in a Hat.md",
+      "json": "NCE1/0061_121&122.The Man in a Hat.json",
+      "lineCount": 20
+    },
+    {
+      "title": "123&124.A Trip to Australia",
+      "filename": "123&124.A Trip to Australia",
+      "markdown": "NCE1/0062_123&124.A Trip to Australia.md",
+      "json": "NCE1/0062_123&124.A Trip to Australia.json",
+      "lineCount": 25
+    },
+    {
+      "title": "125&126.Tea for Two",
+      "filename": "125&126.Tea for Two",
+      "markdown": "NCE1/0063_125&126.Tea for Two.md",
+      "json": "NCE1/0063_125&126.Tea for Two.json",
+      "lineCount": 24
+    },
+    {
+      "title": "127&128.A Famous Actress",
+      "filename": "127&128.A Famous Actress",
+      "markdown": "NCE1/0064_127&128.A Famous Actress.md",
+      "json": "NCE1/0064_127&128.A Famous Actress.json",
+      "lineCount": 25
+    },
+    {
+      "title": "129&130.Seventy Miles an Hour",
+      "filename": "129&130.Seventy Miles an Hour",
+      "markdown": "NCE1/0065_129&130.Seventy Miles an Hour.md",
+      "json": "NCE1/0065_129&130.Seventy Miles an Hour.json",
+      "lineCount": 26
+    },
+    {
+      "title": "131&132.Don't be So Sure",
+      "filename": "131&132.Don't be So Sure",
+      "markdown": "NCE1/0066_131&132.Don't be So Sure.md",
+      "json": "NCE1/0066_131&132.Don't be So Sure.json",
+      "lineCount": 23
+    },
+    {
+      "title": "133&134.Sensational News",
+      "filename": "133&134.Sensational News",
+      "markdown": "NCE1/0067_133&134.Sensational News.md",
+      "json": "NCE1/0067_133&134.Sensational News.json",
+      "lineCount": 22
+    },
+    {
+      "title": "135&136.The Latest Report",
+      "filename": "135&136.The Latest Report",
+      "markdown": "NCE1/0068_135&136.The Latest Report.md",
+      "json": "NCE1/0068_135&136.The Latest Report.json",
+      "lineCount": 25
+    },
+    {
+      "title": "137&138.A Pleasant Dream",
+      "filename": "137&138.A Pleasant Dream",
+      "markdown": "NCE1/0069_137&138.A Pleasant Dream.md",
+      "json": "NCE1/0069_137&138.A Pleasant Dream.json",
+      "lineCount": 20
+    },
+    {
+      "title": "139&140.Is That You, John",
+      "filename": "139&140.Is That You, John",
+      "markdown": "NCE1/0070_139&140.Is That You, John.md",
+      "json": "NCE1/0070_139&140.Is That You, John.json",
+      "lineCount": 22
+    },
+    {
+      "title": "141&142.Sally's First Train Ride",
+      "filename": "141&142.Sally's First Train Ride",
+      "markdown": "NCE1/0071_141&142.Sally's First Train Ride.md",
+      "json": "NCE1/0071_141&142.Sally's First Train Ride.json",
+      "lineCount": 19
+    },
+    {
+      "title": "143&144.A Walk Through the Woods",
+      "filename": "143&144.A Walk Through the Woods",
+      "markdown": "NCE1/0072_143&144.A Walk Through the Woods.md",
+      "json": "NCE1/0072_143&144.A Walk Through the Woods.json",
+      "lineCount": 15
+    }
+  ]
+}

@@ -1,0 +1,139 @@
+{
+  "bookKey": "NCE1",
+  "title": "119&120.A True Story",
+  "filename": "119&120.A True Story",
+  "lines": [
+    {
+      "time": 0.19999999999999996,
+      "english": "Lesson 119",
+      "chinese": "第119课",
+      "raw": "Lesson 119 | 第119课"
+    },
+    {
+      "time": 3.04,
+      "english": "A true story",
+      "chinese": "一个真实的故事",
+      "raw": "A true story | 一个真实的故事"
+    },
+    {
+      "time": 5.89,
+      "english": "Listen to the tape then answer this question.",
+      "chinese": "听录音，然后回答这个问题。",
+      "raw": "Listen to the tape then answer this question. | 听录音，然后回答这个问题。"
+    },
+    {
+      "time": 11.55,
+      "english": "Who called out to the thieves in the dark?",
+      "chinese": "谁在黑暗中对窃贼叫喊？",
+      "raw": "Who called out to the thieves in the dark? | 谁在黑暗中对窃贼叫喊？"
+    },
+    {
+      "time": 17.84,
+      "english": "Do you like stories?",
+      "chinese": "你喜欢故事吗？",
+      "raw": "Do you like stories? | 你喜欢故事吗？"
+    },
+    {
+      "time": 21.12,
+      "english": "I want to tell you a true story.",
+      "chinese": "我想给你讲一个真实的故事。",
+      "raw": "I want to tell you a true story. | 我想给你讲一个真实的故事。"
+    },
+    {
+      "time": 25.0,
+      "english": "It happened to a friend of mine a year ago.",
+      "chinese": "一年前，它发生在我的一位朋友身上。",
+      "raw": "It happened to a friend of mine a year ago. | 一年前，它发生在我的一位朋友身上。"
+    },
+    {
+      "time": 30.22,
+      "english": "While my friend, George, was reading in bed,",
+      "chinese": "我的朋友乔治正在床上看书时，",
+      "raw": "While my friend, George, was reading in bed, | 我的朋友乔治正在床上看书时，"
+    },
+    {
+      "time": 35.78,
+      "english": "two thieves climbed into his kitchen.",
+      "chinese": "两个窃贼爬进了他的厨房。",
+      "raw": "two thieves climbed into his kitchen. | 两个窃贼爬进了他的厨房。"
+    },
+    {
+      "time": 40.56,
+      "english": "After they had entered the house,",
+      "chinese": "他们进入房子后，",
+      "raw": "After they had entered the house, | 他们进入房子后，"
+    },
+    {
+      "time": 43.74,
+      "english": "they went into the dining room.",
+      "chinese": "他们去了饭厅。",
+      "raw": "they went into the dining room. | 他们去了饭厅。"
+    },
+    {
+      "time": 47.18,
+      "english": "It was very dark, so they turned on a torch.",
+      "chinese": "天很黑，所以他们打开了一个手电筒。",
+      "raw": "It was very dark, so they turned on a torch. | 天很黑，所以他们打开了一个手电筒。"
+    },
+    {
+      "time": 54.03,
+      "english": "Suddenly, they heard a voice behind them.",
+      "chinese": "突然，他们听到身后有个声音。",
+      "raw": "Suddenly, they heard a voice behind them. | 突然，他们听到身后有个声音。"
+    },
+    {
+      "time": 59.7,
+      "english": "'What's up? What's up?' someone called.",
+      "chinese": "“怎么了？怎么了？”有人叫道。",
+      "raw": "'What's up? What's up?' someone called. | “怎么了？怎么了？”有人叫道。"
+    },
+    {
+      "time": 65.3,
+      "english": "The thieves dropped the torch and ran away as quickly as they could.",
+      "chinese": "窃贼们扔下手电筒，尽可能快地跑走了。",
+      "raw": "The thieves dropped the torch and ran away as quickly as they could. | 窃贼们扔下手电筒，尽可能快地跑走了。"
+    },
+    {
+      "time": 73.72,
+      "english": "George heard the noise and came downstairs quickly.",
+      "chinese": "乔治听到响声，迅速下了楼。",
+      "raw": "George heard the noise and came downstairs quickly. | 乔治听到响声，迅速下了楼。"
+    },
+    {
+      "time": 79.72,
+      "english": "He turned on the light, but he couldn't see anyone.",
+      "chinese": "他打开灯，但没看到任何人。",
+      "raw": "He turned on the light, but he couldn't see anyone. | 他打开灯，但没看到任何人。"
+    },
+    {
+      "time": 85.79,
+      "english": "The thieves had already gone.",
+      "chinese": "窃贼们已经走了。",
+      "raw": "The thieves had already gone. | 窃贼们已经走了。"
+    },
+    {
+      "time": 89.54,
+      "english": "But George's parrot, Henry, was still there.",
+      "chinese": "但乔治的鹦鹉亨利还在那儿。",
+      "raw": "But George's parrot, Henry, was still there. | 但乔治的鹦鹉亨利还在那儿。"
+    },
+    {
+      "time": 95.25,
+      "english": "What's up, George? he called.",
+      "chinese": "“怎么了，乔治？”它叫道。",
+      "raw": "What's up, George? he called. | “怎么了，乔治？”它叫道。"
+    },
+    {
+      "time": 99.02,
+      "english": "'Nothing, Henry,' George said and smiled.",
+      "chinese": "“没什么，亨利，”乔治说着笑了。",
+      "raw": "'Nothing, Henry,' George said and smiled. | “没什么，亨利，”乔治说着笑了。"
+    },
+    {
+      "time": 103.9,
+      "english": "'Go back to sleep.'",
+      "chinese": "“回去睡觉吧。”",
+      "raw": "'Go back to sleep.' | “回去睡觉吧。”"
+    }
+  ]
+}

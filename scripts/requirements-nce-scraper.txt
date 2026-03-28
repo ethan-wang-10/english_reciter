@@ -1,0 +1,2 @@
+# 新概念课文抓取（curl_cffi 模拟浏览器 TLS，绕过 nce.mleo.site 的 Cloudflare）
+curl_cffi>=0.7.0
