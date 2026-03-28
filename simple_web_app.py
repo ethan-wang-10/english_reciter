@@ -27,7 +27,7 @@ from typing import Dict, Generator, List, Optional, Tuple
 from time import time
 import uuid
 
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response, g
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -68,6 +68,10 @@ CORS(app, supports_credentials=True)
 
 # 用户名：防止路径穿越与非法目录名，仅允许字母数字下划线
 USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
+
+USER_ROLE_PARENT = "parent"
+PARENT_LOGIN_SUFFIX = "_parent"
+DEFAULT_PARENT_PASSWORD = "123123"
 
 # 数据目录
 DATA_DIR = Path("user_data_simple")
@@ -709,6 +713,23 @@ def is_valid_username(username: str) -> bool:
     return bool(username and USERNAME_PATTERN.fullmatch(username))
 
 
+def is_reserved_parent_username(username: str) -> bool:
+    """注册名不可为 *_parent，与家长登录名冲突。"""
+    return bool(username) and username.lower().endswith(PARENT_LOGIN_SUFFIX)
+
+
+def parent_login_username_for_child(child: str) -> Optional[str]:
+    """学生用户名 → 家长登录名（child_parent）；过长则无法创建。"""
+    if not is_valid_username(child):
+        return None
+    p = f"{child}{PARENT_LOGIN_SUFFIX}"
+    return p if USERNAME_PATTERN.fullmatch(p) else None
+
+
+def is_parent_user_record(user_dict: dict) -> bool:
+    return isinstance(user_dict, dict) and user_dict.get("role") == USER_ROLE_PARENT
+
+
 def user_avatar_disk_path(username: str) -> Optional[Path]:
     if not is_valid_username(username):
         return None
@@ -768,6 +789,7 @@ def list_challenge_opponent_usernames(viewer: str) -> List[str]:
     enabled = [
         u for u in users
         if isinstance(users.get(u), dict) and is_user_enabled(u)
+        and not is_parent_user_record(users[u])
     ]
     rows = gamification_mod.build_leaderboard(DATA_DIR, enabled, viewer=viewer)
     return [str(r["username"]) for r in rows if r.get("username") and r["username"] != viewer]
@@ -871,6 +893,9 @@ def register_user_with_invite(
         users = load_users()
         if username in users:
             return False, '用户名已存在'
+
+        if is_reserved_parent_username(username):
+            return False, '该用户名保留给家长账户使用，请更换'
 
         data = load_invites()
         invites = data.get('invites', [])
@@ -1066,7 +1091,7 @@ def _learning_data_summary(username: str) -> Dict[str, int]:
 # ==================== 认证装饰器 ====================
 
 def token_required(f):
-    """要求token认证的装饰器"""
+    """要求token认证的装饰器；家长登录时使用关联学生的数据目录。"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         # 从Authorization头获取token
@@ -1075,16 +1100,43 @@ def token_required(f):
             return jsonify({'error': '需要认证'}), 401
 
         token = auth_header[7:].strip()
-        username = verify_token(token)
+        login_username = verify_token(token)
 
-        if not username:
+        if not login_username:
             return jsonify({'error': '无效或过期的token'}), 401
 
-        if not is_user_enabled(username):
-            _revoke_user_tokens(username)
+        if not is_user_enabled(login_username):
+            _revoke_user_tokens(login_username)
             return jsonify({'error': '账号已停用'}), 403
 
-        # 将用户名传递给路由函数
+        users = load_users()
+        urow = users.get(login_username)
+        g.login_username = login_username
+        if isinstance(urow, dict) and is_parent_user_record(urow):
+            child = (urow.get("child_username") or "").strip()
+            if not child or not is_valid_username(child):
+                return jsonify({'error': '家长账户配置错误'}), 403
+            ch = users.get(child)
+            if not isinstance(ch, dict) or is_parent_user_record(ch):
+                return jsonify({'error': '关联学生不存在'}), 403
+            if not is_user_enabled(child):
+                return jsonify({'error': '学生账号已停用'}), 403
+            g.is_parent = True
+            g.effective_username = child
+            return f(child, *args, **kwargs)
+
+        g.is_parent = False
+        g.effective_username = login_username
+        return f(login_username, *args, **kwargs)
+    return decorated_function
+
+
+def parent_forbidden(f):
+    """家长账户仅可查看进度、导入、排行榜等，禁止练习/挑战等操作。"""
+    @wraps(f)
+    def decorated_function(username, *args, **kwargs):
+        if getattr(g, "is_parent", False):
+            return jsonify({'error': '家长账户仅可查看学习数据与导入，无法执行此操作'}), 403
         return f(username, *args, **kwargs)
     return decorated_function
 
@@ -1185,12 +1237,28 @@ def register():
                 'email': email,
                 'created_at': datetime.now().isoformat(),
                 'access_token': token,
-                'token_type': 'bearer'
+                'token_type': 'bearer',
+                **_auth_session_payload(username),
             }), 201
         return jsonify({'error': err or '注册失败'}), 400
     except Exception as e:
         logger.error(f"注册失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
+
+def _auth_session_payload(login_username: str) -> dict:
+    """供登录与 /api/auth/session 返回家长/学生标识。"""
+    users = load_users()
+    u = users.get(login_username)
+    out = {
+        'login_username': login_username,
+        'is_parent': False,
+        'child_username': None,
+    }
+    if isinstance(u, dict) and is_parent_user_record(u):
+        out['is_parent'] = True
+        out['child_username'] = u.get('child_username')
+    return out
+
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
@@ -1214,12 +1282,21 @@ def login():
         if verify_user(username, password):
             if not is_user_enabled(username):
                 return jsonify({'error': '账号已停用，请联系管理员'}), 403
+            urow = load_users().get(username)
+            if isinstance(urow, dict) and is_parent_user_record(urow):
+                child = (urow.get('child_username') or '').strip()
+                if not child or not is_valid_username(child):
+                    return jsonify({'error': '家长账户配置错误'}), 403
+                if not is_user_enabled(child):
+                    return jsonify({'error': '学生账号已停用，无法以家长身份登录'}), 403
             token = create_token(username)
-            return jsonify({
+            body = {
                 'access_token': token,
                 'token_type': 'bearer',
-                'username': username
-            }), 200
+                'username': username,
+                **_auth_session_payload(username),
+            }
+            return jsonify(body), 200
         return jsonify({'error': '用户名或密码错误'}), 401
     except Exception as e:
         logger.error(f"登录失败: {e}")
@@ -1229,13 +1306,45 @@ def login():
 @token_required
 def logout(username):
     """用户退出"""
-    # 清除所有该用户的token
-    tokens_to_remove = [t for t, u in user_tokens.items() if u == username]
+    # 清除所有该登录身份的 token（家长与学生登录名不同）
+    login = getattr(g, "login_username", username)
+    tokens_to_remove = [t for t, u in user_tokens.items() if u == login]
     for token in tokens_to_remove:
         user_tokens.pop(token, None)
         token_expiry.pop(token, None)
     
     return jsonify({'message': '已退出登录'}), 200
+
+
+@app.route('/api/auth/session', methods=['GET'])
+@token_required
+def auth_session(username):
+    """刷新页后恢复 is_parent / child_username。"""
+    login = getattr(g, 'login_username', username)
+    return jsonify(_auth_session_payload(login)), 200
+
+
+@app.route('/api/auth/parent-password', methods=['PATCH'])
+@token_required
+def patch_parent_password(username):
+    """家长修改自己的登录密码（不影响学生账号）。"""
+    if not getattr(g, 'is_parent', False):
+        return jsonify({'error': '仅家长账户可修改'}), 403
+    data = request.get_json(silent=True) or {}
+    p1 = (data.get('password') or '').strip()
+    p2 = (data.get('password_confirm') or '').strip()
+    if len(p1) < 6:
+        return jsonify({'error': '密码至少6个字符'}), 400
+    if p1 != p2:
+        return jsonify({'error': '两次输入的密码不一致'}), 400
+    login = getattr(g, 'login_username', username)
+    users = load_users()
+    if login not in users:
+        return jsonify({'error': '用户不存在'}), 404
+    users[login]['password_hash'] = hash_password(p1)
+    save_users(users)
+    logger.info("家长账户修改密码: login=%s", login)
+    return jsonify({'message': '密码已更新'}), 200
 
 
 @app.route('/api/gamification', methods=['GET'])
@@ -1256,6 +1365,7 @@ def get_gamification(username):
 
 @app.route('/api/gamification', methods=['PATCH'])
 @token_required
+@parent_forbidden
 def patch_gamification_settings(username):
     """更新排行榜展示、本月打卡目标等"""
     try:
@@ -1314,6 +1424,7 @@ def get_leaderboard(username):
         enabled = [
             u for u in users
             if isinstance(users.get(u), dict) and is_user_enabled(u)
+            and not is_parent_user_record(users[u])
         ]
         rows = gamification_mod.build_leaderboard(
             DATA_DIR, enabled, viewer=username
@@ -1385,6 +1496,7 @@ def get_user_avatar_file(uname):
 
 @app.route('/api/user/avatar', methods=['POST'])
 @token_required
+@parent_forbidden
 def post_user_avatar(username):
     """上传头像：有 Pillow 时统一为压缩 WebP；否则原样保存为单个 avatar.<ext>（覆盖旧文件）。"""
     if 'file' not in request.files:
@@ -1441,6 +1553,7 @@ def post_user_avatar(username):
 
 @app.route('/api/user/avatar', methods=['DELETE'])
 @token_required
+@parent_forbidden
 def delete_user_avatar(username):
     path = user_avatar_disk_path(username)
     if path:
@@ -1462,6 +1575,7 @@ def api_monthly_pool_get(username):
 
 @app.route('/api/monthly-pool/join', methods=['POST'])
 @token_required
+@parent_forbidden
 def api_monthly_pool_join(username):
     ok, msg, state = challenges_mod.join_monthly_pool(DATA_DIR, username)
     if not ok:
@@ -1471,6 +1585,7 @@ def api_monthly_pool_join(username):
 
 @app.route('/api/challenges/opponents', methods=['GET'])
 @token_required
+@parent_forbidden
 def api_challenges_opponents(username):
     """1v1 可选择的对手（排行榜中展示的用户，不含自己）。"""
     return jsonify({'opponents': list_challenge_opponent_usernames(username)}), 200
@@ -1478,12 +1593,14 @@ def api_challenges_opponents(username):
 
 @app.route('/api/challenges', methods=['GET'])
 @token_required
+@parent_forbidden
 def api_challenges_list(username):
     return jsonify({'challenges': challenges_mod.list_duels_for_user(DATA_DIR, username)}), 200
 
 
 @app.route('/api/challenges', methods=['POST'])
 @token_required
+@parent_forbidden
 def api_challenges_create(username):
     data = request.get_json() or {}
     target = (data.get('target_username') or '').strip()
@@ -1506,6 +1623,7 @@ def api_challenges_create(username):
 
 @app.route('/api/challenges/<duel_id>/respond', methods=['POST'])
 @token_required
+@parent_forbidden
 def api_challenges_respond(username, duel_id):
     data = request.get_json() or {}
     accept = bool(data.get('accept'))
@@ -1659,6 +1777,7 @@ def get_extra_review_list(username):
 
 @app.route('/api/words/practice', methods=['POST'])
 @token_required
+@parent_forbidden
 def practice_word(username):
     """练习单词"""
     try:
@@ -1743,6 +1862,7 @@ def practice_word(username):
 
 @app.route('/api/words/speak', methods=['POST'])
 @token_required
+@parent_forbidden
 def speak_text(username):
     """朗读文本（跨平台支持）
     
@@ -2739,7 +2859,13 @@ def admin_list_users():
         u = users[uname]
         if not isinstance(u, dict):
             continue
+        if is_parent_user_record(u):
+            continue
         summ = _learning_data_summary(uname)
+        pname = parent_login_username_for_child(uname)
+        has_parent = bool(
+            pname and pname in users and is_parent_user_record(users.get(pname))
+        )
         out.append({
             'username': uname,
             'email': u.get('email'),
@@ -2748,6 +2874,7 @@ def admin_list_users():
             'plan': u.get('plan', 'free'),
             'pending_words': summ['pending'],
             'mastered_words': summ['mastered'],
+            'parent_account_enabled': has_parent,
         })
     return jsonify({'users': out}), 200
 
@@ -2766,8 +2893,15 @@ def admin_set_user_enabled(username):
     users = load_users()
     if username not in users:
         return jsonify({'error': '用户不存在'}), 404
+    if is_parent_user_record(users[username]):
+        return jsonify({'error': '请使用「家长账户」开关管理家长账号'}), 400
 
     users[username]['enabled'] = enabled
+    if not enabled:
+        pname = parent_login_username_for_child(username)
+        if pname and pname in users and is_parent_user_record(users.get(pname)):
+            del users[pname]
+            _revoke_user_tokens(pname)
     save_users(users)
     if not enabled:
         _revoke_user_tokens(username)
@@ -2777,6 +2911,102 @@ def admin_set_user_enabled(username):
         logger.info("管理员启用用户: %s", username)
 
     return jsonify({'username': username, 'enabled': enabled}), 200
+
+
+@app.route('/api/admin/users/<username>/parent', methods=['PATCH'])
+@admin_required
+def admin_set_user_parent(username):
+    """为学生开启或关闭家长账户；登录名为 学生名_parent，默认密码见 DEFAULT_PARENT_PASSWORD。"""
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+    data = request.get_json(silent=True) or {}
+    if 'enabled' not in data:
+        return jsonify({'error': '缺少 enabled 字段'}), 400
+    want = bool(data['enabled'])
+
+    users = load_users()
+    u = users.get(username)
+    if not isinstance(u, dict):
+        return jsonify({'error': '用户不存在'}), 404
+    if is_parent_user_record(u):
+        return jsonify({'error': '只能为学生账号设置家长账户'}), 400
+
+    pname = parent_login_username_for_child(username)
+    if not pname:
+        return jsonify({'error': '该用户名过长，无法创建家长账号（须为 学生名_parent 且不超过 32 字符）'}), 400
+
+    if want:
+        created_new = False
+        if pname in users:
+            pr = users[pname]
+            if not is_parent_user_record(pr):
+                return jsonify({'error': '家长登录名已被占用'}), 400
+            if pr.get('child_username') != username:
+                return jsonify({'error': '家长登录名已被占用'}), 400
+        else:
+            created_new = True
+            users[pname] = {
+                'role': USER_ROLE_PARENT,
+                'child_username': username,
+                'password_hash': hash_password(DEFAULT_PARENT_PASSWORD),
+                'enabled': True,
+                'created_at': datetime.now().isoformat(),
+            }
+        save_users(users)
+        logger.info("管理员开启家长账户: student=%s parent=%s", username, pname)
+        body = {
+            'username': username,
+            'parent_enabled': True,
+            'parent_login': pname,
+        }
+        if created_new:
+            body['default_password_hint'] = DEFAULT_PARENT_PASSWORD
+        return jsonify(body), 200
+
+    if pname in users:
+        pr = users[pname]
+        if not is_parent_user_record(pr) or pr.get('child_username') != username:
+            return jsonify({'error': '家长账号数据不一致'}), 400
+        del users[pname]
+        save_users(users)
+        _revoke_user_tokens(pname)
+        logger.info("管理员关闭家长账户: student=%s", username)
+    return jsonify({'username': username, 'parent_enabled': False}), 200
+
+
+@app.route('/api/admin/users/<username>/parent-password', methods=['PATCH'])
+@admin_required
+def admin_set_parent_password(username):
+    """管理员重置指定学生对应家长账户的登录密码（username 为学生名，非 _parent）。"""
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+    data = request.get_json(silent=True) or {}
+    new_password = (data.get('password') or '').strip()
+    if len(new_password) < 6:
+        return jsonify({'error': '密码至少6个字符'}), 400
+
+    users = load_users()
+    u = users.get(username)
+    if not isinstance(u, dict):
+        return jsonify({'error': '用户不存在'}), 404
+    if is_parent_user_record(u):
+        return jsonify({'error': '请在学生所在行使用「家长密码」'}), 400
+
+    pname = parent_login_username_for_child(username)
+    if not pname or pname not in users or not is_parent_user_record(users[pname]):
+        return jsonify({'error': '未开启家长账户'}), 404
+    if users[pname].get('child_username') != username:
+        return jsonify({'error': '家长账号数据不一致'}), 400
+
+    users[pname]['password_hash'] = hash_password(new_password)
+    save_users(users)
+    _revoke_user_tokens(pname)
+    logger.info("管理员重置家长密码: student=%s parent=%s", username, pname)
+    return jsonify({
+        'username': username,
+        'parent_login': pname,
+        'message': '家长密码已更新，该家长需重新登录',
+    }), 200
 
 
 @app.route('/api/admin/users/<username>/password', methods=['PATCH'])
@@ -2793,6 +3023,8 @@ def admin_set_user_password(username):
     users = load_users()
     if username not in users:
         return jsonify({'error': '用户不存在'}), 404
+    if is_parent_user_record(users[username]):
+        return jsonify({'error': '家长账户请使用「家长密码」按钮重置，或由家长在客户端修改'}), 400
 
     users[username]['password_hash'] = hash_password(new_password)
     save_users(users)

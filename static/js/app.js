@@ -1,6 +1,26 @@
 // 全局状态
 let token = localStorage.getItem('token');
 let username = localStorage.getItem('username');
+/** 家长登录：服务端以孩子身份操作数据；界面显示 childUsername */
+let isParentSession = localStorage.getItem('session_is_parent') === '1';
+let childUsername = localStorage.getItem('session_child_username') || '';
+
+function setSessionParentFlags(isParent, child) {
+    isParentSession = !!isParent;
+    childUsername = child || '';
+    if (isParentSession) {
+        localStorage.setItem('session_is_parent', '1');
+        localStorage.setItem('session_child_username', childUsername);
+    } else {
+        localStorage.removeItem('session_is_parent');
+        localStorage.removeItem('session_child_username');
+    }
+}
+
+/** 排行榜/奖池「我」的标识（学生用户名） */
+function sessionStudentUsername() {
+    return isParentSession && childUsername ? childUsername : username;
+}
 let currentReviewList = [];
 let currentReviewIndex = 0;
 let currentErrorCount = 0; // 当前单词错误次数
@@ -439,6 +459,11 @@ async function refreshPkInviteIndicator() {
         updatePkActiveChipsFromDuels([]);
         return;
     }
+    if (isParentSession) {
+        updatePkInviteBadgeFromDuels([]);
+        updatePkActiveChipsFromDuels([]);
+        return;
+    }
     try {
         const data = await apiRequest('/challenges');
         const list = data.challenges || [];
@@ -466,7 +491,7 @@ function tickPkInvitePoll() {
 
 function startPkInvitePolling() {
     stopPkInvitePolling();
-    if (!token || !username) return;
+    if (!token || !username || isParentSession) return;
     pkInvitePollTimer = window.setInterval(tickPkInvitePoll, PK_INVITE_POLL_MS);
 }
 
@@ -939,6 +964,29 @@ function bindAvatarCropUi() {
 }
 
 async function loadUserSettingsPanel() {
+    const studentBlocks = document.getElementById('settings-student-blocks');
+    const parentBlock = document.getElementById('settings-parent-block');
+    const title = document.getElementById('settings-title');
+    if (isParentSession) {
+        setSettingsMessage('');
+        if (title) title.textContent = '配置';
+        if (studentBlocks) studentBlocks.style.display = 'none';
+        if (parentBlock) parentBlock.style.display = '';
+        const hint = document.getElementById('settings-parent-login-hint');
+        if (hint) {
+            hint.textContent = childUsername
+                ? `正在查看学生「${childUsername}」的学习数据。家长登录名为 ${username}。`
+                : '';
+        }
+        const n1 = document.getElementById('settings-parent-pw-new');
+        const n2 = document.getElementById('settings-parent-pw-confirm');
+        if (n1) n1.value = '';
+        if (n2) n2.value = '';
+        return;
+    }
+    if (title) title.textContent = '用户设置';
+    if (studentBlocks) studentBlocks.style.display = '';
+    if (parentBlock) parentBlock.style.display = 'none';
     try {
         const [s, poolState] = await Promise.all([
             apiRequest('/user/settings'),
@@ -992,8 +1040,13 @@ function renderMonthlyPoolRace(pool) {
     const poolXp = formatNumber(pool.pool_xp || 0);
     const fee = pool.fee_xp || 150;
 
+    const su = sessionStudentUsername();
     let joinBtnHtml = '';
-    if (pool.join_window_open && !pool.joined) {
+    if (isParentSession) {
+        if (pool.joined) {
+            joinBtnHtml = '<span class="mp-race-badge mp-race-badge--go">学生已报名</span>';
+        }
+    } else if (pool.join_window_open && !pool.joined) {
         joinBtnHtml = `<button type="button" class="btn btn-primary mp-race-join" id="leaderboard-pool-join">加入奖池（${fee} XP）</button>`;
     } else if (pool.joined) {
         joinBtnHtml = '<span class="mp-race-badge mp-race-badge--go">已报名</span>';
@@ -1014,11 +1067,11 @@ function renderMonthlyPoolRace(pool) {
                 const p = Math.max(0, Math.min(1, Number(r.progress) || 0));
                 const pct = Math.round(p * 100);
                 const cd = Number(r.competition_days) || 0;
-                const me = uname === username ? ' mp-lane-me' : '';
+                const me = uname === su ? ' mp-lane-me' : '';
                 const av = r.avatar_url
                     ? `<img src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="28" height="28" loading="lazy" />`
                     : '<span class="mp-lane-avatar-ph" aria-hidden="true">👤</span>';
-                const you = uname === username ? ' <span class="lb-you">我</span>' : '';
+                const you = uname === su ? ' <span class="lb-you">我</span>' : '';
                 return `<div class="mp-lane${me}">
                     <div class="mp-lane-user">${av}<span class="mp-lane-name">${u}${you}</span></div>
                     <div class="mp-lane-track">
@@ -1611,9 +1664,10 @@ async function apiRequest(endpoint, options = {}) {
     if (!response.ok) {
         const error = await response.json();
 
-        if (response.status === 401 || response.status === 403) {
+        if (response.status === 401) {
             token = null;
             username = null;
+            setSessionParentFlags(false, '');
             localStorage.removeItem('token');
             localStorage.removeItem('username');
             clearWordbankCsvDiscoveryCache();
@@ -1658,9 +1712,10 @@ async function fetchWordbankCsvForDiscovery(level) {
         clearWordbankCsvDiscoveryCache();
         return fetchWordbankCsvForDiscovery(level);
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
         token = null;
         username = null;
+        setSessionParentFlags(false, '');
         localStorage.removeItem('token');
         localStorage.removeItem('username');
         clearWordbankCsvDiscoveryCache();
@@ -1707,11 +1762,12 @@ async function login(loginUsername, password) {
 
         token = data.access_token;
         username = data.username;
+        setSessionParentFlags(!!data.is_parent, data.child_username || '');
         
         localStorage.setItem('token', token);
         localStorage.setItem('username', username);
         
-        showMainPage();
+        void showMainPage();
     } catch (error) {
         showError(error.message);
     }
@@ -1730,9 +1786,10 @@ async function register(username, password, email, inviteCode) {
         });
         token = data.access_token;
         username = data.username;
+        setSessionParentFlags(!!data.is_parent, data.child_username || '');
         localStorage.setItem('token', token);
         localStorage.setItem('username', username);
-        showMainPage();
+        void showMainPage();
     } catch (error) {
         showError(error.message);
     }
@@ -1754,6 +1811,7 @@ async function logout() {
     }
     token = null;
     username = null;
+    setSessionParentFlags(false, '');
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     clearWordbankCsvDiscoveryCache();
@@ -1780,26 +1838,66 @@ function showLoginPage() {
     stopPkInvitePolling();
 }
 
-function showMainPage() {
+function applyParentNavMode() {
+    const hide = isParentSession;
+    ['review', 'discover', 'textbook'].forEach((page) => {
+        document.querySelectorAll(`.nav-item[data-page="${page}"]`).forEach((el) => {
+            el.style.display = hide ? 'none' : '';
+        });
+        document.querySelectorAll(`.mobile-tab[data-page="${page}"]`).forEach((el) => {
+            el.style.display = hide ? 'none' : '';
+        });
+        document.querySelectorAll(`.mobile-more-link[data-page="${page}"]`).forEach((el) => {
+            el.style.display = hide ? 'none' : '';
+        });
+    });
+    document.querySelectorAll('#pk-invite-btn, #ng-pk-active, #mobile-ng-pk-active').forEach((el) => {
+        if (el) el.style.display = hide ? 'none' : '';
+    });
+    const lb = document.getElementById('leaderboard-opt-in');
+    const lab = lb?.closest('label');
+    if (lab) lab.style.display = hide ? 'none' : '';
+}
+
+async function showMainPage() {
     document.getElementById('login-page').classList.remove('active');
     document.getElementById('main-page').classList.add('active');
     const gl = document.getElementById('admin-gear-login');
     if (gl) gl.style.display = 'none';
+    if (token) {
+        try {
+            const d = await apiRequest('/auth/session');
+            setSessionParentFlags(!!d.is_parent, d.child_username || '');
+        } catch (_) {
+            /* 保留本地 session 标记 */
+        }
+    }
     const udisp = document.getElementById('username-display');
-    if (udisp) udisp.textContent = username;
+    if (udisp) {
+        udisp.textContent =
+            isParentSession && childUsername ? `${childUsername}（家长查看）` : username;
+    }
     document.querySelector('#main-page .nav-user')?.setAttribute(
         'aria-label',
-        username ? `当前用户 ${username}` : ''
+        isParentSession && childUsername
+            ? `家长查看 ${childUsername}`
+            : username
+              ? `当前用户 ${username}`
+              : ''
     );
+
+    applyParentNavMode();
 
     loadStats();
     refreshNavUserAvatar();
     void refreshPkInviteIndicator();
     startPkInvitePolling();
-    // 获取用户套餐
     loadUserPlan();
-    // 默认展示「今日复习」区块；须拉取列表，否则会一直显示 index.html 里的占位词（如 apple）
-    showSection('review');
+    if (isParentSession) {
+        showSection('progress');
+    } else {
+        showSection('review');
+    }
 }
 
 async function loadUserPlan() {
@@ -3858,6 +3956,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('settings-backdrop')?.addEventListener('click', closeSettings);
     document.getElementById('settings-close')?.addEventListener('click', closeSettings);
+    document.getElementById('settings-parent-pw-save')?.addEventListener('click', async () => {
+        const p1 = document.getElementById('settings-parent-pw-new')?.value?.trim() || '';
+        const p2 = document.getElementById('settings-parent-pw-confirm')?.value?.trim() || '';
+        if (p1.length < 6) {
+            setSettingsMessage('密码至少 6 个字符', true);
+            return;
+        }
+        if (p1 !== p2) {
+            setSettingsMessage('两次输入的密码不一致', true);
+            return;
+        }
+        try {
+            await apiRequest('/auth/parent-password', {
+                method: 'PATCH',
+                body: JSON.stringify({ password: p1, password_confirm: p2 }),
+            });
+            setSettingsMessage('密码已更新');
+            const n1 = document.getElementById('settings-parent-pw-new');
+            const n2 = document.getElementById('settings-parent-pw-confirm');
+            if (n1) n1.value = '';
+            if (n2) n2.value = '';
+        } catch (e) {
+            setSettingsMessage(e.message || '保存失败', true);
+        }
+    });
     document.getElementById('settings-avatar-input')?.addEventListener('change', (e) => {
         const inp = e.target;
         const f = inp.files && inp.files[0];

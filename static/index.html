@@ -477,6 +477,7 @@
                     <button type="button" class="settings-close" id="settings-close" aria-label="关闭">×</button>
                 </div>
                 <div class="settings-panel-body" id="settings-panel-body">
+                    <div id="settings-student-blocks">
                     <div class="settings-block">
                         <h3 class="settings-subtitle">头像</h3>
                         <p class="settings-hint settings-avatar-upload-hint">选择图片后可在圆框内拖动、缩放；服务器只保留一张 WebP 头像。</p>
@@ -527,6 +528,20 @@
                             <button type="button" class="btn btn-primary" id="settings-duel-send">发起</button>
                         </div>
                         <ul class="settings-duel-list" id="settings-duel-list"></ul>
+                    </div>
+                    </div>
+                    <div id="settings-parent-block" class="settings-block" style="display: none;">
+                        <h3 class="settings-subtitle">家长密码</h3>
+                        <p class="settings-hint" id="settings-parent-login-hint">—</p>
+                        <div class="form-group">
+                            <label for="settings-parent-pw-new">新密码（至少 6 位）</label>
+                            <input type="password" id="settings-parent-pw-new" autocomplete="new-password" />
+                        </div>
+                        <div class="form-group">
+                            <label for="settings-parent-pw-confirm">确认新密码</label>
+                            <input type="password" id="settings-parent-pw-confirm" autocomplete="new-password" />
+                        </div>
+                        <button type="button" class="btn btn-primary" id="settings-parent-pw-save">保存密码</button>
                     </div>
                     <p class="settings-message" id="settings-message" role="status"></p>
                 </div>
@@ -726,6 +741,8 @@
                                     <th>已掌握</th>
                                     <th>套餐</th>
                                     <th>状态</th>
+                                    <th>启用</th>
+                                    <th>家长账户</th>
                                     <th>操作</th>
                                 </tr>
                             </thead>

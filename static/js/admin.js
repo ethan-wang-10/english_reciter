@@ -69,6 +69,8 @@ function renderAdminUsers(users) {
         const chk = en ? 'checked' : '';
         const plan = u.plan || 'free';
         const planLabel = plan === 'paid' ? '<span class="plan-badge-vip">VIP</span>' : '<span class="plan-badge-free">免费</span>';
+        const pchk = u.parent_account_enabled ? 'checked' : '';
+        const parentLogin = `${escapeHtml(u.username)}_parent`;
         return `
             <tr>
                 <td>${escapeHtml(u.username)}</td>
@@ -76,6 +78,16 @@ function renderAdminUsers(users) {
                 <td>${escapeHtml(u.mastered_words)}</td>
                 <td>${planLabel}</td>
                 <td>${en ? '正常' : '已禁用'}</td>
+                <td>
+                    <label class="admin-toggle" title="登录名为 用户名_parent，默认密码 123123">
+                        <input type="checkbox" data-admin-parent="${escapeHtml(u.username)}" ${pchk} ${en ? '' : 'disabled'} />
+                        开启
+                    </label>
+                    <span class="admin-parent-login-hint" style="font-size:12px;color:#666;display:block;margin-top:4px;">${parentLogin}</span>
+                    <button type="button" class="btn btn-secondary btn-admin-parent-pw" style="margin-top:6px;font-size:12px;padding:4px 8px;"
+                        data-admin-parent-password="${escapeHtml(u.username)}"
+                        ${u.parent_account_enabled && en ? '' : 'disabled'}>家长密码</button>
+                </td>
                 <td>
                     <label class="admin-toggle">
                         <input type="checkbox" data-admin-user="${escapeHtml(u.username)}" ${chk} />
@@ -102,6 +114,58 @@ function renderAdminUsers(users) {
             } catch (e) {
                 showAdminNotice(e.message || '操作失败');
                 inp.checked = !want;
+            }
+        });
+    });
+
+    tbody.querySelectorAll('input[data-admin-parent]').forEach((inp) => {
+        inp.addEventListener('change', async () => {
+            const un = inp.getAttribute('data-admin-parent');
+            const want = inp.checked;
+            try {
+                const res = await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/parent`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ enabled: want })
+                });
+                await loadAdminDashboard();
+                if (want && res.default_password_hint) {
+                    showAdminNotice(
+                        `家长账户已创建：登录名 ${un}_parent，默认密码 ${res.default_password_hint}`
+                    );
+                } else {
+                    showAdminNotice(want ? '家长账户已开启' : '家长账户已关闭');
+                }
+            } catch (e) {
+                showAdminNotice(e.message || '操作失败');
+                inp.checked = !want;
+            }
+        });
+    });
+
+    tbody.querySelectorAll('[data-admin-parent-password]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const un = btn.getAttribute('data-admin-parent-password');
+            const p1 = window.prompt(`为学生「${un}」的家长账户（${un}_parent）设置新密码（至少6位）`, '');
+            if (p1 === null) return;
+            const p2 = window.prompt('请再次输入新密码', '');
+            if (p2 === null) return;
+            if (p1 !== p2) {
+                showAdminNotice('两次输入的密码不一致');
+                return;
+            }
+            if (p1.length < 6) {
+                showAdminNotice('密码至少6个字符');
+                return;
+            }
+            showAdminNotice('');
+            try {
+                await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/parent-password`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ password: p1 })
+                });
+                showAdminNotice('家长密码已更新，该家长需重新登录');
+            } catch (e) {
+                showAdminNotice(e.message || '设置失败');
             }
         });
     });
