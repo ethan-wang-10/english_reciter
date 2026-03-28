@@ -8,7 +8,7 @@ let currentRevealedCount = 0; // 当前单词已揭示字母数
 let isSubmitting = false; // 防止重复提交（修复一闪而过bug）
 let isAdvancing = false;  // 防止重复推进到下一题
 
-/** 用户套餐类型: 'free' | 'paid' */
+/** 用户套餐类型: 'free' | 'paid'（paid 对应 VIP 权益，展示文案统一为 VIP） */
 let userPlan = 'free';
 
 /** 本轮 3 次尝试均错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
@@ -1182,7 +1182,7 @@ function showMessage(message, type = 'success', durationMs = 3000) {
     }, durationMs);
 }
 
-/** 词汇导入（付费）接口返回拼装成可读说明（在服务端 message 基础上补充词条明细） */
+/** 词汇导入（VIP）接口返回拼装成可读说明（在服务端 message 基础上补充词条明细） */
 function buildVocabImportFeedback(data) {
     let msg = data.message || '处理完成';
     const q = data.queue_result;
@@ -1666,7 +1666,7 @@ function renderAdminUsers(users) {
         const en = u.enabled !== false;
         const chk = en ? 'checked' : '';
         const plan = u.plan || 'free';
-        const planLabel = plan === 'paid' ? '<span class="plan-badge-paid">付费</span>' : '<span class="plan-badge-free">免费</span>';
+        const planLabel = plan === 'paid' ? '<span class="plan-badge-vip">VIP</span>' : '<span class="plan-badge-free">免费</span>';
         return `
             <tr>
                 <td>${escapeHtml(u.username)}</td>
@@ -1682,7 +1682,7 @@ function renderAdminUsers(users) {
                 </td>
                 <td>
                     <button type="button" class="btn-admin-pw" data-admin-set-password="${escapeHtml(u.username)}">设置密码</button>
-                    <button type="button" class="btn-admin-plan" data-admin-set-plan="${escapeHtml(u.username)}" data-current-plan="${escapeHtml(plan)}">${plan === 'paid' ? '降为免费' : '升为付费'}</button>
+                    <button type="button" class="btn-admin-plan" data-admin-set-plan="${escapeHtml(u.username)}" data-current-plan="${escapeHtml(plan)}">${plan === 'paid' ? '降为免费' : '升为 VIP'}</button>
                 </td>
             </tr>`;
     }).join('');
@@ -1744,7 +1744,7 @@ function renderAdminUsers(users) {
                     body: JSON.stringify({ plan: newPlan })
                 });
                 await loadAdminDashboard();
-                showAdminNotice(`用户 ${un} 已设置为${newPlan === 'paid' ? '付费' : '免费'}版`);
+                showAdminNotice(`用户 ${un} 已设置为${newPlan === 'paid' ? 'VIP' : '免费'}版`);
             } catch (e) {
                 showAdminNotice(e.message || '设置失败');
             }
@@ -1883,10 +1883,10 @@ function renderAdminDeepseekStatus(cfg) {
         return;
     }
     if (cfg.deepseek_api_key_set) {
-        el.textContent = `当前已配置 API Key（${cfg.deepseek_api_key_preview}）。付费版功能可正常使用。`;
+        el.textContent = `当前已配置 API Key（${cfg.deepseek_api_key_preview}）。VIP 功能可正常使用。`;
         el.style.color = 'var(--primary-dark)';
     } else {
-        el.textContent = '尚未配置 DeepSeek API Key。付费版功能（文章AI提取、词汇导入）将不可用。';
+        el.textContent = '尚未配置 DeepSeek API Key。VIP 功能（文章 AI 提取、词汇导入）将不可用。';
         el.style.color = 'var(--error-color)';
     }
 }
@@ -1989,8 +1989,8 @@ function updatePlanUI() {
     const hint = document.getElementById('article-plan-hint');
     if (hint) {
         if (userPlan === 'paid') {
-            hint.textContent = '（付费版：使用 AI 智能提取单词原形）';
-            hint.className = 'plan-hint paid';
+            hint.textContent = '（VIP：使用 AI 智能提取单词原形）';
+            hint.className = 'plan-hint vip';
         } else {
             hint.textContent = '（免费版：按空格分词匹配词库）';
             hint.className = 'plan-hint free';
@@ -2055,7 +2055,7 @@ let textbookCatalogCache = null;
 let textbookReaderContext = null;
 const textbookWordCache = new Map();
 let textbookTooltipToken = null;
-/** 同一 lemma 整段导入流程互斥（含查词与付费导入） */
+/** 同一 lemma 整段导入流程互斥（含查词与 VIP 词汇导入） */
 const textbookLemmaImportBusy = new Set();
 /** 词库无该词时，限制重复点击/请求（毫秒时间戳） */
 const textbookLemmaMissNotBefore = new Map();
@@ -2181,7 +2181,7 @@ async function importWordFromTextbookLemma(lemma) {
         textbookLemmaMissNotBefore.set(k, Date.now() + missCooldownMs);
 
         if (userPlan !== 'paid') {
-            showMainBanner('该词不在现有词库中。升级付费版后可自动通过词汇导入加入词库与待复习。');
+            showMainBanner('该词不在现有词库中。开通 VIP 后可自动通过词汇导入加入词库与待复习。');
             return;
         }
 
@@ -2272,7 +2272,7 @@ function bindTextbookReaderInteractions(root) {
                 } else {
                     showTextbookTooltip(
                         `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
-                            `<div class="tb-tip-zh">词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需付费版）'}</div>`,
+                            `<div class="tb-tip-zh">词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需 VIP）'}</div>`,
                         el,
                     );
                 }
@@ -2308,7 +2308,7 @@ function bindTextbookReaderInteractions(root) {
             } else {
                 showTextbookTooltip(
                     `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
-                        `<div class="tb-tip-zh">词库暂无，点击可尝试导入${userPlan === 'paid' ? '（付费自动 AI 生成）' : '（需付费版）'}</div>`,
+                        `<div class="tb-tip-zh">词库暂无，点击可尝试导入${userPlan === 'paid' ? '（VIP 自动 AI 生成）' : '（需 VIP）'}</div>`,
                     el,
                 );
             }
@@ -4028,7 +4028,7 @@ async function importFromArticle() {
 
 async function importVocabToCSV() {
     if (userPlan !== 'paid') {
-        showMessage('词汇导入功能仅限付费版用户使用', 'error');
+        showMessage('词汇导入功能仅限 VIP 用户使用', 'error');
         return;
     }
     const ta = document.getElementById('import-vocab-textarea');

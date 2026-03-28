@@ -391,7 +391,7 @@ def merged_example_from_pair(en: str, cn: str) -> str:
 # ==================== 用户权限 ====================
 
 def get_user_plan(username: str) -> str:
-    """返回用户套餐类型: 'free' 或 'paid'。默认 free。"""
+    """返回用户套餐: 'free' 或 'paid'（paid 对应 VIP）。默认 free。"""
     users = load_users()
     u = users.get(username)
     if isinstance(u, dict):
@@ -400,7 +400,7 @@ def get_user_plan(username: str) -> str:
 
 
 def set_user_plan(username: str, plan: str) -> bool:
-    """设置用户套餐。plan 必须为 'free' 或 'paid'。"""
+    """设置用户套餐。plan 必须为 'free' 或 'paid'（paid 即 VIP）。"""
     if plan not in ("free", "paid"):
         return False
     users = load_users()
@@ -1841,7 +1841,7 @@ def import_from_article(username):
     """
     从文章文本提取单词，返回匹配词条列表（不直接加入待复习）：
     - 免费版：按空格分词后去查 CSV
-    - 付费版：用 DeepSeek 提取原形，再查 CSV
+    - VIP：用 DeepSeek 提取原形，再查 CSV
     前端拿到词条列表后注入选框，让用户确认后再加入待复习。
     """
     data = request.get_json(silent=True) or {}
@@ -1900,7 +1900,7 @@ def import_from_article(username):
 @token_required
 def import_vocab_to_csv(username):
     """
-    词汇导入功能（仅付费版）：
+    词汇导入功能（仅 VIP）：
     - 接收逗号分隔的单词列表
     - 查找 CSV 中没有的词
     - 用 DeepSeek 生成完整词条
@@ -1908,7 +1908,7 @@ def import_vocab_to_csv(username):
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
     if not is_paid_user(username):
-        return jsonify({'error': '词汇导入功能仅限付费版用户使用'}), 403
+        return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
 
     data = request.get_json(silent=True) or {}
     raw = str(data.get('words', '')).strip()
@@ -2334,7 +2334,7 @@ def admin_update_config():
 @app.route('/api/admin/users/<username>/plan', methods=['PATCH'])
 @admin_required
 def admin_set_user_plan(username):
-    """管理员设置用户套餐（free/paid）。"""
+    """管理员设置用户套餐（free / paid，paid 即 VIP）。"""
     if not is_valid_username(username):
         return jsonify({'error': '无效的用户名'}), 400
     data = request.get_json(silent=True) or {}

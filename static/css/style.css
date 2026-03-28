@@ -3998,7 +3998,7 @@ body {
     color: var(--primary-dark);
 }
 
-/* 词汇导入（付费版） */
+/* 词汇导入（VIP） */
 .import-vocab-panel {
     background: var(--surface);
     border: 2px solid var(--border);
@@ -4007,7 +4007,7 @@ body {
     margin-bottom: 20px;
     box-shadow: var(--shadow);
 }
-.paid-badge {
+.vip-badge {
     display: inline-block;
     padding: 2px 10px;
     background: var(--accent-yellow);
@@ -4072,11 +4072,11 @@ body {
     font-size: 0.88rem;
     font-weight: 600;
 }
-.plan-hint.paid { color: var(--primary-dark); }
+.plan-hint.vip { color: var(--primary-dark); }
 .plan-hint.free { color: var(--text-secondary); }
 
 /* 管理员套餐标签 */
-.plan-badge-paid {
+.plan-badge-vip {
     display: inline-block;
     padding: 2px 8px;
     background: var(--accent-yellow);
