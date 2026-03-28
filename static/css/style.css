@@ -4338,3 +4338,16 @@ body {
     font-size: 0.8rem;
     color: #9aa8b8;
 }
+.textbook-word-tooltip .tb-tip-feedback {
+    font-weight: 600;
+    line-height: 1.45;
+}
+.textbook-word-tooltip .tb-tip-feedback--ok {
+    color: #b8f5c8;
+}
+.textbook-word-tooltip .tb-tip-feedback--warn {
+    color: #ffe08a;
+}
+.textbook-word-tooltip .tb-tip-feedback--error {
+    color: #ffb4b4;
+}

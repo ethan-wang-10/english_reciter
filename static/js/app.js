@@ -2116,6 +2116,25 @@ function showTextbookTooltip(html, anchorEl) {
     });
 }
 
+/** 导入结果提示：优先显示在单词旁气泡内，无锚点时退回顶栏 */
+function showTextbookImportFeedback(anchorEl, message, variant) {
+    const text = String(message || '').trim();
+    if (!text) return;
+    if (!anchorEl) {
+        showMainBanner(text);
+        return;
+    }
+    const cls =
+        variant === 'error'
+            ? 'tb-tip-feedback tb-tip-feedback--error'
+            : variant === 'warn'
+              ? 'tb-tip-feedback tb-tip-feedback--warn'
+              : 'tb-tip-feedback tb-tip-feedback--ok';
+    showTextbookTooltip(`<div class="${cls}">${escapeHtml(text)}</div>`, anchorEl);
+    textbookTooltipToken = anchorEl;
+    anchorEl.classList.add('tb-token--active');
+}
+
 async function textbookLookupWord(lemma) {
     const k = String(lemma || '').trim().toLowerCase();
     if (!k || k.length < 2) return null;
@@ -2144,7 +2163,7 @@ function buildImportItemFromCsvRow(w) {
     };
 }
 
-async function importWordFromTextbookLemma(lemma) {
+async function importWordFromTextbookLemma(lemma, anchorEl) {
     const raw = String(lemma || '').trim();
     if (!raw) return;
     const k = raw.toLowerCase();
@@ -2164,27 +2183,32 @@ async function importWordFromTextbookLemma(lemma) {
                 const added = data.added || 0;
                 const skipped = data.skipped_duplicate || 0;
                 if (added > 0) {
-                    showMainBanner(`「${row.english}」已加入待复习`);
+                    showTextbookImportFeedback(anchorEl, `「${row.english}」已加入待复习`, 'ok');
                 } else if (skipped > 0) {
-                    showMainBanner(`「${row.english}」已在学习列表中`);
+                    showTextbookImportFeedback(anchorEl, `「${row.english}」已在学习列表中`, 'warn');
                 } else {
-                    showMainBanner(data.message || '导入完成');
+                    showTextbookImportFeedback(anchorEl, data.message || '导入完成', 'ok');
                 }
                 loadStats();
             } catch (e) {
-                showMainBanner(e.message || '导入失败');
+                showTextbookImportFeedback(anchorEl, e.message || '导入失败', 'error');
             }
             return;
         }
 
         const notBefore = textbookLemmaMissNotBefore.get(k) || 0;
         if (Date.now() < notBefore) {
+            showTextbookImportFeedback(anchorEl, '请稍候再试', 'warn');
             return;
         }
         textbookLemmaMissNotBefore.set(k, Date.now() + missCooldownMs);
 
         if (userPlan !== 'paid') {
-            showMainBanner('该词不在现有词库中。开通 VIP 后可自动通过词汇导入加入词库与待复习。');
+            showTextbookImportFeedback(
+                anchorEl,
+                '该词不在现有词库中。开通 VIP 后可自动通过词汇导入加入词库与待复习。',
+                'warn',
+            );
             return;
         }
 
@@ -2197,11 +2221,11 @@ async function importWordFromTextbookLemma(lemma) {
                 }),
             });
             const msg = data.message || '已完成';
-            showMainBanner(msg);
+            showTextbookImportFeedback(anchorEl, msg, 'ok');
             textbookWordCache.delete(k);
             loadStats();
         } catch (e) {
-            showMainBanner(e.message || '词汇导入失败');
+            showTextbookImportFeedback(anchorEl, e.message || '词汇导入失败', 'error');
         }
     } finally {
         textbookLemmaImportBusy.delete(k);
@@ -2336,15 +2360,14 @@ function bindTextbookReaderInteractions(root) {
                 longPressFired = false;
                 return;
             }
-            hideTextbookTooltip();
-            void importWordFromTextbookLemma(lemma);
+            void importWordFromTextbookLemma(lemma, el);
         });
 
         el.addEventListener('keydown', (ev) => {
             if (ev.key === 'Enter' || ev.key === ' ') {
                 ev.preventDefault();
                 const lemma = el.getAttribute('data-lemma');
-                if (lemma) void importWordFromTextbookLemma(lemma);
+                if (lemma) void importWordFromTextbookLemma(lemma, el);
             }
         });
     });
