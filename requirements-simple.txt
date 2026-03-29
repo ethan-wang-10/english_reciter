@@ -16,8 +16,9 @@ prettytable==3.10.0
 readchar==4.0.6
 nltk==3.8.1
 
-# 词库：英文词形还原（需 `python -m spacy download en_core_web_sm`）
+# 词库：英文词形还原（模型与 spacy 一并安装，无需单独 download）
 spacy==3.7.4
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
 # 头像：压缩与按需缩放（WebP）
 Pillow==10.2.0

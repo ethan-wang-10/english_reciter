@@ -6,6 +6,7 @@
 """
 
 import os
+import sys
 import csv
 import json
 import random
@@ -2220,6 +2221,40 @@ def _normalize_apostrophe_token(term: str) -> str:
 _spacy_nlp = None
 _spacy_nlp_lock = threading.Lock()
 _spacy_nlp_load_failed = False
+_spacy_download_attempted = False
+
+
+def _try_download_en_core_web_sm() -> bool:
+    """在模型缺失时执行 `python -m spacy download en_core_web_sm`（需外网；多进程用文件锁）。"""
+    lock_path = Path(tempfile.gettempdir()) / "english_reciter_spacy_en_sm_download.lock"
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lf = open(lock_path, "a+")
+        try:
+            if fcntl is not None:
+                fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+            logger.info("正在下载 spaCy 模型 en_core_web_sm（首次或缺失时）…")
+            subprocess.run(
+                [sys.executable, "-m", "spacy", "download", "en_core_web_sm"],
+                check=True,
+                timeout=600,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            )
+            return True
+        finally:
+            if fcntl is not None:
+                try:
+                    fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            lf.close()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, FileNotFoundError) as e:
+        logger.warning("spacy download en_core_web_sm 失败: %s", e)
+        return False
 
 
 def _wordbank_lemma_spacy_enabled() -> bool:
@@ -2233,8 +2268,8 @@ def _wordbank_lemma_spacy_enabled() -> bool:
 
 
 def _get_spacy_nlp():
-    """懒加载 en_core_web_sm；失败则后续仅使用启发式。"""
-    global _spacy_nlp, _spacy_nlp_load_failed
+    """懒加载 en_core_web_sm；缺失时尝试 spacy download 一次；再失败则仅用启发式。"""
+    global _spacy_nlp, _spacy_nlp_load_failed, _spacy_download_attempted
     if spacy is None or _spacy_nlp_load_failed:
         return None
     if _spacy_nlp is not None:
@@ -2246,11 +2281,34 @@ def _get_spacy_nlp():
             return _spacy_nlp
         try:
             _spacy_nlp = spacy.load("en_core_web_sm")
+            return _spacy_nlp
+        except OSError:
+            pass
         except Exception as e:
-            logger.warning("spaCy 模型 en_core_web_sm 未加载，词形还原将使用启发式: %s", e)
-            _spacy_nlp_load_failed = True
-            return None
-    return _spacy_nlp
+            logger.warning("spaCy load en_core_web_sm 异常，将尝试下载或降级: %s", e)
+
+        if not _spacy_download_attempted:
+            _spacy_download_attempted = True
+            if _try_download_en_core_web_sm():
+                try:
+                    _spacy_nlp = spacy.load("en_core_web_sm")
+                    return _spacy_nlp
+                except Exception as e:
+                    logger.warning(
+                        "下载后仍无法加载 en_core_web_sm: %s。"
+                        "可手动执行: %s -m spacy download en_core_web_sm",
+                        e,
+                        sys.executable,
+                    )
+            else:
+                logger.warning(
+                    "无法安装 en_core_web_sm，词形还原将使用启发式。"
+                    "请在同一 venv 执行: pip install -r requirements-simple.txt "
+                    "或 %s -m spacy download en_core_web_sm",
+                    sys.executable,
+                )
+        _spacy_nlp_load_failed = True
+        return None
 
 
 def _spacy_lemma_for_surface(surface: str) -> Optional[str]:
