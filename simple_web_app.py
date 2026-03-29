@@ -2347,7 +2347,7 @@ def _contraction_stem_variants(term: str) -> List[str]:
 
 
 def _iter_csv_lemma_candidates(surface: str, mappings: dict):
-    """按优先级产出 (候选原形, 类别)；管理员映射 → 表面形 → spaCy lemma → 撇号 → 复数 → 过去式 → -ing。"""
+    """按优先级产出 (候选原形, 类别)；先词库直配与启发式（快），最后才 spaCy 原型。"""
     if surface in mappings:
         yield mappings[surface], 'admin'
         return
@@ -2355,12 +2355,6 @@ def _iter_csv_lemma_candidates(surface: str, mappings: dict):
     if surface not in seen:
         seen.add(surface)
         yield surface, 'surface'
-    lem = _spacy_lemma_for_surface(surface)
-    if lem and lem != surface:
-        x = mappings.get(lem, lem)
-        if x not in seen:
-            seen.add(x)
-            yield x, 'lemma_nlp'
     for stem in _contraction_stem_variants(surface):
         x = mappings.get(stem, stem)
         if x not in seen:
@@ -2381,11 +2375,12 @@ def _iter_csv_lemma_candidates(surface: str, mappings: dict):
         if x not in seen:
             seen.add(x)
             yield x, 'ing'
-
-
-def _csv_lemma_candidates_for_surface(surface: str, mappings: dict) -> List[str]:
-    """英文表面形 → 词库 english 候选（管理员映射、spaCy、's/'ve、复数、过去式、-ing）。"""
-    return [c for c, _ in _iter_csv_lemma_candidates(surface, mappings)]
+    lem = _spacy_lemma_for_surface(surface)
+    if lem and lem != surface:
+        x = mappings.get(lem, lem)
+        if x not in seen:
+            seen.add(x)
+            yield x, 'lemma_nlp'
 
 
 def _first_lemma_in_csv_with_kind(
@@ -2403,12 +2398,9 @@ def _first_lemma_in_csv(surface: str, mappings: dict, csv_keys: set) -> Optional
 
 
 def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
-    """词库无该词时，用于生成/排队的目标 lemma（spaCy 优先，其次 's/'ve、复数、过去式、-ing）。"""
+    """词库无该词时，用于生成/排队的目标 lemma（启发式优先，最后 spaCy）。"""
     if surface in mappings:
         return mappings[surface]
-    lem = _spacy_lemma_for_surface(surface)
-    if lem and lem != surface:
-        return mappings.get(lem, lem)
     cov = _contraction_stem_variants(surface)
     if cov:
         return mappings.get(cov[0], cov[0])
@@ -2421,6 +2413,9 @@ def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
     ing = _ing_stem_variants(surface)
     if ing:
         return mappings.get(ing[0], ing[0])
+    lem = _spacy_lemma_for_surface(surface)
+    if lem and lem != surface:
+        return mappings.get(lem, lem)
     return surface
 
 
@@ -2479,11 +2474,16 @@ def search_wordbank_csv(username):
         zh = row.get('chinese', '')
         for term in terms:
             if re.match(r'[a-z]', term):
-                matched = False
-                for cand in _csv_lemma_candidates_for_surface(term, mappings):
-                    if en == cand:
-                        matched = True
-                        break
+                if en == term:
+                    matched = True
+                elif term in mappings and mappings[term] == en:
+                    matched = True
+                else:
+                    matched = False
+                    for cand, _ in _iter_csv_lemma_candidates(term, mappings):
+                        if en == cand:
+                            matched = True
+                            break
             else:
                 matched = term in zh
             if matched:
