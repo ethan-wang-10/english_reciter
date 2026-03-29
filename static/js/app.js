@@ -1647,6 +1647,20 @@ async function speakExample() {
     }
 }
 
+/** 解析 JSON 响应；失败时抛出可读错误（Safari 对 SyntaxError 常显示为 “The string did not match the expected pattern.”） */
+function parseApiJsonBody(text) {
+    if (text == null || text === '') {
+        return null;
+    }
+    try {
+        return JSON.parse(text);
+    } catch {
+        throw new Error(
+            '无法解析服务器响应（常见原因：网关超时、502/504，或返回了网页而非 JSON）。请稍后重试；批量词汇导入时可先减少单次词数。'
+        );
+    }
+}
+
 // API 请求
 async function apiRequest(endpoint, options = {}) {
     const headers = {
@@ -1663,8 +1677,11 @@ async function apiRequest(endpoint, options = {}) {
         headers
     });
     
+    const text = await response.text();
+    const data = parseApiJsonBody(text);
+
     if (!response.ok) {
-        const error = await response.json();
+        const error = data && typeof data === 'object' ? data : {};
 
         if (response.status === 401) {
             token = null;
@@ -1679,7 +1696,7 @@ async function apiRequest(endpoint, options = {}) {
         throw new Error(error.error || error.detail || '请求失败');
     }
     
-    return response.json();
+    return data;
 }
 
 /** 单词学习：会话内缓存 + If-None-Match，配合服务端 fields=minimal 与 ETag */
