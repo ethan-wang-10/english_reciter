@@ -4619,6 +4619,15 @@ button.import-article-chip--selected:hover {
     font-size: 0.8rem;
     color: #9aa8b8;
 }
+.textbook-word-tooltip .tb-tip-loading {
+    color: #c5d0dc;
+    animation: tb-tip-pulse 0.9s ease-in-out infinite;
+}
+@keyframes tb-tip-pulse {
+    50% {
+        opacity: 0.55;
+    }
+}
 .textbook-word-tooltip .tb-tip-feedback {
     font-weight: 600;
     line-height: 1.45;

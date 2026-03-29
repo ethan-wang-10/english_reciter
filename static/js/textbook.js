@@ -5,6 +5,10 @@ let textbookCatalogCache = null;
 /** @type {{ corpusId: string, jsonPath: string, title: string } | null} */
 let textbookReaderContext = null;
 const textbookWordCache = new Map();
+/** 词库无词条时：疑难词是否拦截（与 surface 对齐的小写 key） */
+const textbookTroubleBlockedCache = new Map();
+/** 同一 lemma 正在进行的单次查词请求（与预取并行时去重） */
+const textbookLookupInflight = new Map();
 /** 本次会话内：隐式词形命中类型 plural / past / ing / contraction（用于气泡提示） */
 const textbookImplicitMorphHint = new Map();
 let textbookTooltipToken = null;
@@ -103,40 +107,112 @@ function showTextbookImportFeedback(anchorEl, message, variant) {
     anchorEl.classList.add('tb-token--active');
 }
 
-async function textbookLookupWord(lemma) {
-    const k = String(lemma || '')
+function normalizeTextbookLemmaKey(lemma) {
+    return String(lemma || '')
         .trim()
         .toLowerCase()
         .replace(/\u2019/g, "'")
         .replace(/\u2018/g, "'");
-    if (!k || k.length < 2) return null;
-    if (textbookWordCache.has(k)) return textbookWordCache.get(k);
-    try {
-        const params = new URLSearchParams({ q: k });
-        const data = await apiRequest(`/wordbank/csv/search?${params}`);
-        const words = Array.isArray(data.words) ? data.words : [];
-        const row = words[0] || null;
+}
+
+/** 解析 /wordbank/csv/search 响应（含 per_surface=1 的批量预取） */
+function hydrateTextbookFromSearchResponse(data) {
+    const sh = data.surface_hits;
+    if (sh != null && typeof sh === 'object') {
+        const sb = data.surface_blocked || {};
+        for (const k of Object.keys(sh)) {
+            textbookWordCache.set(k, sh[k] || null);
+            if (Object.prototype.hasOwnProperty.call(sb, k)) textbookTroubleBlockedCache.set(k, !!sb[k]);
+        }
         const inlp = data.implicit_lemma_nlp_resolution || {};
         const ip = data.implicit_plural_resolution || {};
         const ipt = data.implicit_past_resolution || {};
         const iing = data.implicit_ing_resolution || {};
         const icon = data.implicit_contraction_resolution || {};
-        // 命中与未命中均缓存（含已有映射仍无词条），避免同一词反复悬停打接口
-        textbookWordCache.set(k, row);
-        if (row) {
-            if (inlp[k]) textbookImplicitMorphHint.set(k, 'lemma_nlp');
-            else if (ipt[k]) textbookImplicitMorphHint.set(k, 'past');
-            else if (iing[k]) textbookImplicitMorphHint.set(k, 'ing');
-            else if (icon[k]) textbookImplicitMorphHint.set(k, 'contraction');
-            else if (ip[k]) textbookImplicitMorphHint.set(k, 'plural');
-            else textbookImplicitMorphHint.delete(k);
-        } else {
-            textbookImplicitMorphHint.delete(k);
+        for (const k of Object.keys(sh)) {
+            if (sh[k]) {
+                if (inlp[k]) textbookImplicitMorphHint.set(k, 'lemma_nlp');
+                else if (ipt[k]) textbookImplicitMorphHint.set(k, 'past');
+                else if (iing[k]) textbookImplicitMorphHint.set(k, 'ing');
+                else if (icon[k]) textbookImplicitMorphHint.set(k, 'contraction');
+                else if (ip[k]) textbookImplicitMorphHint.set(k, 'plural');
+                else textbookImplicitMorphHint.delete(k);
+            } else {
+                textbookImplicitMorphHint.delete(k);
+            }
         }
-        return row;
-    } catch (_) {
-        return null;
+        return;
     }
+}
+
+async function textbookLookupWord(lemma) {
+    const k = normalizeTextbookLemmaKey(lemma);
+    if (!k || k.length < 2) return null;
+    if (textbookWordCache.has(k)) return textbookWordCache.get(k);
+    if (textbookLookupInflight.has(k)) return textbookLookupInflight.get(k);
+    const p = (async () => {
+        try {
+            const data = await apiRequest(
+                `/wordbank/csv/search?q=${encodeURIComponent(k)}&per_surface=1`,
+            );
+            hydrateTextbookFromSearchResponse(data);
+            return textbookWordCache.has(k) ? textbookWordCache.get(k) : null;
+        } catch (_) {
+            return null;
+        } finally {
+            textbookLookupInflight.delete(k);
+        }
+    })();
+    textbookLookupInflight.set(k, p);
+    return p;
+}
+
+/** 课文打开后批量预取本页生词，悬停时多数已命中缓存 */
+async function textbookPrefetchLessonWords(rootEl) {
+    const keys = new Set();
+    rootEl.querySelectorAll('.textbook-token--word[data-lemma]').forEach((el) => {
+        const k = normalizeTextbookLemmaKey(el.getAttribute('data-lemma'));
+        if (k && k.length >= 2) keys.add(k);
+    });
+    const list = [...keys].filter((k) => !textbookWordCache.has(k));
+    if (list.length === 0) return;
+    const CHUNK = 100;
+    for (let i = 0; i < list.length; i += CHUNK) {
+        const chunk = list.slice(i, i + CHUNK);
+        const q = chunk.join(',');
+        try {
+            const data = await apiRequest(
+                `/wordbank/csv/search?q=${encodeURIComponent(q)}&per_surface=1`,
+            );
+            hydrateTextbookFromSearchResponse(data);
+        } catch (_) {
+            /* 预取失败不阻塞阅读 */
+        }
+    }
+}
+
+async function textbookSubtextWhenMissingInWordbank(lemma, k, touchHint) {
+    let sub = touchHint
+        ? `词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需 VIP）'}`
+        : `词库暂无，点击可尝试导入${userPlan === 'paid' ? '（VIP 自动 AI 生成）' : '（需 VIP）'}`;
+    if (textbookTroubleBlockedCache.has(k)) {
+        if (textbookTroubleBlockedCache.get(k)) {
+            sub = '词库暂无；该词已列入疑难词，请联系管理员配置映射';
+        }
+        return sub;
+    }
+    try {
+        const ts = await apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(lemma)}`);
+        if (ts && ts.blocked) {
+            sub = '词库暂无；该词已列入疑难词，请联系管理员配置映射';
+            textbookTroubleBlockedCache.set(k, true);
+        } else {
+            textbookTroubleBlockedCache.set(k, false);
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    return sub;
 }
 
 /** 课文表面形与词库词条不一致时（管理员映射或隐式复数/过去式/-ing/'s/'ve），第一行显示课文中的词，第二行显示 → 原形 */
@@ -264,6 +340,7 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
             showTextbookImportFeedback(anchorEl, msg, 'ok');
             textbookWordCache.delete(k);
             textbookImplicitMorphHint.delete(k);
+            textbookTroubleBlockedCache.delete(k);
             loadStats();
         } catch (e) {
             showTextbookImportFeedback(anchorEl, e.message || '词汇导入失败', 'error');
@@ -326,6 +403,13 @@ function bindTextbookReaderInteractions(root) {
                 if (!lemma) return;
                 el.classList.add('tb-token--active');
                 textbookTooltipToken = el;
+                const k = normalizeTextbookLemmaKey(lemma);
+                if (!textbookWordCache.has(k)) {
+                    showTextbookTooltip(
+                        '<div class="tb-tip-meta tb-tip-loading">释义加载中…</div>',
+                        el,
+                    );
+                }
                 const row = await textbookLookupWord(lemma);
                 if (row) {
                     showTextbookTooltip(
@@ -333,15 +417,7 @@ function bindTextbookReaderInteractions(root) {
                         el,
                     );
                 } else {
-                    let sub = `词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需 VIP）'}`;
-                    try {
-                        const ts = await apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(lemma)}`);
-                        if (ts && ts.blocked) {
-                            sub = '词库暂无；该词已列入疑难词，请联系管理员配置映射';
-                        }
-                    } catch (_) {
-                        /* ignore */
-                    }
+                    const sub = await textbookSubtextWhenMissingInWordbank(lemma, k, true);
                     showTextbookTooltip(
                         `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` + `<div class="tb-tip-zh">${escapeHtml(sub)}</div>`,
                         el,
@@ -365,6 +441,13 @@ function bindTextbookReaderInteractions(root) {
             if (!lemma) return;
             el.classList.add('tb-token--active');
             textbookTooltipToken = el;
+            const k = normalizeTextbookLemmaKey(lemma);
+            if (!textbookWordCache.has(k)) {
+                showTextbookTooltip(
+                    '<div class="tb-tip-meta tb-tip-loading">释义加载中…</div>',
+                    el,
+                );
+            }
             const row = await textbookLookupWord(lemma);
             if (row) {
                 showTextbookTooltip(
@@ -372,15 +455,7 @@ function bindTextbookReaderInteractions(root) {
                     el,
                 );
             } else {
-                let sub = `词库暂无，点击可尝试导入${userPlan === 'paid' ? '（VIP 自动 AI 生成）' : '（需 VIP）'}`;
-                try {
-                    const ts = await apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(lemma)}`);
-                    if (ts && ts.blocked) {
-                        sub = '词库暂无；该词已列入疑难词，请联系管理员配置映射';
-                    }
-                } catch (_) {
-                    /* ignore */
-                }
+                const sub = await textbookSubtextWhenMissingInWordbank(lemma, k);
                 showTextbookTooltip(
                     `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` + `<div class="tb-tip-zh">${escapeHtml(sub)}</div>`,
                     el,
@@ -499,6 +574,7 @@ function renderTextbookReader(data) {
 
     bindTextbookReaderInteractions(reader);
     ensureTextbookDocClickClose();
+    void textbookPrefetchLessonWords(reader);
 
     document.getElementById('textbook-back-btn')?.addEventListener('click', () => {
         hideTextbookTooltip();

@@ -2425,6 +2425,7 @@ def search_wordbank_csv(username):
     """在 CSV 词汇表中搜索（支持英文/中文，逗号分隔多词）。"""
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
+    per_surface = request.args.get('per_surface', '').strip().lower() in ('1', 'true', 'yes')
     if not q:
         return jsonify({
             'words': [],
@@ -2435,6 +2436,8 @@ def search_wordbank_csv(username):
             'implicit_past_resolution': {},
             'implicit_ing_resolution': {},
             'implicit_contraction_resolution': {},
+            'surface_hits': {},
+            'surface_blocked': {},
         }), 200
     terms = [
         _normalize_apostrophe_token(t.strip())
@@ -2451,9 +2454,22 @@ def search_wordbank_csv(username):
     implicit_past_resolution: Dict[str, str] = {}
     implicit_ing_resolution: Dict[str, str] = {}
     implicit_contraction_resolution: Dict[str, str] = {}
+    surface_hits: Dict[str, Optional[dict]] = {}
+    surface_blocked: Dict[str, bool] = {}
+    difficult: Dict[str, object] = {}
+    if per_surface:
+        with _TROUBLES_LOCK:
+            difficult = dict(_read_troubles_unlocked().get('difficult') or {})
     for term in terms:
         if re.match(r'[a-z]', term):
             hit, kind = _first_lemma_in_csv_with_kind(term, mappings, csv_row_keys)
+            if per_surface and term not in surface_hits:
+                if hit is None:
+                    surface_hits[term] = None
+                    surface_blocked[term] = term in difficult
+                else:
+                    surface_hits[term] = lookup_csv_word(hit)
+                    surface_blocked[term] = False
             if hit is not None and hit != term:
                 lemma_resolution[term] = hit
                 if term not in mappings:
@@ -2491,7 +2507,7 @@ def search_wordbank_csv(username):
                     seen.add(en)
                     result.append(row)
                 break
-    return jsonify({
+    out: Dict[str, object] = {
         'words': result,
         'count': len(result),
         'lemma_resolution': lemma_resolution,
@@ -2500,7 +2516,11 @@ def search_wordbank_csv(username):
         'implicit_past_resolution': implicit_past_resolution,
         'implicit_ing_resolution': implicit_ing_resolution,
         'implicit_contraction_resolution': implicit_contraction_resolution,
-    }), 200
+    }
+    if per_surface:
+        out['surface_hits'] = surface_hits
+        out['surface_blocked'] = surface_blocked
+    return jsonify(out), 200
 
 
 @app.route('/api/words/import-from-article', methods=['POST'])
