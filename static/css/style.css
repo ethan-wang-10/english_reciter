@@ -4604,7 +4604,35 @@ button.import-article-chip--selected:hover {
     line-height: 1.45;
     border-radius: 10px;
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
-    pointer-events: none;
+    pointer-events: auto;
+}
+.textbook-word-tooltip .tb-tip-actions {
+    margin-top: 10px;
+}
+.textbook-word-tooltip .tb-tip-nlp-btn {
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(159, 220, 249, 0.45);
+    background: rgba(28, 176, 246, 0.22);
+    color: #c8ecfc;
+    cursor: pointer;
+}
+.textbook-word-tooltip .tb-tip-nlp-btn:hover {
+    background: rgba(28, 176, 246, 0.35);
+}
+.textbook-word-tooltip .tb-tip-nlp-hint {
+    margin-top: 8px;
+    font-size: 0.72rem;
+    color: #7a8a9c;
+    line-height: 1.35;
+}
+.textbook-word-tooltip .tb-tip-nlp-done {
+    margin: 8px 0 0;
+    font-size: 0.8rem;
+    color: #9aa8b8;
 }
 .textbook-word-tooltip .tb-tip-en {
     font-weight: 700;

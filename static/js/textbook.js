@@ -12,6 +12,8 @@ const textbookLookupInflight = new Map();
 /** 本次会话内：隐式词形命中类型 plural / past / ing / contraction（用于气泡提示） */
 const textbookImplicitMorphHint = new Map();
 let textbookTooltipToken = null;
+/** 鼠标离开词后延迟关闭气泡，便于移入气泡点击「智能还原」 */
+let textbookTooltipHideTimer = null;
 /** 同一 lemma 整段导入流程互斥（含查词与 VIP 词汇导入） */
 const textbookLemmaImportBusy = new Set();
 /** 词库无该词时，限制重复点击/请求（毫秒时间戳） */
@@ -26,7 +28,23 @@ function isTextbookMetadataLine(line) {
     return false;
 }
 
+function clearTextbookTooltipHideTimer() {
+    if (textbookTooltipHideTimer) {
+        clearTimeout(textbookTooltipHideTimer);
+        textbookTooltipHideTimer = null;
+    }
+}
+
+function scheduleHideTextbookTooltip(delayMs) {
+    clearTextbookTooltipHideTimer();
+    textbookTooltipHideTimer = setTimeout(() => {
+        textbookTooltipHideTimer = null;
+        hideTextbookTooltip();
+    }, delayMs);
+}
+
 function hideTextbookTooltip() {
+    clearTextbookTooltipHideTimer();
     const tip = document.getElementById('textbook-word-tooltip');
     if (tip) {
         tip.hidden = true;
@@ -34,6 +52,21 @@ function hideTextbookTooltip() {
     }
     document.querySelectorAll('.tb-token--active').forEach((el) => el.classList.remove('tb-token--active'));
     textbookTooltipToken = null;
+}
+
+/** 气泡可交互：移入气泡取消关闭 */
+function ensureTextbookTooltipHoverBridge() {
+    const tip = document.getElementById('textbook-word-tooltip');
+    if (!tip || tip.dataset.tbHoverBridge) return;
+    tip.dataset.tbHoverBridge = '1';
+    tip.addEventListener('mouseenter', () => clearTextbookTooltipHideTimer());
+    tip.addEventListener('mouseleave', (e) => {
+        const rel = e.relatedTarget;
+        if (rel && textbookTooltipToken && (textbookTooltipToken === rel || textbookTooltipToken.contains(rel))) {
+            return;
+        }
+        scheduleHideTextbookTooltip(220);
+    });
 }
 
 let textbookTooltipScrollBound = false;
@@ -78,6 +111,7 @@ function positionTextbookTooltipNearEl(anchorEl) {
 function showTextbookTooltip(html, anchorEl) {
     const tip = document.getElementById('textbook-word-tooltip');
     if (!tip) return;
+    ensureTextbookTooltipHoverBridge();
     ensureTextbookTooltipScrollReposition();
     tip.innerHTML = html;
     tip.hidden = false;
@@ -145,26 +179,71 @@ function hydrateTextbookFromSearchResponse(data) {
     }
 }
 
-async function textbookLookupWord(lemma) {
+/**
+ * 课文查词：默认仅词库 + 规则词形（nlp=0，不调用 spaCy）。
+ * opts.nlp === true 时在用户确认「智能还原」后调用，走 spaCy。
+ */
+async function textbookLookupWord(lemma, opts = {}) {
     const k = normalizeTextbookLemmaKey(lemma);
     if (!k || k.length < 2) return null;
-    if (textbookWordCache.has(k)) return textbookWordCache.get(k);
-    if (textbookLookupInflight.has(k)) return textbookLookupInflight.get(k);
+    const wantNlp = opts.nlp === true;
+    if (textbookWordCache.has(k)) {
+        const row = textbookWordCache.get(k);
+        if (row != null || !wantNlp) return row;
+    }
+    const inflightKey = wantNlp ? `${k}\0nlp` : k;
+    if (textbookLookupInflight.has(inflightKey)) return textbookLookupInflight.get(inflightKey);
     const p = (async () => {
         try {
+            const nlp = wantNlp ? '1' : '0';
             const data = await apiRequest(
-                `/wordbank/csv/search?q=${encodeURIComponent(k)}&per_surface=1`,
+                `/wordbank/csv/search?q=${encodeURIComponent(k)}&per_surface=1&nlp=${nlp}`,
             );
             hydrateTextbookFromSearchResponse(data);
             return textbookWordCache.has(k) ? textbookWordCache.get(k) : null;
         } catch (_) {
             return null;
         } finally {
-            textbookLookupInflight.delete(k);
+            textbookLookupInflight.delete(inflightKey);
         }
     })();
-    textbookLookupInflight.set(k, p);
+    textbookLookupInflight.set(inflightKey, p);
     return p;
+}
+
+function buildTextbookMissingTooltipHtml(lemma, k, sub) {
+    return (
+        `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
+        `<div class="tb-tip-zh">${escapeHtml(sub)}</div>` +
+        `<div class="tb-tip-actions">` +
+        `<button type="button" class="tb-tip-nlp-btn" data-tb-nlp="${escapeHtml(k)}">智能还原（词典，较慢）</button>` +
+        `</div>` +
+        `<div class="tb-tip-meta tb-tip-nlp-hint">不规则词形需加载语言模型，请按需点击</div>`
+    );
+}
+
+async function runTextbookNlpResolve(lemma, anchorEl) {
+    ensureTextbookTooltipHoverBridge();
+    showTextbookTooltip(
+        '<div class="tb-tip-meta tb-tip-loading">词典还原中（较慢）…</div>',
+        anchorEl,
+    );
+    const k = normalizeTextbookLemmaKey(lemma);
+    const row = await textbookLookupWord(lemma, { nlp: true });
+    if (row) {
+        showTextbookTooltip(
+            buildTextbookTooltipHtmlFromRow(row, lemma, textbookImplicitMorphHint.get(k) || null),
+            anchorEl,
+        );
+    } else {
+        const sub = await textbookSubtextWhenMissingInWordbank(lemma, k);
+        showTextbookTooltip(
+            `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
+                `<div class="tb-tip-zh">${escapeHtml(sub)}</div>` +
+                `<p class="tb-tip-meta tb-tip-nlp-done">智能还原后仍未匹配词库。</p>`,
+            anchorEl,
+        );
+    }
 }
 
 /** 课文打开后批量预取本页生词，悬停时多数已命中缓存 */
@@ -182,7 +261,7 @@ async function textbookPrefetchLessonWords(rootEl) {
         const q = chunk.join(',');
         try {
             const data = await apiRequest(
-                `/wordbank/csv/search?q=${encodeURIComponent(q)}&per_surface=1`,
+                `/wordbank/csv/search?q=${encodeURIComponent(q)}&per_surface=1&nlp=0`,
             );
             hydrateTextbookFromSearchResponse(data);
         } catch (_) {
@@ -275,7 +354,10 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
 
     textbookLemmaImportBusy.add(k);
     try {
-        const row = await textbookLookupWord(k);
+        let row = await textbookLookupWord(k);
+        if (!row) {
+            row = await textbookLookupWord(k, { nlp: true });
+        }
         if (row) {
             try {
                 const data = await apiRequest('/words/import-json', {
@@ -401,6 +483,7 @@ function bindTextbookReaderInteractions(root) {
                 pressTimer = null;
                 longPressFired = true;
                 if (!lemma) return;
+                clearTextbookTooltipHideTimer();
                 el.classList.add('tb-token--active');
                 textbookTooltipToken = el;
                 const k = normalizeTextbookLemmaKey(lemma);
@@ -418,10 +501,7 @@ function bindTextbookReaderInteractions(root) {
                     );
                 } else {
                     const sub = await textbookSubtextWhenMissingInWordbank(lemma, k, true);
-                    showTextbookTooltip(
-                        `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` + `<div class="tb-tip-zh">${escapeHtml(sub)}</div>`,
-                        el,
-                    );
+                    showTextbookTooltip(buildTextbookMissingTooltipHtml(lemma, k, sub), el);
                 }
             }, 480);
         });
@@ -439,6 +519,7 @@ function bindTextbookReaderInteractions(root) {
             if (!canHover) return;
             const lemma = el.getAttribute('data-lemma');
             if (!lemma) return;
+            clearTextbookTooltipHideTimer();
             el.classList.add('tb-token--active');
             textbookTooltipToken = el;
             const k = normalizeTextbookLemmaKey(lemma);
@@ -456,16 +537,16 @@ function bindTextbookReaderInteractions(root) {
                 );
             } else {
                 const sub = await textbookSubtextWhenMissingInWordbank(lemma, k);
-                showTextbookTooltip(
-                    `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` + `<div class="tb-tip-zh">${escapeHtml(sub)}</div>`,
-                    el,
-                );
+                showTextbookTooltip(buildTextbookMissingTooltipHtml(lemma, k, sub), el);
             }
         });
 
-        el.addEventListener('mouseleave', () => {
+        el.addEventListener('mouseleave', (e) => {
             if (!canHover) return;
-            if (textbookTooltipToken === el) hideTextbookTooltip();
+            if (textbookTooltipToken !== el) return;
+            const rel = e.relatedTarget;
+            if (rel && tip && (tip === rel || tip.contains(rel))) return;
+            scheduleHideTextbookTooltip(240);
         });
 
         el.addEventListener('mousemove', () => {
@@ -493,6 +574,26 @@ function bindTextbookReaderInteractions(root) {
             }
         });
     });
+
+    ensureTextbookNlpButtonDelegation();
+}
+
+function ensureTextbookNlpButtonDelegation() {
+    if (ensureTextbookNlpButtonDelegation._done) return;
+    ensureTextbookNlpButtonDelegation._done = true;
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.tb-tip-nlp-btn');
+        if (!btn || !textbookTooltipToken) return;
+        const tip = document.getElementById('textbook-word-tooltip');
+        if (!tip || !tip.contains(btn)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const kk = btn.getAttribute('data-tb-nlp');
+        if (!kk) return;
+        const anchor = textbookTooltipToken;
+        const lemmaRaw = anchor.getAttribute('data-lemma') || kk;
+        void runTextbookNlpResolve(lemmaRaw, anchor);
+    });
 }
 
 let textbookDocClickBound = false;
@@ -502,7 +603,7 @@ function ensureTextbookDocClickClose() {
     document.addEventListener('click', (e) => {
         const t = e.target;
         if (t && t.closest && t.closest('.textbook-token--word')) return;
-        if (t && t.id === 'textbook-word-tooltip') return;
+        if (t && t.closest && t.closest('.textbook-word-tooltip')) return;
         hideTextbookTooltip();
     });
 }

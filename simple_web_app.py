@@ -2346,8 +2346,10 @@ def _contraction_stem_variants(term: str) -> List[str]:
     return _dedupe_preserve_order(out)
 
 
-def _iter_csv_lemma_candidates(surface: str, mappings: dict):
-    """按优先级产出 (候选原形, 类别)；先词库直配与启发式（快），最后才 spaCy 原型。"""
+def _iter_csv_lemma_candidates(
+    surface: str, mappings: dict, use_spacy: bool = True,
+):
+    """按优先级产出 (候选原形, 类别)；词库直配与启发式；use_spacy=False 时不调用 spaCy（课文快速路径）。"""
     if surface in mappings:
         yield mappings[surface], 'admin'
         return
@@ -2375,25 +2377,28 @@ def _iter_csv_lemma_candidates(surface: str, mappings: dict):
         if x not in seen:
             seen.add(x)
             yield x, 'ing'
-    lem = _spacy_lemma_for_surface(surface)
-    if lem and lem != surface:
-        x = mappings.get(lem, lem)
-        if x not in seen:
-            seen.add(x)
-            yield x, 'lemma_nlp'
+    if use_spacy:
+        lem = _spacy_lemma_for_surface(surface)
+        if lem and lem != surface:
+            x = mappings.get(lem, lem)
+            if x not in seen:
+                seen.add(x)
+                yield x, 'lemma_nlp'
 
 
 def _first_lemma_in_csv_with_kind(
-    surface: str, mappings: dict, csv_keys: set,
+    surface: str, mappings: dict, csv_keys: set, use_spacy: bool = True,
 ) -> Tuple[Optional[str], Optional[str]]:
-    for c, kind in _iter_csv_lemma_candidates(surface, mappings):
+    for c, kind in _iter_csv_lemma_candidates(surface, mappings, use_spacy):
         if c in csv_keys:
             return c, kind
     return None, None
 
 
-def _first_lemma_in_csv(surface: str, mappings: dict, csv_keys: set) -> Optional[str]:
-    h, _ = _first_lemma_in_csv_with_kind(surface, mappings, csv_keys)
+def _first_lemma_in_csv(
+    surface: str, mappings: dict, csv_keys: set, use_spacy: bool = True,
+) -> Optional[str]:
+    h, _ = _first_lemma_in_csv_with_kind(surface, mappings, csv_keys, use_spacy)
     return h
 
 
@@ -2426,6 +2431,8 @@ def search_wordbank_csv(username):
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
     per_surface = request.args.get('per_surface', '').strip().lower() in ('1', 'true', 'yes')
+    # nlp=0：仅词库直配 + 规则词形（无 spaCy），课文释义气泡默认用
+    use_spacy = request.args.get('nlp', '1').strip().lower() not in ('0', 'false', 'no', 'off')
     if not q:
         return jsonify({
             'words': [],
@@ -2438,6 +2445,7 @@ def search_wordbank_csv(username):
             'implicit_contraction_resolution': {},
             'surface_hits': {},
             'surface_blocked': {},
+            'nlp_enabled': use_spacy,
         }), 200
     terms = [
         _normalize_apostrophe_token(t.strip())
@@ -2462,7 +2470,9 @@ def search_wordbank_csv(username):
             difficult = dict(_read_troubles_unlocked().get('difficult') or {})
     for term in terms:
         if re.match(r'[a-z]', term):
-            hit, kind = _first_lemma_in_csv_with_kind(term, mappings, csv_row_keys)
+            hit, kind = _first_lemma_in_csv_with_kind(
+                term, mappings, csv_row_keys, use_spacy,
+            )
             if per_surface and term not in surface_hits:
                 if hit is None:
                     surface_hits[term] = None
@@ -2496,7 +2506,9 @@ def search_wordbank_csv(username):
                     matched = True
                 else:
                     matched = False
-                    for cand, _ in _iter_csv_lemma_candidates(term, mappings):
+                    for cand, _ in _iter_csv_lemma_candidates(
+                        term, mappings, use_spacy,
+                    ):
                         if en == cand:
                             matched = True
                             break
@@ -2520,6 +2532,7 @@ def search_wordbank_csv(username):
     if per_surface:
         out['surface_hits'] = surface_hits
         out['surface_blocked'] = surface_blocked
+    out['nlp_enabled'] = use_spacy
     return jsonify(out), 200
 
 
