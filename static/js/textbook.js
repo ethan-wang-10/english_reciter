@@ -18,6 +18,8 @@ let textbookTooltipHideTimer = null;
 const textbookLemmaImportBusy = new Set();
 /** 词库无该词时，限制重复点击/请求（毫秒时间戳） */
 const textbookLemmaMissNotBefore = new Map();
+/** 非 VIP：某词「智能还原」已尝试仍无词条时记录，刷新页面前不再显示该按钮 */
+const textbookNlpFreeExhausted = new Set();
 
 /** 过滤 LRC 中的课次标题行（如 Lesson 3 / 第3课），非正文 */
 function isTextbookMetadataLine(line) {
@@ -211,10 +213,20 @@ async function textbookLookupWord(lemma, opts = {}) {
     return p;
 }
 
-function buildTextbookMissingTooltipHtml(lemma, k, sub) {
-    return (
+function buildTextbookMissingTooltipHtml(lemma, k, sub, opts = {}) {
+    const exhausted =
+        opts.nlpFreeExhausted === true || (userPlan !== 'paid' && textbookNlpFreeExhausted.has(k));
+    const base =
         `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
-        `<div class="tb-tip-zh">${escapeHtml(sub)}</div>` +
+        `<div class="tb-tip-zh">${escapeHtml(sub)}</div>`;
+    if (exhausted) {
+        return (
+            base +
+            `<p class="tb-tip-meta tb-tip-nlp-done">未找到匹配词条。刷新页面前无法再次使用智能还原。</p>`
+        );
+    }
+    return (
+        base +
         `<div class="tb-tip-actions">` +
         `<button type="button" class="tb-tip-nlp-btn" data-tb-nlp="${escapeHtml(k)}">智能还原（词典，较慢）</button>` +
         `</div>` +
@@ -223,12 +235,14 @@ function buildTextbookMissingTooltipHtml(lemma, k, sub) {
 }
 
 async function runTextbookNlpResolve(lemma, anchorEl) {
-    ensureTextbookTooltipHoverBridge();
-    showTextbookTooltip(
-        '<div class="tb-tip-meta tb-tip-loading">词典还原中（较慢）…</div>',
-        anchorEl,
-    );
     const k = normalizeTextbookLemmaKey(lemma);
+    if (userPlan !== 'paid' && textbookNlpFreeExhausted.has(k)) return;
+    ensureTextbookTooltipHoverBridge();
+    const loadingHtml =
+        userPlan === 'paid'
+            ? '<div class="tb-tip-meta tb-tip-loading">词典还原中（较慢）…</div>'
+            : '<div class="tb-tip-meta tb-tip-loading">正在查询…</div>';
+    showTextbookTooltip(loadingHtml, anchorEl);
     const row = await textbookLookupWord(lemma, { nlp: true });
     if (row) {
         showTextbookTooltip(
@@ -237,12 +251,17 @@ async function runTextbookNlpResolve(lemma, anchorEl) {
         );
     } else {
         const sub = await textbookSubtextWhenMissingInWordbank(lemma, k);
-        showTextbookTooltip(
-            `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
-                `<div class="tb-tip-zh">${escapeHtml(sub)}</div>` +
-                `<p class="tb-tip-meta tb-tip-nlp-done">智能还原后仍未匹配词库。</p>`,
-            anchorEl,
-        );
+        if (userPlan !== 'paid') {
+            textbookNlpFreeExhausted.add(k);
+            showTextbookTooltip(buildTextbookMissingTooltipHtml(lemma, k, sub, { nlpFreeExhausted: true }), anchorEl);
+        } else {
+            showTextbookTooltip(
+                `<div class="tb-tip-en">${escapeHtml(lemma)}</div>` +
+                    `<div class="tb-tip-zh">${escapeHtml(sub)}</div>` +
+                    `<p class="tb-tip-meta tb-tip-nlp-done">智能还原后仍未匹配词库。</p>`,
+                anchorEl,
+            );
+        }
     }
 }
 
@@ -501,7 +520,12 @@ function bindTextbookReaderInteractions(root) {
                     );
                 } else {
                     const sub = await textbookSubtextWhenMissingInWordbank(lemma, k, true);
-                    showTextbookTooltip(buildTextbookMissingTooltipHtml(lemma, k, sub), el);
+                    showTextbookTooltip(
+                        buildTextbookMissingTooltipHtml(lemma, k, sub, {
+                            nlpFreeExhausted: userPlan !== 'paid' && textbookNlpFreeExhausted.has(k),
+                        }),
+                        el,
+                    );
                 }
             }, 480);
         });
@@ -537,7 +561,12 @@ function bindTextbookReaderInteractions(root) {
                 );
             } else {
                 const sub = await textbookSubtextWhenMissingInWordbank(lemma, k);
-                showTextbookTooltip(buildTextbookMissingTooltipHtml(lemma, k, sub), el);
+                showTextbookTooltip(
+                    buildTextbookMissingTooltipHtml(lemma, k, sub, {
+                        nlpFreeExhausted: userPlan !== 'paid' && textbookNlpFreeExhausted.has(k),
+                    }),
+                    el,
+                );
             }
         });
 
@@ -590,6 +619,8 @@ function ensureTextbookNlpButtonDelegation() {
         e.stopPropagation();
         const kk = btn.getAttribute('data-tb-nlp');
         if (!kk) return;
+        const nk = normalizeTextbookLemmaKey(kk);
+        if (userPlan !== 'paid' && textbookNlpFreeExhausted.has(nk)) return;
         const anchor = textbookTooltipToken;
         const lemmaRaw = anchor.getAttribute('data-lemma') || kk;
         void runTextbookNlpResolve(lemmaRaw, anchor);
