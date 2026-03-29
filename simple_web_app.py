@@ -2283,7 +2283,8 @@ def _get_spacy_nlp():
         if _spacy_nlp is not None:
             return _spacy_nlp
         try:
-            _spacy_nlp = spacy.load("en_core_web_sm")
+            # 句法分析与 NER 不参与英语 lemma；禁用可明显加速（尤其批量分词）
+            _spacy_nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
             return _spacy_nlp
         except OSError:
             pass
@@ -2294,7 +2295,7 @@ def _get_spacy_nlp():
             _spacy_download_attempted = True
             if _try_download_en_core_web_sm():
                 try:
-                    _spacy_nlp = spacy.load("en_core_web_sm")
+                    _spacy_nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
                     return _spacy_nlp
                 except Exception as e:
                     logger.warning(
@@ -2330,6 +2331,46 @@ def _spacy_lemma_for_surface(surface: str) -> Optional[str]:
     if not re.match(r"^[a-z][a-z'\-]*$", lem):
         return None
     return lem
+
+
+# 课文导入等场景对大量词逐次 nlp(surface) 极慢；改为分批拼接后单次 nlp。
+_SPACY_LEMMA_BATCH_CHUNK = 400
+
+
+def _spacy_lemma_map_for_surfaces(surfaces: List[str]) -> Dict[str, str]:
+    """
+    批量得到 surface -> spaCy lemma，避免对每个词单独 nlp()。
+    若词形在合并文本中分词结果与 surface 不一致，该词不在 map 中，调用方可回退 _spacy_lemma_for_surface。
+    """
+    if not _wordbank_lemma_spacy_enabled():
+        return {}
+    nlp = _get_spacy_nlp()
+    if nlp is None:
+        return {}
+    ordered = list(
+        dict.fromkeys(
+            s for s in surfaces
+            if isinstance(s, str) and re.match(r"^[a-z][a-z'\-]*$", s)
+        ),
+    )
+    if not ordered:
+        return {}
+    out: Dict[str, str] = {}
+    for i in range(0, len(ordered), _SPACY_LEMMA_BATCH_CHUNK):
+        chunk = ordered[i : i + _SPACY_LEMMA_BATCH_CHUNK]
+        doc = nlp(" ".join(chunk))
+        for token in doc:
+            if not token.is_alpha:
+                continue
+            surf = _normalize_apostrophe_token(token.text.lower())
+            lem = token.lemma_.lower()
+            if len(lem) < 2:
+                continue
+            if not re.match(r"^[a-z][a-z'\-]*$", lem):
+                continue
+            if surf not in out:
+                out[surf] = lem
+    return out
 
 
 def spacy_extract_lemmas_from_article(text: str) -> Optional[List[str]]:
@@ -2375,6 +2416,7 @@ def _contraction_stem_variants(term: str) -> List[str]:
 
 def _iter_csv_lemma_candidates(
     surface: str, mappings: dict, use_spacy: bool = True,
+    spacy_lemma_map: Optional[Dict[str, str]] = None,
 ):
     """按优先级产出 (候选原形, 类别)；词库直配与启发式；use_spacy=False 时不调用 spaCy（课文快速路径）。"""
     if surface in mappings:
@@ -2405,7 +2447,13 @@ def _iter_csv_lemma_candidates(
             seen.add(x)
             yield x, 'ing'
     if use_spacy:
-        lem = _spacy_lemma_for_surface(surface)
+        lem: Optional[str] = None
+        if spacy_lemma_map is not None:
+            lem = spacy_lemma_map.get(surface)
+            if lem is None:
+                lem = spacy_lemma_map.get(_normalize_apostrophe_token(surface))
+        if lem is None:
+            lem = _spacy_lemma_for_surface(surface)
         if lem and lem != surface:
             x = mappings.get(lem, lem)
             if x not in seen:
@@ -2415,8 +2463,11 @@ def _iter_csv_lemma_candidates(
 
 def _first_lemma_in_csv_with_kind(
     surface: str, mappings: dict, csv_keys: set, use_spacy: bool = True,
+    spacy_lemma_map: Optional[Dict[str, str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    for c, kind in _iter_csv_lemma_candidates(surface, mappings, use_spacy):
+    for c, kind in _iter_csv_lemma_candidates(
+        surface, mappings, use_spacy, spacy_lemma_map,
+    ):
         if c in csv_keys:
             return c, kind
     return None, None
@@ -2424,8 +2475,11 @@ def _first_lemma_in_csv_with_kind(
 
 def _first_lemma_in_csv(
     surface: str, mappings: dict, csv_keys: set, use_spacy: bool = True,
+    spacy_lemma_map: Optional[Dict[str, str]] = None,
 ) -> Optional[str]:
-    h, _ = _first_lemma_in_csv_with_kind(surface, mappings, csv_keys, use_spacy)
+    h, _ = _first_lemma_in_csv_with_kind(
+        surface, mappings, csv_keys, use_spacy, spacy_lemma_map,
+    )
     return h
 
 
@@ -2495,10 +2549,17 @@ def search_wordbank_csv(username):
     if per_surface:
         with _TROUBLES_LOCK:
             difficult = dict(_read_troubles_unlocked().get('difficult') or {})
+    spacy_lemma_map: Optional[Dict[str, str]] = None
+    if use_spacy:
+        batch_terms = [t for t in terms if re.match(r'[a-z]', t)]
+        if batch_terms:
+            spacy_lemma_map = _spacy_lemma_map_for_surfaces(batch_terms)
+            if not spacy_lemma_map:
+                spacy_lemma_map = None
     for term in terms:
         if re.match(r'[a-z]', term):
             hit, kind = _first_lemma_in_csv_with_kind(
-                term, mappings, csv_row_keys, use_spacy,
+                term, mappings, csv_row_keys, use_spacy, spacy_lemma_map,
             )
             if per_surface and term not in surface_hits:
                 if hit is None:
@@ -2534,7 +2595,7 @@ def search_wordbank_csv(username):
                 else:
                     matched = False
                     for cand, _ in _iter_csv_lemma_candidates(
-                        term, mappings, use_spacy,
+                        term, mappings, use_spacy, spacy_lemma_map,
                     ):
                         if en == cand:
                             matched = True
@@ -2620,12 +2681,21 @@ def import_from_article(username):
     csv_set = get_csv_english_set()
     mappings = get_wordbank_lemma_mappings()
     unique_lemmas = list(dict.fromkeys(lemmas))
+    # VIP「spaCy 分词」已在全文 nlp 中得到 lemma，匹配阶段无需再逐词 spaCy（否则双倍耗时）
+    use_spacy_match = use_spacy
+    if plan == 'paid' and extract_mode == 'spacy':
+        use_spacy_match = False
+    spacy_lemma_map: Optional[Dict[str, str]] = None
+    if use_spacy_match:
+        spacy_lemma_map = _spacy_lemma_map_for_surfaces(unique_lemmas)
     unmatched_lemmas: List[str] = []
     matched_effective: List[str] = []
     seen_eff = set()
     matched_surface_count = 0
     for w in unique_lemmas:
-        eff = _first_lemma_in_csv(w, mappings, csv_set, use_spacy)
+        eff = _first_lemma_in_csv(
+            w, mappings, csv_set, use_spacy_match, spacy_lemma_map,
+        )
         if eff is None:
             unmatched_lemmas.append(w)
         else:
@@ -2645,7 +2715,7 @@ def import_from_article(username):
             'words': [],
             'stats': stats,
             'unmatched_lemmas': unmatched_lemmas,
-            'use_spacy': use_spacy,
+            'use_spacy': use_spacy_match,
         }
         if plan == 'paid':
             empty_out['extract_mode'] = extract_mode
@@ -2666,7 +2736,7 @@ def import_from_article(username):
         'words': words,
         'stats': stats,
         'unmatched_lemmas': unmatched_lemmas,
-        'use_spacy': use_spacy,
+        'use_spacy': use_spacy_match,
     }
     if plan == 'paid':
         ok_out['extract_mode'] = extract_mode
