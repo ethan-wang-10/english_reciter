@@ -1973,7 +1973,10 @@ def import_words_json(username):
 @token_required
 def get_user_plan_api(username):
     """获取当前用户套餐类型。"""
-    return jsonify({'plan': get_user_plan(username)}), 200
+    return jsonify({
+        'plan': get_user_plan(username),
+        'article_ai_extract_available': bool(get_deepseek_api_key()),
+    }), 200
 
 
 def _textbooks_load_index() -> dict:
@@ -2329,6 +2332,30 @@ def _spacy_lemma_for_surface(surface: str) -> Optional[str]:
     return lem
 
 
+def spacy_extract_lemmas_from_article(text: str) -> Optional[List[str]]:
+    """用 spaCy 对全文分词，取各 token 的 lemma，去重保序（用于 VIP 课文导入「spaCy 分词」）。"""
+    if spacy is None:
+        return None
+    nlp = _get_spacy_nlp()
+    if nlp is None:
+        return None
+    doc = nlp(text)
+    out: List[str] = []
+    seen = set()
+    for token in doc:
+        if not token.is_alpha or token.is_stop:
+            continue
+        lem = token.lemma_.lower()
+        if len(lem) < 2:
+            continue
+        if not re.match(r"^[a-z][a-z'\-]*$", lem):
+            continue
+        if lem not in seen:
+            seen.add(lem)
+            out.append(lem)
+    return out
+
+
 def _contraction_stem_variants(term: str) -> List[str]:
     """启发式：'s（所有格 / is、has 等）与 've（have）。"""
     t = _normalize_apostrophe_token(term)
@@ -2541,8 +2568,8 @@ def search_wordbank_csv(username):
 def import_from_article(username):
     """
     从文章文本提取单词，返回匹配词条列表（不直接加入待复习）：
-    - 免费版：按空格分词后去查 CSV
-    - VIP：用 DeepSeek 提取原形，再查 CSV
+    - 免费版：按空格分词后去查 CSV；可勾选 use_spacy 在匹配步用 spaCy
+    - VIP：extract_mode=ai 用 DeepSeek 提取原形；extract_mode=spacy 用 spaCy 全文分词取 lemma
     前端拿到词条列表后注入选框，让用户确认后再加入待复习。
     """
     data = request.get_json(silent=True) or {}
@@ -2553,13 +2580,39 @@ def import_from_article(username):
         return jsonify({'error': '文章内容过长（最多20000字符）'}), 400
 
     plan = get_user_plan(username)
-    if plan == 'paid' and get_deepseek_api_key():
-        lemmas = deepseek_extract_lemmas(text)
-        if lemmas is None:
-            return jsonify({'error': 'DeepSeek API 调用失败，请稍后重试'}), 500
-        method = 'deepseek'
+    extract_mode = ''
+    if plan == 'paid':
+        has_ds = bool(get_deepseek_api_key())
+        raw_mode = str(data.get('extract_mode', '') or '').strip().lower()
+        if raw_mode == 'spacy':
+            extract_mode = 'spacy'
+        elif raw_mode in ('ai', 'deepseek', ''):
+            extract_mode = 'ai'
+        else:
+            extract_mode = 'ai'
+        if extract_mode == 'ai' and not has_ds:
+            return jsonify({
+                'error': '未配置 DeepSeek API，无法使用 AI 分词，请选择 spaCy 分词',
+            }), 400
+        if extract_mode == 'spacy':
+            lemmas = spacy_extract_lemmas_from_article(text)
+            if lemmas is None:
+                return jsonify({
+                    'error': 'spaCy 模型未就绪，请安装 en_core_web_sm 或稍后重试',
+                }), 500
+            method = 'spacy'
+        else:
+            lemmas = deepseek_extract_lemmas(text)
+            if lemmas is None:
+                return jsonify({'error': 'DeepSeek API 调用失败，请稍后重试'}), 500
+            method = 'deepseek'
+        use_spacy = True
     else:
-        # 免费版：按空格和标点分词
+        raw_us = data.get('use_spacy', False)
+        if isinstance(raw_us, str):
+            use_spacy = raw_us.strip().lower() in ('1', 'true', 'yes', 'on')
+        else:
+            use_spacy = bool(raw_us)
         raw_words = re.findall(r"[a-zA-Z']+", text)
         lemmas = list({w.lower().strip("'") for w in raw_words if len(w) >= 2})
         method = 'simple'
@@ -2572,7 +2625,7 @@ def import_from_article(username):
     seen_eff = set()
     matched_surface_count = 0
     for w in unique_lemmas:
-        eff = _first_lemma_in_csv(w, mappings, csv_set)
+        eff = _first_lemma_in_csv(w, mappings, csv_set, use_spacy)
         if eff is None:
             unmatched_lemmas.append(w)
         else:
@@ -2586,13 +2639,17 @@ def import_from_article(username):
         'not_in_csv': len(unmatched_lemmas),
     }
     if not matched_effective:
-        return jsonify({
+        empty_out: Dict[str, object] = {
             'message': '未在词库中找到匹配词汇',
             'method': method,
             'words': [],
             'stats': stats,
             'unmatched_lemmas': unmatched_lemmas,
-        }), 200
+            'use_spacy': use_spacy,
+        }
+        if plan == 'paid':
+            empty_out['extract_mode'] = extract_mode
+        return jsonify(empty_out), 200
 
     # 返回完整词条数据，供前端注入选框（按管理员映射解析到词库原形）
     words = []
@@ -2603,13 +2660,17 @@ def import_from_article(username):
 
     stats['matched_in_csv'] = len(words)
 
-    return jsonify({
+    ok_out: Dict[str, object] = {
         'message': f'从文章提取到 {len(words)} 个匹配词汇，请勾选后加入待复习',
         'method': method,
         'words': words,
         'stats': stats,
         'unmatched_lemmas': unmatched_lemmas,
-    }), 200
+        'use_spacy': use_spacy,
+    }
+    if plan == 'paid':
+        ok_out['extract_mode'] = extract_mode
+    return jsonify(ok_out), 200
 
 
 @app.route('/api/wordbank/csv/import-words', methods=['POST'])

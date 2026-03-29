@@ -30,6 +30,8 @@ let isAdvancing = false;  // 防止重复推进到下一题
 
 /** 用户套餐类型: 'free' | 'paid'（paid 对应 VIP 权益，展示文案统一为 VIP） */
 let userPlan = 'free';
+/** 服务端是否配置了 DeepSeek（课文 AI 分词）；来自 /api/user/plan */
+let articleAiExtractAvailable = false;
 
 /** 本轮 3 次尝试均错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
 let wrongWordsInThisPass = new Set();
@@ -1904,6 +1906,7 @@ async function loadUserPlan() {
     try {
         const data = await apiRequest('/user/plan');
         userPlan = data.plan || 'free';
+        articleAiExtractAvailable = data.article_ai_extract_available === true;
         updatePlanUI();
     } catch (_) {
         userPlan = 'free';
@@ -1914,10 +1917,10 @@ function updatePlanUI() {
     const hint = document.getElementById('article-plan-hint');
     if (hint) {
         if (userPlan === 'paid') {
-            hint.textContent = '（VIP：使用 AI 智能提取单词原形）';
+            hint.textContent = '（VIP：可选 AI 分词或 spaCy 分词）';
             hint.className = 'plan-hint vip';
         } else {
-            hint.textContent = '（免费版：按空格分词匹配词库）';
+            hint.textContent = '（免费版：按空格分词；可勾选智能还原匹配不规则词形）';
             hint.className = 'plan-hint free';
         }
     }
@@ -1931,6 +1934,35 @@ function updatePlanUI() {
                 '下拉列表与「课文学习」一致：非 VIP 每册仅列出前 10 篇。选择后课文英文全文会填入下方；再次选择会替换当前内容。';
         }
     }
+    const spacyWrap = document.getElementById('import-article-spacy-wrap');
+    const vipExtractWrap = document.getElementById('import-article-vip-extract-wrap');
+    const aiRadio = document.getElementById('import-article-extract-ai');
+    const spacyModeRadio = document.getElementById('import-article-extract-spacy');
+    if (spacyWrap) {
+        if (userPlan === 'paid') {
+            spacyWrap.hidden = true;
+        } else {
+            spacyWrap.hidden = false;
+        }
+    }
+    if (vipExtractWrap) {
+        if (userPlan === 'paid') {
+            vipExtractWrap.hidden = false;
+            if (aiRadio && spacyModeRadio) {
+                aiRadio.disabled = !articleAiExtractAvailable;
+                if (articleAiExtractAvailable) {
+                    aiRadio.checked = true;
+                    spacyModeRadio.checked = false;
+                } else {
+                    spacyModeRadio.checked = true;
+                    aiRadio.checked = false;
+                }
+            }
+        } else {
+            vipExtractWrap.hidden = true;
+        }
+    }
+
     const vocabPanel = document.getElementById('import-vocab-panel');
     const vocabLocked = document.getElementById('import-vocab-locked');
     const vocabBtn = document.getElementById('import-vocab-btn');
@@ -3634,13 +3666,22 @@ function applyArticleExtractResult(words, data) {
     if (wrap) wrap.hidden = false;
     renderArticleImportPick();
     if (btn) btn.textContent = '确认导入';
-    const method = data.method === 'deepseek' ? '（AI 提取）' : '（空格分词）';
+    let method = '（空格分词）';
+    if (data.method === 'deepseek') method = '（AI 分词）';
+    else if (data.method === 'spacy') method = '（spaCy 分词）';
     const un = Array.isArray(data.unmatched_lemmas) ? data.unmatched_lemmas : [];
+    const usedSpacy = data.use_spacy === true;
     if (resultDiv) {
         resultDiv.style.display = 'block';
         const extra =
             un.length > 0 ? `另有 ${un.length} 个词库未匹配，见下方灰色列表。` : '';
-        resultDiv.innerHTML = `<p class="article-result-title">已提取 ${words.length} 个词库匹配词 ${method}。${extra}点击单词可取消圈选，确认后点击「确认导入」加入待复习。</p>`;
+        let spacyHint = '';
+        if (userPlan !== 'paid' && un.length > 0 && !usedSpacy) {
+            spacyHint =
+                ' <span class="article-result-spacy-hint">若需匹配不规则词形，可勾选「智能还原」后重新提取。</span>';
+        }
+        resultDiv.innerHTML =
+            `<p class="article-result-title">已提取 ${words.length} 个词库匹配词 ${method}。${extra}${spacyHint}点击单词可取消圈选，确认后点击「确认导入」加入待复习。</p>`;
     }
     renderArticleUnmatched(un);
 }
@@ -3739,19 +3780,47 @@ async function importFromArticle() {
         resultDiv.innerHTML = '<span class="loading-dots">正在提取词汇…</span>';
     }
     try {
+        const spacyCb = document.getElementById('import-article-use-spacy-cb');
+        const use_spacy = userPlan === 'paid' ? true : !!(spacyCb && spacyCb.checked);
+        const body =
+            userPlan === 'paid'
+                ? {
+                      text,
+                      extract_mode:
+                          document.getElementById('import-article-extract-spacy')?.checked === true
+                              ? 'spacy'
+                              : 'ai',
+                  }
+                : { text, use_spacy };
         const data = await apiRequest('/words/import-from-article', {
             method: 'POST',
-            body: JSON.stringify({ text }),
+            body: JSON.stringify(body),
         });
 
         const words = Array.isArray(data.words) ? data.words : [];
 
         if (words.length === 0) {
-            renderArticleUnmatched(Array.isArray(data.unmatched_lemmas) ? data.unmatched_lemmas : []);
+            const un = Array.isArray(data.unmatched_lemmas) ? data.unmatched_lemmas : [];
+            renderArticleUnmatched(un);
             const st = data.stats;
             let hint = data.message || '未在词库中找到匹配词汇';
             if (st && typeof st.lemmas_total === 'number') {
                 hint += `（从文章识别 ${st.lemmas_total} 个不重复英文词，词库中均无匹配）`;
+            }
+            if (
+                userPlan !== 'paid' &&
+                !use_spacy &&
+                un.length > 0
+            ) {
+                hint +=
+                    ' 可勾选「用智能还原（spaCy）尝试匹配词形」后再次点击「从文章提取词汇」重试。';
+            } else if (
+                userPlan === 'paid' &&
+                data.extract_mode === 'ai' &&
+                data.method === 'deepseek' &&
+                un.length > 0
+            ) {
+                hint += ' 可尝试改用「spaCy 分词」后再次提取。';
             }
             showImportNotice(hint, { title: '未匹配到词库', isError: true });
             if (resultDiv) resultDiv.style.display = 'none';
