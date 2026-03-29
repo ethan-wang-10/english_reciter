@@ -11,5 +11,6 @@
   "max_backups": 10,
   "language": "zh",
   "log_level": "INFO",
-  "deepseek_api_key": ""
+  "deepseek_api_key": "",
+  "wordbank_lemma_spacy": true
 }

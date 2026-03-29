@@ -16,5 +16,8 @@ prettytable==3.10.0
 readchar==4.0.6
 nltk==3.8.1
 
+# 词库：英文词形还原（需 `python -m spacy download en_core_web_sm`）
+spacy==3.7.4
+
 # 头像：压缩与按需缩放（WebP）
 Pillow==10.2.0

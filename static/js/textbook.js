@@ -116,6 +116,7 @@ async function textbookLookupWord(lemma) {
         const data = await apiRequest(`/wordbank/csv/search?${params}`);
         const words = Array.isArray(data.words) ? data.words : [];
         const row = words[0] || null;
+        const inlp = data.implicit_lemma_nlp_resolution || {};
         const ip = data.implicit_plural_resolution || {};
         const ipt = data.implicit_past_resolution || {};
         const iing = data.implicit_ing_resolution || {};
@@ -123,7 +124,8 @@ async function textbookLookupWord(lemma) {
         // 命中与未命中均缓存（含已有映射仍无词条），避免同一词反复悬停打接口
         textbookWordCache.set(k, row);
         if (row) {
-            if (ipt[k]) textbookImplicitMorphHint.set(k, 'past');
+            if (inlp[k]) textbookImplicitMorphHint.set(k, 'lemma_nlp');
+            else if (ipt[k]) textbookImplicitMorphHint.set(k, 'past');
             else if (iing[k]) textbookImplicitMorphHint.set(k, 'ing');
             else if (icon[k]) textbookImplicitMorphHint.set(k, 'contraction');
             else if (ip[k]) textbookImplicitMorphHint.set(k, 'plural');
@@ -151,15 +153,17 @@ function buildTextbookTooltipHtmlFromRow(row, surfaceLemma, morphKind) {
         : '';
     if (normSurf && enL && normSurf !== enL) {
         const implicitTag =
-            morphKind === 'past'
-                ? '<span class="tb-tip-hint">（隐式过去式）</span>'
-                : morphKind === 'ing'
-                  ? '<span class="tb-tip-hint">（隐式进行时）</span>'
-                  : morphKind === 'contraction'
-                    ? "<span class=\"tb-tip-hint\">（隐式 's / 've）</span>"
-                    : morphKind === 'plural'
-                      ? '<span class="tb-tip-hint">（隐式去复数）</span>'
-                      : '';
+            morphKind === 'lemma_nlp'
+                ? '<span class="tb-tip-hint">（词形还原）</span>'
+                : morphKind === 'past'
+                  ? '<span class="tb-tip-hint">（隐式过去式）</span>'
+                  : morphKind === 'ing'
+                    ? '<span class="tb-tip-hint">（隐式进行时）</span>'
+                    : morphKind === 'contraction'
+                      ? "<span class=\"tb-tip-hint\">（隐式 's / 've）</span>"
+                      : morphKind === 'plural'
+                        ? '<span class="tb-tip-hint">（隐式去复数）</span>'
+                        : '';
         return (
             `<div class="tb-tip-en">${escapeHtml(surfaceLemma)}</div>` +
             `<div class="tb-tip-meta">→ ${escapeHtml(en)}${implicitTag}</div>` +

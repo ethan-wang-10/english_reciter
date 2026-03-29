@@ -45,6 +45,11 @@ try:
 except ImportError:
     PILImage = None  # type: ignore
 
+try:
+    import spacy
+except ImportError:
+    spacy = None  # type: ignore
+
 # 头像：磁盘仅保留 avatar.webp；长边上限；GET ?w= 为按需缩略图（不传则原图）
 AVATAR_MAX_SIDE = 512
 AVATAR_WEBP_QUALITY = 82
@@ -2212,6 +2217,60 @@ def _normalize_apostrophe_token(term: str) -> str:
     )
 
 
+_spacy_nlp = None
+_spacy_nlp_lock = threading.Lock()
+_spacy_nlp_load_failed = False
+
+
+def _wordbank_lemma_spacy_enabled() -> bool:
+    """config.json `wordbank_lemma_spacy` 或环境变量 WORDBANK_LEMMA_SPACY（0/false 关闭）。"""
+    v = os.getenv("WORDBANK_LEMMA_SPACY", "").strip().lower()
+    if v in ("0", "false", "no", "off"):
+        return False
+    if v in ("1", "true", "yes", "on"):
+        return True
+    return bool(_load_app_config().get("wordbank_lemma_spacy", True))
+
+
+def _get_spacy_nlp():
+    """懒加载 en_core_web_sm；失败则后续仅使用启发式。"""
+    global _spacy_nlp, _spacy_nlp_load_failed
+    if spacy is None or _spacy_nlp_load_failed:
+        return None
+    if _spacy_nlp is not None:
+        return _spacy_nlp
+    with _spacy_nlp_lock:
+        if _spacy_nlp_load_failed:
+            return None
+        if _spacy_nlp is not None:
+            return _spacy_nlp
+        try:
+            _spacy_nlp = spacy.load("en_core_web_sm")
+        except Exception as e:
+            logger.warning("spaCy 模型 en_core_web_sm 未加载，词形还原将使用启发式: %s", e)
+            _spacy_nlp_load_failed = True
+            return None
+    return _spacy_nlp
+
+
+def _spacy_lemma_for_surface(surface: str) -> Optional[str]:
+    """单 token 英文表面形 → lemma（小写）；无法处理则返回 None。"""
+    if not _wordbank_lemma_spacy_enabled():
+        return None
+    nlp = _get_spacy_nlp()
+    if nlp is None:
+        return None
+    if not re.match(r"^[a-z][a-z'\-]*$", surface):
+        return None
+    doc = nlp(surface)
+    if len(doc) != 1:
+        return None
+    lem = doc[0].lemma_.lower()
+    if not re.match(r"^[a-z][a-z'\-]*$", lem):
+        return None
+    return lem
+
+
 def _contraction_stem_variants(term: str) -> List[str]:
     """启发式：'s（所有格 / is、has 等）与 've（have）。"""
     t = _normalize_apostrophe_token(term)
@@ -2230,7 +2289,7 @@ def _contraction_stem_variants(term: str) -> List[str]:
 
 
 def _iter_csv_lemma_candidates(surface: str, mappings: dict):
-    """按优先级产出 (候选原形, 类别)；类别用于隐式映射展示。"""
+    """按优先级产出 (候选原形, 类别)；管理员映射 → 表面形 → spaCy lemma → 撇号 → 复数 → 过去式 → -ing。"""
     if surface in mappings:
         yield mappings[surface], 'admin'
         return
@@ -2238,6 +2297,12 @@ def _iter_csv_lemma_candidates(surface: str, mappings: dict):
     if surface not in seen:
         seen.add(surface)
         yield surface, 'surface'
+    lem = _spacy_lemma_for_surface(surface)
+    if lem and lem != surface:
+        x = mappings.get(lem, lem)
+        if x not in seen:
+            seen.add(x)
+            yield x, 'lemma_nlp'
     for stem in _contraction_stem_variants(surface):
         x = mappings.get(stem, stem)
         if x not in seen:
@@ -2261,7 +2326,7 @@ def _iter_csv_lemma_candidates(surface: str, mappings: dict):
 
 
 def _csv_lemma_candidates_for_surface(surface: str, mappings: dict) -> List[str]:
-    """英文表面形 → 词库 english 候选（管理员映射、's/'ve、复数、过去式、-ing）。"""
+    """英文表面形 → 词库 english 候选（管理员映射、spaCy、's/'ve、复数、过去式、-ing）。"""
     return [c for c, _ in _iter_csv_lemma_candidates(surface, mappings)]
 
 
@@ -2280,9 +2345,12 @@ def _first_lemma_in_csv(surface: str, mappings: dict, csv_keys: set) -> Optional
 
 
 def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
-    """词库无该词时，用于生成/排队的目标 lemma（'s/'ve、复数、过去式、-ing 启发）。"""
+    """词库无该词时，用于生成/排队的目标 lemma（spaCy 优先，其次 's/'ve、复数、过去式、-ing）。"""
     if surface in mappings:
         return mappings[surface]
+    lem = _spacy_lemma_for_surface(surface)
+    if lem and lem != surface:
+        return mappings.get(lem, lem)
     cov = _contraction_stem_variants(surface)
     if cov:
         return mappings.get(cov[0], cov[0])
@@ -2309,6 +2377,7 @@ def search_wordbank_csv(username):
             'words': [],
             'count': 0,
             'lemma_resolution': {},
+            'implicit_lemma_nlp_resolution': {},
             'implicit_plural_resolution': {},
             'implicit_past_resolution': {},
             'implicit_ing_resolution': {},
@@ -2324,6 +2393,7 @@ def search_wordbank_csv(username):
         rows = [r for r in rows if r.get('level', '') == level]
     csv_row_keys = {str(r.get('english', '') or '').lower() for r in rows}
     lemma_resolution: Dict[str, str] = {}
+    implicit_lemma_nlp_resolution: Dict[str, str] = {}
     implicit_plural_resolution: Dict[str, str] = {}
     implicit_past_resolution: Dict[str, str] = {}
     implicit_ing_resolution: Dict[str, str] = {}
@@ -2334,7 +2404,9 @@ def search_wordbank_csv(username):
             if hit is not None and hit != term:
                 lemma_resolution[term] = hit
                 if term not in mappings:
-                    if kind == 'plural':
+                    if kind == 'lemma_nlp':
+                        implicit_lemma_nlp_resolution[term] = hit
+                    elif kind == 'plural':
                         implicit_plural_resolution[term] = hit
                     elif kind == 'past':
                         implicit_past_resolution[term] = hit
@@ -2365,6 +2437,7 @@ def search_wordbank_csv(username):
         'words': result,
         'count': len(result),
         'lemma_resolution': lemma_resolution,
+        'implicit_lemma_nlp_resolution': implicit_lemma_nlp_resolution,
         'implicit_plural_resolution': implicit_plural_resolution,
         'implicit_past_resolution': implicit_past_resolution,
         'implicit_ing_resolution': implicit_ing_resolution,
@@ -2642,7 +2715,7 @@ def wordbank_trouble_status(username):
         mapped_to = hit if hit != q else None
     else:
         in_csv = False
-        resolved_lemma = mappings.get(q, q)
+        resolved_lemma = _lemma_for_vocab_not_in_csv(q, mappings)
         mapped_to = resolved_lemma if resolved_lemma != q else None
     blocked = (q in difficult) and not in_csv
     return jsonify({

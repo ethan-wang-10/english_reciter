@@ -14,8 +14,9 @@ RUN apt-get update && apt-get install -y \
 # 复制依赖文件
 COPY requirements-simple.txt .
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements-simple.txt
+# 安装 Python 依赖与 spaCy 英文小模型（词库词形还原）
+RUN pip install --no-cache-dir -r requirements-simple.txt \
+    && python -m spacy download en_core_web_sm
 
 # 复制应用代码
 COPY reciter.py .
