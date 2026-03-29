@@ -466,6 +466,35 @@ body {
     user-select: none;
 }
 
+.nav-user-summary-wrap {
+    position: relative;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.btn-daily-summary-mobile {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 2px solid rgba(88, 204, 2, 0.35);
+    background: var(--primary-light);
+    box-shadow: 0 2px 0 var(--primary-dark);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+
+.btn-daily-summary-mobile:active {
+    transform: translateY(1px);
+    box-shadow: none;
+}
+
 .nav-user .username-inline {
     font-weight: 700;
     color: var(--text-primary);
@@ -476,12 +505,77 @@ body {
     box-shadow: 0 2px 0 var(--primary-dark);
     font-family: inherit;
     font-size: inherit;
-    cursor: default;
+    cursor: pointer;
     user-select: none;
     max-width: 12em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.daily-summary-popover {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 260;
+    min-width: min(320px, calc(100vw - 24px));
+    max-width: min(380px, calc(100vw - 24px));
+    padding: 0;
+    margin: 0;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14);
+}
+
+.daily-summary-popover[hidden] {
+    display: none !important;
+}
+
+.daily-summary-popover-inner {
+    padding: 14px 16px 16px;
+}
+
+.daily-summary-title {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.daily-summary-date {
+    margin: 0 0 12px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.daily-summary-list {
+    margin: 0;
+    padding-left: 1.15em;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+}
+
+.daily-summary-list li {
+    margin-bottom: 6px;
+}
+
+.daily-summary-list li:last-child {
+    margin-bottom: 0;
+}
+
+.daily-summary-loading,
+.daily-summary-empty,
+.daily-summary-error {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.daily-summary-error {
+    color: var(--error-dark);
 }
 
 .nav-user .btn-secondary {
@@ -2134,6 +2228,27 @@ button.import-article-chip--selected:hover {
 
     .nav-user .username-inline {
         display: none;
+    }
+
+    .btn-daily-summary-mobile {
+        display: inline-flex;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border-width: 1px;
+        font-size: 1rem;
+    }
+
+    .daily-summary-popover {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        top: auto;
+        bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+        max-height: min(52vh, 420px);
+        overflow-y: auto;
+        min-width: 0;
+        max-width: none;
     }
 
     .navbar .btn-gear {

@@ -113,7 +113,16 @@
                         <img id="nav-user-avatar-img" class="nav-user-avatar-img" alt="" width="32" height="32" loading="lazy" hidden />
                         <span id="nav-user-avatar-ph" class="nav-user-avatar-ph" aria-hidden="true">👤</span>
                     </span>
-                    <span class="username-inline" id="username-display" title="当前用户"></span>
+                    <div class="nav-user-summary-wrap" id="nav-user-summary-wrap">
+                        <button type="button" class="username-inline" id="username-display" title="点击查看今日小结" aria-expanded="false" aria-haspopup="dialog" aria-controls="daily-summary-popover"></button>
+                        <button type="button" class="btn-daily-summary-mobile" id="daily-summary-mobile-btn" title="今日小结" aria-label="今日小结" aria-expanded="false" aria-haspopup="dialog" aria-controls="daily-summary-popover">📋</button>
+                        <div id="daily-summary-popover" class="daily-summary-popover" role="dialog" aria-modal="false" aria-labelledby="daily-summary-title" hidden>
+                            <div class="daily-summary-popover-inner">
+                                <h3 id="daily-summary-title" class="daily-summary-title">今日小结</h3>
+                                <div id="daily-summary-body" class="daily-summary-body"></div>
+                            </div>
+                        </div>
+                    </div>
                     <button id="logout-btn" class="btn btn-secondary">退出</button>
                 </div>
             </nav>

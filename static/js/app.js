@@ -175,6 +175,137 @@ function updateGamificationNav(g) {
     }
 }
 
+let dailySummaryPopoverOpen = false;
+
+function formatDailySummaryDateLabel() {
+    const d = new Date();
+    return d.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long',
+    });
+}
+
+function renderDailySummaryBody(g, statusData) {
+    const body = document.getElementById('daily-summary-body');
+    if (!body) return;
+    if (!g || !statusData) {
+        body.innerHTML = '<p class="daily-summary-empty">暂无数据</p>';
+        return;
+    }
+    const minC = Number(g.check_in_min_correct) || 5;
+    const todayC = Number(g.today_correct_count) || 0;
+    const done = !!g.check_in_done_today;
+    const xpToday = Number(g.daily_xp_today) || 0;
+    const streak = Number(g.streak) || 0;
+    const words = statusData.words || [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueToday = words.filter((w) => {
+        const nd = new Date(w.next_review_date);
+        nd.setHours(0, 0, 0, 0);
+        return nd <= today;
+    }).length;
+    const round =
+        statusData.stats && statusData.stats.current_round != null
+            ? statusData.stats.current_round + 1
+            : '—';
+    const mastered = statusData.stats ? statusData.stats.mastered_words : 0;
+
+    const goal = g.monthly_checkin_goal;
+    const goalMonth = g.monthly_checkin_goal_month;
+    const monthKey = g.month_key;
+    let monthLine = '';
+    if (goal != null && goalMonth === monthKey) {
+        const md = Number(g.month_valid_checkin_days) || 0;
+        const gNum = Number(goal);
+        monthLine = `<li>本月有效打卡 <strong>${formatNumber(md)}</strong> / ${formatNumber(gNum)} 天</li>`;
+    }
+
+    const checkLine = done
+        ? `<li>今日打卡 <strong>已完成</strong>（已答对 ${formatNumber(todayC)} 词）</li>`
+        : `<li>今日打卡 <strong>进行中</strong>（已答对 ${formatNumber(todayC)} / ${formatNumber(minC)} 词）</li>`;
+
+    body.innerHTML =
+        `<p class="daily-summary-date">${escapeHtml(formatDailySummaryDateLabel())}</p>` +
+        '<ul class="daily-summary-list">' +
+        `<li>今日答对 <strong>${formatNumber(todayC)}</strong> 词</li>` +
+        `<li>今日获得 <strong>${formatNumber(xpToday)}</strong> XP</li>` +
+        checkLine +
+        `<li>连续有效打卡 <strong>${formatNumber(streak)}</strong> 天</li>` +
+        monthLine +
+        `<li>当前复习轮次 <strong>第 ${escapeHtml(String(round))} 轮</strong></li>` +
+        `<li>今日仍待复习（含逾期）<strong>${formatNumber(dueToday)}</strong> 词</li>` +
+        `<li>累计已掌握 <strong>${formatNumber(mastered)}</strong> 词</li>` +
+        '</ul>';
+}
+
+function closeDailySummaryPopover() {
+    const pop = document.getElementById('daily-summary-popover');
+    if (!pop || !dailySummaryPopoverOpen) return;
+    dailySummaryPopoverOpen = false;
+    pop.hidden = true;
+    document.getElementById('username-display')?.setAttribute('aria-expanded', 'false');
+    document.getElementById('daily-summary-mobile-btn')?.setAttribute('aria-expanded', 'false');
+}
+
+async function openDailySummaryPopover() {
+    const pop = document.getElementById('daily-summary-popover');
+    const body = document.getElementById('daily-summary-body');
+    if (!pop || !body) return;
+    dailySummaryPopoverOpen = true;
+    pop.hidden = false;
+    document.getElementById('username-display')?.setAttribute('aria-expanded', 'true');
+    document.getElementById('daily-summary-mobile-btn')?.setAttribute('aria-expanded', 'true');
+    body.innerHTML = '<p class="daily-summary-loading">加载中…</p>';
+    try {
+        const [g, ws] = await Promise.all([apiRequest('/gamification'), apiRequest('/words/status')]);
+        lastGamificationProfile = g;
+        updateGamificationNav(g);
+        if (isSettingsOverlayOpen() && lastGamificationProfile) {
+            updateSettingsCheckinHintFromProfile(lastGamificationProfile);
+            updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
+        }
+        renderDailySummaryBody(g, ws);
+    } catch (e) {
+        body.innerHTML = `<p class="daily-summary-error">${escapeHtml(e.message || '加载失败')}</p>`;
+    }
+}
+
+function toggleDailySummaryPopover() {
+    if (dailySummaryPopoverOpen) {
+        closeDailySummaryPopover();
+    } else {
+        void openDailySummaryPopover();
+    }
+}
+
+function setupDailySummaryPopover() {
+    const wrap = document.getElementById('nav-user-summary-wrap');
+    const ubtn = document.getElementById('username-display');
+    const mbtn = document.getElementById('daily-summary-mobile-btn');
+    const onTrigger = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleDailySummaryPopover();
+    };
+    ubtn?.addEventListener('click', onTrigger);
+    mbtn?.addEventListener('click', onTrigger);
+
+    document.addEventListener('click', (e) => {
+        if (!dailySummaryPopoverOpen || !wrap) return;
+        if (wrap.contains(e.target)) return;
+        closeDailySummaryPopover();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && dailySummaryPopoverOpen) {
+            closeDailySummaryPopover();
+        }
+    });
+}
+
 function openMobileMoreSheet() {
     const sheet = document.getElementById('mobile-more-sheet');
     const btn = document.getElementById('mobile-more-btn');
@@ -1996,6 +2127,7 @@ function updatePlanUI() {
 }
 
 function showSection(sectionId) {
+    closeDailySummaryPopover();
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     const sectionElement = document.getElementById(sectionId + '-section');
     if (sectionElement) {
@@ -3978,6 +4110,7 @@ async function importVocabToCSV() {
 document.addEventListener('DOMContentLoaded', function() {
     mountDeferredAppShell();
     setupVisualViewportKeyboardAvoid();
+    setupDailySummaryPopover();
 
     // 预加载语音列表（Android 等环境首次 getVoices() 可能为空）
     if (typeof window.speechSynthesis !== 'undefined') {
