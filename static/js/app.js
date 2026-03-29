@@ -1967,13 +1967,8 @@ function updatePlanUI() {
             vipExtractWrap.hidden = false;
             if (aiRadio && spacyModeRadio) {
                 aiRadio.disabled = !articleAiExtractAvailable;
-                if (articleAiExtractAvailable) {
-                    aiRadio.checked = true;
-                    spacyModeRadio.checked = false;
-                } else {
-                    spacyModeRadio.checked = true;
-                    aiRadio.checked = false;
-                }
+                spacyModeRadio.checked = true;
+                aiRadio.checked = false;
             }
         } else {
             vipExtractWrap.hidden = true;
