@@ -72,6 +72,8 @@ cp config.example.json config.json
 | `learning_data.json` | CLI 默认学习数据（可从 `words.txt` 初始化） |
 | `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
 | `static/wordbanks/words.csv` | 内置词库（**不随 Git 发布**；本地从 `words.csv.example` 复制或自备；线上勿被 `git pull` 覆盖，由服务器文件或管理后台「增量上传」维护） |
+
+**已有服务器升级到此版本时**：拉取前请先备份 `static/wordbanks/words.csv`。因仓库不再包含该文件，一次 `git pull` 可能会删掉工作区里的旧路径文件；若被删，从备份拷回，或用 `words.csv.example` 起步后再用管理后台增量上传完整词库。
 | `backups/` | 学习数据自动备份（若开启） |
 | `reciter.log` | 运行日志 |
 
