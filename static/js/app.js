@@ -3172,7 +3172,12 @@ async function loadDiscovery() {
             }
             if (emptyEl) emptyEl.style.display = 'none';
             if (rootEl) rootEl.style.display = 'block';
-            renderDiscoveryCard();
+            // 今日单词与复习页使用同源列表，默认顺序一致；进入时自动乱序一次，避免与复习顺序重合
+            if (discoveryDeck.length >= 2) {
+                discoveryShuffle();
+            } else {
+                renderDiscoveryCard();
+            }
             return;
         }
 
