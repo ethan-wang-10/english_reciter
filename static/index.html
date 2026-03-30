@@ -680,6 +680,16 @@
                         <button type="button" id="admin-save-article-ai" class="btn btn-secondary admin-config-save">保存 AI 文章分词开关</button>
                     </div>
 
+                    <h3 class="admin-subtitle">内置词库 CSV 增量上传</h3>
+                    <div class="admin-config-section">
+                        <p class="admin-hint">上传本地的 <code>words.csv</code>（UTF-8）。与服务器合并：不会删除服务器上已有词条；英文相同（忽略大小写）时以上传为准；新词按上传顺序追加在末尾。</p>
+                        <div class="form-group admin-config-group">
+                            <label for="admin-wordbank-csv-file">选择文件</label>
+                            <input type="file" id="admin-wordbank-csv-file" accept=".csv,text/csv" />
+                        </div>
+                        <button type="button" id="admin-wordbank-csv-upload" class="btn btn-primary">上传并合并</button>
+                    </div>
+
                     <details class="admin-words-details">
                         <summary class="admin-words-details-summary">
                             <span class="admin-subtitle">用户词库管理</span>

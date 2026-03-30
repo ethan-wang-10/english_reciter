@@ -4652,6 +4652,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    document.getElementById('admin-wordbank-csv-upload')?.addEventListener('click', async () => {
+        const input = document.getElementById('admin-wordbank-csv-file');
+        const file = input && input.files && input.files[0];
+        showAdminNotice('');
+        if (!file) {
+            showAdminNotice('请先选择 words.csv 文件');
+            return;
+        }
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            showAdminNotice('请选择 .csv 文件');
+            return;
+        }
+        const fd = new FormData();
+        fd.append('file', file, file.name);
+        try {
+            const data = await apiAdminMultipart('/admin/wordbank/csv/incremental-upload', fd);
+            const st = data.stats || {};
+            showAdminNotice(
+                `${data.message || '完成'}：新增 ${st.added ?? '—'} 条，覆盖同词 ${st.replaced ?? '—'} 条，合并后共 ${st.final_count ?? '—'} 条。`
+            );
+            if (input) input.value = '';
+        } catch (e) {
+            showAdminNotice(e.message || '上传失败');
+        }
+    });
+
     document.getElementById('admin-logout')?.addEventListener('click', async () => {
         try {
             const at = getAdminToken();

@@ -21,7 +21,7 @@ import urllib.request
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, date
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from functools import wraps
 from typing import Dict, Generator, List, Optional, Tuple
@@ -434,6 +434,26 @@ def parse_simple_parent_import_text(text: str) -> Tuple[List[dict], Optional[str
 
 # ==================== CSV 词汇表工具 ====================
 
+def _normalize_words_csv_row(row: dict) -> dict:
+    return {k: str(row.get(k, "") or "").strip() for k in _CSV_FIELDS}
+
+
+def _read_words_csv_from_path(path: Path) -> List[dict]:
+    """从磁盘读取 CSV（不经过模块缓存；供 load_words_csv 与需持锁合并时使用）。"""
+    if not path.exists():
+        return []
+    rows: List[dict] = []
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                rows.append(dict(row))
+    except Exception as e:
+        logger.error("读取词汇CSV失败: %s", e)
+        return []
+    return rows
+
+
 def load_words_csv() -> List[dict]:
     """读取 CSV 词汇表，带缓存（文件未修改则复用内存缓存）。"""
     global _words_csv_cache, _words_csv_cache_mtime
@@ -444,22 +464,99 @@ def load_words_csv() -> List[dict]:
             mtime = 0.0
         if _words_csv_cache is not None and mtime == _words_csv_cache_mtime:
             return _words_csv_cache
-        if not WORDS_CSV_FILE.exists():
-            _words_csv_cache = []
-            _words_csv_cache_mtime = 0.0
-            return []
-        rows = []
-        try:
-            with open(WORDS_CSV_FILE, "r", encoding="utf-8", newline="") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    rows.append(dict(row))
-        except Exception as e:
-            logger.error("读取词汇CSV失败: %s", e)
-            rows = []
+        rows = _read_words_csv_from_path(WORDS_CSV_FILE)
         _words_csv_cache = rows
         _words_csv_cache_mtime = mtime
         return rows
+
+
+def _merge_incremental_words_csv(
+    server_rows: List[dict], upload_rows: List[dict]
+) -> Tuple[List[dict], Dict[str, int]]:
+    """
+    增量合并：不删除仅存在于服务端的词；上传与服务器同键（english 小写）时以上传行为准；
+    上传中多出的新词按上传文件顺序追加在末尾。
+    """
+    upload_by_key: Dict[str, dict] = {}
+    for row in upload_rows:
+        clean = _normalize_words_csv_row(row)
+        en = clean.get("english", "").strip()
+        if not en:
+            continue
+        upload_by_key[en.lower()] = clean
+
+    server_ordered_keys: List[str] = []
+    server_by_key: Dict[str, dict] = {}
+    for row in server_rows:
+        clean = _normalize_words_csv_row(row)
+        en = clean.get("english", "").strip()
+        if not en:
+            continue
+        k = en.lower()
+        if k not in server_by_key:
+            server_ordered_keys.append(k)
+        server_by_key[k] = clean
+
+    server_key_set = set(server_by_key.keys())
+    upload_key_set = set(upload_by_key.keys())
+    new_keys = upload_key_set - server_key_set
+
+    merged: List[dict] = []
+    for k in server_ordered_keys:
+        if k in upload_by_key:
+            merged.append(upload_by_key[k])
+        else:
+            merged.append(server_by_key[k])
+
+    new_keys_ordered: List[str] = []
+    seen_new: set = set()
+    for row in upload_rows:
+        clean = _normalize_words_csv_row(row)
+        en = clean.get("english", "").strip()
+        if not en:
+            continue
+        k = en.lower()
+        if k in new_keys and k not in seen_new:
+            new_keys_ordered.append(k)
+            seen_new.add(k)
+
+    for k in new_keys_ordered:
+        merged.append(upload_by_key[k])
+
+    stats = {
+        "server_distinct": len(server_ordered_keys),
+        "upload_distinct": len(upload_by_key),
+        "added": len(new_keys_ordered),
+        "replaced": len(server_key_set & upload_key_set),
+        "unchanged_server_only": len(server_key_set - upload_key_set),
+        "final_count": len(merged),
+    }
+    return merged, stats
+
+
+def _write_words_csv_rows_atomic_under_lock(rows: List[dict]) -> None:
+    """在已持有 _words_csv_lock 时原子写入全表并失效缓存（勿调用会再次加锁的函数）。"""
+    global _words_csv_cache, _words_csv_cache_mtime
+    WORDS_CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(suffix=".csv", dir=str(WORDS_CSV_FILE.parent), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS, extrasaction="ignore")
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({k: str(row.get(k, "") or "").strip() for k in _CSV_FIELDS})
+        os.replace(tmp, WORDS_CSV_FILE)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    _words_csv_cache = None
+    try:
+        _words_csv_cache_mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
+    except OSError:
+        _words_csv_cache_mtime = 0.0
 
 
 def invalidate_words_csv_cache() -> None:
@@ -3619,6 +3716,61 @@ def admin_remove_wordbank_difficult():
         return jsonify({'error': '疑难词不存在'}), 404
     logger.info("管理员删除疑难词记录: %s", surface)
     return jsonify({'message': '已移除'}), 200
+
+
+@app.route('/api/admin/wordbank/csv/incremental-upload', methods=['POST'])
+@admin_required
+def admin_wordbank_csv_incremental_upload():
+    """
+    管理员上传本地 words.csv，与服务器合并：
+    - 不删除仅存在于服务端的词；
+    - 同一 english（忽略大小写）以上传行覆盖；
+    - 上传中新增词按上传顺序接在末尾。
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': '缺少表单字段 file'}), 400
+    up = request.files['file']
+    if not up or not up.filename:
+        return jsonify({'error': '未选择文件'}), 400
+    if not str(up.filename).lower().endswith('.csv'):
+        return jsonify({'error': '请上传 .csv 文件'}), 400
+    raw = up.read()
+    if not raw:
+        return jsonify({'error': '文件为空'}), 400
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return jsonify({'error': '文件须为 UTF-8 编码'}), 400
+    reader = csv.DictReader(StringIO(text))
+    fieldnames = reader.fieldnames or []
+    fn_norm = {str(x or "").strip() for x in fieldnames}
+    if "english" not in fn_norm:
+        return jsonify({'error': 'CSV 须包含 english 列'}), 400
+    upload_rows: List[dict] = []
+    for row in reader:
+        upload_rows.append(dict(row))
+    if not any(str(r.get("english", "")).strip() for r in upload_rows):
+        return jsonify({'error': '上传文件无有效词条（english 列为空）'}), 400
+
+    try:
+        with _words_csv_lock:
+            server_rows = _read_words_csv_from_path(WORDS_CSV_FILE)
+            merged, stats = _merge_incremental_words_csv(server_rows, upload_rows)
+            _write_words_csv_rows_atomic_under_lock(merged)
+    except Exception as e:
+        logger.exception("增量合并 words.csv 失败: %s", e)
+        return jsonify({'error': f'写入失败: {e}'}), 500
+
+    logger.info(
+        "管理员增量上传 words.csv: added=%s replaced=%s final=%s",
+        stats.get("added"),
+        stats.get("replaced"),
+        stats.get("final_count"),
+    )
+    return jsonify({
+        'message': '词库已增量合并',
+        'stats': stats,
+    }), 200
 
 
 # ==================== 健康检查 ====================

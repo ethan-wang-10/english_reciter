@@ -40,6 +40,33 @@ async function apiAdminRequest(endpoint, options = {}) {
     return data;
 }
 
+/** multipart/form-data（勿设置 Content-Type，由浏览器带 boundary） */
+async function apiAdminMultipart(endpoint, formData) {
+    const headers = {};
+    const at = getAdminToken();
+    if (at) {
+        headers.Authorization = `Bearer ${at}`;
+    }
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        body: formData,
+        headers
+    });
+    let data = {};
+    try {
+        data = await response.json();
+    } catch (_) {
+        /* ignore */
+    }
+    if (!response.ok) {
+        if (response.status === 401) {
+            setAdminToken(null);
+        }
+        throw new Error(data.error || data.detail || '请求失败');
+    }
+    return data;
+}
+
 function showAdminNotice(msg) {
     const el = document.getElementById('admin-notice');
     if (!el) return;
