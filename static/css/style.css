@@ -2077,6 +2077,15 @@ button.import-article-chip--selected:hover {
     align-content: flex-start;
 }
 
+.import-article-unmatched-sep {
+    align-self: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    opacity: 0.85;
+    user-select: text;
+}
+
 .import-article-unmatched-chip {
     display: inline-block;
     padding: 4px 8px;

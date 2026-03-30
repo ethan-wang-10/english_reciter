@@ -3750,7 +3750,10 @@ function renderArticleUnmatched(lemmas) {
     }
     wrap.hidden = false;
     el.innerHTML = list
-        .map((w) => `<span class="import-article-unmatched-chip">${escapeHtml(String(w))}</span>`)
+        .map((w, i) =>
+            (i > 0 ? '<span class="import-article-unmatched-sep">, </span>' : '') +
+            `<span class="import-article-unmatched-chip">${escapeHtml(String(w))}</span>`
+        )
         .join('');
 }
 
