@@ -12,11 +12,14 @@ import json
 import random
 import re
 import tempfile
+import base64
 import hashlib
 import secrets
 import shutil
+import ssl
 import subprocess
 import threading
+import urllib.error
 import urllib.request
 from collections import defaultdict
 from contextlib import contextmanager
@@ -25,7 +28,7 @@ from io import BytesIO, StringIO
 from pathlib import Path
 from functools import wraps
 from typing import Dict, Generator, List, Optional, Tuple
-from time import time
+from time import sleep, time
 import uuid
 
 from flask import Flask, request, jsonify, send_file, send_from_directory, Response, g
@@ -99,6 +102,12 @@ _words_csv_cache_mtime: float = 0.0
 
 # DeepSeek API
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+# 单次请求：大 JSON 输出易超过 60s；可通过环境变量覆盖
+DEEPSEEK_HTTP_TIMEOUT_SEC = int(os.getenv("DEEPSEEK_HTTP_TIMEOUT_SEC", "120"))
+DEEPSEEK_HTTP_RETRIES = max(1, int(os.getenv("DEEPSEEK_HTTP_RETRIES", "3")))
+DEEPSEEK_RETRY_BACKOFF_SEC = float(os.getenv("DEEPSEEK_RETRY_BACKOFF_SEC", "2"))
+# 词汇批量生成时，每批结束后暂停（秒），减轻限流；默认 0
+DEEPSEEK_BATCH_PAUSE_SEC = float(os.getenv("DEEPSEEK_BATCH_PAUSE_SEC", "0") or 0)
 _APP_CONFIG_FILE = Path("config.json")
 
 
@@ -127,12 +136,69 @@ def _save_app_config(data: dict) -> None:
         raise
 
 
+# config.json 中 deepseek_api_key 的密文前缀（Fernet）；旧版明文无此前缀
+_DEEPSEEK_ENC_PREFIX = "er-enc:v1:"
+
+
+def _master_secret_for_deepseek_crypto() -> str:
+    """与 Flask SECRET_KEY 一致或单独配置，用于派生 Fernet 密钥；重启后解密需同一值。"""
+    s = os.getenv("DEEPSEEK_KEY_ENCRYPTION_SECRET", "").strip()
+    if s:
+        return s
+    return os.getenv("SECRET_KEY", "").strip()
+
+
+def _fernet_for_deepseek_storage():
+    """用于加密/解密写入 config.json 的 DeepSeek API Key。"""
+    try:
+        from cryptography.fernet import Fernet
+    except ImportError:
+        logger.warning("未安装 cryptography，无法使用 DeepSeek API Key 加密存储")
+        return None
+    master = _master_secret_for_deepseek_crypto()
+    if not master:
+        return None
+    key = base64.urlsafe_b64encode(
+        hashlib.sha256((master + "|english_reciter.deepseek.v1").encode("utf-8")).digest()
+    )
+    return Fernet(key)
+
+
+def _decrypt_deepseek_from_config(raw: str) -> str:
+    """将 config 中的字段解密为明文 Key；明文旧配置或解密失败时返回可解析结果。"""
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    if not raw.startswith(_DEEPSEEK_ENC_PREFIX):
+        return raw
+    f = _fernet_for_deepseek_storage()
+    if f is None:
+        logger.error(
+            "config.json 中 DeepSeek API Key 已加密，但未安装 cryptography 或无法派生密钥，无法解密",
+        )
+        return ""
+    token = raw[len(_DEEPSEEK_ENC_PREFIX) :].encode("utf-8")
+    try:
+        return f.decrypt(token).decode("utf-8")
+    except Exception as e:
+        logger.error("DeepSeek API Key 解密失败（请确认 SECRET_KEY / DEEPSEEK_KEY_ENCRYPTION_SECRET 与加密时一致）: %s", e)
+        return ""
+
+
+def _encrypt_deepseek_for_config(plaintext: str) -> str:
+    f = _fernet_for_deepseek_storage()
+    if f is None:
+        raise RuntimeError("无法初始化加密：请设置 SECRET_KEY 或 DEEPSEEK_KEY_ENCRYPTION_SECRET，并安装 cryptography")
+    return _DEEPSEEK_ENC_PREFIX + f.encrypt(plaintext.encode("utf-8")).decode("ascii")
+
+
 def get_deepseek_api_key() -> str:
-    """读取 DeepSeek API Key：环境变量优先，其次 config.json。"""
+    """读取 DeepSeek API Key：环境变量 DEEPSEEK_API_KEY 优先（进程内明文）；其次 config.json（可密文）。"""
     env_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if env_key:
         return env_key
-    return str(_load_app_config().get("deepseek_api_key", "") or "").strip()
+    raw = str(_load_app_config().get("deepseek_api_key", "") or "").strip()
+    return _decrypt_deepseek_from_config(raw)
 
 
 def _article_ai_extract_enabled() -> bool:
@@ -438,6 +504,65 @@ def _normalize_words_csv_row(row: dict) -> dict:
     return {k: str(row.get(k, "") or "").strip() for k in _CSV_FIELDS}
 
 
+def _is_valid_deepseek_word_entry(entry: object) -> bool:
+    """DeepSeek 返回的单条：需含合法 english、非空 chinese，与词库 CSV 字段兼容。"""
+    if not isinstance(entry, dict):
+        return False
+    en = str(entry.get("english", "")).strip()
+    if not en:
+        return False
+    en_low = en.lower()
+    if not re.match(r"^[a-z][a-z'\-]*$", en_low):
+        return False
+    if not str(entry.get("chinese", "")).strip():
+        return False
+    return True
+
+
+def accumulate_valid_deepseek_word_rows(
+    entries: Optional[List],
+    *,
+    level_hint: str,
+    csv_so_far: set,
+    batch_lower: set,
+) -> Tuple[List[dict], set]:
+    """
+    从 DeepSeek 返回的 JSON 数组中采纳所有格式合法的词条，与 csv_so_far 去重后写入新行。
+    模型多返回的其它合法词也会一并纳入（尽量填充词库）。
+    返回 (新行列表, 本批请求词 batch_lower 中已得到词条的 english 小写集合)。
+    """
+    new_rows: List[dict] = []
+    success_for_batch: set = set()
+    if not entries:
+        return new_rows, success_for_batch
+    extra_words: List[str] = []
+    for entry in entries:
+        if not _is_valid_deepseek_word_entry(entry):
+            continue
+        row = _normalize_words_csv_row(entry)
+        en = row["english"].strip().lower()
+        if not en:
+            continue
+        if en in csv_so_far:
+            continue
+        row["english"] = en
+        if level_hint:
+            row["level"] = level_hint
+        new_rows.append(row)
+        csv_so_far.add(en)
+        if en in batch_lower:
+            success_for_batch.add(en)
+        else:
+            extra_words.append(en)
+    if extra_words:
+        logger.info(
+            "DeepSeek 本批除请求列表外另写入词库 %s 条: %s",
+            len(extra_words),
+            extra_words[:40],
+        )
+    return new_rows, success_for_batch
+
+
 def _read_words_csv_from_path(path: Path) -> List[dict]:
     """从磁盘读取 CSV（不经过模块缓存；供 load_words_csv 与需持锁合并时使用）。"""
     if not path.exists():
@@ -691,6 +816,58 @@ def is_paid_user(username: str) -> bool:
 
 # ==================== DeepSeek API ====================
 
+def _ssl_context_for_https() -> ssl.SSLContext:
+    """
+    urllib 默认在部分环境（尤其 macOS 官方 Python 安装）下缺少根证书，会导致
+    CERTIFICATE_VERIFY_FAILED。优先使用 certifi 的 CA 包；未安装 certifi 时退回系统默认。
+    """
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+def _deepseek_error_is_retryable(err: BaseException) -> bool:
+    """超时、限流、网关错误时可重试。"""
+    msg = str(err).lower()
+    if "timed out" in msg or "timeout" in msg:
+        return True
+    if isinstance(err, urllib.error.HTTPError):
+        return err.code in (429, 502, 503, 504)
+    if isinstance(err, urllib.error.URLError) and isinstance(err.reason, TimeoutError):
+        return True
+    return False
+
+
+def _deepseek_http_error_body_for_log(e: urllib.error.HTTPError) -> str:
+    """读取 DeepSeek/OpenAI 风格 HTTP 错误响应体，便于日志排查（仅调用一次 read）。"""
+    try:
+        raw_bytes = e.read()
+    except Exception as ex:
+        return f"<读取响应体失败: {ex}>"
+    body = raw_bytes.decode("utf-8", errors="replace").strip()
+    if not body:
+        return f"<空响应体 reason={e.reason!r}>"
+    if len(body) > 8000:
+        body = body[:8000] + "…[截断]"
+    try:
+        j = json.loads(body)
+        if isinstance(j, dict):
+            err = j.get("error")
+            if isinstance(err, dict):
+                msg = err.get("message") or err.get("code") or err.get("type")
+                typ = err.get("type", "")
+                if msg:
+                    return f"type={typ!r} message={msg!r} full_json={body[:4000]}"
+            if "message" in j:
+                return f"message={j.get('message')!r} full_json={body[:4000]}"
+    except json.JSONDecodeError:
+        pass
+    return body
+
+
 def _deepseek_chat(messages: List[dict], model: str = "deepseek-chat",
                    max_tokens: int = 4096, temperature: float = 0.7) -> Optional[str]:
     """调用 DeepSeek Chat API，返回助手回复文本；失败返回 None。"""
@@ -698,6 +875,20 @@ def _deepseek_chat(messages: List[dict], model: str = "deepseek-chat",
     if not api_key:
         logger.warning("DEEPSEEK_API_KEY 未配置，无法调用 DeepSeek API")
         return None
+    user_text = ""
+    if messages and isinstance(messages[-1], dict) and messages[-1].get("role") == "user":
+        user_text = str(messages[-1].get("content") or "")
+    prompt_chars = len(user_text)
+    preview_in = user_text[:2000] + ("…[截断]" if len(user_text) > 2000 else "")
+    logger.info(
+        "DeepSeek 请求: model=%s max_tokens=%s temperature=%s timeout_sec=%s prompt_chars=%s 输入预览=%s",
+        model,
+        max_tokens,
+        temperature,
+        DEEPSEEK_HTTP_TIMEOUT_SEC,
+        prompt_chars,
+        preview_in,
+    )
     payload = json.dumps({
         "model": model,
         "messages": messages,
@@ -708,14 +899,93 @@ def _deepseek_chat(messages: List[dict], model: str = "deepseek-chat",
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
-    req = urllib.request.Request(DEEPSEEK_API_URL, data=payload, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            return result["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.error("DeepSeek API 调用失败: %s", e)
-        return None
+    last_err: Optional[BaseException] = None
+    for attempt in range(1, DEEPSEEK_HTTP_RETRIES + 1):
+        req = urllib.request.Request(DEEPSEEK_API_URL, data=payload, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(
+                req,
+                timeout=DEEPSEEK_HTTP_TIMEOUT_SEC,
+                context=_ssl_context_for_https(),
+            ) as resp:
+                raw = resp.read().decode("utf-8")
+            try:
+                result = json.loads(raw)
+            except json.JSONDecodeError as je:
+                last_err = je
+                logger.error(
+                    "DeepSeek 响应非合法 JSON: %s 原始前 2500 字: %s",
+                    je,
+                    raw[:2500],
+                )
+                break
+            if isinstance(result, dict) and result.get("error"):
+                err_obj = result["error"]
+                last_err = ValueError(str(err_obj))
+                logger.error(
+                    "DeepSeek API 返回 error 字段: %s 完整响应前 4000 字: %s",
+                    err_obj,
+                    raw[:4000],
+                )
+                break
+            try:
+                content = result["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError) as ke:
+                last_err = ke
+                logger.error(
+                    "DeepSeek 响应缺少 choices[0].message.content: %s result 前 4000 字: %s",
+                    ke,
+                    raw[:4000],
+                )
+                break
+            preview_out = content[:3000] + ("…[截断]" if len(content) > 3000 else "")
+            logger.info(
+                "DeepSeek 响应: attempt=%s/%s response_chars=%s 输出预览=%s",
+                attempt,
+                DEEPSEEK_HTTP_RETRIES,
+                len(content),
+                preview_out,
+            )
+            return content
+        except urllib.error.HTTPError as e:
+            last_err = e
+            detail = _deepseek_http_error_body_for_log(e)
+            logger.warning(
+                "DeepSeek HTTP 错误: attempt=%s/%s code=%s %s",
+                attempt,
+                DEEPSEEK_HTTP_RETRIES,
+                e.code,
+                detail,
+            )
+            if attempt < DEEPSEEK_HTTP_RETRIES and _deepseek_error_is_retryable(e):
+                wait = DEEPSEEK_RETRY_BACKOFF_SEC * (2 ** (attempt - 1))
+                logger.info("DeepSeek 可重试错误，%.1f 秒后第 %s 次重试", wait, attempt + 1)
+                sleep(wait)
+                continue
+            logger.error(
+                "DeepSeek API 调用失败(HTTP): code=%s reason=%r 详情=%s",
+                e.code,
+                e.reason,
+                detail,
+            )
+            break
+        except Exception as e:
+            last_err = e
+            logger.warning(
+                "DeepSeek 请求失败: attempt=%s/%s err=%s",
+                attempt,
+                DEEPSEEK_HTTP_RETRIES,
+                e,
+            )
+            if attempt < DEEPSEEK_HTTP_RETRIES and _deepseek_error_is_retryable(e):
+                wait = DEEPSEEK_RETRY_BACKOFF_SEC * (2 ** (attempt - 1))
+                logger.info("DeepSeek 可重试错误，%.1f 秒后第 %s 次重试", wait, attempt + 1)
+                sleep(wait)
+                continue
+            break
+    if last_err is not None and not isinstance(last_err, urllib.error.HTTPError):
+        logger.error("DeepSeek API 调用失败: %s", last_err)
+    return None
 
 
 # 词汇导入：每批发给 DeepSeek 的词数（与 max_tokens 估算、JSON 输出上限一致）。切勿与外层 range 步长错配。
@@ -741,6 +1011,7 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
     用 DeepSeek 为单词列表生成词汇表条目（chinese, level, phonetic, examples）。
     返回 list of dict，每个 dict 含 CSV 字段。
     单次调用词数不应超过 DEEPSEEK_VOCAB_BATCH_WORDS（由 import_vocab 分批保证）。
+    下游 ``accumulate_valid_deepseek_word_rows`` 会采纳所有格式合法且与词库去重后的行（含模型多返回的词）。
     """
     level_hint = f"，这批词汇难度级别为：{level}" if level else ""
     words = list(words)[:DEEPSEEK_VOCAB_BATCH_WORDS]
@@ -775,20 +1046,45 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
     wc = max(1, len(words))
     # 多词时每条 JSON 较长，固定 3000 易截断导致解析失败；按词数放大，上限与 DeepSeek 输出上限对齐
     max_out = min(8192, max(2500, 700 + wc * 260))
-    reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=max_out)
-    if not reply:
-        return None
-    # 提取JSON
-    json_match = re.search(r'\[[\s\S]*\]', reply)
-    if not json_match:
-        logger.error("DeepSeek 返回格式不含JSON数组: %s", reply[:200])
-        return None
+    logger.info(
+        "DeepSeek 词汇生成批次: word_count=%s level=%r max_tokens=%s 单词列表=%s",
+        len(words),
+        level or "",
+        max_out,
+        words_str[:800] + ("…[截断]" if len(words_str) > 800 else ""),
+    )
     try:
-        data = json.loads(json_match.group(0))
-        return data if isinstance(data, list) else None
-    except json.JSONDecodeError as e:
-        logger.error("DeepSeek 返回JSON解析失败: %s", e)
+        reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=max_out)
+        if not reply:
+            logger.warning(
+                "DeepSeek 词汇生成: 无有效回复（原因见上方 DeepSeek HTTP/API 错误日志）",
+            )
+            return None
+        # 提取JSON
+        json_match = re.search(r'\[[\s\S]*\]', reply)
+        if not json_match:
+            logger.error(
+                "DeepSeek 返回格式不含JSON数组，reply 前 800 字: %s",
+                reply[:800],
+            )
+            return None
+        try:
+            data = json.loads(json_match.group(0))
+        except json.JSONDecodeError as e:
+            logger.error(
+                "DeepSeek 返回JSON解析失败: %s 片段预览: %s",
+                e,
+                json_match.group(0)[:800],
+            )
+            return None
+        if isinstance(data, list):
+            logger.info("DeepSeek 词汇生成解析成功: entries=%s", len(data))
+            return data
+        logger.warning("DeepSeek 词汇生成: JSON 根类型非数组")
         return None
+    finally:
+        if DEEPSEEK_BATCH_PAUSE_SEC > 0:
+            sleep(DEEPSEEK_BATCH_PAUSE_SEC)
 
 
 # ==================== Token存储（内存中，重启后失效）====================
@@ -2938,23 +3234,22 @@ def import_vocab_to_csv(username):
     failed_surfaces: List[str] = []
 
     if to_generate:
+        csv_so_far = set(existing)
         for i in range(0, len(to_generate), DEEPSEEK_VOCAB_BATCH_WORDS):
             batch = to_generate[i : i + DEEPSEEK_VOCAB_BATCH_WORDS]
             entries = deepseek_generate_word_entries(batch, level=level_hint)
-            success = set()
             batch_lower = {b.lower() for b in batch}
-            if entries:
-                for entry in entries:
-                    if not isinstance(entry, dict):
-                        continue
-                    en = str(entry.get('english', '')).strip().lower()
-                    if not en or en not in batch_lower:
-                        continue
-                    if level_hint:
-                        entry['level'] = level_hint
-                    generated_entries.append(entry)
-                    success.add(en)
-            miss_lemmas = list(batch) if not entries else [b for b in batch if b.lower() not in success]
+            if entries is not None:
+                rows, success = accumulate_valid_deepseek_word_rows(
+                    entries,
+                    level_hint=level_hint,
+                    csv_so_far=csv_so_far,
+                    batch_lower=batch_lower,
+                )
+                generated_entries.extend(rows)
+                miss_lemmas = [b for b in batch if b.lower() not in success]
+            else:
+                miss_lemmas = list(batch)
             for lem in miss_lemmas:
                 for surf in lemma_to_surfaces.get(lem, [lem]):
                     failed_surfaces.append(surf)
@@ -3468,10 +3763,21 @@ def admin_set_user_password(username):
 def admin_get_config():
     """读取 config.json（敏感字段脱敏显示）。"""
     cfg = _load_app_config()
-    key = str(cfg.get("deepseek_api_key", "") or "").strip()
+    raw = str(cfg.get("deepseek_api_key", "") or "").strip()
+    key_plain = _decrypt_deepseek_from_config(raw) if raw else ""
+    if raw and raw.startswith(_DEEPSEEK_ENC_PREFIX) and not key_plain:
+        preview = "（已加密，解密失败或未配置 SECRET_KEY）"
+    elif key_plain:
+        preview = (
+            key_plain[:8] + "…"
+            if len(key_plain) > 8
+            else ("（已设置）" if key_plain else "")
+        )
+    else:
+        preview = ""
     return jsonify({
-        "deepseek_api_key_set": bool(key),
-        "deepseek_api_key_preview": (key[:8] + "…" if len(key) > 8 else ("（已设置）" if key else "")),
+        "deepseek_api_key_set": bool(raw),
+        "deepseek_api_key_preview": preview,
         "article_ai_extract_enabled": bool(cfg.get("article_ai_extract_enabled", False)),
     }), 200
 
@@ -3485,7 +3791,13 @@ def admin_update_config():
     changed = False
     if "deepseek_api_key" in data:
         new_key = str(data["deepseek_api_key"] or "").strip()
-        cfg["deepseek_api_key"] = new_key
+        if new_key:
+            try:
+                cfg["deepseek_api_key"] = _encrypt_deepseek_for_config(new_key)
+            except RuntimeError as e:
+                return jsonify({"error": str(e)}), 400
+        else:
+            cfg["deepseek_api_key"] = ""
         changed = True
     if "article_ai_extract_enabled" in data:
         cfg["article_ai_extract_enabled"] = bool(data["article_ai_extract_enabled"])

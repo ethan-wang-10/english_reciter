@@ -11,6 +11,12 @@ Flask-CORS==4.0.0
 # 生产环境 WSGI 服务器
 gunicorn==21.2.0
 
+# HTTPS（DeepSeek 等）：避免 macOS 等环境下 urllib 证书链缺失
+certifi>=2024.8.30
+
+# config.json 内 DeepSeek API Key 加密（Fernet）
+cryptography>=42.0.0
+
 # 核心功能依赖（与CLI版相同）
 prettytable==3.10.0
 readchar==4.0.6
@@ -21,4 +27,4 @@ spacy==3.8.13
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # 头像：压缩与按需缩放（WebP）
-Pillow==10.2.0
+Pillow==12.0.0
