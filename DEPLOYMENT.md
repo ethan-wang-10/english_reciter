@@ -404,7 +404,7 @@ cat > user_data_simple/your-username/config.json << 'EOF'
   "tts_enabled": false,
   "max_success_count": 8,
   "max_review_round": 8,
-  "review_interval_days": [1, 2, 4, 7, 15, 30, 60, 90],
+  "review_interval_days": [1, 2, 4, 7, 15, 30, 60],
   "backup_enabled": true,
   "backup_interval_days": 7,
   "max_backups": 10,

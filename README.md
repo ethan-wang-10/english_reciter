@@ -6,7 +6,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 间隔重复 | 按本地 `config.json`（由 `config.example.json` 复制）中的天数阶梯安排复习（默认 1→2→4→7→15→30→60→90 天） |
+| 间隔重复 | 按本地 `config.json`（由 `config.example.json` 复制）中的天数阶梯安排复习（默认 1→2→4→7→15→30→60 天） |
 | 掌握判定 | 连续成功达到 `max_success_count`（默认 8）后移入已掌握列表 |
 | 例句 | 本地例句库（`word_examples.json`），离线可用 |
 | Web 版 | Flask 应用、注册登录、多用户数据隔离（`user_data_simple/`）、静态前端 |
