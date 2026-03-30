@@ -484,15 +484,20 @@ async function loadAdminDashboard() {
 function renderAdminDeepseekStatus(cfg) {
     const el = document.getElementById('admin-deepseek-status');
     if (!el) return;
+    const cb = document.getElementById('admin-article-ai-extract');
     if (!cfg) {
         el.textContent = '无法读取配置';
+        if (cb) cb.checked = false;
         return;
     }
+    if (typeof cfg.article_ai_extract_enabled === 'boolean' && cb) {
+        cb.checked = cfg.article_ai_extract_enabled;
+    }
     if (cfg.deepseek_api_key_set) {
-        el.textContent = `当前已配置 API Key（${cfg.deepseek_api_key_preview}）。VIP 功能可正常使用。`;
+        el.textContent = `当前已配置 API Key（${cfg.deepseek_api_key_preview}）。词汇 AI 导入等可用；课文导入默认 spaCy，开启下方开关后管理员可选用 AI 分词。`;
         el.style.color = 'var(--primary-dark)';
     } else {
-        el.textContent = '尚未配置 DeepSeek API Key。VIP 功能（文章 AI 提取、词汇导入）将不可用。';
+        el.textContent = '尚未配置 DeepSeek API Key。词汇 AI 导入与课文 AI 分词将不可用。';
         el.style.color = 'var(--error-color)';
     }
 }

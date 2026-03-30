@@ -12,5 +12,6 @@
   "language": "zh",
   "log_level": "INFO",
   "deepseek_api_key": "",
-  "wordbank_lemma_spacy": true
+  "wordbank_lemma_spacy": true,
+  "article_ai_extract_enabled": false
 }

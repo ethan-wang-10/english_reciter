@@ -135,6 +135,20 @@ def get_deepseek_api_key() -> str:
     return str(_load_app_config().get("deepseek_api_key", "") or "").strip()
 
 
+def _article_ai_extract_enabled() -> bool:
+    """管理后台开启后，管理员可凭管理员会话在课文导入中使用 AI 分词；普通用户统一 spaCy。"""
+    return bool(_load_app_config().get("article_ai_extract_enabled", False))
+
+
+def _admin_token_from_request() -> str:
+    """课文导入等场景：用户 JWT 与管理员 token 分开发送。"""
+    h = (request.headers.get("X-Admin-Token") or "").strip()
+    if h:
+        return h
+    data = request.get_json(silent=True) or {}
+    return str(data.get("admin_token", "") or "").strip()
+
+
 # 动态读取（每次调用 get_deepseek_api_key() 而不是模块级常量）
 DEEPSEEK_API_KEY = ""  # 保持兼容，实际使用 get_deepseek_api_key()
 
@@ -1976,6 +1990,7 @@ def get_user_plan_api(username):
     return jsonify({
         'plan': get_user_plan(username),
         'article_ai_extract_available': bool(get_deepseek_api_key()),
+        'article_ai_extract_enabled': _article_ai_extract_enabled(),
     }), 200
 
 
@@ -2630,7 +2645,7 @@ def import_from_article(username):
     """
     从文章文本提取单词，返回匹配词条列表（不直接加入待复习）：
     - 免费版：按空格分词后去查 CSV；可勾选 use_spacy 在匹配步用 spaCy
-    - VIP：extract_mode=ai 用 DeepSeek 提取原形；extract_mode=spacy 用 spaCy 全文分词取 lemma
+    - VIP：默认 extract_mode=spacy；extract_mode=ai 仅当管理后台开启且请求携带有效管理员 token
     前端拿到词条列表后注入选框，让用户确认后再加入待复习。
     """
     data = request.get_json(silent=True) or {}
@@ -2645,16 +2660,23 @@ def import_from_article(username):
     if plan == 'paid':
         has_ds = bool(get_deepseek_api_key())
         raw_mode = str(data.get('extract_mode', '') or '').strip().lower()
-        if raw_mode == 'spacy':
-            extract_mode = 'spacy'
-        elif raw_mode in ('ai', 'deepseek', ''):
+        if raw_mode in ('ai', 'deepseek'):
+            admin_tok = _admin_token_from_request()
+            if not _article_ai_extract_enabled():
+                return jsonify({
+                    'error': '未在管理后台开启「AI 文章分词」，VIP 默认使用 spaCy 分词',
+                }), 403
+            if not has_ds:
+                return jsonify({
+                    'error': '未配置 DeepSeek API，无法使用 AI 分词',
+                }), 400
+            if not verify_admin_token(admin_tok):
+                return jsonify({
+                    'error': 'AI 分词仅限管理员：请先登录管理后台并保持会话有效',
+                }), 403
             extract_mode = 'ai'
         else:
-            extract_mode = 'ai'
-        if extract_mode == 'ai' and not has_ds:
-            return jsonify({
-                'error': '未配置 DeepSeek API，无法使用 AI 分词，请选择 spaCy 分词',
-            }), 400
+            extract_mode = 'spacy'
         if extract_mode == 'spacy':
             lemmas = spacy_extract_lemmas_from_article(text)
             if lemmas is None:
@@ -3353,19 +3375,23 @@ def admin_get_config():
     return jsonify({
         "deepseek_api_key_set": bool(key),
         "deepseek_api_key_preview": (key[:8] + "…" if len(key) > 8 else ("（已设置）" if key else "")),
+        "article_ai_extract_enabled": bool(cfg.get("article_ai_extract_enabled", False)),
     }), 200
 
 
 @app.route('/api/admin/config', methods=['PATCH'])
 @admin_required
 def admin_update_config():
-    """更新 config.json 中的运行时配置（目前支持 deepseek_api_key）。"""
+    """更新 config.json 中的运行时配置（deepseek_api_key、article_ai_extract_enabled 等）。"""
     data = request.get_json(silent=True) or {}
     cfg = _load_app_config()
     changed = False
     if "deepseek_api_key" in data:
         new_key = str(data["deepseek_api_key"] or "").strip()
         cfg["deepseek_api_key"] = new_key
+        changed = True
+    if "article_ai_extract_enabled" in data:
+        cfg["article_ai_extract_enabled"] = bool(data["article_ai_extract_enabled"])
         changed = True
     if not changed:
         return jsonify({"error": "没有可更新的字段"}), 400

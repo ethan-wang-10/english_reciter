@@ -310,7 +310,7 @@
                             <textarea id="import-article-textarea" class="import-json-textarea" rows="8"
                                 spellcheck="false" placeholder="在此粘贴英文文章…"></textarea>
                             <div id="import-article-vip-extract-wrap" class="import-article-vip-extract-wrap" hidden>
-                                <p class="import-article-vip-extract-lead">分词方式（VIP）</p>
+                                <p class="import-article-vip-extract-lead">分词方式（管理员 · 需先在管理后台开启）</p>
                                 <div class="import-article-vip-extract-options" role="group" aria-label="分词方式">
                                     <label class="import-article-vip-label" for="import-article-extract-ai">
                                         <input type="radio" name="import-article-extract-mode" value="ai"
@@ -670,6 +670,14 @@
                                 placeholder="sk-…（留空则清除）" />
                         </div>
                         <button type="button" id="admin-save-deepseek" class="btn btn-primary admin-config-save">保存 API Key</button>
+                        <div class="form-group admin-config-group admin-article-ai-row">
+                            <label class="admin-toggle" for="admin-article-ai-extract">
+                                <input type="checkbox" id="admin-article-ai-extract" />
+                                允许管理员在课文导入中使用 AI 分词（DeepSeek）
+                            </label>
+                            <p class="admin-hint">开启后，仅当管理员已登录管理后台时，可在「导入单词 → 从文章导入」中选择 AI 分词；普通 VIP 用户统一使用 spaCy 分词。</p>
+                        </div>
+                        <button type="button" id="admin-save-article-ai" class="btn btn-secondary admin-config-save">保存 AI 文章分词开关</button>
                     </div>
 
                     <details class="admin-words-details">

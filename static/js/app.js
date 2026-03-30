@@ -30,8 +30,10 @@ let isAdvancing = false;  // 防止重复推进到下一题
 
 /** 用户套餐类型: 'free' | 'paid'（paid 对应 VIP 权益，展示文案统一为 VIP） */
 let userPlan = 'free';
-/** 服务端是否配置了 DeepSeek（课文 AI 分词）；来自 /api/user/plan */
+/** 服务端是否配置了 DeepSeek；来自 /api/user/plan */
 let articleAiExtractAvailable = false;
+/** 管理后台是否开启「AI 文章分词」；来自 /api/user/plan */
+let articleAiExtractEnabled = false;
 
 /** 本轮 3 次尝试均错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
 let wrongWordsInThisPass = new Set();
@@ -2055,9 +2057,11 @@ async function loadUserPlan() {
         const data = await apiRequest('/user/plan');
         userPlan = data.plan || 'free';
         articleAiExtractAvailable = data.article_ai_extract_available === true;
+        articleAiExtractEnabled = data.article_ai_extract_enabled === true;
         updatePlanUI();
     } catch (_) {
         userPlan = 'free';
+        articleAiExtractEnabled = false;
     }
 }
 
@@ -2065,7 +2069,7 @@ function updatePlanUI() {
     const hint = document.getElementById('article-plan-hint');
     if (hint) {
         if (userPlan === 'paid') {
-            hint.textContent = '（VIP：可选 AI 分词或 spaCy 分词）';
+            hint.textContent = '（VIP：课文导入统一使用 spaCy 分词；管理员可在后台开启 AI 分词）';
             hint.className = 'plan-hint vip';
         } else {
             hint.textContent = '（免费版：按空格分词；可勾选智能还原匹配不规则词形）';
@@ -2086,6 +2090,12 @@ function updatePlanUI() {
     const vipExtractWrap = document.getElementById('import-article-vip-extract-wrap');
     const aiRadio = document.getElementById('import-article-extract-ai');
     const spacyModeRadio = document.getElementById('import-article-extract-spacy');
+    const adminTok = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('adminToken') : null;
+    const showVipAiChoice =
+        userPlan === 'paid' &&
+        articleAiExtractEnabled &&
+        articleAiExtractAvailable &&
+        !!adminTok;
     if (spacyWrap) {
         if (userPlan === 'paid') {
             spacyWrap.hidden = true;
@@ -2094,15 +2104,19 @@ function updatePlanUI() {
         }
     }
     if (vipExtractWrap) {
-        if (userPlan === 'paid') {
+        if (showVipAiChoice) {
             vipExtractWrap.hidden = false;
             if (aiRadio && spacyModeRadio) {
-                aiRadio.disabled = !articleAiExtractAvailable;
+                aiRadio.disabled = false;
                 spacyModeRadio.checked = true;
                 aiRadio.checked = false;
             }
         } else {
             vipExtractWrap.hidden = true;
+            if (aiRadio && spacyModeRadio) {
+                spacyModeRadio.checked = true;
+                aiRadio.checked = false;
+            }
         }
     }
 
@@ -3926,19 +3940,25 @@ async function importFromArticle() {
     try {
         const spacyCb = document.getElementById('import-article-use-spacy-cb');
         const use_spacy = userPlan === 'paid' ? true : !!(spacyCb && spacyCb.checked);
+        const vipAiWrap = document.getElementById('import-article-vip-extract-wrap');
+        const useAiExtract =
+            userPlan === 'paid' &&
+            vipAiWrap &&
+            !vipAiWrap.hidden &&
+            document.getElementById('import-article-extract-ai')?.checked === true;
         const body =
             userPlan === 'paid'
-                ? {
-                      text,
-                      extract_mode:
-                          document.getElementById('import-article-extract-spacy')?.checked === true
-                              ? 'spacy'
-                              : 'ai',
-                  }
+                ? { text, extract_mode: useAiExtract ? 'ai' : 'spacy' }
                 : { text, use_spacy };
+        const extraHeaders = {};
+        if (useAiExtract) {
+            const at = sessionStorage.getItem('adminToken');
+            if (at) extraHeaders['X-Admin-Token'] = at;
+        }
         const data = await apiRequest('/words/import-from-article', {
             method: 'POST',
             body: JSON.stringify(body),
+            headers: extraHeaders,
         });
 
         const words = Array.isArray(data.words) ? data.words : [];
@@ -4573,6 +4593,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             setAdminToken(data.access_token);
             await loadAdminDashboard();
+            updatePlanUI();
         } catch (e) {
             showAdminNotice(e.message || '登录失败');
         }
@@ -4603,9 +4624,26 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             if (keyInput) keyInput.value = '';
             showAdminNotice(newKey ? 'API Key 已保存' : 'API Key 已清除');
-            // 刷新状态显示
             const cfg = await apiAdminRequest('/admin/config').catch(() => null);
             renderAdminDeepseekStatus(cfg);
+            void loadUserPlan();
+        } catch (e) {
+            showAdminNotice(e.message || '保存失败');
+        }
+    });
+
+    document.getElementById('admin-save-article-ai')?.addEventListener('click', async () => {
+        const cb = document.getElementById('admin-article-ai-extract');
+        showAdminNotice('');
+        try {
+            await apiAdminRequest('/admin/config', {
+                method: 'PATCH',
+                body: JSON.stringify({ article_ai_extract_enabled: cb ? cb.checked : false })
+            });
+            showAdminNotice('AI 文章分词开关已保存');
+            const cfg = await apiAdminRequest('/admin/config').catch(() => null);
+            renderAdminDeepseekStatus(cfg);
+            void loadUserPlan();
         } catch (e) {
             showAdminNotice(e.message || '保存失败');
         }
@@ -4629,6 +4667,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setAdminToken(null);
         showAdminLoginPanel();
         showAdminNotice('');
+        updatePlanUI();
     });
     
     document.addEventListener('visibilitychange', () => {
