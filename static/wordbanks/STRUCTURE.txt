@@ -2,7 +2,10 @@ wordbanks/ 目录说明
 ==================
 
 words.csv
-  词库（CSV），供背单词等功能使用。
+  词库（CSV），供背单词等功能使用。此文件已列入仓库 .gitignore，不随 git push；
+  线上由服务器本地或管理后台「增量上传」维护，避免 git pull 覆盖。
+words.csv.example
+  列表示例与表头，新环境可复制为 words.csv 后再扩充。
 
 textbooks/
   课文学习总索引，便于以后增加多套教材而不绑定固定子目录结构。

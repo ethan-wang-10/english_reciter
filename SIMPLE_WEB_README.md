@@ -60,7 +60,7 @@ docker run -p 8000:8000 english-reciter-simple
 | `/api/wordbank/csv/search` | GET | 在词库中搜索（`q` 参数） |
 | `/api/words/mastered` | GET | 获取已掌握单词 |
 
-内置词库文件：`static/wordbanks/words.csv`（唯一数据源；更新后提交 Git 并部署）。
+内置词库文件：`static/wordbanks/words.csv`（唯一数据源；**已加入 `.gitignore`**，不提交仓库，避免部署时 `git pull` 覆盖线上词库。新环境可复制 `static/wordbanks/words.csv.example` 为 `words.csv` 再扩充；线上更新请用管理后台「内置词库 CSV 增量上传」或直接在服务器编辑该文件。）
 
 ## 认证方式
 
@@ -81,7 +81,7 @@ english_reciter/
 │   ├── index.html
 │   ├── css/
 │   ├── js/
-│   └── wordbanks/words.csv  # 内置词库（唯一数据源）
+│   └── wordbanks/words.csv  # 内置词库（运行时文件，见 .gitignore；示例见 words.csv.example）
 ├── user_data_simple/      # 用户数据目录（新）
 │   ├── users.json         # 用户信息
 │   └── <username>/        # 每个用户的数据目录
