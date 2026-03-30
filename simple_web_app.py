@@ -141,11 +141,24 @@ _DEEPSEEK_ENC_PREFIX = "er-enc:v1:"
 
 
 def _master_secret_for_deepseek_crypto() -> str:
-    """与 Flask SECRET_KEY 一致或单独配置，用于派生 Fernet 密钥；重启后解密需同一值。"""
+    """
+    用于派生 Fernet 密钥。优先专用变量，其次环境变量 SECRET_KEY；
+    若均未设置，则使用 Flask app.secret_key（开发时常见），便于本地保存密文。
+    生产环境请固定设置 SECRET_KEY 或 DEEPSEEK_KEY_ENCRYPTION_SECRET，否则重启后随机 secret 会导致无法解密。
+    """
     s = os.getenv("DEEPSEEK_KEY_ENCRYPTION_SECRET", "").strip()
     if s:
         return s
-    return os.getenv("SECRET_KEY", "").strip()
+    s = os.getenv("SECRET_KEY", "").strip()
+    if s:
+        return s
+    try:
+        sk = app.secret_key
+        if sk is not None and str(sk).strip():
+            return str(sk)
+    except Exception:
+        pass
+    return ""
 
 
 def _fernet_for_deepseek_storage():
@@ -186,9 +199,19 @@ def _decrypt_deepseek_from_config(raw: str) -> str:
 
 
 def _encrypt_deepseek_for_config(plaintext: str) -> str:
+    try:
+        import cryptography.fernet  # noqa: F401
+    except ImportError:
+        raise RuntimeError(
+            "未安装 cryptography，无法加密保存 API Key。请执行: pip install -r requirements-simple.txt"
+        ) from None
     f = _fernet_for_deepseek_storage()
     if f is None:
-        raise RuntimeError("无法初始化加密：请设置 SECRET_KEY 或 DEEPSEEK_KEY_ENCRYPTION_SECRET，并安装 cryptography")
+        raise RuntimeError(
+            "无法派生加密密钥：请设置环境变量 SECRET_KEY 或 DEEPSEEK_KEY_ENCRYPTION_SECRET；"
+            " 本地开发未设置时可在运行中的 Web 进程内保存（将使用 Flask app.secret_key）；"
+            " 生产环境务必固定 SECRET_KEY，否则重启后无法解密已存密文。"
+        ) from None
     return _DEEPSEEK_ENC_PREFIX + f.encrypt(plaintext.encode("utf-8")).decode("ascii")
 
 
