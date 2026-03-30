@@ -2576,11 +2576,18 @@ def _dedupe_preserve_order(items: List[str]) -> List[str]:
 
 
 def _plural_stem_variants(term: str) -> List[str]:
-    """启发式去复数：-es、-s（非完备形态学；ss 结尾不剥 s）。"""
+    """启发式去复数：-ies→-y、-es、-s（非完备形态学；ss 结尾不剥 s）。"""
     if len(term) < 4 or not re.match(r'^[a-z]+$', term):
         return []
     stems: List[str] = []
-    if term.endswith('es') and len(term) > 3:
+    # flies→fly, cities→city（元音+ies 如 pies/dies 不处理）
+    if (
+        term.endswith('ies')
+        and len(term) >= 5
+        and term[-4] not in 'aeiou'
+    ):
+        stems.append(term[:-3] + 'y')
+    elif term.endswith('es') and len(term) > 3:
         stem = term[:-2]
         if len(stem) >= 2:
             stems.append(stem)
@@ -2617,6 +2624,83 @@ def _ing_stem_variants(term: str) -> List[str]:
     if len(stem) >= 2 and stem[-1] == stem[-2] and stem[-1] not in 'aeiou':
         return [stem[:-1]]
     return [stem]
+
+
+# 派生后缀：长优先，避免 information 被误拆成 informa+tion
+_DERIV_SUFFIXES: Tuple[str, ...] = tuple(
+    sorted(
+        {
+            'ification',
+            'ization',
+            'isation',
+            'ness',
+            'ation',
+            'ition',
+            'tion',
+            'sion',
+            'ment',
+            'less',
+            'able',
+            'ible',
+            'eous',
+            'ious',
+            'ous',
+            'ive',
+            'ful',
+            'ity',
+            'ify',
+            'ize',
+            'ise',
+        },
+        key=len,
+        reverse=True,
+    ),
+)
+
+
+def _extra_morph_stem_variants(term: str) -> List[str]:
+    """
+    在常规 contraction / 复数 / -ed / -ing 之后、spaCy 之前的快速词形推断：
+    -ly 副词、比较级/最高级 -er/-est、-iest→-y，以及常见派生后缀剥离。
+    """
+    if len(term) < 4 or not re.match(r'^[a-z]+$', term):
+        return []
+    out: List[str] = []
+    # 形容词/副词：happily → happy
+    if term.endswith('ily') and len(term) >= 6:
+        out.append(term[:-3] + 'y')
+    # quickly → quick；likely/probably 等不拆（长度与 -abl 排除）
+    if (
+        term.endswith('ly')
+        and not term.endswith('ily')
+        and len(term) >= 7
+    ):
+        stem = term[:-2]
+        if len(stem) >= 4 and not stem.endswith('abl'):
+            out.append(stem)
+    # happiest → happy
+    if term.endswith('iest') and len(term) >= 6:
+        stem = term[:-4] + 'y'
+        if len(stem) >= 3:
+            out.append(stem)
+    # fastest → fast（词干至少 4 字母，减少 water→wat）
+    if term.endswith('est') and len(term) >= 7:
+        stem = term[:-3]
+        if len(stem) >= 4:
+            out.append(stem)
+    # faster → fast（同上）
+    if term.endswith('er') and not term.endswith('est') and len(term) >= 6:
+        stem = term[:-2]
+        if len(stem) >= 4:
+            out.append(stem)
+    for suf in _DERIV_SUFFIXES:
+        if len(term) <= len(suf) + 2:
+            continue
+        if term.endswith(suf):
+            stem = term[: -len(suf)]
+            if len(stem) >= 3:
+                out.append(stem)
+    return _dedupe_preserve_order(out)
 
 
 def _normalize_apostrophe_token(term: str) -> str:
@@ -2854,6 +2938,11 @@ def _iter_csv_lemma_candidates(
         if x not in seen:
             seen.add(x)
             yield x, 'ing'
+    for stem in _extra_morph_stem_variants(surface):
+        x = mappings.get(stem, stem)
+        if x not in seen:
+            seen.add(x)
+            yield x, 'suffix'
     if use_spacy:
         lem: Optional[str] = None
         if spacy_lemma_map is not None:
@@ -2907,6 +2996,8 @@ def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
     ing = _ing_stem_variants(surface)
     if ing:
         return mappings.get(ing[0], ing[0])
+    for stem in _extra_morph_stem_variants(surface):
+        return mappings.get(stem, stem)
     lem = _spacy_lemma_for_surface(surface)
     if lem and lem != surface:
         return mappings.get(lem, lem)
@@ -2932,6 +3023,7 @@ def search_wordbank_csv(username):
             'implicit_past_resolution': {},
             'implicit_ing_resolution': {},
             'implicit_contraction_resolution': {},
+            'implicit_suffix_resolution': {},
             'surface_hits': {},
             'surface_blocked': {},
             'nlp_enabled': use_spacy,
@@ -2951,6 +3043,7 @@ def search_wordbank_csv(username):
     implicit_past_resolution: Dict[str, str] = {}
     implicit_ing_resolution: Dict[str, str] = {}
     implicit_contraction_resolution: Dict[str, str] = {}
+    implicit_suffix_resolution: Dict[str, str] = {}
     surface_hits: Dict[str, Optional[dict]] = {}
     surface_blocked: Dict[str, bool] = {}
     difficult: Dict[str, object] = {}
@@ -2989,6 +3082,8 @@ def search_wordbank_csv(username):
                         implicit_ing_resolution[term] = hit
                     elif kind == 'contraction':
                         implicit_contraction_resolution[term] = hit
+                    elif kind == 'suffix':
+                        implicit_suffix_resolution[term] = hit
     result = []
     seen = set()
     for row in rows:
@@ -3024,6 +3119,7 @@ def search_wordbank_csv(username):
         'implicit_past_resolution': implicit_past_resolution,
         'implicit_ing_resolution': implicit_ing_resolution,
         'implicit_contraction_resolution': implicit_contraction_resolution,
+        'implicit_suffix_resolution': implicit_suffix_resolution,
     }
     if per_surface:
         out['surface_hits'] = surface_hits

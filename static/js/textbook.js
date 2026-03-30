@@ -165,12 +165,14 @@ function hydrateTextbookFromSearchResponse(data) {
         const ipt = data.implicit_past_resolution || {};
         const iing = data.implicit_ing_resolution || {};
         const icon = data.implicit_contraction_resolution || {};
+        const isuf = data.implicit_suffix_resolution || {};
         for (const k of Object.keys(sh)) {
             if (sh[k]) {
                 if (inlp[k]) textbookImplicitMorphHint.set(k, 'lemma_nlp');
                 else if (ipt[k]) textbookImplicitMorphHint.set(k, 'past');
                 else if (iing[k]) textbookImplicitMorphHint.set(k, 'ing');
                 else if (icon[k]) textbookImplicitMorphHint.set(k, 'contraction');
+                else if (isuf[k]) textbookImplicitMorphHint.set(k, 'suffix');
                 else if (ip[k]) textbookImplicitMorphHint.set(k, 'plural');
                 else textbookImplicitMorphHint.delete(k);
             } else {
@@ -337,7 +339,9 @@ function buildTextbookTooltipHtmlFromRow(row, surfaceLemma, morphKind) {
                       ? "<span class=\"tb-tip-hint\">（隐式 's / 've）</span>"
                       : morphKind === 'plural'
                         ? '<span class="tb-tip-hint">（隐式去复数）</span>'
-                        : '';
+                        : morphKind === 'suffix'
+                          ? '<span class="tb-tip-hint">（词形推断）</span>'
+                          : '';
         return (
             `<div class="tb-tip-en">${escapeHtml(surfaceLemma)}</div>` +
             `<div class="tb-tip-meta">→ ${escapeHtml(en)}${implicitTag}</div>` +
