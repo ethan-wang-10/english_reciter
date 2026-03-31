@@ -2614,7 +2614,13 @@ def _plural_stem_variants(term: str) -> List[str]:
         stem = term[:-2]
         if len(stem) >= 2:
             stems.append(stem)
-    if term.endswith('s') and not term.endswith('ss') and len(term) > 3:
+    # 不以 -s 当英语复数：拉丁/希腊借词常以 -us 结尾（eucalyptus、cactus、bonus），剥 s 会得到错误词干
+    if (
+        term.endswith('s')
+        and not term.endswith('ss')
+        and not term.endswith('us')
+        and len(term) > 3
+    ):
         stem = term[:-1]
         if len(stem) >= 2:
             stems.append(stem)
@@ -2956,8 +2962,14 @@ def _contraction_stem_variants(term: str) -> List[str]:
 def _iter_csv_lemma_candidates(
     surface: str, mappings: dict, use_spacy: bool = True,
     spacy_lemma_map: Optional[Dict[str, str]] = None,
+    use_heuristics: bool = True,
 ):
-    """按优先级产出 (候选原形, 类别)；词库直配与启发式；use_spacy=False 时不调用 spaCy（课文快速路径）。"""
+    """按优先级产出 (候选原形, 类别)。
+
+    - use_heuristics=False：仅管理员映射、表面形直配与 spaCy（导入单词等场景）。
+    - use_heuristics=True：另含缩写/复数/-ed/-ing/派生等快速启发式（课文悬停释义默认用）。
+    - use_spacy=False 时不调用 spaCy（课文 nlp=0 快速路径）。
+    """
     if surface in mappings:
         yield mappings[surface], 'admin'
         return
@@ -2965,31 +2977,32 @@ def _iter_csv_lemma_candidates(
     if surface not in seen:
         seen.add(surface)
         yield surface, 'surface'
-    for stem in _contraction_stem_variants(surface):
-        x = mappings.get(stem, stem)
-        if x not in seen:
-            seen.add(x)
-            yield x, 'contraction'
-    for stem in _plural_stem_variants(surface):
-        x = mappings.get(stem, stem)
-        if x not in seen:
-            seen.add(x)
-            yield x, 'plural'
-    for stem in _past_tense_stem_variants(surface):
-        x = mappings.get(stem, stem)
-        if x not in seen:
-            seen.add(x)
-            yield x, 'past'
-    for stem in _ing_stem_variants(surface):
-        x = mappings.get(stem, stem)
-        if x not in seen:
-            seen.add(x)
-            yield x, 'ing'
-    for stem in _extra_morph_stem_variants(surface):
-        x = mappings.get(stem, stem)
-        if x not in seen:
-            seen.add(x)
-            yield x, 'suffix'
+    if use_heuristics:
+        for stem in _contraction_stem_variants(surface):
+            x = mappings.get(stem, stem)
+            if x not in seen:
+                seen.add(x)
+                yield x, 'contraction'
+        for stem in _plural_stem_variants(surface):
+            x = mappings.get(stem, stem)
+            if x not in seen:
+                seen.add(x)
+                yield x, 'plural'
+        for stem in _past_tense_stem_variants(surface):
+            x = mappings.get(stem, stem)
+            if x not in seen:
+                seen.add(x)
+                yield x, 'past'
+        for stem in _ing_stem_variants(surface):
+            x = mappings.get(stem, stem)
+            if x not in seen:
+                seen.add(x)
+                yield x, 'ing'
+        for stem in _extra_morph_stem_variants(surface):
+            x = mappings.get(stem, stem)
+            if x not in seen:
+                seen.add(x)
+                yield x, 'suffix'
     if use_spacy:
         lem: Optional[str] = None
         if spacy_lemma_map is not None:
@@ -3008,9 +3021,10 @@ def _iter_csv_lemma_candidates(
 def _first_lemma_in_csv_with_kind(
     surface: str, mappings: dict, csv_keys: set, use_spacy: bool = True,
     spacy_lemma_map: Optional[Dict[str, str]] = None,
+    use_heuristics: bool = True,
 ) -> Tuple[Optional[str], Optional[str]]:
     for c, kind in _iter_csv_lemma_candidates(
-        surface, mappings, use_spacy, spacy_lemma_map,
+        surface, mappings, use_spacy, spacy_lemma_map, use_heuristics,
     ):
         if c in csv_keys:
             return c, kind
@@ -3020,31 +3034,35 @@ def _first_lemma_in_csv_with_kind(
 def _first_lemma_in_csv(
     surface: str, mappings: dict, csv_keys: set, use_spacy: bool = True,
     spacy_lemma_map: Optional[Dict[str, str]] = None,
+    use_heuristics: bool = True,
 ) -> Optional[str]:
     h, _ = _first_lemma_in_csv_with_kind(
-        surface, mappings, csv_keys, use_spacy, spacy_lemma_map,
+        surface, mappings, csv_keys, use_spacy, spacy_lemma_map, use_heuristics,
     )
     return h
 
 
-def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
-    """词库无该词时，用于生成/排队的目标 lemma（启发式优先，最后 spaCy）。"""
+def _lemma_for_vocab_not_in_csv(
+    surface: str, mappings: dict, use_heuristics: bool = True,
+) -> str:
+    """词库无该词时，用于生成/排队的目标 lemma（启发式与 spaCy 顺序见 use_heuristics）。"""
     if surface in mappings:
         return mappings[surface]
-    cov = _contraction_stem_variants(surface)
-    if cov:
-        return mappings.get(cov[0], cov[0])
-    stems = _plural_stem_variants(surface)
-    if stems:
-        return mappings.get(stems[0], stems[0])
-    pst = _past_tense_stem_variants(surface)
-    if pst:
-        return mappings.get(pst[0], pst[0])
-    ing = _ing_stem_variants(surface)
-    if ing:
-        return mappings.get(ing[0], ing[0])
-    for stem in _extra_morph_stem_variants(surface):
-        return mappings.get(stem, stem)
+    if use_heuristics:
+        cov = _contraction_stem_variants(surface)
+        if cov:
+            return mappings.get(cov[0], cov[0])
+        stems = _plural_stem_variants(surface)
+        if stems:
+            return mappings.get(stems[0], stems[0])
+        pst = _past_tense_stem_variants(surface)
+        if pst:
+            return mappings.get(pst[0], pst[0])
+        ing = _ing_stem_variants(surface)
+        if ing:
+            return mappings.get(ing[0], ing[0])
+        for stem in _extra_morph_stem_variants(surface):
+            return mappings.get(stem, stem)
     lem = _spacy_lemma_for_surface(surface)
     if lem and lem != surface:
         return mappings.get(lem, lem)
@@ -3054,12 +3072,19 @@ def _lemma_for_vocab_not_in_csv(surface: str, mappings: dict) -> str:
 @app.route('/api/wordbank/csv/search', methods=['GET'])
 @token_required
 def search_wordbank_csv(username):
-    """在 CSV 词汇表中搜索（支持英文/中文，逗号分隔多词）。"""
+    """在 CSV 词汇表中搜索（支持英文/中文，逗号分隔多词）。
+
+    - ``heuristics=1``：启用缩写/复数/-ed/-ing/派生等快速规则（课文悬停释义须传）。
+    - 默认 ``heuristics=0``：仅表面形、管理员映射与 spaCy（与导入场景一致）。
+    """
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
     per_surface = request.args.get('per_surface', '').strip().lower() in ('1', 'true', 'yes')
-    # nlp=0：仅词库直配 + 规则词形（无 spaCy），课文释义气泡默认用
+    # nlp=0：无 spaCy；启发式（复数/-ed 等）由 heuristics 控制，课文悬停传 heuristics=1
     use_spacy = request.args.get('nlp', '1').strip().lower() not in ('0', 'false', 'no', 'off')
+    use_heuristics = request.args.get('heuristics', '0').strip().lower() in (
+        '1', 'true', 'yes', 'on',
+    )
     if not q:
         return jsonify({
             'words': [],
@@ -3074,6 +3099,7 @@ def search_wordbank_csv(username):
             'surface_hits': {},
             'surface_blocked': {},
             'nlp_enabled': use_spacy,
+            'heuristics_enabled': use_heuristics,
         }), 200
     terms = [
         _normalize_apostrophe_token(t.strip())
@@ -3108,6 +3134,7 @@ def search_wordbank_csv(username):
         if re.match(r'[a-z]', term):
             hit, kind = _first_lemma_in_csv_with_kind(
                 term, mappings, csv_row_keys, use_spacy, spacy_lemma_map,
+                use_heuristics,
             )
             if per_surface and term not in surface_hits:
                 if hit is None:
@@ -3145,7 +3172,7 @@ def search_wordbank_csv(username):
                 else:
                     matched = False
                     for cand, _ in _iter_csv_lemma_candidates(
-                        term, mappings, use_spacy, spacy_lemma_map,
+                        term, mappings, use_spacy, spacy_lemma_map, use_heuristics,
                     ):
                         if en == cand:
                             matched = True
@@ -3172,6 +3199,7 @@ def search_wordbank_csv(username):
         out['surface_hits'] = surface_hits
         out['surface_blocked'] = surface_blocked
     out['nlp_enabled'] = use_spacy
+    out['heuristics_enabled'] = use_heuristics
     return jsonify(out), 200
 
 
@@ -3253,6 +3281,7 @@ def import_from_article(username):
     for w in unique_lemmas:
         eff = _first_lemma_in_csv(
             w, mappings, csv_set, use_spacy_match, spacy_lemma_map,
+            use_heuristics=False,
         )
         if eff is None:
             unmatched_lemmas.append(w)
@@ -3339,11 +3368,15 @@ def import_vocab_to_csv(username):
 
     surface_to_lemma: Dict[str, str] = {}
     for s in input_surfaces:
-        hit = _first_lemma_in_csv(s, mappings, existing)
+        hit = _first_lemma_in_csv(
+            s, mappings, existing, use_spacy=True, use_heuristics=False,
+        )
         if hit is not None:
             surface_to_lemma[s] = hit
         else:
-            surface_to_lemma[s] = _lemma_for_vocab_not_in_csv(s, mappings)
+            surface_to_lemma[s] = _lemma_for_vocab_not_in_csv(
+                s, mappings, use_heuristics=False,
+            )
 
     lemma_to_surfaces: Dict[str, List[str]] = defaultdict(list)
     for s, lem in surface_to_lemma.items():
@@ -3487,14 +3520,14 @@ def wordbank_trouble_status(username):
         mappings = dict(tdoc.get('mappings') or {})
         difficult = dict(tdoc.get('difficult') or {})
     csv_set = get_csv_english_set()
-    hit = _first_lemma_in_csv(q, mappings, csv_set)
+    hit = _first_lemma_in_csv(q, mappings, csv_set, use_spacy=True, use_heuristics=False)
     if hit is not None:
         in_csv = True
         resolved_lemma = hit
         mapped_to = hit if hit != q else None
     else:
         in_csv = False
-        resolved_lemma = _lemma_for_vocab_not_in_csv(q, mappings)
+        resolved_lemma = _lemma_for_vocab_not_in_csv(q, mappings, use_heuristics=False)
         mapped_to = resolved_lemma if resolved_lemma != q else None
     blocked = (q in difficult) and not in_csv
     return jsonify({

@@ -4,6 +4,7 @@
 生成词条并追加到 static/wordbanks/words.csv。默认不用 lemma：课文取 token 表面形，词库仅原样或管理员映射；需还原/联想时加 --lemmatize。
 
 复用 simple_web_app 中的 spaCy、DeepSeek、CSV 与疑难词逻辑（方案 A）。
+与线上一致：词库匹配不使用快速启发式（无复数/-ed 等规则），仅管理员映射、表面形与（可选）spaCy。
 
 用法（请在项目根目录执行，或任意目录执行本脚本——会自动 chdir 到仓库根）：
   python scripts/nce_vocab_sync.py --lesson static/wordbanks/nce/NCE1/0001_001\\&002.Excuse\\ Me.json --dry-run
@@ -316,7 +317,7 @@ def main() -> None:
     parser.add_argument(
         "--no-spacy-match",
         action="store_true",
-        help="（需同时指定 --lemmatize）匹配阶段不使用 spaCy，仅用词库直配与规则词形",
+        help="（需同时指定 --lemmatize）匹配阶段不使用 spaCy，仅用词库直配与管理员映射（与默认相同，均无快速规则词形）",
     )
     parser.add_argument(
         "--lemmatize",
@@ -408,12 +409,19 @@ def main() -> None:
     for lem in combined:
         if args.lemmatize:
             hit = swa._first_lemma_in_csv(
-                lem, mappings, csv_set, use_spacy, spacy_lemma_map
+                lem,
+                mappings,
+                csv_set,
+                use_spacy,
+                spacy_lemma_map,
+                use_heuristics=False,
             )
             if hit is not None:
                 matched += 1
                 continue
-            target = swa._lemma_for_vocab_not_in_csv(lem, mappings)
+            target = swa._lemma_for_vocab_not_in_csv(
+                lem, mappings, use_heuristics=False
+            )
             tl = target.strip().lower()
             if tl in csv_set:
                 matched += 1

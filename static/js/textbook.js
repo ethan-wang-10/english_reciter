@@ -201,7 +201,7 @@ async function textbookLookupWord(lemma, opts = {}) {
         try {
             const nlp = wantNlp ? '1' : '0';
             const data = await apiRequest(
-                `/wordbank/csv/search?q=${encodeURIComponent(k)}&per_surface=1&nlp=${nlp}`,
+                `/wordbank/csv/search?q=${encodeURIComponent(k)}&per_surface=1&nlp=${nlp}&heuristics=1`,
             );
             hydrateTextbookFromSearchResponse(data);
             return textbookWordCache.has(k) ? textbookWordCache.get(k) : null;
@@ -282,7 +282,7 @@ async function textbookPrefetchLessonWords(rootEl) {
         const q = chunk.join(',');
         try {
             const data = await apiRequest(
-                `/wordbank/csv/search?q=${encodeURIComponent(q)}&per_surface=1&nlp=0`,
+                `/wordbank/csv/search?q=${encodeURIComponent(q)}&per_surface=1&nlp=0&heuristics=1`,
             );
             hydrateTextbookFromSearchResponse(data);
         } catch (_) {

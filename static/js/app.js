@@ -3467,7 +3467,7 @@ async function doWordbankSearch(q) {
     wbState.loading = true;
     renderWordbankMeta();
     try {
-        const params = new URLSearchParams({ q });
+        const params = new URLSearchParams({ q, heuristics: '0' });
         const data = await apiRequest(`/wordbank/csv/search?${params}`);
         wbState.filtered = Array.isArray(data.words) ? data.words : [];
     } catch (e) {
