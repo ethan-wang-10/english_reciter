@@ -2912,6 +2912,30 @@ def spacy_extract_lemmas_from_article(text: str) -> Optional[List[str]]:
     return out
 
 
+def spacy_extract_surfaces_from_article(text: str) -> Optional[List[str]]:
+    """用 spaCy 对全文分词，取各 token 的表面形（小写），去重保序；停用词与词形过滤与 lemma 版一致。"""
+    if spacy is None:
+        return None
+    nlp = _get_spacy_nlp()
+    if nlp is None:
+        return None
+    doc = nlp(text)
+    out: List[str] = []
+    seen = set()
+    for token in doc:
+        if not token.is_alpha or token.is_stop:
+            continue
+        surf = _normalize_apostrophe_token(token.text.lower())
+        if len(surf) < 2:
+            continue
+        if not re.match(r"^[a-z][a-z'\-]*$", surf):
+            continue
+        if surf not in seen:
+            seen.add(surf)
+            out.append(surf)
+    return out
+
+
 def _contraction_stem_variants(term: str) -> List[str]:
     """启发式：'s（所有格 / is、has 等）与 've（have）。"""
     t = _normalize_apostrophe_token(term)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-从 NCE 课文 JSON 提取词形（spaCy lemma），与 words.csv 比对；未命中则按批调用 DeepSeek
-生成词条并追加到 static/wordbanks/words.csv。
+从 NCE 课文 JSON 和/或外部词汇表提取词形，与 words.csv 比对；未命中则按批调用 DeepSeek
+生成词条并追加到 static/wordbanks/words.csv。默认不用 lemma：课文取 token 表面形，词库仅原样或管理员映射；需还原/联想时加 --lemmatize。
 
 复用 simple_web_app 中的 spaCy、DeepSeek、CSV 与疑难词逻辑（方案 A）。
 
@@ -9,6 +9,11 @@
   python scripts/nce_vocab_sync.py --lesson static/wordbanks/nce/NCE1/0001_001\\&002.Excuse\\ Me.json --dry-run
   python scripts/nce_vocab_sync.py --nce-dir static/wordbanks/nce/NCE1 --dry-run
   python scripts/nce_vocab_sync.py --nce-dir static/wordbanks/nce/NCE1 --level 初中
+
+词汇表（每行一词，或 TOEFL 词典行：词头 + 空格 + [音标]）：
+  python scripts/nce_vocab_sync.py --vocab-file static/wordbanks/CET4+6_edited.txt --dry-run
+  python scripts/nce_vocab_sync.py --vocab-file static/wordbanks/TOEFL.txt --vocab-format toefl --dry-run
+  python scripts/nce_vocab_sync.py --vocab-file a.txt --vocab-file b.txt --vocab-format auto
 
 疑难词重试（user_data_simple/_shared/wordbank_troubles.json 中 difficult）：
   python scripts/nce_vocab_sync.py --retry-difficult --dry-run
@@ -22,9 +27,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set
+
+_TOEFL_HEADWORD_RE = re.compile(r"^(.+?)\s+\[")
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -71,6 +79,76 @@ def _collect_json_paths(lessons: List[str], nce_dir: Optional[str]) -> List[Path
         if p not in seen:
             seen.add(p)
             out.append(p)
+    return out
+
+
+def _detect_vocab_format(path: Path) -> str:
+    """根据首条非空行判断：含「词头 + 空格 + [」视为 toefl，否则 plain。"""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            if _TOEFL_HEADWORD_RE.match(s):
+                return "toefl"
+            return "plain"
+    return "plain"
+
+
+def _parse_plain_vocab_file(path: Path, normalize) -> List[str]:
+    out: List[str] = []
+    seen: Set[str] = set()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            key = normalize(s)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _parse_toefl_vocab_file(path: Path, normalize) -> List[str]:
+    out: List[str] = []
+    seen: Set[str] = set()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            m = _TOEFL_HEADWORD_RE.match(s)
+            if not m:
+                continue
+            head = normalize(m.group(1).strip())
+            if not head or head in seen:
+                continue
+            seen.add(head)
+            out.append(head)
+    return out
+
+
+def _parse_vocab_file(path: Path, fmt: str, normalize) -> List[str]:
+    eff = fmt.strip().lower()
+    if eff == "auto":
+        eff = _detect_vocab_format(path)
+    if eff == "toefl":
+        return _parse_toefl_vocab_file(path, normalize)
+    if eff != "plain":
+        raise SystemExit(f"未知词汇表格式: {fmt!r}（可用 plain / toefl / auto）")
+    return _parse_plain_vocab_file(path, normalize)
+
+
+def _merge_surfaces_preserve_order(surfaces: List[str]) -> List[str]:
+    seen: Set[str] = set()
+    out: List[str] = []
+    for w in surfaces:
+        if w in seen:
+            continue
+        seen.add(w)
+        out.append(w)
     return out
 
 
@@ -238,19 +316,38 @@ def main() -> None:
     parser.add_argument(
         "--no-spacy-match",
         action="store_true",
-        help="匹配阶段不使用 spaCy（仅词库直配 + 规则），与课文快速路径类似",
+        help="（需同时指定 --lemmatize）匹配阶段不使用 spaCy，仅用词库直配与规则词形",
+    )
+    parser.add_argument(
+        "--lemmatize",
+        action="store_true",
+        help="课文分词取 lemma、词库匹配用语境/词形还原（默认关闭：课文取 token 表面形，词库仅原样或管理员映射）",
     )
     parser.add_argument(
         "--retry-difficult",
         action="store_true",
         help="对 user_data_simple/_shared/wordbank_troubles.json 中的疑难词再次调用 DeepSeek（与课文模式互斥）",
     )
+    parser.add_argument(
+        "--vocab-file",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="外部词汇表（可多次指定）；plain=每行一词，toefl=词头 + 空格 + [音标]…（见 --vocab-format）",
+    )
+    parser.add_argument(
+        "--vocab-format",
+        default="auto",
+        choices=("plain", "toefl", "auto"),
+        metavar="FMT",
+        help="词汇表解析方式：plain / toefl / auto（默认 auto：按文件首行自动判断）",
+    )
     args = parser.parse_args()
 
-    if args.retry_difficult and (args.lesson or args.nce_dir):
-        parser.error("使用 --retry-difficult 时不要指定 --lesson 或 --nce-dir")
-    if not args.retry_difficult and not args.lesson and not args.nce_dir:
-        parser.error("请指定 --lesson 和/或 --nce-dir，或使用 --retry-difficult")
+    if args.retry_difficult and (args.lesson or args.nce_dir or args.vocab_file):
+        parser.error("使用 --retry-difficult 时不要指定 --lesson、--nce-dir 或 --vocab-file")
+    if not args.retry_difficult and not args.lesson and not args.nce_dir and not args.vocab_file:
+        parser.error("请指定 --lesson 和/或 --nce-dir 和/或 --vocab-file，或使用 --retry-difficult")
 
     # 在仓库根目录下导入，保证 static/wordbanks 相对路径有效
     import simple_web_app as swa
@@ -260,21 +357,36 @@ def main() -> None:
         return
 
     json_paths = _collect_json_paths(args.lesson, args.nce_dir)
-    if not json_paths:
-        raise SystemExit("未找到任何课文 JSON")
+    normalize = swa._normalize_apostrophe_token
 
-    full_text = _build_full_text(json_paths)
-    if not full_text.strip():
-        raise SystemExit("所选文件中无英文课文内容（lines[].english 为空）")
+    vocab_surfaces: List[str] = []
+    for raw in args.vocab_file:
+        p = Path(raw)
+        if not p.is_file():
+            raise SystemExit(f"词汇表文件不存在: {p}")
+        vocab_surfaces.extend(_parse_vocab_file(p.resolve(), args.vocab_format, normalize))
+    vocab_surfaces = _merge_surfaces_preserve_order(vocab_surfaces)
 
-    use_spacy = not args.no_spacy_match
-    lemmas = swa.spacy_extract_lemmas_from_article(full_text)
-    if lemmas is None:
-        raise SystemExit(
-            "spaCy 不可用或模型未加载。请安装 spacy 与 en_core_web_sm："
-            f" {sys.executable} -m spacy download en_core_web_sm"
-        )
+    lemmas_from_article: List[str] = []
+    if json_paths:
+        full_text = _build_full_text(json_paths)
+        if not full_text.strip():
+            raise SystemExit("所选文件中无英文课文内容（lines[].english 为空）")
+        if args.lemmatize:
+            lemmas_from_article = swa.spacy_extract_lemmas_from_article(full_text)
+        else:
+            lemmas_from_article = swa.spacy_extract_surfaces_from_article(full_text)
+        if lemmas_from_article is None:
+            raise SystemExit(
+                "spaCy 不可用或模型未加载。请安装 spacy 与 en_core_web_sm："
+                f" {sys.executable} -m spacy download en_core_web_sm"
+            )
 
+    combined = _merge_surfaces_preserve_order(vocab_surfaces + lemmas_from_article)
+    if not combined:
+        raise SystemExit("未从词汇表或课文收集到任何词")
+
+    use_spacy = args.lemmatize and (not args.no_spacy_match)
     csv_set = swa.get_csv_english_set()
     mappings = swa.get_wordbank_lemma_mappings()
     with swa._TROUBLES_LOCK:
@@ -283,7 +395,7 @@ def main() -> None:
 
     spacy_lemma_map: Optional[Dict[str, str]] = None
     if use_spacy:
-        spacy_lemma_map = swa._spacy_lemma_map_for_surfaces(lemmas)
+        spacy_lemma_map = swa._spacy_lemma_map_for_surfaces(combined)
         if not spacy_lemma_map:
             spacy_lemma_map = None
 
@@ -293,30 +405,54 @@ def main() -> None:
     blocked: List[str] = []
     blocked_seen: Set[str] = set()
 
-    for lem in lemmas:
-        hit = swa._first_lemma_in_csv(
-            lem, mappings, csv_set, use_spacy, spacy_lemma_map
-        )
-        if hit is not None:
-            matched += 1
-            continue
-        target = swa._lemma_for_vocab_not_in_csv(lem, mappings)
-        tl = target.strip().lower()
-        if tl in csv_set:
-            matched += 1
-            continue
-        if lem in difficult or tl in difficult:
-            if tl not in blocked_seen:
-                blocked_seen.add(tl)
-                blocked.append(tl)
-            continue
-        if tl not in seen_new:
-            seen_new.add(tl)
-            new_lemmas_ordered.append(tl)
+    for lem in combined:
+        if args.lemmatize:
+            hit = swa._first_lemma_in_csv(
+                lem, mappings, csv_set, use_spacy, spacy_lemma_map
+            )
+            if hit is not None:
+                matched += 1
+                continue
+            target = swa._lemma_for_vocab_not_in_csv(lem, mappings)
+            tl = target.strip().lower()
+            if tl in csv_set:
+                matched += 1
+                continue
+            if lem in difficult or tl in difficult:
+                if tl not in blocked_seen:
+                    blocked_seen.add(tl)
+                    blocked.append(tl)
+                continue
+            if tl not in seen_new:
+                seen_new.add(tl)
+                new_lemmas_ordered.append(tl)
+        else:
+            tl = swa._normalize_apostrophe_token(str(lem).strip())
+            if not tl:
+                continue
+            canon = mappings[tl] if tl in mappings else tl
+            if canon in csv_set:
+                matched += 1
+                continue
+            if tl in difficult or canon in difficult:
+                if canon not in blocked_seen:
+                    blocked_seen.add(canon)
+                    blocked.append(canon)
+                continue
+            if canon not in seen_new:
+                seen_new.add(canon)
+                new_lemmas_ordered.append(canon)
 
-    print(f"课文文件: {len(json_paths)} 个")
-    print(f"spaCy 提取 lemma 数（去重、已滤停用词）: {len(lemmas)}")
-    print(f"已在 words.csv（含规则/spaCy 匹配）: {matched}")
+    if args.vocab_file:
+        print(f"词汇表文件: {len(args.vocab_file)} 个，解析词数（文件内去重后）: {len(vocab_surfaces)}")
+    if json_paths:
+        print(f"课文文件: {len(json_paths)} 个")
+        if args.lemmatize:
+            print(f"spaCy 提取 lemma 数（去重、已滤停用词）: {len(lemmas_from_article)}")
+        else:
+            print(f"spaCy 提取表面形数（去重、已滤停用词）: {len(lemmas_from_article)}")
+    print(f"合并后待匹配词数（保序去重）: {len(combined)}")
+    print(f"已在 words.csv（{'含规则/spaCy 匹配' if args.lemmatize else '仅原样或管理员映射'}）: {matched}")
     print(f"待生成（未在词库）: {len(new_lemmas_ordered)}")
     if blocked:
         print(f"疑难词跳过（见 user_data_simple/_shared/wordbank_troubles.json）: {len(blocked)}")
