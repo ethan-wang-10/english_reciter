@@ -187,8 +187,9 @@ def _deepseek_generate_append(
     if not swa.get_deepseek_api_key():
         raise SystemExit("未配置 DeepSeek API（环境变量 DEEPSEEK_API_KEY 或 config.json 的 deepseek_api_key）")
 
-    generated: List[dict] = []
     failed_surfaces: List[str] = []
+    total_appended = 0
+    difficult_cleared = 0
 
     csv_so_far: Set[str] = set(swa.get_csv_english_set())
     batch_size = swa.DEEPSEEK_VOCAB_BATCH_WORDS
@@ -203,7 +204,15 @@ def _deepseek_generate_append(
                 csv_so_far=csv_so_far,
                 batch_lower=batch_lower,
             )
-            generated.extend(rows)
+            if rows:
+                n = swa.append_words_to_csv(rows)
+                total_appended += n
+                print(f"  本批已写入 {n} 条到 {swa.WORDS_CSV_FILE}（累计 {total_appended}）")
+                if remove_difficult_on_success:
+                    for row in rows:
+                        en = str(row.get("english", "") or "").strip().lower()
+                        if en and swa.delete_wordbank_difficult(en):
+                            difficult_cleared += 1
             miss = [b for b in batch if b.lower() not in success]
         else:
             miss = list(batch)
@@ -213,17 +222,10 @@ def _deepseek_generate_append(
     if failed_surfaces:
         swa.record_surfaces_to_difficult(failed_surfaces)
 
-    if generated:
-        n = swa.append_words_to_csv(generated)
-        swa.invalidate_words_csv_cache()
-        print(f"\n已追加 {n} 条到 {swa.WORDS_CSV_FILE}")
-        if remove_difficult_on_success:
-            cleared = 0
-            for row in generated:
-                en = str(row.get("english", "") or "").strip().lower()
-                if en and swa.delete_wordbank_difficult(en):
-                    cleared += 1
-            print(f"已从疑难词中移除（生成成功）: {cleared} 个")
+    if total_appended:
+        print(f"\n共追加 {total_appended} 条到 {swa.WORDS_CSV_FILE}")
+        if remove_difficult_on_success and difficult_cleared:
+            print(f"已从疑难词中移除（生成成功）: {difficult_cleared} 个")
     else:
         print("\n未生成任何有效词条（DeepSeek 返回空或解析失败）")
 
