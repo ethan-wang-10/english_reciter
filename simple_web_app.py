@@ -100,6 +100,53 @@ _words_csv_lock = threading.Lock()
 _words_csv_cache: Optional[List[dict]] = None
 _words_csv_cache_mtime: float = 0.0
 
+# 跨进程互斥：threading.Lock 仅同进程内有效；多进程/多脚本写 words.csv 需文件锁
+_WORDS_CSV_LOCKFILE = STATIC_WB_DIR / ".words.csv.lock"
+
+
+@contextmanager
+def _words_csv_interprocess_lock() -> Generator[None, None, None]:
+    """独占锁，保护 words.csv 的读与写（多进程安全）。
+
+    与 _words_csv_lock 嵌套时必须先本锁、再线程锁，避免与 load_words_csv 缓存未命中路径死锁。"""
+    _WORDS_CSV_LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
+    f = open(_WORDS_CSV_LOCKFILE, "a+b", buffering=0)
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            f.seek(0, os.SEEK_END)
+            if f.tell() == 0:
+                f.write(b"\0")
+                f.flush()
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        if sys.platform == "win32":
+            import msvcrt
+
+            try:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        try:
+            f.close()
+        except OSError:
+            pass
+
 # DeepSeek API
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 # 单次请求：大 JSON 输出易超过 60s；可通过环境变量覆盖
@@ -612,10 +659,19 @@ def load_words_csv() -> List[dict]:
             mtime = 0.0
         if _words_csv_cache is not None and mtime == _words_csv_cache_mtime:
             return _words_csv_cache
-        rows = _read_words_csv_from_path(WORDS_CSV_FILE)
-        _words_csv_cache = rows
-        _words_csv_cache_mtime = mtime
-        return rows
+
+    with _words_csv_interprocess_lock():
+        with _words_csv_lock:
+            try:
+                mtime2 = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
+            except OSError:
+                mtime2 = 0.0
+            if _words_csv_cache is not None and mtime2 == _words_csv_cache_mtime:
+                return _words_csv_cache
+            rows = _read_words_csv_from_path(WORDS_CSV_FILE)
+            _words_csv_cache = rows
+            _words_csv_cache_mtime = mtime2
+            return rows
 
 
 def _merge_incremental_words_csv(
@@ -683,7 +739,7 @@ def _merge_incremental_words_csv(
 
 
 def _write_words_csv_rows_atomic_under_lock(rows: List[dict]) -> None:
-    """在已持有 _words_csv_lock 时原子写入全表并失效缓存（勿调用会再次加锁的函数）。"""
+    """在已持有 _words_csv_interprocess_lock 与 _words_csv_lock 时原子写入全表并失效缓存（勿调用会再次加锁的函数）。"""
     global _words_csv_cache, _words_csv_cache_mtime
     WORDS_CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(suffix=".csv", dir=str(WORDS_CSV_FILE.parent), text=True)
@@ -722,30 +778,31 @@ def append_words_to_csv(new_rows: List[dict]) -> int:
     """将新词条 append 到 CSV 文件，返回实际写入数量。"""
     if not new_rows:
         return 0
-    with _words_csv_lock:
-        file_exists = WORDS_CSV_FILE.exists()
-        WORDS_CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(suffix=".csv", dir=str(WORDS_CSV_FILE.parent), text=True)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS, extrasaction="ignore")
-                if file_exists:
-                    with open(WORDS_CSV_FILE, "r", encoding="utf-8", newline="") as src:
-                        f.write(src.read())
-                else:
-                    writer.writeheader()
-                for row in new_rows:
-                    clean = {k: str(row.get(k, "") or "").strip() for k in _CSV_FIELDS}
-                    writer.writerow(clean)
-            os.replace(tmp, WORDS_CSV_FILE)
-        except Exception:
+    with _words_csv_interprocess_lock():
+        with _words_csv_lock:
+            file_exists = WORDS_CSV_FILE.exists()
+            WORDS_CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(suffix=".csv", dir=str(WORDS_CSV_FILE.parent), text=True)
             try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
-        global _words_csv_cache
-        _words_csv_cache = None
+                with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS, extrasaction="ignore")
+                    if file_exists:
+                        with open(WORDS_CSV_FILE, "r", encoding="utf-8", newline="") as src:
+                            f.write(src.read())
+                    else:
+                        writer.writeheader()
+                    for row in new_rows:
+                        clean = {k: str(row.get(k, "") or "").strip() for k in _CSV_FIELDS}
+                        writer.writerow(clean)
+                os.replace(tmp, WORDS_CSV_FILE)
+            except Exception:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+            global _words_csv_cache
+            _words_csv_cache = None
     return len(new_rows)
 
 
@@ -4395,10 +4452,11 @@ def admin_wordbank_csv_incremental_upload():
         return jsonify({'error': '上传文件无有效词条（english 列为空）'}), 400
 
     try:
-        with _words_csv_lock:
-            server_rows = _read_words_csv_from_path(WORDS_CSV_FILE)
-            merged, stats = _merge_incremental_words_csv(server_rows, upload_rows)
-            _write_words_csv_rows_atomic_under_lock(merged)
+        with _words_csv_interprocess_lock():
+            with _words_csv_lock:
+                server_rows = _read_words_csv_from_path(WORDS_CSV_FILE)
+                merged, stats = _merge_incremental_words_csv(server_rows, upload_rows)
+                _write_words_csv_rows_atomic_under_lock(merged)
     except Exception as e:
         logger.exception("增量合并 words.csv 失败: %s", e)
         return jsonify({'error': f'写入失败: {e}'}), 500
