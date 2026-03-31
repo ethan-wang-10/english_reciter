@@ -22,7 +22,8 @@
 合并 token 与词头一致时，若已安装 NLTK WordNet 数据，会用 synsets 兜底（如 wed）；未安装则仅依赖多词白名单与 spaCy。
 
 --spellcheck 仅在通过格式与 spaCy 后执行；长度小于 --spell-min-len 的分段跳过（减少短词/专有名词误报）。
-pyspellchecker 为美式词频；英式拼写可写入 scripts/spelling_extra_words.txt（或 --spell-extra-file）以补充。
+pyspellchecker 词频偏美式；拼写检查在「词表未知」时会尝试常见英式→美式对应形（如 colour/color、centre/center、
+neighbour/neighbor、-ise/-ize），美英两种写法均不判错。人名/地名等可写入 spelling_extra_words.txt 补充。
 """
 
 from __future__ import annotations
@@ -130,6 +131,63 @@ def _load_spell_extra_words(path: Path) -> List[str]:
     return out
 
 
+# 英式常见写法 → 美式（pyspellchecker 为美式词频）；用于「任一侧视为合法」
+_BR_TO_US_FIXED: Dict[str, str] = {
+    "defence": "defense",
+    "offence": "offense",
+    "pretence": "pretense",
+    "licence": "license",
+    "programme": "program",
+    "maths": "math",
+    "cheque": "check",
+    "aeroplane": "airplane",
+    "woollen": "woolen",
+}
+
+
+def _us_spelling_alternatives(p: str) -> List[str]:
+    """生成可能与英式对应的常见美式拼写，供与词典比对（不保证语义一致，仅减少美/英互判错）。"""
+    alts: List[str] = []
+    if p in _BR_TO_US_FIXED:
+        alts.append(_BR_TO_US_FIXED[p])
+    # 复合词内英式片段（须在通用 -our 替换之前，避免 neighbour→neighbor 等误替换）
+    if "neighbour" in p:
+        alts.append(p.replace("neighbour", "neighbor", 1))
+    if "behaviour" in p:
+        alts.append(p.replace("behaviour", "behavior", 1))
+    if "flavour" in p:
+        alts.append(p.replace("flavour", "flavor", 1))
+    if "honour" in p:
+        alts.append(p.replace("honour", "honor", 1))
+    if "favour" in p:
+        alts.append(p.replace("favour", "favor", 1))
+    if p.endswith("our") and len(p) >= 5:
+        alts.append(p[:-3] + "or")
+    if p.endswith("re") and len(p) >= 5:
+        alts.append(p[:-2] + "er")
+    if p.endswith("ise") and len(p) >= 5:
+        alts.append(p[:-3] + "ize")
+    if p.endswith("yse") and len(p) >= 6:
+        alts.append(p[:-3] + "yze")
+    seen: Set[str] = set()
+    out: List[str] = []
+    for a in alts:
+        if a and a != p and a not in seen:
+            seen.add(a)
+            out.append(a)
+    return out
+
+
+def _spell_segment_ok_us_or_br(spell: "SpellChecker", p: str) -> bool:
+    """美式词频中未知时，若常见美式对应拼写存在于词典，则视为合法（美/英不互判错）。"""
+    if not spell.unknown([p]):
+        return True
+    for alt in _us_spelling_alternatives(p):
+        if not spell.unknown([alt]):
+            return True
+    return False
+
+
 def _spellcheck_reasons(spell: "SpellChecker", en_lower: str, min_len: int) -> List[str]:
     """对整词或连字符分段做词典检查；仅报告长度 >= min_len 的分段。"""
     s = str(en_lower).strip().lower()
@@ -140,8 +198,7 @@ def _spellcheck_reasons(spell: "SpellChecker", en_lower: str, min_len: int) -> L
     for p in parts:
         if not p or len(p) < min_len:
             continue
-        unk = spell.unknown([p])
-        if not unk:
+        if _spell_segment_ok_us_or_br(spell, p):
             continue
         sug = spell.correction(p)
         if sug and sug != p:
