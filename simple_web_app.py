@@ -3074,17 +3074,23 @@ def _lemma_for_vocab_not_in_csv(
 def search_wordbank_csv(username):
     """在 CSV 词汇表中搜索（支持英文/中文，逗号分隔多词）。
 
-    - ``heuristics=1``：启用缩写/复数/-ed/-ing/派生等快速规则（课文悬停释义须传）。
-    - 默认 ``heuristics=0``：仅表面形、管理员映射与 spaCy（与导入场景一致）。
+    - ``heuristics=1``：启用缩写/复数/-ed/-ing/派生等快速规则。
+    - ``heuristics=0``：关闭（仅表面形、管理员映射与 spaCy）。
+    - 未指定 ``heuristics`` 时：``per_surface=1``（课文学习逐词）默认开启启发式；否则默认关闭（导入页词库搜索）。
     """
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
     per_surface = request.args.get('per_surface', '').strip().lower() in ('1', 'true', 'yes')
-    # nlp=0：无 spaCy；启发式（复数/-ed 等）由 heuristics 控制，课文悬停传 heuristics=1
+    # nlp=0：无 spaCy；启发式由 heuristics 控制
     use_spacy = request.args.get('nlp', '1').strip().lower() not in ('0', 'false', 'no', 'off')
-    use_heuristics = request.args.get('heuristics', '0').strip().lower() in (
-        '1', 'true', 'yes', 'on',
-    )
+    raw_heur = (request.args.get('heuristics') or '').strip().lower()
+    if raw_heur in ('1', 'true', 'yes', 'on'):
+        use_heuristics = True
+    elif raw_heur in ('0', 'false', 'no', 'off'):
+        use_heuristics = False
+    else:
+        # 未传参：课文学习（per_surface 逐词）默认开启启发式；导入页词库搜索无 per_surface，默认关
+        use_heuristics = per_surface
     if not q:
         return jsonify({
             'words': [],
