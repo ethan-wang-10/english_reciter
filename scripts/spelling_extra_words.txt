@@ -1,0 +1,21 @@
+# 补充到 pyspellchecker（默认美式词频）。每行一词；# 开头为注释。
+# 人名/地名等仍误报时请自行追加。
+
+colour
+neighbour
+centre
+maths
+programme
+behaviour
+cheque
+defence
+harbour
+honour
+kilometre
+labour
+metre
+neighbourhood
+realise
+aeroplane
+favourite
+woollen

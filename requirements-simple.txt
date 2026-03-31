@@ -22,6 +22,9 @@ prettytable==3.10.0
 readchar==4.0.6
 nltk==3.8.1
 
+# scripts/validate_words_csv.py --spellcheck：英语拼写检查（词频词典）
+pyspellchecker>=0.8.0
+
 # 词库：英文词形还原（spacy 3.8.x 与 en_core_web_sm 3.8.0 对齐，避免 W095 版本不匹配）
 spacy==3.8.13
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl

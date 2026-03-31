@@ -16,8 +16,13 @@
   python scripts/validate_words_csv.py --csv static/wordbanks/words.csv
   python scripts/validate_words_csv.py --remove-from-csv --dry-run   # 预览将删除的行
   python scripts/validate_words_csv.py --remove-from-csv            # 删除非法行并写入疑难词
+  python scripts/validate_words_csv.py --spellcheck                # 额外：pyspellchecker 查拼写（需 pip install pyspellchecker）
+  python scripts/validate_words_csv.py --spellcheck --spell-min-len 6
 
 合并 token 与词头一致时，若已安装 NLTK WordNet 数据，会用 synsets 兜底（如 wed）；未安装则仅依赖多词白名单与 spaCy。
+
+--spellcheck 仅在通过格式与 spaCy 后执行；长度小于 --spell-min-len 的分段跳过（减少短词/专有名词误报）。
+pyspellchecker 为美式词频；英式拼写可写入 scripts/spelling_extra_words.txt（或 --spell-extra-file）以补充。
 """
 
 from __future__ import annotations
@@ -29,9 +34,13 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
+
+if TYPE_CHECKING:
+    from spellchecker import SpellChecker
 
 ROOT = Path(__file__).resolve().parent.parent
+_SPELL_EXTRA_DEFAULT = ROOT / "scripts" / "spelling_extra_words.txt"
 
 _ENGLISH_RE = re.compile(r"^[a-z][a-z'\-]*$")
 _PART_RE = re.compile(r"^[a-z][a-z']*$")
@@ -109,10 +118,46 @@ def _spacy_accepts_headword(swa, nlp, english_lower: str) -> bool:
     return False
 
 
+def _load_spell_extra_words(path: Path) -> List[str]:
+    if not path.is_file():
+        return []
+    out: List[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        out.append(s.lower())
+    return out
+
+
+def _spellcheck_reasons(spell: "SpellChecker", en_lower: str, min_len: int) -> List[str]:
+    """对整词或连字符分段做词典检查；仅报告长度 >= min_len 的分段。"""
+    s = str(en_lower).strip().lower()
+    if not s:
+        return []
+    parts = s.split("-") if "-" in s else [s]
+    out: List[str] = []
+    for p in parts:
+        if not p or len(p) < min_len:
+            continue
+        unk = spell.unknown([p])
+        if not unk:
+            continue
+        sug = spell.correction(p)
+        if sug and sug != p:
+            out.append(f"拼写疑似错误:{p}→{sug}")
+        else:
+            out.append(f"词典未收录:{p}")
+    return out
+
+
 def validate_row(
     swa,
     nlp,
     row: Dict[str, str],
+    *,
+    spell: Optional["SpellChecker"] = None,
+    spell_min_len: int = 5,
 ) -> List[str]:
     reasons: List[str] = []
     for k in swa._CSV_FIELDS:
@@ -131,6 +176,9 @@ def validate_row(
             reasons.append("english:格式非法")
         elif not _spacy_accepts_headword(swa, nlp, en):
             reasons.append("english:spaCy无法识别为合法词形(单段或连字符分段)")
+        elif spell is not None:
+            for sr in _spellcheck_reasons(spell, en, spell_min_len):
+                reasons.append(f"english:{sr}")
     return reasons
 
 
@@ -172,9 +220,47 @@ def main() -> None:
         action="store_true",
         help="从指定 CSV 中删除校验未通过的行（默认仍写入疑难词；--dry-run 时仅预览）",
     )
+    parser.add_argument(
+        "--spellcheck",
+        action="store_true",
+        help="启用 pyspellchecker 拼写检查（在格式与 spaCy 通过后执行；需安装 pyspellchecker）",
+    )
+    parser.add_argument(
+        "--spell-min-len",
+        type=int,
+        default=5,
+        metavar="N",
+        help="拼写检查最短分段长度（默认 5；连字符词按段计）",
+    )
+    parser.add_argument(
+        "--spell-extra-file",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=f"补充词表路径（默认 {_SPELL_EXTRA_DEFAULT.name}；不存在则忽略）",
+    )
     args = parser.parse_args()
 
     import simple_web_app as swa
+
+    spell: Optional["SpellChecker"] = None
+    if args.spellcheck:
+        try:
+            from spellchecker import SpellChecker
+
+            spell = SpellChecker()
+            extra_path = args.spell_extra_file or _SPELL_EXTRA_DEFAULT
+            extras = _load_spell_extra_words(extra_path)
+            if extras:
+                spell.word_frequency.load_words(extras)
+                print(
+                    f"拼写检查: 已加载补充词 {len(extras)} 个（{extra_path}）",
+                    file=sys.stderr,
+                )
+        except ImportError:
+            raise SystemExit(
+                "未安装 pyspellchecker。请执行: pip install pyspellchecker"
+            ) from None
 
     csv_path = Path(args.csv)
     if not csv_path.is_file():
@@ -214,9 +300,17 @@ def main() -> None:
 
             all_rows.append((dict(row), line_no))
 
+    smin = max(1, int(args.spell_min_len))
+
     checked: List[Tuple[dict, int, List[str]]] = []
     for row, ln in all_rows:
-        reasons = validate_row(swa, nlp, row)
+        reasons = validate_row(
+            swa,
+            nlp,
+            row,
+            spell=spell,
+            spell_min_len=smin,
+        )
         checked.append((row, ln, reasons))
         if reasons:
             en_raw = str(row.get("english", "") or "").strip().lower()
