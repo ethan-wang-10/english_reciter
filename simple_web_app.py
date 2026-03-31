@@ -3069,6 +3069,31 @@ def _lemma_for_vocab_not_in_csv(
     return surface
 
 
+def _vocab_import_spacy_accepts_surface(
+    surface: str,
+    mappings: dict,
+    lemma_map: Optional[Dict[str, str]],
+) -> bool:
+    """
+    VIP 词汇导入：用 spaCy 原型校验词形是否可识别；管理员映射的词直接通过。
+    关闭 wordbank_lemma_spacy 或模型不可用时，仅用字符规则，避免导入完全不可用。
+    """
+    s = str(surface or "").strip().lower()
+    if not s or not re.match(r"^[a-z][a-z'\-]*$", s) or len(s) < 2:
+        return False
+    if s in mappings:
+        return True
+    if not _wordbank_lemma_spacy_enabled():
+        return True
+    if _get_spacy_nlp() is None:
+        return True
+    if lemma_map:
+        lem = lemma_map.get(s) or lemma_map.get(_normalize_apostrophe_token(s))
+        if lem is not None:
+            return True
+    return _spacy_lemma_for_surface(s) is not None
+
+
 @app.route('/api/wordbank/csv/search', methods=['GET'])
 @token_required
 def search_wordbank_csv(username):
@@ -3342,7 +3367,8 @@ def import_vocab_to_csv(username):
     """
     词汇导入功能（仅 VIP）：
     - 接收逗号分隔的单词列表
-    - 管理员映射（表面形 -> 原形）优先解析后再查 CSV
+    - 管理员映射（表面形 -> 原形）优先；未映射时先用 spaCy 原型校验词形是否可识别，不通过则跳过
+    - 写入词库 / 待复习时使用用户原始输入（表面形）或管理员映射目标，不再用 spaCy 原型替代（避免 are/was/were 都落成 be）
     - 疑难词（AI 曾失败）不再重复调用 DeepSeek，直至管理员配置映射或删除记录
     - 查找 CSV 中没有的词，用 DeepSeek 生成完整词条并 append 到 CSV
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
@@ -3372,42 +3398,57 @@ def import_vocab_to_csv(username):
         mappings = dict(tdoc.get('mappings') or {})
         difficult = dict(tdoc.get('difficult') or {})
 
-    surface_to_lemma: Dict[str, str] = {}
+    # 批量 spaCy：仅用于校验「是否可识别词形」，不用于写入词库时的英文键
+    uniq_for_spacy = list(
+        dict.fromkeys(s for s in input_surfaces if s not in mappings),
+    )
+    lemma_map: Optional[Dict[str, str]] = None
+    if uniq_for_spacy and _wordbank_lemma_spacy_enabled() and _get_spacy_nlp() is not None:
+        lemma_map = _spacy_lemma_map_for_surfaces(uniq_for_spacy)
+        if not lemma_map:
+            lemma_map = None
+
+    invalid_surfaces: List[str] = []
+    surface_to_target: Dict[str, str] = {}
     for s in input_surfaces:
-        hit = _first_lemma_in_csv(
-            s, mappings, existing, use_spacy=True, use_heuristics=False,
-        )
-        if hit is not None:
-            surface_to_lemma[s] = hit
-        else:
-            surface_to_lemma[s] = _lemma_for_vocab_not_in_csv(
-                s, mappings, use_heuristics=False,
-            )
-
-    lemma_to_surfaces: Dict[str, List[str]] = defaultdict(list)
-    for s, lem in surface_to_lemma.items():
-        lemma_to_surfaces[lem].append(s)
-
-    already_in_csv = [s for s in input_surfaces if surface_to_lemma[s] in existing]
-
-    new_lemmas_ordered: List[str] = []
-    seen_lemma = set()
-    for s in input_surfaces:
-        lem = surface_to_lemma[s]
-        if lem in existing:
+        if not _vocab_import_spacy_accepts_surface(s, mappings, lemma_map):
+            invalid_surfaces.append(s)
             continue
-        if lem not in seen_lemma:
-            seen_lemma.add(lem)
-            new_lemmas_ordered.append(lem)
+        surface_to_target[s] = mappings[s] if s in mappings else s
 
-    blocked_lemmas: List[str] = []
-    to_generate: List[str] = []
-    for lem in new_lemmas_ordered:
-        surfs = lemma_to_surfaces[lem]
-        if any(s in difficult for s in surfs):
-            blocked_lemmas.append(lem)
-        else:
-            to_generate.append(lem)
+    already_in_csv = [
+        s for s in input_surfaces
+        if s in surface_to_target and surface_to_target[s] in existing
+    ]
+
+    # 待生成：按用户输入顺序去重表面形；英文键 = 管理员映射目标或原词
+    to_generate_unique: List[str] = []
+    seen_tg = set()
+    for s in input_surfaces:
+        if s not in surface_to_target:
+            continue
+        t = surface_to_target[s]
+        if t in existing:
+            continue
+        if s in difficult:
+            continue
+        if s in seen_tg:
+            continue
+        seen_tg.add(s)
+        to_generate_unique.append(s)
+
+    blocked_surfaces: List[str] = []
+    for s in input_surfaces:
+        if s not in surface_to_target:
+            continue
+        t = surface_to_target[s]
+        if t in existing:
+            continue
+        if s in difficult:
+            blocked_surfaces.append(s)
+    blocked_surfaces = _dedupe_preserve_order(blocked_surfaces)
+
+    to_generate = to_generate_unique
 
     if to_generate and not get_deepseek_api_key():
         return jsonify({'error': '服务端未配置 DEEPSEEK_API_KEY，无法使用此功能'}), 503
@@ -3417,8 +3458,14 @@ def import_vocab_to_csv(username):
 
     if to_generate:
         csv_so_far = set(existing)
+        # surface -> 本次写入词库使用的英文键（用户原词或映射目标）
+        gen_key_to_surface: Dict[str, str] = {}  # 同一 batch 内 key 应对应唯一 surface（去重后）
+        for s in to_generate:
+            gen_key_to_surface[surface_to_target[s]] = s
+
         for i in range(0, len(to_generate), DEEPSEEK_VOCAB_BATCH_WORDS):
-            batch = to_generate[i : i + DEEPSEEK_VOCAB_BATCH_WORDS]
+            batch_surfaces = to_generate[i : i + DEEPSEEK_VOCAB_BATCH_WORDS]
+            batch = [surface_to_target[s] for s in batch_surfaces]
             entries = deepseek_generate_word_entries(batch, level=level_hint)
             batch_lower = {b.lower() for b in batch}
             if entries is not None:
@@ -3432,9 +3479,9 @@ def import_vocab_to_csv(username):
                 miss_lemmas = [b for b in batch if b.lower() not in success]
             else:
                 miss_lemmas = list(batch)
-            for lem in miss_lemmas:
-                for surf in lemma_to_surfaces.get(lem, [lem]):
-                    failed_surfaces.append(surf)
+            for key in miss_lemmas:
+                surf = gen_key_to_surface.get(key, key)
+                failed_surfaces.append(surf)
 
         failed_surfaces = _dedupe_preserve_order(failed_surfaces)
         if failed_surfaces:
@@ -3448,19 +3495,13 @@ def import_vocab_to_csv(username):
                 logger.error("写入CSV失败: %s", e)
                 return jsonify({'error': f'写入词库失败: {e}'}), 500
 
-    blocked_surfaces: List[str] = []
-    for lem in blocked_lemmas:
-        for surf in lemma_to_surfaces.get(lem, []):
-            blocked_surfaces.append(surf)
-    blocked_surfaces = _dedupe_preserve_order(blocked_surfaces)
-
     # 加入待复习
     queue_result = None
     if also_queue:
         items_to_queue = []
         for s in already_in_csv:
-            lem = surface_to_lemma[s]
-            row = lookup_csv_word(lem)
+            t = surface_to_target[s]
+            row = lookup_csv_word(t)
             if row:
                 picked = pick_example_for_word(row)
                 items_to_queue.append({
@@ -3485,6 +3526,9 @@ def import_vocab_to_csv(username):
     msg = f"处理 {len(input_surfaces)} 个单词：{len(generated_entries)} 个新词已写入词库"
     if already_in_csv:
         msg += f"，{len(already_in_csv)} 个已在词库中"
+    if invalid_surfaces:
+        inv = _dedupe_preserve_order(invalid_surfaces)
+        msg += f"，{len(inv)} 个未通过词形校验（已跳过）"
     if blocked_surfaces:
         msg += f"，{len(blocked_surfaces)} 个疑难词（已跳过 AI 生成）"
     if failed_surfaces:
@@ -3501,6 +3545,7 @@ def import_vocab_to_csv(username):
         'already_in_csv_words': already_in_csv,
         'failed': failed_surfaces,
         'blocked_surfaces': blocked_surfaces,
+        'invalid_surfaces': _dedupe_preserve_order(invalid_surfaces),
         'queue_result': queue_result,
         'also_add_to_queue': also_queue,
     }), 200

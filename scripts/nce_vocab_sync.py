@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 从 NCE 课文 JSON 和/或外部词汇表提取词形，与 words.csv 比对；未命中则按批调用 DeepSeek
-生成词条并追加到 static/wordbanks/words.csv。默认不用 lemma：课文取 token 表面形，词库仅原样或管理员映射；需还原/联想时加 --lemmatize。
+生成词条并追加到 static/wordbanks/words.csv。课文始终用 spaCy 取 token 表面形；加 --lemmatize 时用 spaCy 原型仅做词形校验，写入词库/DeepSeek 仍用表面形或管理员映射（与 VIP 词汇导入一致）。
 
 复用 simple_web_app 中的 spaCy、DeepSeek、CSV 与疑难词逻辑（方案 A）。
-与线上一致：词库匹配不使用快速启发式（无复数/-ed 等规则），仅管理员映射、表面形与（可选）spaCy。
+与线上一致：词库匹配不使用快速启发式（无复数/-ed 等规则），仅管理员映射、表面形与（可选）spaCy 校验。
 
 用法（请在项目根目录执行，或任意目录执行本脚本——会自动 chdir 到仓库根）：
   python scripts/nce_vocab_sync.py --lesson static/wordbanks/nce/NCE1/0001_001\\&002.Excuse\\ Me.json --dry-run
@@ -317,12 +317,12 @@ def main() -> None:
     parser.add_argument(
         "--no-spacy-match",
         action="store_true",
-        help="（需同时指定 --lemmatize）匹配阶段不使用 spaCy，仅用词库直配与管理员映射（与默认相同，均无快速规则词形）",
+        help="（需同时指定 --lemmatize）不做 spaCy 词形校验，仅用词库直配与管理员映射",
     )
     parser.add_argument(
         "--lemmatize",
         action="store_true",
-        help="课文分词取 lemma、词库匹配用语境/词形还原（默认关闭：课文取 token 表面形，词库仅原样或管理员映射）",
+        help="用 spaCy 原型校验每个词是否可识别；课文仍取表面形；写入/DeepSeek 使用表面形或管理员映射（与 VIP 词汇导入一致）",
     )
     parser.add_argument(
         "--retry-difficult",
@@ -368,65 +368,55 @@ def main() -> None:
         vocab_surfaces.extend(_parse_vocab_file(p.resolve(), args.vocab_format, normalize))
     vocab_surfaces = _merge_surfaces_preserve_order(vocab_surfaces)
 
-    lemmas_from_article: List[str] = []
+    surfaces_from_article: List[str] = []
     if json_paths:
         full_text = _build_full_text(json_paths)
         if not full_text.strip():
             raise SystemExit("所选文件中无英文课文内容（lines[].english 为空）")
-        if args.lemmatize:
-            lemmas_from_article = swa.spacy_extract_lemmas_from_article(full_text)
-        else:
-            lemmas_from_article = swa.spacy_extract_surfaces_from_article(full_text)
-        if lemmas_from_article is None:
+        surfaces_from_article = swa.spacy_extract_surfaces_from_article(full_text)
+        if surfaces_from_article is None:
             raise SystemExit(
                 "spaCy 不可用或模型未加载。请安装 spacy 与 en_core_web_sm："
                 f" {sys.executable} -m spacy download en_core_web_sm"
             )
 
-    combined = _merge_surfaces_preserve_order(vocab_surfaces + lemmas_from_article)
+    combined = _merge_surfaces_preserve_order(vocab_surfaces + surfaces_from_article)
     if not combined:
         raise SystemExit("未从词汇表或课文收集到任何词")
 
-    use_spacy = args.lemmatize and (not args.no_spacy_match)
+    use_spacy_validate = args.lemmatize and (not args.no_spacy_match)
     csv_set = swa.get_csv_english_set()
     mappings = swa.get_wordbank_lemma_mappings()
     with swa._TROUBLES_LOCK:
         tdoc = swa._read_troubles_unlocked()
         difficult: Dict[str, object] = dict(tdoc.get("difficult") or {})
 
-    spacy_lemma_map: Optional[Dict[str, str]] = None
-    if use_spacy:
-        spacy_lemma_map = swa._spacy_lemma_map_for_surfaces(combined)
-        if not spacy_lemma_map:
-            spacy_lemma_map = None
+    lemma_map: Optional[Dict[str, str]] = None
+    if use_spacy_validate:
+        uniq_for_map = list(dict.fromkeys(s for s in combined if s not in mappings))
+        if uniq_for_map and swa._wordbank_lemma_spacy_enabled() and swa._get_spacy_nlp() is not None:
+            lemma_map = swa._spacy_lemma_map_for_surfaces(uniq_for_map)
+            if not lemma_map:
+                lemma_map = None
 
     matched = 0
     new_lemmas_ordered: List[str] = []
     seen_new: Set[str] = set()
     blocked: List[str] = []
     blocked_seen: Set[str] = set()
+    invalid_surfaces = 0
 
-    for lem in combined:
-        if args.lemmatize:
-            hit = swa._first_lemma_in_csv(
-                lem,
-                mappings,
-                csv_set,
-                use_spacy,
-                spacy_lemma_map,
-                use_heuristics=False,
-            )
-            if hit is not None:
-                matched += 1
+    for surface in combined:
+        if use_spacy_validate:
+            if not swa._vocab_import_spacy_accepts_surface(surface, mappings, lemma_map):
+                invalid_surfaces += 1
                 continue
-            target = swa._lemma_for_vocab_not_in_csv(
-                lem, mappings, use_heuristics=False
-            )
+            target = mappings[surface] if surface in mappings else surface
             tl = target.strip().lower()
             if tl in csv_set:
                 matched += 1
                 continue
-            if lem in difficult or tl in difficult:
+            if surface in difficult or tl in difficult:
                 if tl not in blocked_seen:
                     blocked_seen.add(tl)
                     blocked.append(tl)
@@ -435,7 +425,7 @@ def main() -> None:
                 seen_new.add(tl)
                 new_lemmas_ordered.append(tl)
         else:
-            tl = swa._normalize_apostrophe_token(str(lem).strip())
+            tl = swa._normalize_apostrophe_token(str(surface).strip())
             if not tl:
                 continue
             canon = mappings[tl] if tl in mappings else tl
@@ -455,12 +445,13 @@ def main() -> None:
         print(f"词汇表文件: {len(args.vocab_file)} 个，解析词数（文件内去重后）: {len(vocab_surfaces)}")
     if json_paths:
         print(f"课文文件: {len(json_paths)} 个")
-        if args.lemmatize:
-            print(f"spaCy 提取 lemma 数（去重、已滤停用词）: {len(lemmas_from_article)}")
-        else:
-            print(f"spaCy 提取表面形数（去重、已滤停用词）: {len(lemmas_from_article)}")
+        print(f"spaCy 从课文提取表面形数（去重、已滤停用词）: {len(surfaces_from_article)}")
     print(f"合并后待匹配词数（保序去重）: {len(combined)}")
-    print(f"已在 words.csv（{'含规则/spaCy 匹配' if args.lemmatize else '仅原样或管理员映射'}）: {matched}")
+    if use_spacy_validate and invalid_surfaces:
+        print(f"未通过 spaCy 词形校验（已跳过）: {invalid_surfaces}")
+    print(
+        f"已在 words.csv（{'表面形精确匹配；含 spaCy 校验' if use_spacy_validate else '仅原样或管理员映射'}）: {matched}"
+    )
     print(f"待生成（未在词库）: {len(new_lemmas_ordered)}")
     if blocked:
         print(f"疑难词跳过（见 user_data_simple/_shared/wordbank_troubles.json）: {len(blocked)}")
