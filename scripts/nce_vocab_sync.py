@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 从 NCE 课文 JSON 和/或外部词汇表提取词形，与 words.csv 比对；未命中则按批调用 DeepSeek
-生成词条并追加到 static/wordbanks/words.csv。课文始终用 spaCy 取 token 表面形；加 --lemmatize 时用 spaCy 原型仅做词形校验，写入词库/DeepSeek 仍用表面形或管理员映射（与 VIP 词汇导入一致）。
+生成词条并追加到 static/wordbanks/words.csv。课文始终用 spaCy 取 token 表面形；加 --lemmatize 时用 spaCy 校验词形；写入词库前对名词简单复数规范为原形（与 Web VIP 导入一致），管理员映射优先。
 
 复用 simple_web_app 中的 spaCy、DeepSeek、CSV 与疑难词逻辑（方案 A）。
 与线上一致：词库匹配不使用快速启发式（无复数/-ed 等规则），仅管理员映射、表面形与（可选）spaCy 校验。
@@ -411,7 +411,11 @@ def main() -> None:
             if not swa._vocab_import_spacy_accepts_surface(surface, mappings, lemma_map):
                 invalid_surfaces += 1
                 continue
-            target = mappings[surface] if surface in mappings else surface
+            target = (
+                mappings[surface]
+                if surface in mappings
+                else swa._normalize_import_english_surface(surface)
+            )
             tl = target.strip().lower()
             if tl in csv_set:
                 matched += 1
@@ -428,7 +432,11 @@ def main() -> None:
             tl = swa._normalize_apostrophe_token(str(surface).strip())
             if not tl:
                 continue
-            canon = mappings[tl] if tl in mappings else tl
+            canon = (
+                mappings[tl]
+                if tl in mappings
+                else swa._normalize_import_english_surface(tl)
+            )
             if canon in csv_set:
                 matched += 1
                 continue

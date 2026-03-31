@@ -2375,9 +2375,19 @@ def import_words_json(username):
         return jsonify({'error': '单词列表为空'}), 400
     if len(items) > 5000:
         return jsonify({'error': '单次最多导入 5000 条'}), 400
+    norm_items: List[dict] = []
+    for it in items:
+        if not isinstance(it, dict):
+            norm_items.append(it)
+            continue
+        row = dict(it)
+        en = str(row.get("english", "")).strip()
+        if en:
+            row["english"] = _normalize_import_english_surface(en)[:500]
+        norm_items.append(row)
     try:
         with user_reciter_session(username) as reciter:
-            result = reciter.add_words_from_dicts(items)
+            result = reciter.add_words_from_dicts(norm_items)
         n = result['added']
         skipped = result['skipped_duplicate']
         invalid = result['skipped_invalid']
@@ -2854,6 +2864,69 @@ def _spacy_lemma_for_surface(surface: str) -> Optional[str]:
     return lem
 
 
+def _regular_plural_surfaces_from_lemma(lemma: str) -> set:
+    """
+    由名词原形生成「简单复数」常见拼写形式（小写），用于与表面形比对。
+    不含不规则复数（feet、children 等）；与 spaCy lemma 搭配使用。
+    """
+    if not lemma or len(lemma) < 2:
+        return set()
+    if not re.match(r"^[a-z][a-z'\-]*$", lemma):
+        return set()
+    L = lemma
+    cand: set = set()
+    if L.endswith("y") and len(L) >= 2 and L[-2] not in "aeiou":
+        cand.add(L[:-1] + "ies")
+    elif L.endswith("y"):
+        cand.add(L + "s")
+    if L.endswith("fe"):
+        cand.add(L[:-2] + "ves")
+    elif L.endswith("f") and not L.endswith("ff"):
+        cand.add(L[:-1] + "ves")
+    if L.endswith(("s", "x", "z")):
+        cand.add(L + "es")
+    elif L.endswith("ch") or L.endswith("sh"):
+        cand.add(L + "es")
+    elif L.endswith("o"):
+        cand.add(L + "es")
+        cand.add(L + "s")
+    else:
+        cand.add(L + "s")
+    return cand
+
+
+def _normalize_import_english_surface(surface: str) -> str:
+    """
+    导入用词：若为名词且 spaCy 标为复数，且表面形属于该原形的「简单复数」拼写，则改为原形。
+    不规则复数（feet、children 等）保持表面形；非名词、单数、spaCy 不可用时保持原样。
+    管理员映射应在调用本函数之前处理，使映射目标不被本函数改写。
+    """
+    surf = _normalize_apostrophe_token(surface.strip().lower())
+    if not re.match(r"^[a-z][a-z'\-]*$", surf):
+        return surf
+    if not _wordbank_lemma_spacy_enabled():
+        return surf
+    nlp = _get_spacy_nlp()
+    if nlp is None:
+        return surf
+    doc = nlp(surf)
+    if len(doc) != 1:
+        return surf
+    tok = doc[0]
+    if tok.pos_ != "NOUN":
+        return surf
+    if tok.morph.get("Number") != "Plur":
+        return surf
+    lem = tok.lemma_.lower()
+    if lem == surf:
+        return surf
+    if not re.match(r"^[a-z][a-z'\-]*$", lem):
+        return surf
+    if surf in _regular_plural_surfaces_from_lemma(lem):
+        return lem
+    return surf
+
+
 # 课文导入等场景对大量词逐次 nlp(surface) 极慢；改为分批拼接后单次 nlp。
 _SPACY_LEMMA_BATCH_CHUNK = 400
 
@@ -3102,10 +3175,14 @@ def search_wordbank_csv(username):
     - ``heuristics=1``：启用缩写/复数/-ed/-ing/派生等快速规则。
     - ``heuristics=0``：关闭（仅表面形、管理员映射与 spaCy）。
     - 未指定 ``heuristics`` 时：``per_surface=1``（课文学习逐词）默认开启启发式；否则默认关闭（导入页词库搜索）。
+    - ``surface_first=1``（导入页「从词库搜索」）：英文词先仅用表面形与管理员映射匹配，未命中再启用 spaCy 原型匹配。
     """
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
     per_surface = request.args.get('per_surface', '').strip().lower() in ('1', 'true', 'yes')
+    surface_first = request.args.get('surface_first', '').strip().lower() in (
+        '1', 'true', 'yes', 'on',
+    )
     # nlp=0：无 spaCy；启发式由 heuristics 控制
     use_spacy = request.args.get('nlp', '1').strip().lower() not in ('0', 'false', 'no', 'off')
     raw_heur = (request.args.get('heuristics') or '').strip().lower()
@@ -3131,6 +3208,7 @@ def search_wordbank_csv(username):
             'surface_blocked': {},
             'nlp_enabled': use_spacy,
             'heuristics_enabled': use_heuristics,
+            'surface_first': surface_first,
         }), 200
     terms = [
         _normalize_apostrophe_token(t.strip())
@@ -3161,12 +3239,27 @@ def search_wordbank_csv(username):
             spacy_lemma_map = _spacy_lemma_map_for_surfaces(batch_terms)
             if not spacy_lemma_map:
                 spacy_lemma_map = None
+
+    def _resolve_term_hit(t: str) -> Tuple[Optional[str], Optional[str]]:
+        """解析英文检索词在词库中的命中原形；surface_first 时先表面形与映射，未命中再 spaCy。"""
+        if surface_first:
+            h1, k1 = _first_lemma_in_csv_with_kind(
+                t, mappings, csv_row_keys, False, None, use_heuristics,
+            )
+            if h1 is not None or not use_spacy:
+                return h1, k1
+            return _first_lemma_in_csv_with_kind(
+                t, mappings, csv_row_keys, True, spacy_lemma_map, use_heuristics,
+            )
+        return _first_lemma_in_csv_with_kind(
+            t, mappings, csv_row_keys, use_spacy, spacy_lemma_map, use_heuristics,
+        )
+
+    term_hits: Dict[str, Optional[str]] = {}
     for term in terms:
         if re.match(r'[a-z]', term):
-            hit, kind = _first_lemma_in_csv_with_kind(
-                term, mappings, csv_row_keys, use_spacy, spacy_lemma_map,
-                use_heuristics,
-            )
+            hit, kind = _resolve_term_hit(term)
+            term_hits[term] = hit
             if per_surface and term not in surface_hits:
                 if hit is None:
                     surface_hits[term] = None
@@ -3194,20 +3287,24 @@ def search_wordbank_csv(username):
     for row in rows:
         en = row.get('english', '').lower()
         zh = row.get('chinese', '')
+        matched = False
         for term in terms:
             if re.match(r'[a-z]', term):
-                if en == term:
-                    matched = True
-                elif term in mappings and mappings[term] == en:
-                    matched = True
+                if surface_first:
+                    th = term_hits.get(term)
+                    matched = th is not None and en == th
                 else:
-                    matched = False
-                    for cand, _ in _iter_csv_lemma_candidates(
-                        term, mappings, use_spacy, spacy_lemma_map, use_heuristics,
-                    ):
-                        if en == cand:
-                            matched = True
-                            break
+                    if en == term:
+                        matched = True
+                    elif term in mappings and mappings[term] == en:
+                        matched = True
+                    else:
+                        for cand, _ in _iter_csv_lemma_candidates(
+                            term, mappings, use_spacy, spacy_lemma_map, use_heuristics,
+                        ):
+                            if en == cand:
+                                matched = True
+                                break
             else:
                 matched = term in zh
             if matched:
@@ -3231,6 +3328,7 @@ def search_wordbank_csv(username):
         out['surface_blocked'] = surface_blocked
     out['nlp_enabled'] = use_spacy
     out['heuristics_enabled'] = use_heuristics
+    out['surface_first'] = surface_first
     return jsonify(out), 200
 
 
@@ -3367,8 +3465,8 @@ def import_vocab_to_csv(username):
     """
     词汇导入功能（仅 VIP）：
     - 接收逗号分隔的单词列表
-    - 管理员映射（表面形 -> 原形）优先；未映射时先用 spaCy 原型校验词形是否可识别，不通过则跳过
-    - 写入词库 / 待复习时使用用户原始输入（表面形）或管理员映射目标，不再用 spaCy 原型替代（避免 are/was/were 都落成 be）
+    - 管理员映射（表面形 -> 原形）优先；未映射时先用 spaCy 校验词形是否可识别，不通过则跳过
+    - 未映射时：名词「简单复数」表面形（如 apples）规范为原形（apple）再写入词库与待复习；不规则复数（feet 等）保持表面形；动词/形容词不因 lemma 误收成原形（避免 are→be）
     - 疑难词（AI 曾失败）不再重复调用 DeepSeek，直至管理员配置映射或删除记录
     - 查找 CSV 中没有的词，用 DeepSeek 生成完整词条并 append 到 CSV
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
@@ -3414,7 +3512,9 @@ def import_vocab_to_csv(username):
         if not _vocab_import_spacy_accepts_surface(s, mappings, lemma_map):
             invalid_surfaces.append(s)
             continue
-        surface_to_target[s] = mappings[s] if s in mappings else s
+        surface_to_target[s] = (
+            mappings[s] if s in mappings else _normalize_import_english_surface(s)
+        )
 
     already_in_csv = [
         s for s in input_surfaces
@@ -3646,6 +3746,9 @@ def community_import_simple(username):
             if not en or not zh:
                 skipped_invalid += 1
                 continue
+            en = _normalize_import_english_surface(en)
+            if len(en) > 500:
+                en = en[:500]
             key = en.lower()
             if key in system_keys:
                 rejected_in_system.append(en)
