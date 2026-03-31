@@ -392,7 +392,7 @@ def main() -> None:
             )
         elif not args.dry_run and removed_n:
             with swa._words_csv_interprocess_lock():
-                with swa._words_csv_lock():
+                with swa._words_csv_lock:
                     if csv_path.resolve() == swa.WORDS_CSV_FILE.resolve():
                         swa._write_words_csv_rows_atomic_under_lock(kept_rows)
                     else:
