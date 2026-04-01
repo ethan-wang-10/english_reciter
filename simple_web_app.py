@@ -60,6 +60,39 @@ try:
 except ImportError:
     spacy = None  # type: ignore
 
+
+def _load_dotenv_from_file() -> None:
+    """从项目根目录 .env 注入环境变量（不覆盖已有非空值）。
+
+    Gunicorn worker 有时不会继承 PM2 传入的环境；与 ecosystem.config.cjs 行为对齐。
+    """
+    env_path = Path(__file__).resolve().parent / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        raw = env_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip()
+        if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+            val = val[1:-1]
+        if not key:
+            continue
+        if os.environ.get(key):
+            continue
+        os.environ[key] = val
+
+
+_load_dotenv_from_file()
+
 # 头像：磁盘仅保留 avatar.webp；长边上限；GET ?w= 为按需缩略图（不传则原图）
 AVATAR_MAX_SIDE = 512
 AVATAR_WEBP_QUALITY = 82
@@ -75,7 +108,8 @@ app = Flask(__name__, static_folder='static')
 _secret = os.getenv("SECRET_KEY")
 if os.getenv("FLASK_ENV", "").lower() == "production" and not _secret:
     raise RuntimeError(
-        "生产环境必须设置环境变量 SECRET_KEY（例如在 docker-compose 或 systemd 中配置）"
+        "生产环境必须设置 SECRET_KEY：在项目根目录创建 .env（见 .env.example），"
+        "或设置环境变量 SECRET_KEY（docker-compose / systemd / PM2）"
     )
 app.secret_key = _secret or secrets.token_urlsafe(32)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB上传限制
