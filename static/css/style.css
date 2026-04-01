@@ -3407,7 +3407,7 @@ button.import-article-chip--selected:hover {
 .mp-lane-pin {
     position: absolute;
     top: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scaleX(-1);
     font-size: 1.1rem;
     line-height: 1;
     filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
