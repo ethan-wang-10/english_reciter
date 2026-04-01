@@ -11,9 +11,11 @@
   python scripts/nce_vocab_sync.py --nce-dir static/wordbanks/nce/NCE1 --dry-run
   python scripts/nce_vocab_sync.py --nce-dir static/wordbanks/nce/NCE1 --level 初中
 
-词汇表（每行一词，或 TOEFL 词典行：词头 + 空格 + [音标]）：
+词汇表（每行一词，或 TOEFL：词头 + 空格 + [音标]，或 tab：词头 + 制表符 + 释义，如 SAT / highschool / middleschool）：
   python scripts/nce_vocab_sync.py --vocab-file static/wordbanks/CET4+6_edited.txt --dry-run
   python scripts/nce_vocab_sync.py --vocab-file static/wordbanks/TOEFL.txt --vocab-format toefl --dry-run
+  python scripts/nce_vocab_sync.py --vocab-file static/wordbanks/SAT.txt --vocab-format auto --dry-run
+  python scripts/nce_vocab_sync.py --vocab-file static/wordbanks/highschool.txt --vocab-file static/wordbanks/middleschool.txt --vocab-format tab --dry-run
   python scripts/nce_vocab_sync.py --vocab-file a.txt --vocab-file b.txt --vocab-format auto
 
 疑难词重试（user_data_simple/_shared/wordbank_troubles.json 中 difficult）：
@@ -84,7 +86,7 @@ def _collect_json_paths(lessons: List[str], nce_dir: Optional[str]) -> List[Path
 
 
 def _detect_vocab_format(path: Path) -> str:
-    """根据首条非空行判断：含「词头 + 空格 + [」视为 toefl，否则 plain。"""
+    """根据首条非空行判断：toefl（词头 + 空格 + [）、tab（词头\\t释义）、plain。"""
     with open(path, encoding="utf-8") as f:
         for line in f:
             s = line.strip()
@@ -92,6 +94,8 @@ def _detect_vocab_format(path: Path) -> str:
                 continue
             if _TOEFL_HEADWORD_RE.match(s):
                 return "toefl"
+            if "\t" in s and s.split("\t", 1)[0].strip():
+                return "tab"
             return "plain"
     return "plain"
 
@@ -131,14 +135,35 @@ def _parse_toefl_vocab_file(path: Path, normalize) -> List[str]:
     return out
 
 
+def _parse_tab_vocab_file(path: Path, normalize) -> List[str]:
+    """词头与释义以制表符分隔（如 SAT.txt、highschool.txt、middleschool.txt）。"""
+    out: List[str] = []
+    seen: Set[str] = set()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            if "\t" not in s:
+                continue
+            head = normalize(s.split("\t", 1)[0].strip())
+            if not head or head in seen:
+                continue
+            seen.add(head)
+            out.append(head)
+    return out
+
+
 def _parse_vocab_file(path: Path, fmt: str, normalize) -> List[str]:
     eff = fmt.strip().lower()
     if eff == "auto":
         eff = _detect_vocab_format(path)
     if eff == "toefl":
         return _parse_toefl_vocab_file(path, normalize)
+    if eff == "tab":
+        return _parse_tab_vocab_file(path, normalize)
     if eff != "plain":
-        raise SystemExit(f"未知词汇表格式: {fmt!r}（可用 plain / toefl / auto）")
+        raise SystemExit(f"未知词汇表格式: {fmt!r}（可用 plain / toefl / tab / auto）")
     return _parse_plain_vocab_file(path, normalize)
 
 
@@ -336,14 +361,14 @@ def main() -> None:
         action="append",
         default=[],
         metavar="PATH",
-        help="外部词汇表（可多次指定）；plain=每行一词，toefl=词头 + 空格 + [音标]…（见 --vocab-format）",
+        help="外部词汇表（可多次指定）；plain / toefl / tab 见 --vocab-format",
     )
     parser.add_argument(
         "--vocab-format",
         default="auto",
-        choices=("plain", "toefl", "auto"),
+        choices=("plain", "toefl", "tab", "auto"),
         metavar="FMT",
-        help="词汇表解析方式：plain / toefl / auto（默认 auto：按文件首行自动判断）",
+        help="词汇表解析：plain 每行一词；toefl 词头+空格+[音标]；tab 词头+制表符+释义；auto 按文件首行判断",
     )
     args = parser.parse_args()
 
