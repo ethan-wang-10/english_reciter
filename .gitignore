@@ -34,6 +34,7 @@ user_data_simple/*
 
 # --- 内置词库（线上由服务器本地或管理后台增量上传维护；勿提交，避免 git pull 覆盖）---
 static/wordbanks/words.csv
+static/wordbanks/.words.csv.lock
 
 # --- Local secrets / env ---
 .env
