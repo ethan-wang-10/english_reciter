@@ -1117,6 +1117,7 @@ async function loadUserSettingsPanel() {
         const n2 = document.getElementById('settings-parent-pw-confirm');
         if (n1) n1.value = '';
         if (n2) n2.value = '';
+        resetSettingsPendingWordsCollapse();
         await loadSettingsPendingWordsBlock();
         return;
     }
@@ -1135,14 +1136,36 @@ async function loadUserSettingsPanel() {
     } catch (e) {
         setSettingsMessage(e.message || '加载失败', true);
     }
+    resetSettingsPendingWordsCollapse();
     await loadSettingsPendingWordsBlock();
+}
+
+function resetSettingsPendingWordsCollapse() {
+    const panel = document.getElementById('settings-pending-words-panel');
+    const btn = document.getElementById('settings-pending-words-toggle');
+    if (panel) panel.hidden = true;
+    if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.classList.remove('is-open');
+    }
 }
 
 /** 配置页：列出当前学生待复习词并可移除（家长登录可删；学生仅未开通家长账户时可删） */
 async function loadSettingsPendingWordsBlock() {
     const listEl = document.getElementById('settings-pending-words-list');
     const leadEl = document.getElementById('settings-pending-words-lead');
+    const toggleText = document.getElementById('settings-pending-words-toggle-text');
     if (!listEl) return;
+    const panelEl = document.getElementById('settings-pending-words-panel');
+    const expandedPanel = panelEl && !panelEl.hidden;
+    const expandLabel =
+        isParentSession && childUsername
+            ? '点击展开：查看并管理该学生的待复习单词'
+            : '点击展开：查看列表并管理待复习单词';
+    if (toggleText) {
+        toggleText.dataset.expandLabel = expandLabel;
+        toggleText.textContent = expandedPanel ? '点击收起' : expandLabel;
+    }
     if (leadEl) {
         leadEl.textContent =
             isParentSession && childUsername
@@ -4385,6 +4408,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('settings-backdrop')?.addEventListener('click', closeSettings);
     document.getElementById('settings-close')?.addEventListener('click', closeSettings);
+    document.getElementById('settings-pending-words-toggle')?.addEventListener('click', () => {
+        const panel = document.getElementById('settings-pending-words-panel');
+        const btn = document.getElementById('settings-pending-words-toggle');
+        const span = document.getElementById('settings-pending-words-toggle-text');
+        if (!panel || !btn) return;
+        const opening = panel.hidden;
+        panel.hidden = !opening;
+        btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+        btn.classList.toggle('is-open', opening);
+        if (span) {
+            if (opening) {
+                span.textContent = '点击收起';
+            } else {
+                span.textContent =
+                    span.dataset.expandLabel || '点击展开：查看列表并管理待复习单词';
+            }
+        }
+    });
     document.getElementById('settings-pending-words-list')?.addEventListener('click', async (e) => {
         const btn = e.target.closest('.settings-pending-remove-btn');
         if (!btn) return;

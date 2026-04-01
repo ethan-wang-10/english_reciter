@@ -519,11 +519,18 @@
                 <div class="settings-panel-body" id="settings-panel-body">
                     <div id="settings-pending-words-block" class="settings-block">
                         <h3 class="settings-subtitle">待复习词汇</h3>
-                        <p class="settings-hint" id="settings-pending-words-lead">
-                            从个人待复习列表中移除单词（不影响已掌握词库）。学生可自行管理；家长登录时可管理对应学生的待复习。
-                        </p>
-                        <div id="settings-pending-words-list" class="settings-pending-words-list" role="list"></div>
-                        <button type="button" class="btn btn-secondary" id="settings-pending-words-refresh">刷新列表</button>
+                        <button type="button" id="settings-pending-words-toggle" class="settings-pending-words-toggle"
+                            aria-expanded="false" aria-controls="settings-pending-words-panel">
+                            <span class="settings-pending-words-chevron" aria-hidden="true">▶</span>
+                            <span id="settings-pending-words-toggle-text" class="settings-pending-words-toggle-text">点击展开：查看列表并管理待复习单词</span>
+                        </button>
+                        <div id="settings-pending-words-panel" class="settings-pending-words-panel" hidden>
+                            <p class="settings-hint" id="settings-pending-words-lead">
+                                从个人待复习列表中移除单词（不影响已掌握词库）。学生可自行管理；家长登录时可管理对应学生的待复习。
+                            </p>
+                            <div id="settings-pending-words-list" class="settings-pending-words-list" role="list"></div>
+                            <button type="button" class="btn btn-secondary" id="settings-pending-words-refresh">刷新列表</button>
+                        </div>
                     </div>
                     <div id="settings-student-blocks">
                     <div class="settings-block">
