@@ -70,7 +70,8 @@ def _load_dotenv_from_file() -> None:
     if not env_path.is_file():
         return
     try:
-        raw = env_path.read_text(encoding="utf-8")
+        # utf-8-sig：避免 Windows 记事本等保存的 BOM 导致首行键名变成 \ufeffSECRET_KEY
+        raw = env_path.read_text(encoding="utf-8-sig")
     except OSError:
         return
     for line in raw.splitlines():
