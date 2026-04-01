@@ -1341,6 +1341,85 @@ function renderMonthlyPoolRace(pool) {
     }
 }
 
+function renderMonthlyPkBoard(board) {
+    const wrap = document.getElementById('monthly-pk-board-wrap');
+    if (!wrap) return;
+    if (!board || typeof board !== 'object') {
+        wrap.innerHTML = '';
+        return;
+    }
+    const viewer = sessionStudentUsername() || username || '';
+    const prevM = board.prev_month || '';
+    const curM = board.current_month || '';
+    const settled = Array.isArray(board.settled_last_month) ? board.settled_last_month : [];
+    const ongoing = Array.isArray(board.ongoing_this_month) ? board.ongoing_this_month : [];
+
+    const meClass = (u) => (u && viewer && u === viewer ? ' monthly-pk-user-me' : '');
+
+    const fmtDuel = (d, isOngoing) => {
+        const a = d.from_user || '';
+        const b = d.target_user || '';
+        const w = Number(d.wager_xp) || 0;
+        const days = d.pk_checkin_days || {};
+        const da = Number(days[a] ?? days[String(a)]) || 0;
+        const db = Number(days[b] ?? days[String(b)]) || 0;
+        const winner = d.winner;
+        const tie = d.tie;
+        let outcome = '';
+        if (isOngoing) {
+            outcome =
+                '<p class="monthly-pk-outcome monthly-pk-ongoing">⚡ 还在对线：比的是有效打卡天数，不是谁起得早（虽然早起也可能赢）。平局？赌注各回各家，友谊的小船暂时没翻。</p>';
+        } else if (tie) {
+            outcome =
+                '<p class="monthly-pk-outcome monthly-pk-tie">🤝 平局！谁也别说谁菜——赌注退回，下次记得用打卡天数说话，别用表情包。</p>';
+        } else if (winner) {
+            const wcls = meClass(winner);
+            outcome = `<p class="monthly-pk-outcome">🏆 本局 MVP：<strong class="monthly-pk-winner${wcls}">${escapeHtml(
+                winner,
+            )}</strong>（${da} 天 vs ${db} 天）· 输的一方：截图可以删，记忆建议留着当动力。</p>`;
+        } else {
+            outcome = `<p class="monthly-pk-outcome">已结算 · ${da} 天 vs ${db} 天——系统懒得站队，只负责记账。</p>`;
+        }
+        return (
+            `<article class="monthly-pk-card">` +
+            `<p class="monthly-pk-vs">` +
+            `<span class="monthly-pk-name${meClass(a)}">${escapeHtml(a)}</span>` +
+            ` <span class="monthly-pk-x" aria-hidden="true">⚔️</span> ` +
+            `<span class="monthly-pk-name${meClass(b)}">${escapeHtml(b)}</span>` +
+            `</p>` +
+            `<p class="monthly-pk-meta">押注 ${escapeHtml(String(w))} XP · 计分区间打卡 ${escapeHtml(
+                String(da),
+            )} : ${escapeHtml(String(db))}（数字不会骗人，除非你没打卡）</p>` +
+            outcome +
+            `</article>`
+        );
+    };
+
+    const settledHtml = settled.length
+        ? settled.map((d) => fmtDuel(d, false)).join('')
+        : '<p class="monthly-pk-empty">上月擂台比图书馆还安静——要么全员佛系，要么全在别的赛道偷偷上分。</p>';
+
+    const ongoingHtml = ongoing.length
+        ? ongoing.map((d) => fmtDuel(d, true)).join('')
+        : '<p class="monthly-pk-empty">本月居然没人约战？去「设置」里点一发 PK，让友谊在赌注里升华一下。</p>';
+
+    wrap.innerHTML =
+        `<div class="monthly-pk-board">` +
+        `<div class="monthly-pk-head">` +
+        `<h3 class="monthly-pk-title">每月 PK 风云榜</h3>` +
+        `<p class="monthly-pk-tagline">专治「我学了但我不说」：上月谁把谁按在打卡天数上摩擦，本月谁还在互相瞪眼，都在这里公示。输了不丢人，不点发起才亏。</p>` +
+        `</div>` +
+        `<section class="monthly-pk-section" aria-labelledby="monthly-pk-prev-title">` +
+        `<h4 id="monthly-pk-prev-title" class="monthly-pk-section-title">📜 ${escapeHtml(prevM)} 旧账已结清</h4>` +
+        `<div class="monthly-pk-list">${settledHtml}</div>` +
+        `</section>` +
+        `<section class="monthly-pk-section" aria-labelledby="monthly-pk-cur-title">` +
+        `<h4 id="monthly-pk-cur-title" class="monthly-pk-section-title">🔥 ${escapeHtml(curM)} 火线吃瓜区</h4>` +
+        `<div class="monthly-pk-list">${ongoingHtml}</div>` +
+        `</section>` +
+        `</div>`;
+}
+
 function renderLeaderboardTable(rows) {
     const wrap = document.getElementById('leaderboard-table-wrap');
     if (!wrap) return;
@@ -1401,11 +1480,13 @@ async function loadLeaderboardSection() {
     if (loading) loading.style.display = 'block';
     try {
         await refreshGamification();
-        const [data, pool] = await Promise.all([
+        const [data, pool, pkBoard] = await Promise.all([
             apiRequest('/leaderboard'),
             apiRequest('/monthly-pool'),
+            apiRequest('/challenges/monthly-pk-board'),
         ]);
         renderMonthlyPoolRace(pool);
+        renderMonthlyPkBoard(pkBoard);
         renderLeaderboardTable(data.leaderboard);
         renderAchievementsGrid(lastGamificationProfile);
     } catch (e) {
@@ -1415,6 +1496,8 @@ async function loadLeaderboardSection() {
         }
         const raceWrap = document.getElementById('monthly-pool-race-wrap');
         if (raceWrap) raceWrap.innerHTML = '';
+        const pkWrap = document.getElementById('monthly-pk-board-wrap');
+        if (pkWrap) pkWrap.innerHTML = '';
     } finally {
         if (loading) loading.style.display = 'none';
     }

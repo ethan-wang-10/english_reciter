@@ -1857,6 +1857,11 @@ def patch_parent_password(username):
     return jsonify({'message': '密码已更新'}), 200
 
 
+def _pk_stats_for_gamification(username: str) -> Tuple[int, int]:
+    st = challenges_mod.pk_user_stats_from_duels(DATA_DIR, username)
+    return int(st.get("pk_wins") or 0), int(st.get("pk_matches") or 0)
+
+
 @app.route('/api/gamification', methods=['GET'])
 @token_required
 def get_gamification(username):
@@ -1864,8 +1869,13 @@ def get_gamification(username):
     try:
         with user_reciter_session(username) as reciter:
             mastered_n = len(reciter.mastered_words)
+        pkw, pkm = _pk_stats_for_gamification(username)
         profile = gamification_mod.public_profile(
-            DATA_DIR, username, mastered_words=mastered_n
+            DATA_DIR,
+            username,
+            mastered_words=mastered_n,
+            pk_wins=pkw,
+            pk_matches=pkm,
         )
         return jsonify(profile), 200
     except Exception as e:
@@ -1908,8 +1918,13 @@ def patch_gamification_settings(username):
             return jsonify({'error': str(ve)}), 400
         with user_reciter_session(username) as reciter:
             mastered_n = len(reciter.mastered_words)
+        pkw, pkm = _pk_stats_for_gamification(username)
         profile = gamification_mod.public_profile(
-            DATA_DIR, username, mastered_words=mastered_n
+            DATA_DIR,
+            username,
+            mastered_words=mastered_n,
+            pk_wins=pkw,
+            pk_matches=pkm,
         )
         return jsonify({**out, **{k: profile[k] for k in (
             'month_key', 'month_valid_checkin_days', 'month_days_in_month',
@@ -1955,8 +1970,13 @@ def get_user_settings(username):
     try:
         with user_reciter_session(username) as reciter:
             mastered_n = len(reciter.mastered_words)
+        pkw, pkm = _pk_stats_for_gamification(username)
         prof = gamification_mod.public_profile(
-            DATA_DIR, username, mastered_words=mastered_n
+            DATA_DIR,
+            username,
+            mastered_words=mastered_n,
+            pk_wins=pkw,
+            pk_matches=pkm,
         )
         pool = enrich_monthly_pool_with_avatars(
             challenges_mod.get_monthly_pool_state(DATA_DIR, username)
@@ -2141,6 +2161,15 @@ def api_challenges_respond(username, duel_id):
     if not ok or not row:
         return jsonify({'error': msg or '操作失败'}), 400
     return jsonify(row), 200
+
+
+@app.route('/api/challenges/monthly-pk-board', methods=['GET'])
+@token_required
+def api_monthly_pk_board(username):
+    """上月 PK 结算榜 + 本月进行中（全站）；用于排行榜页展示。"""
+    board = challenges_mod.monthly_pk_board(DATA_DIR)
+    board["viewer"] = username
+    return jsonify(board), 200
 
 
 @app.route('/api/words/status', methods=['GET'])
@@ -2343,6 +2372,7 @@ def practice_word(username):
             mastered_now = len(reciter.mastered_words) > old_mastered_count
             gam_payload = None
             if is_correct:
+                pkw, pkm = _pk_stats_for_gamification(username)
                 gam_payload = gamification_mod.award_correct_answer(
                     DATA_DIR,
                     username,
@@ -2352,6 +2382,8 @@ def practice_word(username):
                     new_success_count=new_success_count,
                     mastered_now=mastered_now,
                     mastered_words=len(reciter.mastered_words),
+                    pk_wins=pkw,
+                    pk_matches=pkm,
                 )
 
             body = {

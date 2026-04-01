@@ -3353,6 +3353,118 @@ button.import-article-chip--selected:hover {
     margin-bottom: 24px;
 }
 
+/* 排行榜页：每月 1v1 PK 风云榜 */
+.monthly-pk-board-wrap {
+    margin-bottom: 24px;
+}
+
+.monthly-pk-board {
+    padding: 16px 18px 18px;
+    border-radius: var(--radius-lg);
+    border: 2px dashed rgba(255, 87, 34, 0.4);
+    background: linear-gradient(145deg, rgba(255, 193, 7, 0.09) 0%, rgba(33, 150, 243, 0.07) 50%, rgba(156, 39, 176, 0.06) 100%);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.monthly-pk-head {
+    margin-bottom: 14px;
+}
+
+.monthly-pk-title {
+    margin: 0 0 6px;
+    font-size: 1.12rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+
+.monthly-pk-tagline {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    font-weight: 600;
+}
+
+.monthly-pk-section {
+    margin-top: 14px;
+}
+
+.monthly-pk-section-title {
+    margin: 0 0 10px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.monthly-pk-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.monthly-pk-card {
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.55);
+}
+
+.monthly-pk-vs {
+    margin: 0 0 6px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    line-height: 1.35;
+}
+
+.monthly-pk-x {
+    opacity: 0.85;
+    font-size: 0.9em;
+}
+
+.monthly-pk-meta {
+    margin: 0 0 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.monthly-pk-outcome {
+    margin: 0;
+    font-size: 0.86rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.monthly-pk-outcome.monthly-pk-tie {
+    color: #6d4c41;
+}
+
+.monthly-pk-outcome.monthly-pk-ongoing {
+    color: #1565c0;
+}
+
+.monthly-pk-empty {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-style: italic;
+    line-height: 1.45;
+}
+
+.monthly-pk-name.monthly-pk-user-me,
+.monthly-pk-winner.monthly-pk-user-me {
+    background: rgba(28, 176, 246, 0.15);
+    border-radius: 4px;
+    padding: 0 4px;
+}
+
+.monthly-pk-winner {
+    font-weight: 800;
+}
+
 .mp-race {
     background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
     border: 2px solid var(--border);

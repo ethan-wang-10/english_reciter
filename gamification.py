@@ -59,6 +59,10 @@ ACHIEVEMENT_DEFS: Dict[str, Dict[str, str]] = {
     "correct_10000": {"title": "万次笃行", "desc": "累计答对 10000 次", "icon": "🎖️"},
     "daily_xp_cap": {"title": "满载而归", "desc": "单日获得 XP 达到当日软上限", "icon": "📈"},
     "monthly_goal_met": {"title": "月度守约", "desc": "本月有效打卡天数达到所设目标", "icon": "🤝"},
+    "pk_debut": {"title": "擂台首秀", "desc": "参加过 1v1 PK：赢了的别嚣张，输了的……下次记得打卡", "icon": "🥊"},
+    "pk_duel_winner": {"title": "这次我赢了", "desc": "PK 赢过至少一次——对面同学，承让承让（下次还约）", "icon": "🦅"},
+    "pk_wins_3": {"title": "三连击·心理战", "desc": "累计 3 胜：建议对手把你拉黑前先复盘打卡天数", "icon": "🎪"},
+    "pk_wins_10": {"title": "劝分大师", "desc": "累计 10 胜：你不是来背单词的，你是来批发胜利的", "icon": "👑"},
 }
 
 
@@ -234,6 +238,8 @@ def _unlock_achievements(
     state: Dict[str, Any],
     *,
     mastered_words: int,
+    pk_wins: int = 0,
+    pk_matches: int = 0,
 ) -> List[Dict[str, Any]]:
     """根据当前状态解锁成就，返回本次新解锁列表（含 meta）。"""
     new_list: List[Dict[str, Any]] = []
@@ -325,6 +331,23 @@ def _unlock_achievements(
             goal_n = 0
         if goal_n >= 1 and valid_checkin_days_in_month(state, ym) >= goal_n:
             grant("monthly_goal_met")
+
+    try:
+        pm = int(pk_matches)
+    except (TypeError, ValueError):
+        pm = 0
+    try:
+        pw = int(pk_wins)
+    except (TypeError, ValueError):
+        pw = 0
+    if pm >= 1:
+        grant("pk_debut")
+    if pw >= 1:
+        grant("pk_duel_winner")
+    if pw >= 3:
+        grant("pk_wins_3")
+    if pw >= 10:
+        grant("pk_wins_10")
 
     return new_list
 
@@ -443,6 +466,8 @@ def award_correct_answer(
     new_success_count: int,
     mastered_now: bool,
     mastered_words: int,
+    pk_wins: int = 0,
+    pk_matches: int = 0,
 ) -> Dict[str, Any]:
     """
     答对后加分、更新 streak、解锁成就。在同一用户锁内调用。
@@ -486,7 +511,12 @@ def award_correct_answer(
     if monthly_bonus_xp > 0:
         state["total_xp"] = int(state.get("total_xp") or 0) + monthly_bonus_xp
 
-    new_achievements = _unlock_achievements(state, mastered_words=mastered_words)
+    new_achievements = _unlock_achievements(
+        state,
+        mastered_words=mastered_words,
+        pk_wins=pk_wins,
+        pk_matches=pk_matches,
+    )
     save_state(data_dir, username, state)
 
     lv = level_from_xp(int(state["total_xp"]))
@@ -515,20 +545,40 @@ def sync_achievements_only(
     username: str,
     *,
     mastered_words: int,
+    pk_wins: int = 0,
+    pk_matches: int = 0,
 ) -> List[Dict[str, Any]]:
     """不加分，仅根据已掌握数等补发成就（老用户首次打开）。"""
     state = load_state(data_dir, username)
     before = set(state.get("achievements", {}).keys())
-    new = _unlock_achievements(state, mastered_words=mastered_words)
+    new = _unlock_achievements(
+        state,
+        mastered_words=mastered_words,
+        pk_wins=pk_wins,
+        pk_matches=pk_matches,
+    )
     after = set(state.get("achievements", {}).keys())
     if after != before:
         save_state(data_dir, username, state)
     return new
 
 
-def public_profile(data_dir: Path, username: str, *, mastered_words: int) -> Dict[str, Any]:
+def public_profile(
+    data_dir: Path,
+    username: str,
+    *,
+    mastered_words: int,
+    pk_wins: int = 0,
+    pk_matches: int = 0,
+) -> Dict[str, Any]:
     """GET /api/gamification 用；会补同步成就。"""
-    sync_achievements_only(data_dir, username, mastered_words=mastered_words)
+    sync_achievements_only(
+        data_dir,
+        username,
+        mastered_words=mastered_words,
+        pk_wins=pk_wins,
+        pk_matches=pk_matches,
+    )
     state = load_state(data_dir, username)
     total_xp = int(state.get("total_xp") or 0)
     lv, need = xp_to_next_level(total_xp)

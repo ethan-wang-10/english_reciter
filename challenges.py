@@ -506,3 +506,80 @@ def list_duels_for_user(data_dir: Path, username: str) -> List[Dict[str, Any]]:
             out.append(row)
     out.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
     return out
+
+
+def pk_user_stats_from_duels(data_dir: Path, username: str) -> Dict[str, int]:
+    """已结算 PK：参与次数与胜场（用于成就）。"""
+    settle_due_duels(data_dir)
+    data = _load_duels(data_dir)
+    wins = 0
+    matches = 0
+    for d in data.get("duels") or []:
+        if not d.get("settled"):
+            continue
+        a = str(d.get("from_user") or "")
+        b = str(d.get("target_user") or "")
+        if username not in (a, b):
+            continue
+        matches += 1
+        if str(d.get("winner") or "") == username:
+            wins += 1
+    return {"pk_wins": wins, "pk_matches": matches}
+
+
+def monthly_pk_board(data_dir: Path) -> Dict[str, Any]:
+    """
+    全站月度 PK 看板：上一自然月已结算战绩 + 本月进行中。
+    """
+    expire_pending_duels_if_needed(data_dir)
+    settle_due_duels(data_dir)
+    today = date.today()
+    cur_ym = month_key(today)
+    first = today.replace(day=1)
+    prev_last = first - timedelta(days=1)
+    prev_ym = month_key(prev_last)
+
+    data = _load_duels(data_dir)
+    duels = data.get("duels") or []
+    settled_last: List[Dict[str, Any]] = []
+    ongoing: List[Dict[str, Any]] = []
+
+    for d in duels:
+        ym = str(d.get("month") or "").strip()
+        if not ym:
+            continue
+        st = d.get("status")
+        if d.get("settled") and ym == prev_ym:
+            row = enrich_duel_for_api(dict(d))
+            fu = row.get("from_user")
+            tu = row.get("target_user")
+            if fu and tu:
+                row["pk_checkin_days"] = {
+                    str(fu): duel_pk_days_for_user(data_dir, str(fu), row),
+                    str(tu): duel_pk_days_for_user(data_dir, str(tu), row),
+                }
+            else:
+                row["pk_checkin_days"] = {}
+            settled_last.append(row)
+        elif (not d.get("settled")) and st == "active" and ym == cur_ym:
+            row = enrich_duel_for_api(dict(d))
+            fu = row.get("from_user")
+            tu = row.get("target_user")
+            if fu and tu:
+                row["pk_checkin_days"] = {
+                    str(fu): duel_pk_days_for_user(data_dir, str(fu), row),
+                    str(tu): duel_pk_days_for_user(data_dir, str(tu), row),
+                }
+            else:
+                row["pk_checkin_days"] = {}
+            ongoing.append(row)
+
+    settled_last.sort(key=lambda x: str(x.get("settled_at") or ""), reverse=True)
+    ongoing.sort(key=lambda x: str(x.get("accepted_at") or ""), reverse=True)
+
+    return {
+        "prev_month": prev_ym,
+        "current_month": cur_ym,
+        "settled_last_month": settled_last,
+        "ongoing_this_month": ongoing,
+    }
