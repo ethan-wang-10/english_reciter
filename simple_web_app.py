@@ -1231,6 +1231,15 @@ def is_parent_user_record(user_dict: dict) -> bool:
     return isinstance(user_dict, dict) and user_dict.get("role") == USER_ROLE_PARENT
 
 
+def student_has_enabled_parent_account(child: str) -> bool:
+    """学生账号是否已开通家长登录（存在对应 *_parent 账号）。"""
+    users = load_users()
+    pname = parent_login_username_for_child(child)
+    if not pname or pname not in users:
+        return False
+    return is_parent_user_record(users.get(pname))
+
+
 def user_avatar_disk_path(username: str) -> Optional[Path]:
     if not is_valid_username(username):
         return None
@@ -3762,6 +3771,94 @@ def get_community_wordbank(username):
             "words": data.get("words") or [],
         }
     ), 200
+
+
+@app.route('/api/words/pending', methods=['GET'])
+@token_required
+def list_pending_words_for_settings(username):
+    """待复习单词列表（配置页；家长登录时可删；学生仅在未开通家长账户时可删）。"""
+    is_parent = getattr(g, "is_parent", False)
+    has_parent = student_has_enabled_parent_account(username)
+    can_remove = bool(is_parent or not has_parent)
+    try:
+        with user_reciter_session(username) as reciter:
+            today_d = date.today()
+            out: List[dict] = []
+            for w in reciter.all_words:
+                csv_row = lookup_csv_word(w.english)
+                nd = w.next_review_date
+                out.append(
+                    {
+                        "english": w.english,
+                        "chinese": w.chinese,
+                        "phonetic": csv_row.get("phonetic", "") if csv_row else "",
+                        "next_review_date": nd.isoformat(),
+                        "remaining_days": (nd - today_d).days,
+                        "review_count": w.review_count,
+                    }
+                )
+            return jsonify(
+                {
+                    "words": out,
+                    "count": len(out),
+                    "can_remove_pending": can_remove,
+                }
+            ), 200
+    except Exception as e:
+        logger.error("列出待复习失败: %s", e)
+        return jsonify({"error": "服务器内部错误"}), 500
+
+
+@app.route('/api/words/pending/remove', methods=['POST'])
+@token_required
+def remove_pending_words_api(username):
+    """从待复习中移除单词（不删除已掌握词）。家长登录可删；学生仅在未开通家长账户时可删。"""
+    if not _rate_allow(f"pending_rm:{_client_ip()}", 120):
+        return jsonify({"error": "请求过于频繁，请稍后再试"}), 429
+    is_parent = getattr(g, "is_parent", False)
+    if not is_parent and student_has_enabled_parent_account(username):
+        return jsonify(
+            {
+                "error": "已开通家长账户，待复习词汇请由家长登录后在配置中管理",
+            }
+        ), 403
+    body = request.get_json(silent=True) or {}
+    raw = body.get("english")
+    if isinstance(raw, str):
+        english_list = [raw]
+    elif isinstance(raw, list):
+        english_list = raw
+    else:
+        return jsonify({"error": "请提供 english 字段（字符串或字符串数组）"}), 400
+    seen = set()
+    keys_ordered: List[str] = []
+    for e in english_list:
+        s = str(e or "").strip()
+        if not s:
+            continue
+        k = s.lower()
+        if k not in seen:
+            seen.add(k)
+            keys_ordered.append(s)
+    if not keys_ordered:
+        return jsonify({"error": "未提供有效单词"}), 400
+    if len(keys_ordered) > 200:
+        return jsonify({"error": "单次最多移除 200 条"}), 400
+
+    try:
+        with user_reciter_session(username) as reciter:
+            result = reciter.remove_pending_words_by_english(keys_ordered)
+        _invalidate_user_reciter_cache(username)
+        logger.info(
+            "用户 %s 待复习移除: removed=%s not_found=%s",
+            username,
+            result.get("removed"),
+            len(result.get("not_found") or []),
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error("待复习移除失败: %s", e)
+        return jsonify({"error": "服务器内部错误"}), 500
 
 
 @app.route('/api/wordbank/community/import-simple', methods=['POST'])

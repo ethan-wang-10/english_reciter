@@ -1117,6 +1117,7 @@ async function loadUserSettingsPanel() {
         const n2 = document.getElementById('settings-parent-pw-confirm');
         if (n1) n1.value = '';
         if (n2) n2.value = '';
+        await loadSettingsPendingWordsBlock();
         return;
     }
     if (title) title.textContent = '用户设置';
@@ -1133,6 +1134,68 @@ async function loadUserSettingsPanel() {
         updateGamificationNav(s);
     } catch (e) {
         setSettingsMessage(e.message || '加载失败', true);
+    }
+    await loadSettingsPendingWordsBlock();
+}
+
+/** 配置页：列出当前学生待复习词并可移除（家长登录可删；学生仅未开通家长账户时可删） */
+async function loadSettingsPendingWordsBlock() {
+    const listEl = document.getElementById('settings-pending-words-list');
+    const leadEl = document.getElementById('settings-pending-words-lead');
+    if (!listEl) return;
+    if (leadEl) {
+        leadEl.textContent =
+            isParentSession && childUsername
+                ? `管理学生「${childUsername}」的待复习列表。移除后该词不再出现在待复习中（已掌握词不受影响）。`
+                : '管理你的待复习列表。移除后该词不再出现在待复习中（已掌握词不受影响）。';
+    }
+    listEl.innerHTML = '<p class="settings-hint">加载中…</p>';
+    try {
+        const data = await apiRequest('/words/pending');
+        const canRemove = data.can_remove_pending !== false;
+        if (leadEl && !isParentSession && !canRemove) {
+            leadEl.textContent =
+                '已开通家长账户，待复习词汇仅可由家长登录后在「配置」中管理；学生账号无法在此移除。';
+        }
+        const words = Array.isArray(data.words) ? data.words : [];
+        if (words.length === 0) {
+            listEl.innerHTML =
+                '<p class="settings-hint settings-pending-words-empty">当前没有待复习单词。</p>';
+            return;
+        }
+        const removeBtn = (enc) =>
+            canRemove
+                ? `<button type="button" class="btn btn-secondary settings-pending-remove-btn" data-english="${enc}">移除</button>`
+                : '';
+        listEl.innerHTML = words
+            .map((w) => {
+                const en = String(w.english || '');
+                const enc = encodeURIComponent(en);
+                const zh = escapeHtml(w.chinese || '');
+                const enDisp = escapeHtml(en);
+                const rd =
+                    typeof w.remaining_days === 'number'
+                        ? `距下次复习 ${w.remaining_days} 天`
+                        : '';
+                const meta = [rd].filter(Boolean).join(' · ');
+                return (
+                    `<div class="settings-pending-row" role="listitem">` +
+                    `<div class="settings-pending-row-main">` +
+                    `<strong class="settings-pending-en">${enDisp}</strong>` +
+                    `<span class="settings-pending-zh">${zh}</span>` +
+                    (meta
+                        ? `<div class="settings-pending-meta">${escapeHtml(meta)}</div>`
+                        : '') +
+                    `</div>` +
+                    removeBtn(enc) +
+                    `</div>`
+                );
+            })
+            .join('');
+    } catch (e) {
+        listEl.innerHTML = `<p class="settings-hint settings-message-error">${escapeHtml(
+            e.message || '加载失败',
+        )}</p>`;
     }
 }
 
@@ -4322,6 +4385,50 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('settings-backdrop')?.addEventListener('click', closeSettings);
     document.getElementById('settings-close')?.addEventListener('click', closeSettings);
+    document.getElementById('settings-pending-words-list')?.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.settings-pending-remove-btn');
+        if (!btn) return;
+        let english = '';
+        try {
+            english = decodeURIComponent(btn.getAttribute('data-english') || '');
+        } catch (_) {
+            return;
+        }
+        if (!english) return;
+        if (
+            !confirm(
+                `确定从待复习列表移除「${english}」吗？\n（不会删除已掌握词汇）`,
+            )
+        ) {
+            return;
+        }
+        btn.disabled = true;
+        try {
+            const res = await apiRequest('/words/pending/remove', {
+                method: 'POST',
+                body: JSON.stringify({ english }),
+            });
+            const n = res && typeof res.removed === 'number' ? res.removed : 0;
+            setSettingsMessage(n > 0 ? '已从待复习移除' : '未能移除（可能已不在待复习中）', !n);
+            await loadSettingsPendingWordsBlock();
+        } catch (err) {
+            setSettingsMessage(err.message || '移除失败', true);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+    document.getElementById('settings-pending-words-refresh')?.addEventListener('click', async () => {
+        const b = document.getElementById('settings-pending-words-refresh');
+        if (b) b.disabled = true;
+        try {
+            await loadSettingsPendingWordsBlock();
+            setSettingsMessage('已刷新', false);
+        } catch (e) {
+            setSettingsMessage(e.message || '刷新失败', true);
+        } finally {
+            if (b) b.disabled = false;
+        }
+    });
     document.getElementById('settings-parent-pw-save')?.addEventListener('click', async () => {
         const p1 = document.getElementById('settings-parent-pw-new')?.value?.trim() || '';
         const p2 = document.getElementById('settings-parent-pw-confirm')?.value?.trim() || '';
