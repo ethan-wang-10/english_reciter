@@ -686,7 +686,7 @@ function renderTextbookReader(data) {
         btn.addEventListener('click', () => {
             const i = parseInt(btn.getAttribute('data-idx') || '-1', 10);
             const line = lines[i];
-            if (line && line.english) speakEnglishInBrowser(line.english, () => {});
+            if (line && line.english) void speakEnglishPreferred(line.english, () => {});
         });
     });
 

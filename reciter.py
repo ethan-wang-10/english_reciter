@@ -38,6 +38,13 @@ def get_logger(name: str = __name__) -> logging.Logger:
 
 logger = get_logger()
 
+try:
+    from tts_piper import piper_runtime_ready, piper_synthesize_wav, play_wav_bytes
+except ImportError:
+    piper_runtime_ready = None  # type: ignore[misc, assignment]
+    piper_synthesize_wav = None  # type: ignore[misc, assignment]
+    play_wav_bytes = None  # type: ignore[misc, assignment]
+
 
 class Config:
     """配置管理类"""
@@ -59,7 +66,9 @@ class Config:
             "backup_interval_days": 7,
             "max_backups": 10,
             "language": "zh",
-            "log_level": "INFO"
+            "log_level": "INFO",
+            "piper_model": "",
+            "piper_binary": "",
         }
         
         if os.path.exists(self.config_file):
@@ -84,6 +93,9 @@ class Config:
         
         log_level = getattr(logging, default_config.get("log_level", "INFO"))
         logger.setLevel(log_level)
+
+        self.PIPER_MODEL = (default_config.get("piper_model") or "").strip()
+        self.PIPER_BINARY = (default_config.get("piper_binary") or "").strip()
 
 
 class ExampleGenerator:
@@ -713,31 +725,40 @@ class WordReciter:
         return self.config.REVIEW_INTERVAL_DAYS[-1]
     
     def _text_to_speech(self, text: str) -> None:
-        """文本转语音（跨平台支持）
-        
-        - macOS: 使用系统 say 命令
-        - Linux/Windows: 如果 say 命令不存在则静默跳过
-        """
+        """文本转语音：优先 Piper（配置模型时），否则 macOS ``say``。"""
         if not self.config.TTS_ENABLED:
             return
-        
-        if shutil.which('say') is None:
-            logger.debug("say 命令不可用，跳过语音播放")
-            return
-        
+
         try:
             if not text or not isinstance(text, str):
                 logger.warning("无效的文本输入")
                 return
-            
+
             en_text = text.split('_')[0]
             if not en_text:
                 logger.warning("无法提取有效的英文文本")
                 return
-            
+
+            safe = "".join(
+                ch for ch in en_text.strip()[:500] if ch.isprintable() or ch.isspace()
+            ).strip()[:500]
+            if not safe:
+                return
+
+            if piper_runtime_ready and piper_synthesize_wav and play_wav_bytes:
+                if piper_runtime_ready(self.config):
+                    wav = piper_synthesize_wav(safe, self.config)
+                    if wav:
+                        play_wav_bytes(wav)
+                        return
+
+            if shutil.which('say') is None:
+                logger.debug("say 命令不可用，跳过语音播放")
+                return
+
             try:
                 subprocess.run(
-                    ['say', en_text],
+                    ['say', safe],
                     capture_output=True,
                     text=True,
                     timeout=30

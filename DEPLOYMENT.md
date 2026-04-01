@@ -434,6 +434,17 @@ which say
 # 应用将自动跳过语音功能
 ```
 
+### 5. Piper 神经语音（推荐，远程用户可听到）
+
+在**服务器**上安装 [Piper](https://github.com/rhasspy/piper) 可执行文件并下载英文 `.onnx` 模型（及同目录下的 `.onnx.json` 配置，若发布包提供）。设置环境变量后重启 Web 进程：
+
+- `PIPER_MODEL`：模型文件路径，例如 `/opt/piper/en_US-lessac-medium.onnx`
+- `PIPER_BINARY`（可选）：`piper` 可执行文件的完整路径；不设置则在 `PATH` 中查找
+
+前端在登录后会请求 `/api/tts/capabilities`；若 `piper` 为 `true`，朗读将优先请求 `/api/words/speak-audio` 返回 WAV，在浏览器中播放（不依赖服务器声卡）。未配置 Piper 时仍使用浏览器 Web Speech 或本机 `say` 降级。
+
+命令行版 `reciter.py` 可在 `config.json` 中增加 `piper_model`、`piper_binary`（也可用上述环境变量），优先 Piper，其次 macOS `say`。
+
 ## 故障排查
 
 ### 问题 1: 无法启动

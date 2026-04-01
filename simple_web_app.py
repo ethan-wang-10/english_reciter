@@ -45,6 +45,12 @@ import gamification as gamification_mod
 import challenges as challenges_mod
 
 try:
+    from tts_piper import piper_runtime_ready, piper_synthesize_wav
+except ImportError:
+    piper_runtime_ready = None  # type: ignore[misc, assignment]
+    piper_synthesize_wav = None  # type: ignore[misc, assignment]
+
+try:
     from PIL import Image as PILImage
 except ImportError:
     PILImage = None  # type: ignore
@@ -2447,6 +2453,49 @@ def speak_text(username):
     except Exception as e:
         logger.error(f"朗读失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/tts/capabilities')
+def tts_capabilities():
+    """前端是否可优先使用 Piper：需设置 PIPER_MODEL 且 piper 在 PATH 中。"""
+    if piper_runtime_ready is None:
+        return jsonify({'piper': False}), 200
+    return jsonify({'piper': bool(piper_runtime_ready())}), 200
+
+
+@app.route('/api/words/speak-audio', methods=['POST'])
+@token_required
+@parent_forbidden
+def speak_text_audio(username):
+    """使用 Piper 合成英文 WAV 并返回，供浏览器播放（远程可用）。"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': '无效的JSON数据'}), 400
+
+        text = data.get('text', '').strip()
+        if not text:
+            return jsonify({'error': '文本不能为空'}), 400
+
+        safe_text = sanitize_tts_text(text)
+        if not safe_text:
+            return jsonify({'error': '文本无效或过长'}), 400
+
+        if piper_runtime_ready is None or not piper_runtime_ready():
+            return jsonify({'error': 'Piper 未配置'}), 503
+
+        if piper_synthesize_wav is None:
+            return jsonify({'error': 'Piper 不可用'}), 503
+
+        wav = piper_synthesize_wav(safe_text)
+        if not wav:
+            return jsonify({'error': '语音合成失败'}), 503
+
+        return Response(wav, mimetype='audio/wav')
+    except Exception as e:
+        logger.error(f"Piper 朗读失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
 
 def _parse_import_json_body(request):
     """解析 JSON 导入：根为数组，或 {\"words\": [...]}。"""

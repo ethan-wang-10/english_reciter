@@ -34,6 +34,8 @@ let userPlan = 'free';
 let articleAiExtractAvailable = false;
 /** 管理后台是否开启「AI 文章分词」；来自 /api/user/plan */
 let articleAiExtractEnabled = false;
+/** 服务端是否配置 Piper（神经语音 WAV）；来自 /api/tts/capabilities */
+let serverPiperAvailable = false;
 
 /** 本轮 3 次尝试均错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
 let wrongWordsInThisPass = new Set();
@@ -2052,6 +2054,94 @@ function speakEnglishInBrowser(text, onEnd) {
     return true;
 }
 
+/** 使用服务端 Piper 返回的 WAV；失败返回 false（不调用 onEnd） */
+async function speakEnglishViaPiperApi(text, onEnd) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    let response;
+    try {
+        response = await fetch(`${API_BASE}/words/speak-audio`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ text }),
+        });
+    } catch (_) {
+        return false;
+    }
+    if (!response.ok) return false;
+    const ct = response.headers.get('content-type') || '';
+    if (!ct.includes('audio') && !ct.includes('octet-stream')) return false;
+    let blob;
+    try {
+        blob = await response.blob();
+    } catch (_) {
+        return false;
+    }
+    if (!blob || blob.size < 100) return false;
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    const cleanup = () => {
+        try {
+            URL.revokeObjectURL(url);
+        } catch (_) {
+            /* ignore */
+        }
+        if (typeof onEnd === 'function') onEnd();
+    };
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    try {
+        await audio.play();
+    } catch (_) {
+        try {
+            URL.revokeObjectURL(url);
+        } catch (_) {
+            /* ignore */
+        }
+        return false;
+    }
+    return true;
+}
+
+/** 优先 Piper，其次 Web Speech，最后服务端 say（仅服务器本机扬声器） */
+async function speakEnglishPreferred(text, onEnd) {
+    const raw = String(text || '').trim().slice(0, 500);
+    if (!raw) {
+        if (typeof onEnd === 'function') onEnd();
+        return false;
+    }
+    const done = typeof onEnd === 'function' ? onEnd : () => focusWordCapture(0);
+    if (serverPiperAvailable) {
+        const ok = await speakEnglishViaPiperApi(raw, done);
+        if (ok) return true;
+    }
+    if (speakEnglishInBrowser(raw, done)) {
+        return true;
+    }
+    try {
+        await apiRequest('/words/speak', {
+            method: 'POST',
+            body: JSON.stringify({ text: raw }),
+        });
+        done();
+        return true;
+    } catch (_) {
+        done();
+        return false;
+    }
+}
+
+async function refreshTtsCapabilities() {
+    serverPiperAvailable = false;
+    if (!token) return;
+    try {
+        const data = await apiRequest('/tts/capabilities');
+        serverPiperAvailable = data && data.piper === true;
+    } catch (_) {
+        serverPiperAvailable = false;
+    }
+}
+
 // 朗读例句
 async function speakExample() {
     const word = currentReviewList[currentReviewIndex];
@@ -2067,21 +2157,7 @@ async function speakExample() {
     if (!enText) enText = String(exampleText).trim();
     if (!enText) return;
 
-    if (speakEnglishInBrowser(enText)) {
-        return;
-    }
-
-    try {
-        await apiRequest('/words/speak', {
-            method: 'POST',
-            body: JSON.stringify({
-                text: enText
-            })
-        });
-        focusWordCapture(0);
-    } catch (error) {
-        focusWordCapture(0);
-    }
+    await speakEnglishPreferred(enText, () => focusWordCapture(0));
 }
 
 /** 解析 JSON 响应；失败时抛出可读错误（Safari 对 SyntaxError 常显示为 “The string did not match the expected pattern.”） */
@@ -2367,6 +2443,7 @@ async function loadUserPlan() {
         userPlan = 'free';
         articleAiExtractEnabled = false;
     }
+    await refreshTtsCapabilities();
 }
 
 function updatePlanUI() {
@@ -3594,7 +3671,7 @@ function renderDiscoveryCard() {
     const speakBtn = wrap.querySelector('.discovery-speak-word');
     if (speakBtn) {
         speakBtn.addEventListener('click', () => {
-            speakEnglishInBrowser(w.english, () => {});
+            void speakEnglishPreferred(w.english, () => {});
         });
     }
     wrap.querySelectorAll('.discovery-speak-example').forEach((btn) => {
@@ -3602,7 +3679,7 @@ function renderDiscoveryCard() {
         const seg = si != null ? examples[parseInt(si, 10)] : null;
         if (!seg || !seg.en) return;
         btn.addEventListener('click', () => {
-            speakEnglishInBrowser(seg.en, () => {});
+            void speakEnglishPreferred(seg.en, () => {});
         });
     });
 }

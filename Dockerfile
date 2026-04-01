@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -r requirements-simple.txt
 
 # 复制应用代码
 COPY reciter.py .
+COPY tts_piper.py .
 COPY simple_web_app.py .
 COPY config.example.json .
 RUN cp config.example.json config.json
