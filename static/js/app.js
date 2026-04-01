@@ -1341,6 +1341,79 @@ function renderMonthlyPoolRace(pool) {
     }
 }
 
+/** 从候选数组随机取一条（吐槽文案轮换用） */
+function pickRandom(arr) {
+    if (!arr || arr.length === 0) return '';
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** 排行榜页顶部说明：每次打开页随机一条 */
+const LEADERBOARD_INTRO_ROASTS = [
+    '按累计 XP 排名，看看谁卷得最优雅。再往上翻翻：群体赛跑是「大家一起卷」，PK 榜是「点名卷」——上月谁赢了嘴仗，本月谁还在硬撑，都写在上面。',
+    'XP 榜是面子工程，PK 榜是里子工程：一个比谁总分高，一个比谁打卡天数能把对面气笑。',
+    '温馨提示：排行榜解决不了人生，但能解决「我到底有没有在学」的焦虑——顺便看看 PK 区谁在互相伤害。',
+    '上面赛跑图一乐，中间 PK 见真章：有人赢的是积分，有人赢的是对面少打一天卡。',
+    '数据不会说谎，除非你没打卡。XP 榜、群体赛、PK 榜三连——总有一个让你坐不住。',
+    '学习这件事，要么自己卷，要么拉人一起卷；PK 榜专门公示第二种。',
+    '别光盯着排名：月度赛是众筹内卷，1v1 PK 是精准打击，请按需食用。',
+];
+
+const PK_BOARD_TITLE_ROASTS = [
+    '每月 PK 风云榜',
+    '本月擂台弹幕区',
+    '1v1 打卡公开处刑榜',
+    '友谊的小船停靠站',
+];
+
+const PK_BOARD_TAGLINE_ROASTS = [
+    '专治「我学了但我不说」：上月谁把谁按在打卡天数上摩擦，本月谁还在互相瞪眼，都在这里公示。输了不丢人，不点发起才亏。',
+    '这里没有「差不多学了」，只有「打卡天数比你多」。上月旧账、本月新仇，一键围观。',
+    '约战之前请三思：输的是赌注，赢的是可以在心里默念三遍「我打卡了」的权利。',
+    '本榜不提供心理辅导，只提供冷冰冰的有效打卡对比。觉得扎心说明来对地方了。',
+    '别人晒步数你晒打卡天数——PK 区欢迎一切良性（或恶性）竞争。',
+    '温馨提示：平局不是默契，是系统看你们一样菜（划掉）一样努力。',
+];
+
+const PK_SECTION_PREV_SUFFIX_ROASTS = [
+    '旧账已结清',
+    '服务器已记仇完毕',
+    '恩怨写入数据库',
+    '瓜已熟透可食用',
+    '战绩存档，不服下个月',
+];
+
+const PK_SECTION_CUR_SUFFIX_ROASTS = [
+    '火线吃瓜区',
+    '实时对线中',
+    '战况随时更新',
+    '赌注已冻结，人还在卷',
+    '当前赛季现场',
+];
+
+const PK_EMPTY_SETTLED_ROASTS = [
+    '上月擂台比图书馆还安静——要么全员佛系，要么全在别的赛道偷偷上分。',
+    '上月居然一场没有？合理怀疑大家都在假装没看见「发起 PK」按钮。',
+    '空空如也。不是世界和平，是大家都把火药留到本月了。',
+    '上月无人约战——建议反思：是友谊太铁，还是赌注不够刺激。',
+    '此处本应锣鼓喧天，实际上连表情包都没人发。',
+];
+
+const PK_EMPTY_ONGOING_ROASTS = [
+    '本月居然没人约战？去「设置」里点一发 PK，让友谊在赌注里升华一下。',
+    '本月擂台闲置中。再不动手，下个月吐槽文案都要重复了。',
+    '零场进行中——是给对手留面子，还是给自己留退路？',
+    '静悄悄，未必在憋大招，也可能真的在摸鱼。',
+    '暂无对线：适合补刀（划掉）补打卡。',
+];
+
+const PK_META_SUFFIX_ROASTS = [
+    '数字不会骗人，除非你没打卡',
+    '谁天数少谁尴尬，系统不包售后',
+    '建议输家截图留念，赢家低调做人',
+    '统计口径：冷酷无情',
+    '平局别找客服，客服也在背单词',
+];
+
 function renderMonthlyPkBoard(board) {
     const wrap = document.getElementById('monthly-pk-board-wrap');
     if (!wrap) return;
@@ -1356,6 +1429,62 @@ function renderMonthlyPkBoard(board) {
 
     const meClass = (u) => (u && viewer && u === viewer ? ' monthly-pk-user-me' : '');
 
+    const ongoingHtmlBlocks = [
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-ongoing">⚡ 还在对线：比的是有效打卡天数，不是谁起得早（虽然早起也可能赢）。平局？赌注各回各家，友谊的小船暂时没翻。</p>',
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-ongoing">🔥 战况胶着：系统只认打卡不认嘴硬。谁多一天，谁就多一分理直气壮。</p>',
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-ongoing">⏳ 未分胜负：建议双方减少「明天一定」，增加「今天已打卡」。</p>',
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-ongoing">📶 信号满格：对线仍在继续。平局时赌注退回——毕竟钱是无辜的。</p>',
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-ongoing">🎬 现场直播：有效打卡天数实时计分，比追剧刺激一点点。</p>',
+    ];
+
+    const tieHtmlBlocks = [
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-tie">🤝 平局！谁也别说谁菜——赌注退回，下次记得用打卡天数说话，别用表情包。</p>',
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-tie">🤝 平分秋色：系统宣布你们一样努力（或一样摸鱼）。赌注原路返回。</p>',
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-tie">🤝 默契平局？不，是打卡天数恰好一样——这比赢还少见。</p>',
+        () =>
+            '<p class="monthly-pk-outcome monthly-pk-tie">🤝 和棋！谁也没赢谁，但你们都赢回了 XP——四舍五入算双赢。</p>',
+    ];
+
+    const fallbackHtmlBlocks = [
+        (da, db) =>
+            `<p class="monthly-pk-outcome">已结算 · ${da} 天 vs ${db} 天——系统懒得站队，只负责记账。</p>`,
+        (da, db) =>
+            `<p class="monthly-pk-outcome">已结算 · ${da} 天 vs ${db} 天。别问谁更亏，问就是都打卡了就不亏。</p>`,
+        (da, db) =>
+            `<p class="monthly-pk-outcome">已落地 · ${da} : ${db}。结果已写入历史，翻篇请自费。</p>`,
+    ];
+
+    const winnerHtmlBlocks = [
+        (w, da, db, wcls) =>
+            `<p class="monthly-pk-outcome">🏆 本局 MVP：<strong class="monthly-pk-winner${wcls}">${escapeHtml(
+                w,
+            )}</strong>（${da} 天 vs ${db} 天）· 输的一方：截图可以删，记忆建议留着当动力。</p>`,
+        (w, da, db, wcls) =>
+            `<p class="monthly-pk-outcome">🏆 <strong class="monthly-pk-winner${wcls}">${escapeHtml(
+                w,
+            )}</strong> 拿下！${da} 天对 ${db} 天——对面同学，承让，下次记得把闹钟往前拨五分钟。</p>`,
+        (w, da, db, wcls) =>
+            `<p class="monthly-pk-outcome">🥇 胜方 <strong class="monthly-pk-winner${wcls}">${escapeHtml(
+                w,
+            )}</strong>：有效打卡多一天，心里爽一年（${da} vs ${db}）。</p>`,
+        (w, da, db, wcls) =>
+            `<p class="monthly-pk-outcome">✨ 恭喜 <strong class="monthly-pk-winner${wcls}">${escapeHtml(
+                w,
+            )}</strong> 在打卡天数上完成一次「微小但扎心」的超越（${da} 天 vs ${db} 天）。</p>`,
+        (w, da, db, wcls) =>
+            `<p class="monthly-pk-outcome">📣 胜者为王：<strong class="monthly-pk-winner${wcls}">${escapeHtml(
+                w,
+            )}</strong>（${da} : ${db}）· 败者不必气馁，气馁完请打开设置再约一局。</p>`,
+    ];
+
     const fmtDuel = (d, isOngoing) => {
         const a = d.from_user || '';
         const b = d.target_user || '';
@@ -1367,19 +1496,16 @@ function renderMonthlyPkBoard(board) {
         const tie = d.tie;
         let outcome = '';
         if (isOngoing) {
-            outcome =
-                '<p class="monthly-pk-outcome monthly-pk-ongoing">⚡ 还在对线：比的是有效打卡天数，不是谁起得早（虽然早起也可能赢）。平局？赌注各回各家，友谊的小船暂时没翻。</p>';
+            outcome = pickRandom(ongoingHtmlBlocks)();
         } else if (tie) {
-            outcome =
-                '<p class="monthly-pk-outcome monthly-pk-tie">🤝 平局！谁也别说谁菜——赌注退回，下次记得用打卡天数说话，别用表情包。</p>';
+            outcome = pickRandom(tieHtmlBlocks)();
         } else if (winner) {
             const wcls = meClass(winner);
-            outcome = `<p class="monthly-pk-outcome">🏆 本局 MVP：<strong class="monthly-pk-winner${wcls}">${escapeHtml(
-                winner,
-            )}</strong>（${da} 天 vs ${db} 天）· 输的一方：截图可以删，记忆建议留着当动力。</p>`;
+            outcome = pickRandom(winnerHtmlBlocks)(winner, da, db, wcls);
         } else {
-            outcome = `<p class="monthly-pk-outcome">已结算 · ${da} 天 vs ${db} 天——系统懒得站队，只负责记账。</p>`;
+            outcome = pickRandom(fallbackHtmlBlocks)(da, db);
         }
+        const metaSuffix = pickRandom(PK_META_SUFFIX_ROASTS);
         return (
             `<article class="monthly-pk-card">` +
             `<p class="monthly-pk-vs">` +
@@ -1389,7 +1515,7 @@ function renderMonthlyPkBoard(board) {
             `</p>` +
             `<p class="monthly-pk-meta">押注 ${escapeHtml(String(w))} XP · 计分区间打卡 ${escapeHtml(
                 String(da),
-            )} : ${escapeHtml(String(db))}（数字不会骗人，除非你没打卡）</p>` +
+            )} : ${escapeHtml(String(db))}（${escapeHtml(metaSuffix)}）</p>` +
             outcome +
             `</article>`
         );
@@ -1397,24 +1523,29 @@ function renderMonthlyPkBoard(board) {
 
     const settledHtml = settled.length
         ? settled.map((d) => fmtDuel(d, false)).join('')
-        : '<p class="monthly-pk-empty">上月擂台比图书馆还安静——要么全员佛系，要么全在别的赛道偷偷上分。</p>';
+        : `<p class="monthly-pk-empty">${escapeHtml(pickRandom(PK_EMPTY_SETTLED_ROASTS))}</p>`;
 
     const ongoingHtml = ongoing.length
         ? ongoing.map((d) => fmtDuel(d, true)).join('')
-        : '<p class="monthly-pk-empty">本月居然没人约战？去「设置」里点一发 PK，让友谊在赌注里升华一下。</p>';
+        : `<p class="monthly-pk-empty">${escapeHtml(pickRandom(PK_EMPTY_ONGOING_ROASTS))}</p>`;
+
+    const boardTitle = escapeHtml(pickRandom(PK_BOARD_TITLE_ROASTS));
+    const tagline = escapeHtml(pickRandom(PK_BOARD_TAGLINE_ROASTS));
+    const prevSuffix = escapeHtml(pickRandom(PK_SECTION_PREV_SUFFIX_ROASTS));
+    const curSuffix = escapeHtml(pickRandom(PK_SECTION_CUR_SUFFIX_ROASTS));
 
     wrap.innerHTML =
         `<div class="monthly-pk-board">` +
         `<div class="monthly-pk-head">` +
-        `<h3 class="monthly-pk-title">每月 PK 风云榜</h3>` +
-        `<p class="monthly-pk-tagline">专治「我学了但我不说」：上月谁把谁按在打卡天数上摩擦，本月谁还在互相瞪眼，都在这里公示。输了不丢人，不点发起才亏。</p>` +
+        `<h3 class="monthly-pk-title">${boardTitle}</h3>` +
+        `<p class="monthly-pk-tagline">${tagline}</p>` +
         `</div>` +
         `<section class="monthly-pk-section" aria-labelledby="monthly-pk-prev-title">` +
-        `<h4 id="monthly-pk-prev-title" class="monthly-pk-section-title">📜 ${escapeHtml(prevM)} 旧账已结清</h4>` +
+        `<h4 id="monthly-pk-prev-title" class="monthly-pk-section-title">📜 ${escapeHtml(prevM)} ${prevSuffix}</h4>` +
         `<div class="monthly-pk-list">${settledHtml}</div>` +
         `</section>` +
         `<section class="monthly-pk-section" aria-labelledby="monthly-pk-cur-title">` +
-        `<h4 id="monthly-pk-cur-title" class="monthly-pk-section-title">🔥 ${escapeHtml(curM)} 火线吃瓜区</h4>` +
+        `<h4 id="monthly-pk-cur-title" class="monthly-pk-section-title">🔥 ${escapeHtml(curM)} ${curSuffix}</h4>` +
         `<div class="monthly-pk-list">${ongoingHtml}</div>` +
         `</section>` +
         `</div>`;
@@ -1480,6 +1611,10 @@ async function loadLeaderboardSection() {
     if (loading) loading.style.display = 'block';
     try {
         await refreshGamification();
+        const introEl = document.getElementById('leaderboard-intro');
+        if (introEl) {
+            introEl.textContent = pickRandom(LEADERBOARD_INTRO_ROASTS);
+        }
         const [data, pool, pkBoard] = await Promise.all([
             apiRequest('/leaderboard'),
             apiRequest('/monthly-pool'),
