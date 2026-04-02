@@ -29,5 +29,6 @@ pyspellchecker>=0.8.0
 spacy==3.8.13
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
-# 头像：压缩与按需缩放（WebP）
+# 头像：压缩与按需缩放（WebP）；词汇导入「从图片识别」需系统安装 Tesseract（如 brew install tesseract）
 Pillow==12.0.0
+pytesseract>=0.3.10

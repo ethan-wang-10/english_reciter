@@ -2176,8 +2176,9 @@ function parseApiJsonBody(text) {
 
 // API 请求
 async function apiRequest(endpoint, options = {}) {
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const headers = {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...options.headers
     };
     
@@ -2504,13 +2505,16 @@ function updatePlanUI() {
     const vocabPanel = document.getElementById('import-vocab-panel');
     const vocabLocked = document.getElementById('import-vocab-locked');
     const vocabBtn = document.getElementById('import-vocab-btn');
+    const vocabOcrRow = document.getElementById('import-vocab-ocr-row');
     if (vocabPanel) {
         if (userPlan === 'paid') {
             if (vocabLocked) vocabLocked.style.display = 'none';
             if (vocabBtn) vocabBtn.style.display = '';
+            if (vocabOcrRow) vocabOcrRow.style.display = '';
         } else {
             if (vocabLocked) vocabLocked.style.display = 'block';
             if (vocabBtn) vocabBtn.style.display = 'none';
+            if (vocabOcrRow) vocabOcrRow.style.display = 'none';
         }
     }
     if (textbookCatalogCache && document.getElementById('textbook-section')?.classList.contains('active')) {
@@ -4451,6 +4455,67 @@ function applyImportVocabTextareaNormalize() {
     if (cur !== n) ta.value = n;
 }
 
+/** 合并 OCR 提取的词到词汇导入框（按小写去重，保留已有顺序） */
+function mergeOcrTokensIntoVocabTextarea(tokens) {
+    const ta = document.getElementById('import-vocab-textarea');
+    if (!ta || !Array.isArray(tokens)) return 0;
+    const existing = parseVocabImportTokens(ta.value);
+    const seen = new Set(existing.map((t) => String(t).toLowerCase()));
+    let added = 0;
+    for (const t of tokens) {
+        const s = String(t).trim();
+        if (!s) continue;
+        const k = s.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        existing.push(s);
+        added += 1;
+    }
+    ta.value = formatVocabImportTextarea(existing);
+    return added;
+}
+
+async function importVocabFromOcrImage(file) {
+    if (userPlan !== 'paid') {
+        showImportNotice('词汇导入功能仅限 VIP 用户使用', { title: '无法识别', isError: true });
+        return;
+    }
+    if (!file || !file.size) {
+        showImportNotice('请选择有效的图片文件', { isError: true });
+        return;
+    }
+    const btn = document.getElementById('import-vocab-ocr-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '识别中…';
+    }
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+        const data = await apiRequest('/wordbank/ocr-extract', { method: 'POST', body: fd });
+        const tokens = data.tokens || [];
+        const added = mergeOcrTokensIntoVocabTextarea(tokens);
+        if (!tokens.length) {
+            showImportNotice(
+                '未在图中识别到英文词。可换一张更清晰的图片，或把文字粘贴到上方输入框。',
+                { title: '图片识别完成', isError: false }
+            );
+        } else {
+            const mergeMsg = added
+                ? `已加入列表 ${added} 个新词（共识别 ${tokens.length} 个，重复已跳过）。`
+                : `共识别 ${tokens.length} 个词，均已存在于列表中。`;
+            showImportNotice(mergeMsg, { title: '图片识别完成', isError: false });
+        }
+    } catch (error) {
+        showImportNotice(error.message || '识别失败', { title: '图片识别失败', isError: true });
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '从图片识别单词';
+        }
+    }
+}
+
 function initImportVocabTextareaNormalize() {
     const ta = document.getElementById('import-vocab-textarea');
     if (!ta || ta.dataset.vocabNormalizeBound === '1') return;
@@ -4956,6 +5021,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const importVocabBtn = document.getElementById('import-vocab-btn');
     if (importVocabBtn) {
         importVocabBtn.addEventListener('click', importVocabToCSV);
+    }
+    const importVocabOcrBtn = document.getElementById('import-vocab-ocr-btn');
+    const importVocabOcrInput = document.getElementById('import-vocab-ocr-input');
+    if (importVocabOcrBtn && importVocabOcrInput) {
+        importVocabOcrBtn.addEventListener('click', () => importVocabOcrInput.click());
+        importVocabOcrInput.addEventListener('change', () => {
+            const f = importVocabOcrInput.files && importVocabOcrInput.files[0];
+            importVocabOcrInput.value = '';
+            if (f) void importVocabFromOcrImage(f);
+        });
     }
     document.getElementById('admin-words-user')?.addEventListener('change', () => loadAdminUserWords());
     document.getElementById('admin-words-status')?.addEventListener('change', () => loadAdminUserWords());

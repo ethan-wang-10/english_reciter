@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, date
 from io import BytesIO, StringIO
 from pathlib import Path
 from functools import wraps
-from typing import Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 from time import sleep, time
 import uuid
 
@@ -54,6 +54,17 @@ try:
     from PIL import Image as PILImage
 except ImportError:
     PILImage = None  # type: ignore
+
+try:
+    import pytesseract
+    from pytesseract.pytesseract import TesseractNotFoundError
+except ImportError:
+    pytesseract = None  # type: ignore[misc, assignment]
+
+    class TesseractNotFoundError(Exception):
+        """pytesseract 未安装时的占位，避免 except 误捕 RuntimeError。"""
+
+        pass
 
 try:
     import spacy
@@ -3639,6 +3650,103 @@ def import_from_article(username):
     if plan == 'paid':
         ok_out['extract_mode'] = extract_mode
     return jsonify(ok_out), 200
+
+
+# 词汇导入：本地 Tesseract OCR（需系统安装 tesseract 与 eng.traineddata）
+_OCR_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+_OCR_MAX_SIDE = 2400
+_OCR_MAX_TOKENS = 500
+_OCR_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
+
+
+def _ocr_stack_ready() -> bool:
+    return PILImage is not None and pytesseract is not None
+
+
+def _prepare_image_for_ocr(stream) -> Any:
+    assert PILImage is not None
+    raw = stream.read()
+    if len(raw) > _OCR_MAX_UPLOAD_BYTES:
+        raise ValueError("图片过大（单张不超过 8MB）")
+    if not raw:
+        raise ValueError("文件为空")
+    im = PILImage.open(BytesIO(raw))
+    im = im.convert("RGB")
+    w, h = im.size
+    if max(w, h) > _OCR_MAX_SIDE:
+        scale = _OCR_MAX_SIDE / float(max(w, h))
+        nw = max(1, int(round(w * scale)))
+        nh = max(1, int(round(h * scale)))
+        im = im.resize((nw, nh), PILImage.Resampling.LANCZOS)
+    return im
+
+
+def _english_tokens_from_ocr_text(text: str) -> List[str]:
+    """从 OCR 文本中提取英文词形，按出现顺序去重（忽略大小写），最多 _OCR_MAX_TOKENS 个。"""
+    seen: set = set()
+    out: List[str] = []
+    for m in _OCR_WORD_RE.finditer(text or ""):
+        w = m.group(0)
+        if len(w) == 1 and w.lower() not in ("a", "i"):
+            continue
+        key = w.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(w)
+        if len(out) >= _OCR_MAX_TOKENS:
+            break
+    return out
+
+
+@app.route('/api/wordbank/ocr-extract', methods=['POST'])
+@token_required
+def wordbank_ocr_extract(username):
+    """VIP：上传图片，本地 Tesseract 识别英文并返回词列表（不入库；结果填入词汇导入框）。"""
+    if not is_paid_user(username):
+        return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
+    if not _ocr_stack_ready():
+        return jsonify({
+            'error': '服务器未启用图片识别：请安装 Pillow、pytesseract，并在系统安装 Tesseract（含 eng 语言包）',
+        }), 503
+    if 'file' not in request.files:
+        return jsonify({'error': '缺少 file 字段'}), 400
+    f = request.files['file']
+    if not f or not f.filename:
+        return jsonify({'error': '未选择文件'}), 400
+    ct = (f.mimetype or '').lower()
+    if ct not in ('image/jpeg', 'image/png', 'image/webp', 'image/gif'):
+        return jsonify({'error': '仅支持 JPEG、PNG、WebP、GIF'}), 400
+    try:
+        f.stream.seek(0)
+    except (OSError, AttributeError, TypeError):
+        pass
+    try:
+        im = _prepare_image_for_ocr(f.stream)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.exception("OCR 图片解析失败: %s", e)
+        return jsonify({'error': '无法解析图片'}), 400
+    try:
+        assert pytesseract is not None
+        raw_text = pytesseract.image_to_string(
+            im,
+            lang="eng",
+            config="--psm 6",
+        )
+    except TesseractNotFoundError:
+        return jsonify({
+            'error': '未检测到 Tesseract。请在服务器安装（如 macOS: brew install tesseract；Linux: apt install tesseract-ocr tesseract-ocr-eng）',
+        }), 503
+    except Exception as e:
+        logger.exception("OCR 识别失败: %s", e)
+        return jsonify({'error': '文字识别失败'}), 500
+    tokens = _english_tokens_from_ocr_text(raw_text)
+    return jsonify({
+        'raw_text': (raw_text or "").strip(),
+        'tokens': tokens,
+    }), 200
 
 
 @app.route('/api/wordbank/csv/import-words', methods=['POST'])

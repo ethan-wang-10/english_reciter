@@ -379,6 +379,11 @@
                         </p>
                         <textarea id="import-vocab-textarea" class="import-json-textarea" rows="4"
                             spellcheck="false" placeholder="每行一词，或 attack, curious, abandon"></textarea>
+                        <div class="import-vocab-ocr-row" id="import-vocab-ocr-row">
+                            <input type="file" id="import-vocab-ocr-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" />
+                            <button type="button" id="import-vocab-ocr-btn" class="btn btn-secondary">从图片识别单词</button>
+                            <span class="import-vocab-ocr-hint">本地 Tesseract，结果填入上方列表，可再编辑后导入</span>
+                        </div>
                         <div class="import-vocab-options">
                             <label class="import-vocab-label">指定难度（可选）：</label>
                             <select id="import-vocab-level" class="import-vocab-select">
