@@ -294,8 +294,10 @@
                 <div class="container">
                     <h2>导入单词</h2>
 
+                    <!-- 文章 / 图片 / 选词：同一卡片容器（与原先「从文章导入」单框体验一致） -->
+                    <div class="import-wordflow-card">
                     <!-- 文章导入区块 -->
-                    <div class="import-article-panel">
+                    <div class="import-wordflow-section import-wordflow-section--article">
                         <h3 class="import-json-title">从文章导入</h3>
                         <p class="import-json-desc">
                             粘贴一篇英文文章，系统会提取其中的词汇并与词库匹配。
@@ -336,7 +338,7 @@
                     </div>
 
                     <!-- 从图片导入（OCR → 文本框 → 与「从文章导入」相同提取流程） -->
-                    <div class="import-article-panel import-ocr-panel" id="import-ocr-panel">
+                    <div class="import-wordflow-section import-wordflow-section--ocr" id="import-ocr-panel">
                         <h3 class="import-json-title">从图片导入</h3>
                         <p class="import-json-desc">
                             选择教材或笔记照片，本地 Tesseract 识别英文后填入下方文本框；可编辑识别结果，再点击「从文章提取词汇」，后续与上方「从文章导入」一致（词库匹配、圈选、确认导入）。
@@ -378,7 +380,7 @@
                     </div>
 
                     <!-- 文章 / 图片导入共用的选词与未匹配提示 -->
-                    <div class="import-extract-shared-wrap">
+                    <div class="import-wordflow-section import-extract-shared-wrap">
                         <div id="import-article-pick-wrap" class="import-article-pick-wrap" hidden>
                             <p class="import-article-pick-lead">以下为词库中匹配到的词，默认全部选中；可勾选「全选」切换全选/全不选，或点击单词单独切换。蓝色为将导入。</p>
                             <div class="import-article-pick-toolbar">
@@ -393,6 +395,7 @@
                             <p class="import-article-unmatched-lead">以下词在词库中无匹配（无法分词）：</p>
                             <div id="import-article-unmatched" class="import-article-unmatched" aria-live="polite"></div>
                         </div>
+                    </div>
                     </div>
 
                     <!-- 词库搜索区块（重新设计：无难度tab，直接全局搜索） -->

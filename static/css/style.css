@@ -4586,14 +4586,21 @@ button.import-article-chip--selected:hover {
     max-width: 400px;
 }
 
-/* 文章导入 */
-.import-article-panel {
+/* 文章 / 图片 / 共用选词：单卡片外壳 */
+.import-wordflow-card {
     background: var(--surface);
     border: 2px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 24px;
     margin-bottom: 20px;
     box-shadow: var(--shadow);
+    overflow: hidden;
+}
+.import-wordflow-section {
+    padding: 24px;
+    margin: 0;
+}
+.import-wordflow-section + .import-wordflow-section {
+    border-top: 1px solid var(--border);
 }
 
 .import-nc-lesson-label {
@@ -4679,9 +4686,6 @@ button.import-article-chip--selected:hover {
     margin-bottom: 20px;
     box-shadow: var(--shadow);
 }
-.import-ocr-panel {
-    margin-top: 8px;
-}
 .import-ocr-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -4695,9 +4699,15 @@ button.import-article-chip--selected:hover {
     line-height: 1.35;
     flex: 1 1 200px;
 }
-.import-extract-shared-wrap {
-    margin-top: 4px;
-    margin-bottom: 20px;
+/* 同一卡片内：选词 / 未匹配不再单独成「第二张白框」 */
+.import-wordflow-card .import-article-pick-wrap {
+    border: none;
+    background: rgba(0, 0, 0, 0.035);
+    min-height: 0;
+}
+.import-wordflow-card .import-article-unmatched-wrap {
+    border: none;
+    background: rgba(0, 0, 0, 0.04);
 }
 .vip-badge {
     display: inline-block;
