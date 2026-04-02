@@ -4121,6 +4121,7 @@ function resetArticleImportPickUI() {
         resultDiv.innerHTML = '';
     }
     renderArticleUnmatched([]);
+    updatePlanUI();
 }
 
 function renderArticleUnmatched(lemmas) {
@@ -4204,6 +4205,8 @@ function applyArticleExtractResult(words, data) {
     const wrap = document.getElementById('import-article-pick-wrap');
     const btnA = document.getElementById('import-article-btn');
     const resultDiv = document.getElementById('article-import-result');
+    const vipW = document.getElementById('import-article-vip-extract-wrap');
+    const spacyW = document.getElementById('import-article-spacy-wrap');
     articleImportPickMode = true;
     articleImportWords = words;
     articleImportSelectedIdx = new Set(words.map((_, i) => i));
@@ -4211,6 +4214,8 @@ function applyArticleExtractResult(words, data) {
         ta.value = '';
         ta.style.display = 'none';
     }
+    if (vipW) vipW.hidden = true;
+    if (spacyW) spacyW.hidden = true;
     if (wrap) wrap.hidden = false;
     renderArticleImportPick();
     if (btnA) btnA.textContent = '确认导入';
@@ -4222,14 +4227,14 @@ function applyArticleExtractResult(words, data) {
     if (resultDiv) {
         resultDiv.style.display = 'block';
         const extra =
-            un.length > 0 ? `另有 ${un.length} 个词库未匹配，见下方灰色列表。` : '';
+            un.length > 0 ? `另有 ${un.length} 个词库未匹配，见上方灰字列表。` : '';
         let spacyHint = '';
         if (userPlan !== 'paid' && un.length > 0 && !usedSpacy) {
             spacyHint =
                 ' <span class="article-result-spacy-hint">若需匹配不规则词形，可勾选「智能还原」后重新提取。</span>';
         }
         resultDiv.innerHTML =
-            `<p class="article-result-title">已提取 ${words.length} 个词库匹配词 ${method}。${extra}${spacyHint}点击单词可取消圈选，确认后点击「确认导入」加入待复习。</p>`;
+            `<p class="article-result-title">已提取 ${words.length} 个词库匹配词 ${method}。${extra}${spacyHint}点击单词可取消圈选，最下方「确认导入」加入待复习。</p>`;
     }
     renderArticleUnmatched(un);
 }

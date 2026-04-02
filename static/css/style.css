@@ -4652,6 +4652,15 @@ button.import-article-chip--selected:hover {
     border-radius: var(--radius-md);
     font-size: 0.9rem;
 }
+/* 摘要条在选词区下方、主按钮上方 */
+.import-wordflow-section--article .article-import-result {
+    margin-top: 14px;
+}
+.import-article-primary-btn {
+    width: 100%;
+    margin-top: 14px;
+    box-sizing: border-box;
+}
 .article-result-title {
     font-weight: 700;
     color: var(--text-secondary);
@@ -4702,15 +4711,17 @@ button.import-article-chip--selected:hover {
     line-height: 1.35;
     flex: 1 1 200px;
 }
-/* 同一卡片内：选词 / 未匹配不再单独成「第二张白框」 */
-.import-wordflow-card .import-article-pick-wrap {
+/* 选词 / 未匹配与文本框同区：浅色底、不另起白卡片 */
+.import-wordflow-card .import-article-editor-area .import-article-pick-wrap {
     border: none;
     background: rgba(0, 0, 0, 0.035);
     min-height: 0;
+    margin-top: 0;
 }
-.import-wordflow-card .import-article-unmatched-wrap {
+.import-wordflow-card .import-article-editor-area .import-article-unmatched-wrap {
     border: none;
     background: rgba(0, 0, 0, 0.04);
+    margin-top: 10px;
 }
 .vip-badge {
     display: inline-block;

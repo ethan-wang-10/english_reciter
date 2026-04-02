@@ -316,6 +316,20 @@
                         <div class="import-article-editor-area">
                             <textarea id="import-article-textarea" class="import-json-textarea" rows="8"
                                 spellcheck="false" placeholder="在此粘贴英文，或通过课文 / 图片识别填入…"></textarea>
+                            <div id="import-article-pick-wrap" class="import-article-pick-wrap" hidden>
+                                <p class="import-article-pick-lead">以下为词库中匹配到的词，默认全部选中；可勾选「全选」切换全选/全不选，或点击单词单独切换。蓝色为将导入。</p>
+                                <div class="import-article-pick-toolbar">
+                                    <label class="import-article-select-all-label" for="import-article-select-all-cb">
+                                        <input type="checkbox" id="import-article-select-all-cb" />
+                                        <span>全选</span>
+                                    </label>
+                                </div>
+                                <div id="import-article-pick" class="import-article-pick" role="group" aria-label="选择要导入的词"></div>
+                            </div>
+                            <div id="import-article-unmatched-wrap" class="import-article-unmatched-wrap" hidden>
+                                <p class="import-article-unmatched-lead">以下词在词库中无匹配（无法分词）：</p>
+                                <div id="import-article-unmatched" class="import-article-unmatched" aria-live="polite"></div>
+                            </div>
                             <div id="import-article-vip-extract-wrap" class="import-article-vip-extract-wrap" hidden>
                                 <p class="import-article-vip-extract-lead">分词方式（管理员 · 需先在管理后台开启）</p>
                                 <div class="import-article-vip-extract-options" role="group" aria-label="分词方式">
@@ -338,26 +352,8 @@
                                 </label>
                             </div>
                         </div>
-                        <button type="button" id="import-article-btn" class="btn btn-primary import-json-btn">从文章提取词汇</button>
                         <div id="article-import-result" class="article-import-result" style="display:none;"></div>
-                    </div>
-
-                    <!-- 选词与未匹配（与上方同一流程） -->
-                    <div class="import-wordflow-section import-extract-shared-wrap">
-                        <div id="import-article-pick-wrap" class="import-article-pick-wrap" hidden>
-                            <p class="import-article-pick-lead">以下为词库中匹配到的词，默认全部选中；可勾选「全选」切换全选/全不选，或点击单词单独切换。蓝色为将导入。</p>
-                            <div class="import-article-pick-toolbar">
-                                <label class="import-article-select-all-label" for="import-article-select-all-cb">
-                                    <input type="checkbox" id="import-article-select-all-cb" />
-                                    <span>全选</span>
-                                </label>
-                            </div>
-                            <div id="import-article-pick" class="import-article-pick" role="group" aria-label="选择要导入的词"></div>
-                        </div>
-                        <div id="import-article-unmatched-wrap" class="import-article-unmatched-wrap" hidden>
-                            <p class="import-article-unmatched-lead">以下词在词库中无匹配（无法分词）：</p>
-                            <div id="import-article-unmatched" class="import-article-unmatched" aria-live="polite"></div>
-                        </div>
+                        <button type="button" id="import-article-btn" class="btn btn-primary import-json-btn import-article-primary-btn">从文章提取词汇</button>
                     </div>
                     </div>
 
