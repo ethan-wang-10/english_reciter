@@ -4123,6 +4123,18 @@ button.import-article-chip--selected:hover {
     margin-bottom: 20px;
 }
 
+.discovery-search-wrap {
+    margin-bottom: 18px;
+}
+
+.discovery-search-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
 .discovery-top-controls {
     flex-direction: column;
     justify-content: center;

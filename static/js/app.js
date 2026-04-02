@@ -3421,6 +3421,9 @@ let discoveryDeck = [];
 let discoveryIndex = 0;
 /** 「今日单词」模式：牌组仅为今日复习列表 */
 let discoveryModeToday = false;
+/** 搜索框有内容且使用全词库 /wordbank/csv/search 结果作为牌组 */
+let discoverySearchMode = false;
+let discoverySearchDebounceTimer = null;
 
 const DISCOVERY_LEVEL_STORAGE_KEY = 'english_reciter_discovery_level';
 
@@ -3511,6 +3514,9 @@ function initDiscoveryLevelButtons() {
         } catch (_) {
             /* ignore */
         }
+        const ds = document.getElementById('discovery-search');
+        if (ds) ds.value = '';
+        discoverySearchMode = false;
         discoveryIndex = 0;
         loadDiscovery();
     });
@@ -3523,9 +3529,65 @@ function discoverySortPending(a, b) {
     return String(a.english).localeCompare(String(b.english), 'en');
 }
 
+async function loadDiscoverySearchFromQuery(q) {
+    const emptyEl = document.getElementById('discovery-empty');
+    const rootEl = document.getElementById('discovery-root');
+    const trimmed = String(q || '').trim();
+    discoverySearchMode = true;
+    discoveryModeToday = false;
+    try {
+        const params = new URLSearchParams({ q: trimmed, heuristics: '0', surface_first: '1' });
+        const data = await apiRequest(`/wordbank/csv/search?${params}`);
+        const rows = Array.isArray(data.words) ? data.words : [];
+        discoveryDeck = [];
+        for (const row of rows) {
+            const en = String(row.english || '').trim();
+            if (!en) continue;
+            discoveryDeck.push({
+                english: en,
+                chinese: String(row.chinese || '').trim(),
+                phonetic: String(row.phonetic || '').trim(),
+                examples: discoveryExamplesFromCsvRow(row),
+                source: 'wordbank',
+            });
+        }
+        discoveryIndex = 0;
+        if (discoveryDeck.length === 0) {
+            if (emptyEl) {
+                emptyEl.style.display = 'block';
+                emptyEl.innerHTML =
+                    '<p>未在词库中找到匹配词条，请尝试其它关键词或清空搜索框。</p>';
+            }
+            if (rootEl) rootEl.style.display = 'none';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+        if (rootEl) rootEl.style.display = 'block';
+        renderDiscoveryCard();
+    } catch (_) {
+        discoverySearchMode = false;
+        discoveryDeck = [];
+        discoveryIndex = 0;
+        const wrap = document.getElementById('discovery-card-wrap');
+        if (wrap) wrap.innerHTML = '';
+        if (emptyEl) {
+            emptyEl.style.display = 'block';
+            emptyEl.innerHTML = '<p>搜索失败，请稍后重试。</p>';
+        }
+        if (rootEl) rootEl.style.display = 'none';
+        showMainBanner('搜索失败，请稍后重试');
+    }
+}
+
 async function loadDiscovery() {
     const emptyEl = document.getElementById('discovery-empty');
     const rootEl = document.getElementById('discovery-root');
+    const searchQ = (document.getElementById('discovery-search')?.value || '').trim();
+    if (searchQ) {
+        await loadDiscoverySearchFromQuery(searchQ);
+        return;
+    }
+    discoverySearchMode = false;
     const level = String(getDiscoverySelectedLevel() || '').trim();
     discoveryModeToday = false;
     try {
@@ -3662,7 +3724,9 @@ function renderDiscoveryCard() {
     if (counter) {
         const n = discoveryDeck.length;
         const i = discoveryIndex + 1;
-        if (discoveryModeToday && w.source === 'today') {
+        if (discoverySearchMode) {
+            counter.textContent = `${i} / ${n}（全词库搜索）`;
+        } else if (discoveryModeToday && w.source === 'today') {
             counter.textContent = `${i} / ${n}（今日复习）`;
         } else {
             counter.textContent = `${i} / ${n}`;
@@ -3881,6 +3945,15 @@ function initWordbankPanel() {
     document.getElementById('discovery-shuffle')?.addEventListener('click', () => discoveryShuffle());
 
     initDiscoveryLevelButtons();
+    const discoverySearch = document.getElementById('discovery-search');
+    if (discoverySearch) {
+        discoverySearch.addEventListener('input', () => {
+            if (discoverySearchDebounceTimer) clearTimeout(discoverySearchDebounceTimer);
+            discoverySearchDebounceTimer = setTimeout(() => {
+                void loadDiscovery();
+            }, 350);
+        });
+    }
 
     document.getElementById('wordbank-select-filtered')?.addEventListener('click', () => {
         for (const w of wbState.filtered) {
