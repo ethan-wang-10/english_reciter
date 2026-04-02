@@ -4679,18 +4679,25 @@ button.import-article-chip--selected:hover {
     margin-bottom: 20px;
     box-shadow: var(--shadow);
 }
-.import-vocab-ocr-row {
+.import-ocr-panel {
+    margin-top: 8px;
+}
+.import-ocr-toolbar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    margin: 12px 0 8px;
+    margin-bottom: 10px;
 }
-.import-vocab-ocr-hint {
+.import-ocr-toolbar-hint {
     font-size: 0.85rem;
     color: var(--text-muted);
     line-height: 1.35;
     flex: 1 1 200px;
+}
+.import-extract-shared-wrap {
+    margin-top: 4px;
+    margin-bottom: 20px;
 }
 .vip-badge {
     display: inline-block;

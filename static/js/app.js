@@ -2505,16 +2505,51 @@ function updatePlanUI() {
     const vocabPanel = document.getElementById('import-vocab-panel');
     const vocabLocked = document.getElementById('import-vocab-locked');
     const vocabBtn = document.getElementById('import-vocab-btn');
-    const vocabOcrRow = document.getElementById('import-vocab-ocr-row');
+    const ocrLocked = document.getElementById('import-ocr-locked');
+    const ocrContent = document.getElementById('import-ocr-content');
+    const spacyWrapOcr = document.getElementById('import-ocr-spacy-wrap');
+    const vipExtractWrapOcr = document.getElementById('import-ocr-vip-extract-wrap');
+    const aiRadioOcr = document.getElementById('import-ocr-extract-ai');
+    const spacyModeRadioOcr = document.getElementById('import-ocr-extract-spacy');
     if (vocabPanel) {
         if (userPlan === 'paid') {
             if (vocabLocked) vocabLocked.style.display = 'none';
             if (vocabBtn) vocabBtn.style.display = '';
-            if (vocabOcrRow) vocabOcrRow.style.display = '';
         } else {
             if (vocabLocked) vocabLocked.style.display = 'block';
             if (vocabBtn) vocabBtn.style.display = 'none';
-            if (vocabOcrRow) vocabOcrRow.style.display = 'none';
+        }
+    }
+    if (ocrLocked && ocrContent) {
+        if (userPlan === 'paid') {
+            ocrLocked.style.display = 'none';
+            ocrContent.style.display = '';
+        } else {
+            ocrLocked.style.display = 'block';
+            ocrContent.style.display = 'none';
+        }
+    }
+    if (spacyWrapOcr) {
+        if (userPlan === 'paid') {
+            spacyWrapOcr.hidden = true;
+        } else {
+            spacyWrapOcr.hidden = false;
+        }
+    }
+    if (vipExtractWrapOcr) {
+        if (showVipAiChoice) {
+            vipExtractWrapOcr.hidden = false;
+            if (aiRadioOcr && spacyModeRadioOcr) {
+                aiRadioOcr.disabled = false;
+                spacyModeRadioOcr.checked = true;
+                aiRadioOcr.checked = false;
+            }
+        } else {
+            vipExtractWrapOcr.hidden = true;
+            if (aiRadioOcr && spacyModeRadioOcr) {
+                spacyModeRadioOcr.checked = true;
+                aiRadioOcr.checked = false;
+            }
         }
     }
     if (textbookCatalogCache && document.getElementById('textbook-section')?.classList.contains('active')) {
@@ -4096,6 +4131,8 @@ let articleImportPickMode = false;
 let articleImportWords = [];
 /** @type {Set<number>} */
 let articleImportSelectedIdx = new Set();
+/** 最近一次「从文章提取」来自粘贴文章还是图片 OCR（用于隐藏对应文本框与结果区） */
+let articleImportContext = 'article';
 /** 导入成功且结果对话框已打开时，finally 不再恢复「确认导入」按钮 */
 function resetArticleImportPickUI() {
     articleImportPickMode = false;
@@ -4103,26 +4140,43 @@ function resetArticleImportPickUI() {
     articleImportSelectedIdx.clear();
     importResultModalOnClose = null;
     hideImportResultModalShell();
-    const ta = document.getElementById('import-article-textarea');
+    const taA = document.getElementById('import-article-textarea');
+    const taO = document.getElementById('import-ocr-textarea');
+    if (taA) {
+        taA.value = '';
+        taA.style.display = '';
+        taA.disabled = false;
+    }
+    if (taO) {
+        taO.value = '';
+        taO.style.display = '';
+        taO.disabled = false;
+    }
     const wrap = document.getElementById('import-article-pick-wrap');
     const pick = document.getElementById('import-article-pick');
-    const btn = document.getElementById('import-article-btn');
-    if (ta) {
-        ta.value = '';
-        ta.style.display = '';
-        ta.disabled = false;
-    }
+    const btnA = document.getElementById('import-article-btn');
+    const btnO = document.getElementById('import-ocr-btn');
     if (wrap) wrap.hidden = true;
     if (pick) pick.innerHTML = '';
-    if (btn) {
-        btn.textContent = '从文章提取词汇';
-        btn.disabled = false;
+    if (btnA) {
+        btnA.textContent = '从文章提取词汇';
+        btnA.disabled = false;
+    }
+    if (btnO) {
+        btnO.textContent = '从文章提取词汇';
+        btnO.disabled = false;
     }
     const resultDiv = document.getElementById('article-import-result');
+    const resultOcr = document.getElementById('import-ocr-result');
     if (resultDiv) {
         resultDiv.style.display = 'none';
         resultDiv.innerHTML = '';
     }
+    if (resultOcr) {
+        resultOcr.style.display = 'none';
+        resultOcr.innerHTML = '';
+    }
+    articleImportContext = 'article';
     renderArticleUnmatched([]);
 }
 
@@ -4203,10 +4257,17 @@ function initImportArticleSelectAllCheckbox() {
 }
 
 function applyArticleExtractResult(words, data) {
-    const ta = document.getElementById('import-article-textarea');
+    const ta =
+        articleImportContext === 'ocr'
+            ? document.getElementById('import-ocr-textarea')
+            : document.getElementById('import-article-textarea');
     const wrap = document.getElementById('import-article-pick-wrap');
-    const btn = document.getElementById('import-article-btn');
-    const resultDiv = document.getElementById('article-import-result');
+    const btnA = document.getElementById('import-article-btn');
+    const btnO = document.getElementById('import-ocr-btn');
+    const resultDiv =
+        articleImportContext === 'ocr'
+            ? document.getElementById('import-ocr-result')
+            : document.getElementById('article-import-result');
     articleImportPickMode = true;
     articleImportWords = words;
     articleImportSelectedIdx = new Set(words.map((_, i) => i));
@@ -4216,7 +4277,8 @@ function applyArticleExtractResult(words, data) {
     }
     if (wrap) wrap.hidden = false;
     renderArticleImportPick();
-    if (btn) btn.textContent = '确认导入';
+    if (btnA) btnA.textContent = '确认导入';
+    if (btnO) btnO.textContent = '确认导入';
     let method = '（空格分词）';
     if (data.method === 'deepseek') method = '（AI 分词）';
     else if (data.method === 'spacy') method = '（spaCy 分词）';
@@ -4260,10 +4322,15 @@ async function confirmArticleImportFromPicks() {
         showImportNotice('没有可导入的词条', { isError: true });
         return;
     }
-    const btn = document.getElementById('import-article-btn');
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = '导入中…';
+    const btnA = document.getElementById('import-article-btn');
+    const btnO = document.getElementById('import-ocr-btn');
+    if (btnA) {
+        btnA.disabled = true;
+        btnA.textContent = '导入中…';
+    }
+    if (btnO) {
+        btnO.disabled = true;
+        btnO.textContent = '导入中…';
     }
     const chunk = 500;
     let added = 0;
@@ -4303,42 +4370,71 @@ async function confirmArticleImportFromPicks() {
     } catch (error) {
         showImportNotice(error.message || '导入失败', { isError: true });
     } finally {
-        if (btn && articleImportPickMode && !importResultModalPending) {
-            btn.disabled = false;
-            btn.textContent = '确认导入';
+        if (articleImportPickMode && !importResultModalPending) {
+            if (btnA) {
+                btnA.disabled = false;
+                btnA.textContent = '确认导入';
+            }
+            if (btnO) {
+                btnO.disabled = false;
+                btnO.textContent = '确认导入';
+            }
         }
     }
 }
 
-async function importFromArticle() {
+/**
+ * @param {'article'|'ocr'} triggerSource 来自「从文章导入」或「从图片导入」按钮
+ */
+async function importFromArticle(triggerSource = 'article') {
     if (articleImportPickMode) {
         await confirmArticleImportFromPicks();
         return;
     }
-    const ta = document.getElementById('import-article-textarea');
+    articleImportContext = triggerSource;
+    const prefix = triggerSource === 'ocr' ? 'import-ocr' : 'import-article';
+    const ta = document.getElementById(`${prefix}-textarea`);
     if (!ta) return;
     const text = ta.value.trim();
     if (!text) {
-        showImportNotice('请先粘贴文章内容', { isError: true });
+        showImportNotice(
+            triggerSource === 'ocr'
+                ? '请先选择图片识别文字，或在此输入英文'
+                : '请先粘贴文章内容',
+            { isError: true }
+        );
         return;
     }
-    const btn = document.getElementById('import-article-btn');
-    if (btn) btn.disabled = true;
-    const resultDiv = document.getElementById('article-import-result');
+    const btnA = document.getElementById('import-article-btn');
+    const btnO = document.getElementById('import-ocr-btn');
+    if (btnA) btnA.disabled = true;
+    if (btnO) btnO.disabled = true;
+    const resultDiv =
+        triggerSource === 'ocr'
+            ? document.getElementById('import-ocr-result')
+            : document.getElementById('article-import-result');
+    const resultDivOther =
+        triggerSource === 'ocr'
+            ? document.getElementById('article-import-result')
+            : document.getElementById('import-ocr-result');
+    if (resultDivOther) {
+        resultDivOther.style.display = 'none';
+        resultDivOther.innerHTML = '';
+    }
     renderArticleUnmatched([]);
     if (resultDiv) {
         resultDiv.style.display = 'block';
         resultDiv.innerHTML = '<span class="loading-dots">正在提取词汇…</span>';
     }
     try {
-        const spacyCb = document.getElementById('import-article-use-spacy-cb');
+        const spacyCb = document.getElementById(`${prefix}-use-spacy-cb`);
         const use_spacy = userPlan === 'paid' ? true : !!(spacyCb && spacyCb.checked);
-        const vipAiWrap = document.getElementById('import-article-vip-extract-wrap');
+        const vipAiWrap = document.getElementById(`${prefix}-vip-extract-wrap`);
         const useAiExtract =
             userPlan === 'paid' &&
             vipAiWrap &&
             !vipAiWrap.hidden &&
-            document.getElementById('import-article-extract-ai')?.checked === true;
+            document.getElementById(`${prefix}-extract-ai`)?.checked === true;
         const body =
             userPlan === 'paid'
                 ? { text, extract_mode: useAiExtract ? 'ai' : 'spacy' }
@@ -4390,7 +4486,8 @@ async function importFromArticle() {
         showImportNotice(error.message || '提取失败', { isError: true });
         if (resultDiv) resultDiv.style.display = 'none';
     } finally {
-        if (btn) btn.disabled = false;
+        if (btnA) btnA.disabled = false;
+        if (btnO) btnO.disabled = false;
     }
 }
 
@@ -4455,36 +4552,18 @@ function applyImportVocabTextareaNormalize() {
     if (cur !== n) ta.value = n;
 }
 
-/** 合并 OCR 提取的词到词汇导入框（按小写去重，保留已有顺序） */
-function mergeOcrTokensIntoVocabTextarea(tokens) {
-    const ta = document.getElementById('import-vocab-textarea');
-    if (!ta || !Array.isArray(tokens)) return 0;
-    const existing = parseVocabImportTokens(ta.value);
-    const seen = new Set(existing.map((t) => String(t).toLowerCase()));
-    let added = 0;
-    for (const t of tokens) {
-        const s = String(t).trim();
-        if (!s) continue;
-        const k = s.toLowerCase();
-        if (seen.has(k)) continue;
-        seen.add(k);
-        existing.push(s);
-        added += 1;
-    }
-    ta.value = formatVocabImportTextarea(existing);
-    return added;
-}
-
-async function importVocabFromOcrImage(file) {
+/** 从图片 OCR 填入「从图片导入」文本框（整段 raw_text），再点「从文章提取词汇」与文章导入流程一致 */
+async function runImportOcrToTextarea(file) {
     if (userPlan !== 'paid') {
-        showImportNotice('词汇导入功能仅限 VIP 用户使用', { title: '无法识别', isError: true });
+        showImportNotice('图片识别仅限 VIP 会员使用', { title: '无法识别', isError: true });
         return;
     }
     if (!file || !file.size) {
         showImportNotice('请选择有效的图片文件', { isError: true });
         return;
     }
-    const btn = document.getElementById('import-vocab-ocr-btn');
+    const btn = document.getElementById('import-ocr-pick-img-btn');
+    const ta = document.getElementById('import-ocr-textarea');
     if (btn) {
         btn.disabled = true;
         btn.textContent = '识别中…';
@@ -4493,25 +4572,27 @@ async function importVocabFromOcrImage(file) {
     fd.append('file', file);
     try {
         const data = await apiRequest('/wordbank/ocr-extract', { method: 'POST', body: fd });
-        const tokens = data.tokens || [];
-        const added = mergeOcrTokensIntoVocabTextarea(tokens);
-        if (!tokens.length) {
+        const raw = data.raw_text != null ? String(data.raw_text).trim() : '';
+        if (ta) {
+            ta.value = raw;
+        }
+        if (!raw) {
             showImportNotice(
-                '未在图中识别到英文词。可换一张更清晰的图片，或把文字粘贴到上方输入框。',
+                '未识别到文字。可换一张更清晰的图片，或检查服务端是否已安装 Tesseract。',
                 { title: '图片识别完成', isError: false }
             );
         } else {
-            const mergeMsg = added
-                ? `已加入列表 ${added} 个新词（共识别 ${tokens.length} 个，重复已跳过）。`
-                : `共识别 ${tokens.length} 个词，均已存在于列表中。`;
-            showImportNotice(mergeMsg, { title: '图片识别完成', isError: false });
+            showImportNotice(
+                '已填入识别文本，可编辑后点击下方「从文章提取词汇」。',
+                { title: '图片识别完成', isError: false }
+            );
         }
     } catch (error) {
         showImportNotice(error.message || '识别失败', { title: '图片识别失败', isError: true });
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.textContent = '从图片识别单词';
+            btn.textContent = '选择图片';
         }
     }
 }
@@ -5015,22 +5096,26 @@ document.addEventListener('DOMContentLoaded', function() {
     initImportResultModal();
     const importArticleBtn = document.getElementById('import-article-btn');
     if (importArticleBtn) {
-        importArticleBtn.addEventListener('click', importFromArticle);
+        importArticleBtn.addEventListener('click', () => importFromArticle('article'));
+    }
+    const importOcrBtn = document.getElementById('import-ocr-btn');
+    if (importOcrBtn) {
+        importOcrBtn.addEventListener('click', () => importFromArticle('ocr'));
+    }
+    const importOcrPickImgBtn = document.getElementById('import-ocr-pick-img-btn');
+    const importOcrFileInput = document.getElementById('import-ocr-file-input');
+    if (importOcrPickImgBtn && importOcrFileInput) {
+        importOcrPickImgBtn.addEventListener('click', () => importOcrFileInput.click());
+        importOcrFileInput.addEventListener('change', () => {
+            const f = importOcrFileInput.files && importOcrFileInput.files[0];
+            importOcrFileInput.value = '';
+            if (f) void runImportOcrToTextarea(f);
+        });
     }
     initImportVocabTextareaNormalize();
     const importVocabBtn = document.getElementById('import-vocab-btn');
     if (importVocabBtn) {
         importVocabBtn.addEventListener('click', importVocabToCSV);
-    }
-    const importVocabOcrBtn = document.getElementById('import-vocab-ocr-btn');
-    const importVocabOcrInput = document.getElementById('import-vocab-ocr-input');
-    if (importVocabOcrBtn && importVocabOcrInput) {
-        importVocabOcrBtn.addEventListener('click', () => importVocabOcrInput.click());
-        importVocabOcrInput.addEventListener('change', () => {
-            const f = importVocabOcrInput.files && importVocabOcrInput.files[0];
-            importVocabOcrInput.value = '';
-            if (f) void importVocabFromOcrImage(f);
-        });
     }
     document.getElementById('admin-words-user')?.addEventListener('change', () => loadAdminUserWords());
     document.getElementById('admin-words-status')?.addEventListener('change', () => loadAdminUserWords());
