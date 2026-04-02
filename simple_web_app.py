@@ -3702,9 +3702,7 @@ def _english_tokens_from_ocr_text(text: str) -> List[str]:
 @app.route('/api/wordbank/ocr-extract', methods=['POST'])
 @token_required
 def wordbank_ocr_extract(username):
-    """VIP：上传图片，本地 Tesseract 识别英文并返回词列表（不入库；结果填入词汇导入框）。"""
-    if not is_paid_user(username):
-        return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
+    """上传图片，本地 Tesseract 识别英文并返回 raw_text 与词列表（不入库；供从图片导入流程使用）。"""
     if not _ocr_stack_ready():
         return jsonify({
             'error': '服务器未启用图片识别：请安装 Pillow、pytesseract，并在系统安装 Tesseract（含 eng 语言包）',

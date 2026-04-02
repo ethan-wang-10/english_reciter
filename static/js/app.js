@@ -2505,8 +2505,6 @@ function updatePlanUI() {
     const vocabPanel = document.getElementById('import-vocab-panel');
     const vocabLocked = document.getElementById('import-vocab-locked');
     const vocabBtn = document.getElementById('import-vocab-btn');
-    const ocrLocked = document.getElementById('import-ocr-locked');
-    const ocrContent = document.getElementById('import-ocr-content');
     const spacyWrapOcr = document.getElementById('import-ocr-spacy-wrap');
     const vipExtractWrapOcr = document.getElementById('import-ocr-vip-extract-wrap');
     const aiRadioOcr = document.getElementById('import-ocr-extract-ai');
@@ -2518,15 +2516,6 @@ function updatePlanUI() {
         } else {
             if (vocabLocked) vocabLocked.style.display = 'block';
             if (vocabBtn) vocabBtn.style.display = 'none';
-        }
-    }
-    if (ocrLocked && ocrContent) {
-        if (userPlan === 'paid') {
-            ocrLocked.style.display = 'none';
-            ocrContent.style.display = '';
-        } else {
-            ocrLocked.style.display = 'block';
-            ocrContent.style.display = 'none';
         }
     }
     if (spacyWrapOcr) {
@@ -4554,10 +4543,6 @@ function applyImportVocabTextareaNormalize() {
 
 /** 从图片 OCR 填入「从图片导入」文本框（整段 raw_text），再点「从文章提取词汇」与文章导入流程一致 */
 async function runImportOcrToTextarea(file) {
-    if (userPlan !== 'paid') {
-        showImportNotice('图片识别仅限 VIP 会员使用', { title: '无法识别', isError: true });
-        return;
-    }
     if (!file || !file.size) {
         showImportNotice('请选择有效的图片文件', { isError: true });
         return;
