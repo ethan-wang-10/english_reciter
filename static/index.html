@@ -303,15 +303,24 @@
                             粘贴英文、选择新概念课文或「选择图片」识别文字，内容填入下方文本框后提取词汇并与词库匹配。
                             <span id="article-plan-hint" class="plan-hint"></span>
                         </p>
-                        <label class="import-nc-lesson-label" for="import-nc-lesson-select">新概念课文</label>
-                        <select id="import-nc-lesson-select" class="import-nc-lesson-select" autocomplete="off">
-                            <option value="">— 新概念课文（可选）—</option>
-                        </select>
-                        <p id="import-nc-lesson-hint" class="import-nc-lesson-hint"></p>
-                        <div class="import-ocr-toolbar import-article-ocr-toolbar">
-                            <input type="file" id="import-ocr-file-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" />
-                            <button type="button" id="import-ocr-pick-img-btn" class="btn btn-secondary">选择图片</button>
-                            <span class="import-ocr-toolbar-hint">本地识别英文填入下方；支持 JPEG / PNG / WebP / GIF，可再编辑</span>
+                        <div class="import-article-sources" role="group" aria-label="填入正文（可选）">
+                            <div class="import-article-source-block">
+                                <label class="import-article-source-label" for="import-nc-lesson-select">新概念课文</label>
+                                <select id="import-nc-lesson-select" class="import-nc-lesson-select import-article-source-control" autocomplete="off">
+                                    <option value="">— 新概念课文（可选）—</option>
+                                </select>
+                                <p id="import-nc-lesson-hint" class="import-nc-lesson-hint import-article-source-hint"></p>
+                            </div>
+                            <div class="import-article-source-block">
+                                <label class="import-article-source-label" for="import-ocr-pick-img-btn">从图片识别</label>
+                                <input type="file" id="import-ocr-file-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" />
+                                <button type="button" id="import-ocr-pick-img-btn" class="import-article-source-file-btn">
+                                    选择图片…
+                                </button>
+                                <p class="import-nc-lesson-hint import-article-source-hint">
+                                    本地 Tesseract 识别英文填入下方文本框；支持 JPEG / PNG / WebP / GIF，可再编辑。
+                                </p>
+                            </div>
                         </div>
                         <div class="import-article-editor-area">
                             <textarea id="import-article-textarea" class="import-json-textarea" rows="8"

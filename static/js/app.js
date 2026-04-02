@@ -4569,7 +4569,7 @@ async function runImportOcrToTextarea(file) {
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.textContent = '选择图片';
+            btn.textContent = '选择图片…';
         }
     }
 }

@@ -4615,12 +4615,24 @@ button.import-article-chip--selected:hover {
     border-top: 1px solid var(--border);
 }
 
-.import-nc-lesson-label {
+.import-nc-lesson-label,
+.import-article-source-label {
     display: block;
     font-size: 0.9rem;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 6px;
+}
+
+/* 课文与图片：同一组「填入来源」，标签 + 全宽控件 + 说明 */
+.import-article-sources {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+.import-article-source-block .import-nc-lesson-select {
+    margin-bottom: 0;
 }
 
 .import-nc-lesson-select {
@@ -4656,6 +4668,37 @@ button.import-article-chip--selected:hover {
     font-weight: 600;
     line-height: 1.45;
     margin: 0 0 12px;
+}
+.import-article-source-block .import-article-source-hint {
+    margin: 6px 0 0;
+}
+.import-article-source-file-btn {
+    width: 100%;
+    max-width: 100%;
+    padding: 10px 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text-primary);
+    background: var(--surface);
+    cursor: pointer;
+    box-sizing: border-box;
+    text-align: left;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.import-article-source-file-btn:hover {
+    border-color: var(--secondary-color);
+}
+.import-article-source-file-btn:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 3px rgba(28, 176, 246, 0.2);
+}
+.import-article-source-file-btn:disabled {
+    opacity: 0.65;
+    cursor: wait;
 }
 .article-import-result {
     margin-top: 12px;
@@ -4706,22 +4749,6 @@ button.import-article-chip--selected:hover {
     padding: 24px;
     margin-bottom: 20px;
     box-shadow: var(--shadow);
-}
-.import-ocr-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-}
-.import-article-ocr-toolbar {
-    margin-top: 4px;
-}
-.import-ocr-toolbar-hint {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    line-height: 1.35;
-    flex: 1 1 200px;
 }
 /* 选词 / 未匹配与文本框同区：浅色底、不另起白卡片 */
 .import-wordflow-card .import-article-editor-area .import-article-pick-wrap {
