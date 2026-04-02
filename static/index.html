@@ -294,13 +294,13 @@
                 <div class="container">
                     <h2>导入单词</h2>
 
-                    <!-- 文章 / 图片 / 选词：同一卡片容器（与原先「从文章导入」单框体验一致） -->
+                    <!-- 文章（含课文 / 图片 OCR）与共用选词：同一卡片 -->
                     <div class="import-wordflow-card">
-                    <!-- 文章导入区块 -->
+                    <!-- 从文章导入：课文与图片识别均填入下方同一文本框 -->
                     <div class="import-wordflow-section import-wordflow-section--article">
                         <h3 class="import-json-title">从文章导入</h3>
                         <p class="import-json-desc">
-                            粘贴一篇英文文章，系统会提取其中的词汇并与词库匹配。
+                            粘贴英文、选择新概念课文或「选择图片」识别文字，内容填入下方文本框后提取词汇并与词库匹配。
                             <span id="article-plan-hint" class="plan-hint"></span>
                         </p>
                         <label class="import-nc-lesson-label" for="import-nc-lesson-select">新概念课文</label>
@@ -308,9 +308,14 @@
                             <option value="">— 新概念课文（可选）—</option>
                         </select>
                         <p id="import-nc-lesson-hint" class="import-nc-lesson-hint"></p>
+                        <div class="import-ocr-toolbar import-article-ocr-toolbar">
+                            <input type="file" id="import-ocr-file-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" />
+                            <button type="button" id="import-ocr-pick-img-btn" class="btn btn-secondary">选择图片</button>
+                            <span class="import-ocr-toolbar-hint">本地识别英文填入下方；支持 JPEG / PNG / WebP / GIF，可再编辑</span>
+                        </div>
                         <div class="import-article-editor-area">
                             <textarea id="import-article-textarea" class="import-json-textarea" rows="8"
-                                spellcheck="false" placeholder="在此粘贴英文文章…"></textarea>
+                                spellcheck="false" placeholder="在此粘贴英文，或通过课文 / 图片识别填入…"></textarea>
                             <div id="import-article-vip-extract-wrap" class="import-article-vip-extract-wrap" hidden>
                                 <p class="import-article-vip-extract-lead">分词方式（管理员 · 需先在管理后台开启）</p>
                                 <div class="import-article-vip-extract-options" role="group" aria-label="分词方式">
@@ -337,49 +342,7 @@
                         <div id="article-import-result" class="article-import-result" style="display:none;"></div>
                     </div>
 
-                    <!-- 从图片导入（OCR → 文本框 → 与「从文章导入」相同提取流程） -->
-                    <div class="import-wordflow-section import-wordflow-section--ocr" id="import-ocr-panel">
-                        <h3 class="import-json-title">从图片导入</h3>
-                        <p class="import-json-desc">
-                            选择教材或笔记照片，本地 Tesseract 识别英文后填入下方文本框；可编辑识别结果，再点击「从文章提取词汇」，后续与上方「从文章导入」一致（词库匹配、圈选、确认导入）。
-                        </p>
-                        <div id="import-ocr-content">
-                            <div class="import-ocr-toolbar">
-                                <input type="file" id="import-ocr-file-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" />
-                                <button type="button" id="import-ocr-pick-img-btn" class="btn btn-secondary">选择图片</button>
-                                <span class="import-ocr-toolbar-hint">支持 JPEG / PNG / WebP / GIF，识别结果可编辑</span>
-                            </div>
-                            <div class="import-article-editor-area">
-                                <textarea id="import-ocr-textarea" class="import-json-textarea" rows="8"
-                                    spellcheck="false" placeholder="选择图片后，识别文字将显示在此；也可手动粘贴或修改…"></textarea>
-                                <div id="import-ocr-vip-extract-wrap" class="import-article-vip-extract-wrap" hidden>
-                                    <p class="import-article-vip-extract-lead">分词方式（管理员 · 需先在管理后台开启）</p>
-                                    <div class="import-article-vip-extract-options" role="group" aria-label="分词方式（图片）">
-                                        <label class="import-article-vip-label" for="import-ocr-extract-ai">
-                                            <input type="radio" name="import-ocr-extract-mode" value="ai"
-                                                id="import-ocr-extract-ai" />
-                                            <span>AI 分词（DeepSeek 提取实义词原形）</span>
-                                        </label>
-                                        <label class="import-article-vip-label" for="import-ocr-extract-spacy">
-                                            <input type="radio" name="import-ocr-extract-mode" value="spacy"
-                                                id="import-ocr-extract-spacy" checked />
-                                            <span>spaCy 分词（本地分词与词形还原）</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                <div id="import-ocr-spacy-wrap" class="import-article-spacy-wrap" hidden>
-                                    <label class="import-article-spacy-label" for="import-ocr-use-spacy-cb">
-                                        <input type="checkbox" id="import-ocr-use-spacy-cb" checked />
-                                        <span>无法匹配词库时，用智能还原（spaCy）尝试匹配词形（较慢，需服务端已安装模型）</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <button type="button" id="import-ocr-btn" class="btn btn-primary import-json-btn">从文章提取词汇</button>
-                            <div id="import-ocr-result" class="article-import-result" style="display:none;"></div>
-                        </div>
-                    </div>
-
-                    <!-- 文章 / 图片导入共用的选词与未匹配提示 -->
+                    <!-- 选词与未匹配（与上方同一流程） -->
                     <div class="import-wordflow-section import-extract-shared-wrap">
                         <div id="import-article-pick-wrap" class="import-article-pick-wrap" hidden>
                             <p class="import-article-pick-lead">以下为词库中匹配到的词，默认全部选中；可勾选「全选」切换全选/全不选，或点击单词单独切换。蓝色为将导入。</p>

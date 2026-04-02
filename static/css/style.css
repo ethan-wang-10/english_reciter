@@ -4693,6 +4693,9 @@ button.import-article-chip--selected:hover {
     gap: 10px;
     margin-bottom: 10px;
 }
+.import-article-ocr-toolbar {
+    margin-top: 4px;
+}
 .import-ocr-toolbar-hint {
     font-size: 0.85rem;
     color: var(--text-muted);
