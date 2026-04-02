@@ -2972,20 +2972,74 @@ button.import-article-chip--selected:hover {
 }
 
 .settings-pending-words-list {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.settings-pending-batch-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.settings-pending-select-all-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.settings-pending-selected-count {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    flex: 1;
+    min-width: 5rem;
+}
+
+.settings-pending-delete-btn {
+    flex-shrink: 0;
 }
 
 .settings-pending-row {
     display: flex;
     flex-direction: row;
     align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 10px 12px;
-    margin-bottom: 8px;
-    border-radius: 8px;
+    gap: 8px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border-radius: 6px;
     border: 1px solid var(--border);
     background: rgba(0, 0, 0, 0.02);
+}
+
+.settings-pending-row--batch {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: start;
+}
+
+.settings-pending-cb-wrap {
+    padding-top: 2px;
+    flex-shrink: 0;
+}
+
+.settings-pending-cb {
+    width: 1.05rem;
+    height: 1.05rem;
+    cursor: pointer;
 }
 
 .settings-pending-row-main {
@@ -2993,27 +3047,29 @@ button.import-article-chip--selected:hover {
     min-width: 0;
 }
 
+.settings-pending-line1 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+}
+
 .settings-pending-en {
     font-weight: 800;
+    font-size: 0.95rem;
 }
 
 .settings-pending-zh {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     color: var(--text-secondary);
     font-weight: 600;
 }
 
 .settings-pending-meta {
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     color: var(--text-secondary);
-    margin-top: 4px;
-}
-
-.settings-pending-remove-btn {
-    flex-shrink: 0;
-    align-self: center;
+    margin-top: 2px;
+    line-height: 1.25;
 }
 
 .settings-subtitle {

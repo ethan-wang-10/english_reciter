@@ -551,6 +551,14 @@
                             <p class="settings-hint" id="settings-pending-words-lead">
                                 从个人待复习列表中移除单词（不影响已掌握词库）。学生可自行管理；家长登录时可管理对应学生的待复习。
                             </p>
+                            <div id="settings-pending-batch-toolbar" class="settings-pending-batch-toolbar" hidden>
+                                <label class="settings-pending-select-all-label">
+                                    <input type="checkbox" id="settings-pending-select-all" />
+                                    <span>全选</span>
+                                </label>
+                                <span id="settings-pending-selected-count" class="settings-pending-selected-count" aria-live="polite">已选 0 项</span>
+                                <button type="button" class="btn btn-danger-outline settings-pending-delete-btn" id="settings-pending-words-delete-selected" disabled>删除选中</button>
+                            </div>
                             <div id="settings-pending-words-list" class="settings-pending-words-list" role="list"></div>
                             <button type="button" class="btn btn-secondary" id="settings-pending-words-refresh">刷新列表</button>
                         </div>

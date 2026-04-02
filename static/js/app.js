@@ -1152,11 +1152,30 @@ function resetSettingsPendingWordsCollapse() {
     }
 }
 
+function syncSettingsPendingBatchToolbar() {
+    const list = document.getElementById('settings-pending-words-list');
+    const all = document.getElementById('settings-pending-select-all');
+    if (!list || !all) return;
+    const cbs = list.querySelectorAll('.settings-pending-cb');
+    const n = cbs.length;
+    let checked = 0;
+    cbs.forEach((cb) => {
+        if (cb.checked) checked += 1;
+    });
+    all.checked = n > 0 && checked === n;
+    all.indeterminate = checked > 0 && checked < n;
+    const countEl = document.getElementById('settings-pending-selected-count');
+    const delBtn = document.getElementById('settings-pending-words-delete-selected');
+    if (countEl) countEl.textContent = `已选 ${checked} 项`;
+    if (delBtn) delBtn.disabled = checked === 0;
+}
+
 /** 配置页：列出当前学生待复习词并可移除（家长登录可删；学生仅未开通家长账户时可删） */
 async function loadSettingsPendingWordsBlock() {
     const listEl = document.getElementById('settings-pending-words-list');
     const leadEl = document.getElementById('settings-pending-words-lead');
     const toggleText = document.getElementById('settings-pending-words-toggle-text');
+    const batchToolbar = document.getElementById('settings-pending-batch-toolbar');
     if (!listEl) return;
     const panelEl = document.getElementById('settings-pending-words-panel');
     const expandedPanel = panelEl && !panelEl.hidden;
@@ -1174,6 +1193,7 @@ async function loadSettingsPendingWordsBlock() {
                 ? `管理学生「${childUsername}」的待复习列表。移除后该词不再出现在待复习中（已掌握词不受影响）。`
                 : '管理你的待复习列表。移除后该词不再出现在待复习中（已掌握词不受影响）。';
     }
+    if (batchToolbar) batchToolbar.hidden = true;
     listEl.innerHTML = '<p class="settings-hint">加载中…</p>';
     try {
         const data = await apiRequest('/words/pending');
@@ -1181,16 +1201,23 @@ async function loadSettingsPendingWordsBlock() {
         if (leadEl && !isParentSession && !canRemove) {
             leadEl.textContent =
                 '已开通家长账户，待复习词汇仅可由家长登录后在「配置」中管理；学生账号无法在此移除。';
+        } else if (leadEl && canRemove) {
+            leadEl.textContent =
+                (isParentSession && childUsername
+                    ? `管理学生「${childUsername}」的待复习列表。移除后该词不再出现在待复习中（已掌握词不受影响）。`
+                    : '管理你的待复习列表。移除后该词不再出现在待复习中（已掌握词不受影响）。') +
+                ' 勾选后点击「删除选中」可批量移除。';
         }
         const words = Array.isArray(data.words) ? data.words : [];
+        if (batchToolbar) batchToolbar.hidden = !(canRemove && words.length > 0);
         if (words.length === 0) {
             listEl.innerHTML =
                 '<p class="settings-hint settings-pending-words-empty">当前没有待复习单词。</p>';
             return;
         }
-        const removeBtn = (enc) =>
+        const rowCb = (enc) =>
             canRemove
-                ? `<button type="button" class="btn btn-secondary settings-pending-remove-btn" data-english="${enc}">移除</button>`
+                ? `<input type="checkbox" class="settings-pending-cb" data-english="${enc}" aria-label="选择该词" />`
                 : '';
         listEl.innerHTML = words
             .map((w) => {
@@ -1204,20 +1231,24 @@ async function loadSettingsPendingWordsBlock() {
                         : '';
                 const meta = [rd].filter(Boolean).join(' · ');
                 return (
-                    `<div class="settings-pending-row" role="listitem">` +
+                    `<div class="settings-pending-row${canRemove ? ' settings-pending-row--batch' : ''}" role="listitem">` +
+                    (canRemove ? `<div class="settings-pending-cb-wrap">${rowCb(enc)}</div>` : '') +
                     `<div class="settings-pending-row-main">` +
+                    `<div class="settings-pending-line1">` +
                     `<strong class="settings-pending-en">${enDisp}</strong>` +
                     `<span class="settings-pending-zh">${zh}</span>` +
+                    `</div>` +
                     (meta
                         ? `<div class="settings-pending-meta">${escapeHtml(meta)}</div>`
                         : '') +
                     `</div>` +
-                    removeBtn(enc) +
                     `</div>`
                 );
             })
             .join('');
+        if (canRemove && batchToolbar) syncSettingsPendingBatchToolbar();
     } catch (e) {
+        if (batchToolbar) batchToolbar.hidden = true;
         listEl.innerHTML = `<p class="settings-hint settings-message-error">${escapeHtml(
             e.message || '加载失败',
         )}</p>`;
@@ -4844,36 +4875,56 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
-    document.getElementById('settings-pending-words-list')?.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.settings-pending-remove-btn');
-        if (!btn) return;
-        let english = '';
-        try {
-            english = decodeURIComponent(btn.getAttribute('data-english') || '');
-        } catch (_) {
-            return;
+    document.getElementById('settings-pending-words-list')?.addEventListener('change', (e) => {
+        const t = e.target;
+        if (t && t.classList && t.classList.contains('settings-pending-cb')) {
+            syncSettingsPendingBatchToolbar();
         }
-        if (!english) return;
+    });
+    document.getElementById('settings-pending-select-all')?.addEventListener('change', (e) => {
+        const on = e.target.checked;
+        document.querySelectorAll('#settings-pending-words-list .settings-pending-cb').forEach((cb) => {
+            cb.checked = on;
+        });
+        syncSettingsPendingBatchToolbar();
+    });
+    document.getElementById('settings-pending-words-delete-selected')?.addEventListener('click', async () => {
+        const selected = [];
+        document.querySelectorAll('#settings-pending-words-list .settings-pending-cb:checked').forEach((cb) => {
+            let en = '';
+            try {
+                en = decodeURIComponent(cb.getAttribute('data-english') || '');
+            } catch (_) {
+                return;
+            }
+            if (en) selected.push(en);
+        });
+        if (!selected.length) return;
         if (
             !confirm(
-                `确定从待复习列表移除「${english}」吗？\n（不会删除已掌握词汇）`,
+                `确定从待复习列表移除已选中的 ${selected.length} 个词吗？\n（不会删除已掌握词汇）`,
             )
         ) {
             return;
         }
-        btn.disabled = true;
+        const btn = document.getElementById('settings-pending-words-delete-selected');
+        if (btn) btn.disabled = true;
         try {
             const res = await apiRequest('/words/pending/remove', {
                 method: 'POST',
-                body: JSON.stringify({ english }),
+                body: JSON.stringify({ english: selected }),
             });
             const n = res && typeof res.removed === 'number' ? res.removed : 0;
-            setSettingsMessage(n > 0 ? '已从待复习移除' : '未能移除（可能已不在待复习中）', !n);
+            setSettingsMessage(
+                n > 0 ? `已从待复习移除 ${n} 个词` : '未能移除（可能已不在待复习中）',
+                !n,
+            );
             await loadSettingsPendingWordsBlock();
         } catch (err) {
             setSettingsMessage(err.message || '移除失败', true);
         } finally {
-            btn.disabled = false;
+            if (btn) btn.disabled = false;
+            syncSettingsPendingBatchToolbar();
         }
     });
     document.getElementById('settings-pending-words-refresh')?.addEventListener('click', async () => {
