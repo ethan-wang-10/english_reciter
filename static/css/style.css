@@ -5162,29 +5162,60 @@ button.import-article-chip--selected:hover {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-shrink: 0;
 }
-.textbook-fullread-btn,
-.textbook-fullread-restart-btn {
+.textbook-fullread-start-btn {
     font-family: inherit;
     font-size: 0.82rem;
     font-weight: 700;
-    padding: 6px 12px;
-    border-radius: var(--radius-md);
-    border: 2px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 2px solid var(--secondary-color);
     background: #fff;
+    color: var(--secondary-dark);
     cursor: pointer;
     white-space: nowrap;
 }
-.textbook-fullread-btn {
-    border-color: var(--secondary-color);
-    color: var(--secondary-dark);
-}
-.textbook-fullread-btn:hover,
-.textbook-fullread-restart-btn:hover {
-    border-color: var(--secondary-color);
+.textbook-fullread-start-btn:hover {
     background: #f0fbff;
+}
+.textbook-fullread-icon-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.textbook-fullread-icon-btn {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 999px;
+    border: 2px solid var(--secondary-color);
+    background: #fff;
+    color: var(--secondary-dark);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.textbook-fullread-icon-btn:hover {
+    background: #f0fbff;
+}
+.textbook-fullread-icon-btn .tb-fr-svg {
+    display: block;
+    pointer-events: none;
+}
+.textbook-fullread-icon-btn--exit {
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+.textbook-fullread-icon-btn--exit:hover {
+    border-color: #c45c5c;
+    color: #b33;
+    background: #fff5f5;
 }
 .textbook-lines {
     display: flex;

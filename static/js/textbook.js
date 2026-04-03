@@ -21,7 +21,18 @@ const textbookLemmaMissNotBefore = new Map();
 /** 非 VIP：某词「智能还原」已尝试仍无词条时记录，刷新页面前不再显示该按钮 */
 const textbookNlpFreeExhausted = new Set();
 
-// ----- 全文朗读（逐句、高亮；暂停/继续/从头） -----
+// ----- 全文朗读（逐句、高亮；暂停/继续/从头/退出） -----
+/** 图标栏内 SVG（currentColor 随主题） */
+const TB_FR_SVG = {
+    pause:
+        '<svg class="tb-fr-svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 5h4v14H6V5zm8 0h4v14h-4V5z"/></svg>',
+    play: '<svg class="tb-fr-svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>',
+    restart:
+        '<svg class="tb-fr-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 3v5h5"/></svg>',
+    exit:
+        '<svg class="tb-fr-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>',
+};
+
 /** @type {number} */
 let tbFullReadSession = 0;
 /** 'idle' | 'playing' | 'paused' */
@@ -62,21 +73,27 @@ function tbFullReadSetHighlight(lineIndex) {
 }
 
 function tbFullReadSyncUi() {
-    const main = document.getElementById('textbook-fullread-btn');
-    const restart = document.getElementById('textbook-fullread-restart-btn');
-    if (!main) return;
+    const start = document.getElementById('textbook-fullread-start-btn');
+    const bar = document.getElementById('textbook-fullread-icon-bar');
+    const toggle = document.getElementById('textbook-fullread-toggle-btn');
+    if (!start || !bar) return;
     if (tbFullReadMode === 'idle') {
-        main.textContent = '全文朗读';
-        main.setAttribute('aria-label', '全文朗读');
-        if (restart) restart.hidden = true;
-    } else if (tbFullReadMode === 'playing') {
-        main.textContent = '暂停';
-        main.setAttribute('aria-label', '暂停全文朗读');
-        if (restart) restart.hidden = false;
+        start.hidden = false;
+        bar.hidden = true;
     } else {
-        main.textContent = '继续';
-        main.setAttribute('aria-label', '继续全文朗读');
-        if (restart) restart.hidden = false;
+        start.hidden = true;
+        bar.hidden = false;
+        if (toggle) {
+            if (tbFullReadMode === 'playing') {
+                toggle.innerHTML = TB_FR_SVG.pause;
+                toggle.title = '暂停';
+                toggle.setAttribute('aria-label', '暂停全文朗读');
+            } else {
+                toggle.innerHTML = TB_FR_SVG.play;
+                toggle.title = '继续';
+                toggle.setAttribute('aria-label', '继续全文朗读');
+            }
+        }
     }
 }
 
@@ -192,23 +209,31 @@ function bindTextbookFullRead(reader, lines) {
     tbFullReadNextLine = 0;
     tbFullReadSyncUi();
 
-    const main = document.getElementById('textbook-fullread-btn');
-    const restart = document.getElementById('textbook-fullread-restart-btn');
-    if (main) {
-        main.onclick = () => {
-            if (tbFullReadMode === 'idle') {
-                tbFullReadStart();
-            } else if (tbFullReadMode === 'playing') {
-                tbFullReadPause();
-            } else {
-                tbFullReadResume();
-            }
+    const startBtn = document.getElementById('textbook-fullread-start-btn');
+    const toggleBtn = document.getElementById('textbook-fullread-toggle-btn');
+    const restartBtn = document.getElementById('textbook-fullread-restart-icon-btn');
+    const exitBtn = document.getElementById('textbook-fullread-exit-btn');
+
+    if (startBtn) {
+        startBtn.onclick = () => {
+            tbFullReadStart();
         };
     }
-    if (restart) {
-        restart.onclick = () => {
+    if (toggleBtn) {
+        toggleBtn.onclick = () => {
+            if (tbFullReadMode === 'playing') tbFullReadPause();
+            else if (tbFullReadMode === 'paused') tbFullReadResume();
+        };
+    }
+    if (restartBtn) {
+        restartBtn.onclick = () => {
             if (tbFullReadMode === 'idle') return;
             tbFullReadRestartFromHead();
+        };
+    }
+    if (exitBtn) {
+        exitBtn.onclick = () => {
+            textbookFullReadAbort();
         };
     }
 }
@@ -870,8 +895,12 @@ function renderTextbookReader(data) {
         `<div class="textbook-reader-title-row">` +
         `<h3 class="textbook-reader-title">${title}</h3>` +
         `<div class="textbook-fullread-actions">` +
-        `<button type="button" class="textbook-fullread-btn" id="textbook-fullread-btn">全文朗读</button>` +
-        `<button type="button" class="textbook-fullread-restart-btn" id="textbook-fullread-restart-btn" hidden>从头</button>` +
+        `<button type="button" class="textbook-fullread-start-btn" id="textbook-fullread-start-btn">全文朗读</button>` +
+        `<div class="textbook-fullread-icon-bar" id="textbook-fullread-icon-bar" hidden>` +
+        `<button type="button" class="textbook-fullread-icon-btn" id="textbook-fullread-toggle-btn" title="暂停" aria-label="暂停全文朗读">${TB_FR_SVG.pause}</button>` +
+        `<button type="button" class="textbook-fullread-icon-btn" id="textbook-fullread-restart-icon-btn" title="从头朗读" aria-label="从头朗读">${TB_FR_SVG.restart}</button>` +
+        `<button type="button" class="textbook-fullread-icon-btn textbook-fullread-icon-btn--exit" id="textbook-fullread-exit-btn" title="退出全文朗读" aria-label="退出全文朗读">${TB_FR_SVG.exit}</button>` +
+        `</div>` +
         `</div>` +
         `</div>` +
         `</div>` +
