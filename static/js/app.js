@@ -2739,6 +2739,202 @@ async function loadStats() {
     }
 }
 
+function normalizeEnglishKey(s) {
+    return String(s || '').trim().toLowerCase();
+}
+
+/**
+ * 从当前复习列表中移除若干词后，新下标：仍指向原「当前题」或其后第一个未被删词；若已无题则等于 length（由 showCurrentWord → onPassComplete 收尾）。
+ */
+function computeNewReviewIndexAfterWordRemoval(oldList, oldIdx, removedSet, newList) {
+    if (newList.length === 0) return 0;
+    if (oldIdx >= oldList.length) return newList.length;
+    for (let j = oldIdx; j < oldList.length; j++) {
+        const w = oldList[j];
+        if (!removedSet.has(normalizeEnglishKey(w.english))) {
+            const idx = newList.findIndex(
+                (x) => normalizeEnglishKey(x.english) === normalizeEnglishKey(w.english),
+            );
+            if (idx >= 0) return idx;
+        }
+    }
+    return newList.length;
+}
+
+/**
+ * 从当前复习会话中抠掉已在服务端删除的待复习词，尽量保留题序与进度（不整表重载）。
+ * @param {string[]} removedEnglishList 服务端返回的 removed_english（可合并多批）
+ */
+function applyPendingRemovalToReviewSession(removedEnglishList) {
+    if (!Array.isArray(removedEnglishList) || removedEnglishList.length === 0) return;
+
+    const removedSet = new Set(
+        removedEnglishList.map((s) => normalizeEnglishKey(s)).filter(Boolean),
+    );
+    if (removedSet.size === 0) return;
+
+    const reviewBox = document.getElementById('review-box');
+    const reviewComplete = document.getElementById('review-complete');
+    const modal = document.getElementById('remedial-offer-modal');
+    const modalOpen = modal && modal.style.display === 'flex';
+
+    const pruneWordMapRemoved = () => {
+        for (const [k] of [...wordMap.entries()]) {
+            if (removedSet.has(normalizeEnglishKey(k))) {
+                wordMap.delete(k);
+            }
+        }
+    };
+
+    const wrongBefore = wrongWordsOrder.length;
+    wrongWordsOrder = wrongWordsOrder.filter((en) => !removedSet.has(normalizeEnglishKey(en)));
+    wrongWordsInThisPass = new Set(wrongWordsOrder);
+    sessionMainFailedThree = Math.max(0, sessionMainFailedThree - (wrongBefore - wrongWordsOrder.length));
+    pruneWordMapRemoved();
+
+    if (modalOpen && wrongRoundNumber === 0 && reviewSessionMode === 'daily') {
+        const countEl = document.getElementById('remedial-offer-count');
+        if (countEl) countEl.textContent = String(wrongWordsOrder.length);
+        if (wrongWordsOrder.length === 0) {
+            closeRemedialOfferModal();
+            showFinalComplete();
+        }
+        return;
+    }
+
+    const sessionEndedUi =
+        !modalOpen &&
+        reviewComplete &&
+        reviewComplete.style.display !== 'none' &&
+        reviewBox &&
+        reviewBox.style.display === 'none';
+    if (sessionEndedUi) {
+        return;
+    }
+
+    const finishMainRoundEmpty = () => {
+        if (wrongWordsOrder.length > 0) {
+            if (reviewBox) reviewBox.style.display = 'none';
+            if (reviewComplete) reviewComplete.style.display = 'none';
+            showRemedialOfferModal();
+        } else {
+            showFinalComplete();
+        }
+    };
+
+    const applyListUpdate = (oldList, oldIdx) => {
+        const newList = oldList.filter((w) => !removedSet.has(normalizeEnglishKey(w.english)));
+        const removedInList = oldList.length - newList.length;
+        if (removedInList === 0) return null;
+        currentReviewList = newList;
+        currentReviewIndex = computeNewReviewIndexAfterWordRemoval(oldList, oldIdx, removedSet, newList);
+        currentReviewList.forEach((w) => wordMap.set(w.english, w));
+        isSubmitting = false;
+        isAdvancing = false;
+        return newList;
+    };
+
+    if (reviewSessionMode === 'bonus') {
+        const oldList = currentReviewList;
+        const oldIdx = currentReviewIndex;
+        const removedInList = oldList.filter((w) => removedSet.has(normalizeEnglishKey(w.english))).length;
+        if (removedInList === 0) {
+            renderWrongPanel();
+            return;
+        }
+        sessionInitialMainWords = Math.max(0, sessionInitialMainWords - removedInList);
+        const newList = applyListUpdate(oldList, oldIdx);
+        if (!newList) return;
+        if (newList.length === 0) {
+            showFinalComplete();
+            return;
+        }
+        if (reviewBox) reviewBox.style.display = 'block';
+        if (reviewComplete) reviewComplete.style.display = 'none';
+        showReviewEmptyActions(false);
+        renderWrongPanel();
+        updateWrongRoundLabel();
+        void showCurrentWord();
+        return;
+    }
+
+    if (reviewSessionMode !== 'daily') return;
+
+    if (wrongRoundNumber === 0) {
+        const oldList = currentReviewList;
+        const oldIdx = currentReviewIndex;
+        const removedInMain = oldList.filter((w) => removedSet.has(normalizeEnglishKey(w.english))).length;
+        if (removedInMain === 0) {
+            renderWrongPanel();
+            updateWrongRoundLabel();
+            return;
+        }
+        sessionInitialMainWords = Math.max(0, sessionInitialMainWords - removedInMain);
+        const newList = applyListUpdate(oldList, oldIdx);
+        if (!newList) return;
+        if (newList.length === 0) {
+            finishMainRoundEmpty();
+            return;
+        }
+        if (reviewBox) reviewBox.style.display = 'block';
+        if (reviewComplete) reviewComplete.style.display = 'none';
+        showReviewEmptyActions(false);
+        renderWrongPanel();
+        updateWrongRoundLabel();
+        void showCurrentWord();
+        return;
+    }
+
+    const oldList = currentReviewList;
+    const oldIdx = currentReviewIndex;
+    const removedInList = oldList.filter((w) => removedSet.has(normalizeEnglishKey(w.english))).length;
+    if (removedInList === 0) {
+        renderWrongPanel();
+        updateWrongRoundLabel();
+        return;
+    }
+    const newList = applyListUpdate(oldList, oldIdx);
+    if (!newList) return;
+    if (newList.length === 0) {
+        wrongWordsOrder = [];
+        wrongWordsInThisPass = new Set();
+        showFinalComplete();
+        return;
+    }
+    if (reviewBox) reviewBox.style.display = 'block';
+    if (reviewComplete) reviewComplete.style.display = 'none';
+    renderWrongPanel();
+    updateWrongRoundLabel();
+    void showCurrentWord();
+}
+
+/**
+ * 待复习队列在服务端减少后，同步导航统计与当前页中依赖该队列的视图（否则需整页刷新才一致）。
+ * @param {string[]} [removedEnglishList] 服务端实际移除的词，用于复习页就地抠词；不传则仅刷新统计与其它页。
+ */
+async function syncMainPageAfterPendingWordsRemoved(removedCount, removedEnglishList) {
+    try {
+        await loadStats();
+    } catch (_) {
+        /* loadStats 内部已提示 */
+    }
+    if (!(removedCount > 0)) return;
+    try {
+        if (document.getElementById('review-section')?.classList.contains('active')) {
+            if (Array.isArray(removedEnglishList) && removedEnglishList.length > 0) {
+                applyPendingRemovalToReviewSession(removedEnglishList);
+            } else {
+                await loadReviewList();
+            }
+        }
+        if (document.getElementById('discover-section')?.classList.contains('active') && discoveryModeToday) {
+            await loadDiscovery();
+        }
+    } catch (_) {
+        /* apply / loadReviewList / loadDiscovery 内部已提示 */
+    }
+}
+
 // ==================== 复习功能 ====================
 
 function recordWrongAttempt(word) {
@@ -5033,6 +5229,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         try {
             let totalRemoved = 0;
+            const removedEnglishAcc = [];
             for (let i = 0; i < selected.length; i += pendingRmBatch) {
                 const chunk = selected.slice(i, i + pendingRmBatch);
                 if (btn && selected.length > pendingRmBatch) {
@@ -5044,6 +5241,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 const n = res && typeof res.removed === 'number' ? res.removed : 0;
                 totalRemoved += n;
+                const part = res && Array.isArray(res.removed_english) ? res.removed_english : [];
+                removedEnglishAcc.push(...part);
             }
             setSettingsMessage(
                 totalRemoved > 0
@@ -5053,6 +5252,7 @@ document.addEventListener('DOMContentLoaded', function() {
             );
             document.getElementById('settings-message')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             await loadSettingsPendingWordsBlock();
+            await syncMainPageAfterPendingWordsRemoved(totalRemoved, removedEnglishAcc);
         } catch (err) {
             setSettingsMessage(err.message || '移除失败', true);
             document.getElementById('settings-message')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
