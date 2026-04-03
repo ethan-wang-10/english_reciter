@@ -2600,9 +2600,15 @@ async function loadStats() {
     try {
         const data = await apiRequest('/words/status');
 
-        document.getElementById('review-count').textContent = data.words.filter(w => 
-            new Date(w.next_review_date) <= new Date()
-        ).length;
+        // 勿用 new Date('YYYY-MM-DD') 与当前时间比较：ISO 日期按 UTC 午夜解析，东八区在当日 0:00–8:00 会误判为「尚未到期」。
+        // 与 /api/words/status 中 remaining_days 语义一致（服务端 date.today()）。
+        document.getElementById('review-count').textContent = data.words.filter((w) => {
+            if (typeof w.remaining_days === 'number') return w.remaining_days <= 0;
+            const d = String(w.next_review_date || '').slice(0, 10);
+            const t = new Date();
+            const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+            return d <= todayStr;
+        }).length;
 
         document.getElementById('mastered-count').textContent = data.stats.mastered_words;
         document.getElementById('round-count').textContent = data.stats.current_round + 1;
