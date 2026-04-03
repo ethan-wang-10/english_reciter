@@ -21,6 +21,198 @@ const textbookLemmaMissNotBefore = new Map();
 /** 非 VIP：某词「智能还原」已尝试仍无词条时记录，刷新页面前不再显示该按钮 */
 const textbookNlpFreeExhausted = new Set();
 
+// ----- 全文朗读（逐句、高亮；暂停/继续/从头） -----
+/** @type {number} */
+let tbFullReadSession = 0;
+/** 'idle' | 'playing' | 'paused' */
+let tbFullReadMode = 'idle';
+let tbFullReadPaused = false;
+/** @type {string[]} */
+let tbFullReadLines = [];
+/** @type {HTMLElement[] | null} */
+let tbFullReadLineEls = null;
+let tbFullReadLastHighlight = -1;
+/** 句间暂停后，下一句应从该索引开始朗读 */
+let tbFullReadNextLine = 0;
+
+function tbFullReadClearHighlight() {
+    if (tbFullReadLastHighlight >= 0 && tbFullReadLineEls && tbFullReadLineEls[tbFullReadLastHighlight]) {
+        tbFullReadLineEls[tbFullReadLastHighlight].classList.remove('textbook-line--speaking');
+    }
+    tbFullReadLastHighlight = -1;
+}
+
+/** 仅更新当前句高亮：最多改两个 DOM 节点，避免长课文反复 classList 扫描 */
+function tbFullReadSetHighlight(lineIndex) {
+    requestAnimationFrame(() => {
+        if (!tbFullReadLineEls || lineIndex < 0 || lineIndex >= tbFullReadLineEls.length) return;
+        if (tbFullReadLastHighlight === lineIndex) return;
+        if (tbFullReadLastHighlight >= 0 && tbFullReadLineEls[tbFullReadLastHighlight]) {
+            tbFullReadLineEls[tbFullReadLastHighlight].classList.remove('textbook-line--speaking');
+        }
+        tbFullReadLastHighlight = lineIndex;
+        const el = tbFullReadLineEls[lineIndex];
+        el.classList.add('textbook-line--speaking');
+        try {
+            el.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+        } catch (_) {
+            /* ignore */
+        }
+    });
+}
+
+function tbFullReadSyncUi() {
+    const main = document.getElementById('textbook-fullread-btn');
+    const restart = document.getElementById('textbook-fullread-restart-btn');
+    if (!main) return;
+    if (tbFullReadMode === 'idle') {
+        main.textContent = '全文朗读';
+        main.setAttribute('aria-label', '全文朗读');
+        if (restart) restart.hidden = true;
+    } else if (tbFullReadMode === 'playing') {
+        main.textContent = '暂停';
+        main.setAttribute('aria-label', '暂停全文朗读');
+        if (restart) restart.hidden = false;
+    } else {
+        main.textContent = '继续';
+        main.setAttribute('aria-label', '继续全文朗读');
+        if (restart) restart.hidden = false;
+    }
+}
+
+function tbFullReadFinish() {
+    tbFullReadClearHighlight();
+    tbFullReadMode = 'idle';
+    tbFullReadPaused = false;
+    tbFullReadNextLine = 0;
+    tbFullReadSyncUi();
+}
+
+function textbookFullReadAbort() {
+    tbFullReadSession++;
+    stopSpeakPlayback();
+    tbFullReadClearHighlight();
+    tbFullReadMode = 'idle';
+    tbFullReadPaused = false;
+    tbFullReadNextLine = 0;
+    tbFullReadSyncUi();
+}
+
+function tbFullReadOnLineEnd(session, finishedLineIndex) {
+    if (session !== tbFullReadSession) return;
+    const next = finishedLineIndex + 1;
+    tbFullReadNextLine = next;
+    if (next >= tbFullReadLines.length) {
+        tbFullReadFinish();
+        return;
+    }
+    setTimeout(() => {
+        if (session !== tbFullReadSession) return;
+        if (tbFullReadPaused) {
+            tbFullReadMode = 'paused';
+            tbFullReadSyncUi();
+            return;
+        }
+        void tbFullReadPlayLine(session, next);
+    }, 0);
+}
+
+function tbFullReadPlayLine(session, lineIndex) {
+    if (session !== tbFullReadSession) return;
+    let idx = lineIndex;
+    while (idx < tbFullReadLines.length && !String(tbFullReadLines[idx] || '').trim()) {
+        idx++;
+    }
+    if (idx >= tbFullReadLines.length) {
+        tbFullReadFinish();
+        return;
+    }
+    tbFullReadSetHighlight(idx);
+    void speakEnglishPreferred(
+        tbFullReadLines[idx],
+        () => {
+            tbFullReadOnLineEnd(session, idx);
+        },
+        null,
+    );
+}
+
+function tbFullReadStart() {
+    if (!tbFullReadLines.length) return;
+    textbookFullReadAbort();
+    const mySession = tbFullReadSession;
+    tbFullReadPaused = false;
+    tbFullReadNextLine = 0;
+    tbFullReadMode = 'playing';
+    tbFullReadSyncUi();
+    void tbFullReadPlayLine(mySession, 0);
+}
+
+function tbFullReadPause() {
+    if (tbFullReadMode !== 'playing') return;
+    pauseTtsPlayback();
+    tbFullReadPaused = true;
+    tbFullReadMode = 'paused';
+    tbFullReadSyncUi();
+}
+
+function tbFullReadResume() {
+    if (tbFullReadMode !== 'paused') return;
+    tbFullReadPaused = false;
+    const resumed = resumeTtsPlayback();
+    if (resumed) {
+        tbFullReadMode = 'playing';
+        tbFullReadSyncUi();
+        return;
+    }
+    const mySession = tbFullReadSession;
+    tbFullReadMode = 'playing';
+    tbFullReadSyncUi();
+    void tbFullReadPlayLine(mySession, tbFullReadNextLine);
+}
+
+function tbFullReadRestartFromHead() {
+    if (!tbFullReadLines.length) return;
+    stopSpeakPlayback();
+    tbFullReadSession++;
+    const mySession = tbFullReadSession;
+    tbFullReadPaused = false;
+    tbFullReadMode = 'playing';
+    tbFullReadSyncUi();
+    tbFullReadClearHighlight();
+    void tbFullReadPlayLine(mySession, 0);
+}
+
+function bindTextbookFullRead(reader, lines) {
+    tbFullReadLines = lines.map((line) => String(line.english || '').trim());
+    tbFullReadLineEls = Array.from(reader.querySelectorAll('.textbook-line'));
+    tbFullReadMode = 'idle';
+    tbFullReadPaused = false;
+    tbFullReadLastHighlight = -1;
+    tbFullReadNextLine = 0;
+    tbFullReadSyncUi();
+
+    const main = document.getElementById('textbook-fullread-btn');
+    const restart = document.getElementById('textbook-fullread-restart-btn');
+    if (main) {
+        main.onclick = () => {
+            if (tbFullReadMode === 'idle') {
+                tbFullReadStart();
+            } else if (tbFullReadMode === 'playing') {
+                tbFullReadPause();
+            } else {
+                tbFullReadResume();
+            }
+        };
+    }
+    if (restart) {
+        restart.onclick = () => {
+            if (tbFullReadMode === 'idle') return;
+            tbFullReadRestartFromHead();
+        };
+    }
+}
+
 /** 过滤 LRC 中的课次标题行（如 Lesson 3 / 第3课），非正文 */
 function isTextbookMetadataLine(line) {
     const en = String(line.english || '').trim();
@@ -675,7 +867,13 @@ function renderTextbookReader(data) {
     reader.innerHTML =
         `<div class="textbook-reader-head">` +
         `<button type="button" class="textbook-back-btn" id="textbook-back-btn">← 课文列表</button>` +
+        `<div class="textbook-reader-title-row">` +
         `<h3 class="textbook-reader-title">${title}</h3>` +
+        `<div class="textbook-fullread-actions">` +
+        `<button type="button" class="textbook-fullread-btn" id="textbook-fullread-btn">全文朗读</button>` +
+        `<button type="button" class="textbook-fullread-restart-btn" id="textbook-fullread-restart-btn" hidden>从头</button>` +
+        `</div>` +
+        `</div>` +
         `</div>` +
         `<div class="textbook-lines">${blocks}</div>`;
 
@@ -684,6 +882,7 @@ function renderTextbookReader(data) {
 
     reader.querySelectorAll('.textbook-speak-line').forEach((btn) => {
         btn.addEventListener('click', () => {
+            textbookFullReadAbort();
             const i = parseInt(btn.getAttribute('data-idx') || '-1', 10);
             const line = lines[i];
             if (line && line.english) void speakEnglishPreferred(line.english, () => {}, btn);
@@ -709,10 +908,12 @@ function renderTextbookReader(data) {
     });
 
     bindTextbookReaderInteractions(reader);
+    bindTextbookFullRead(reader, lines);
     ensureTextbookDocClickClose();
     void textbookPrefetchLessonWords(reader);
 
     document.getElementById('textbook-back-btn')?.addEventListener('click', () => {
+        textbookFullReadAbort();
         hideTextbookTooltip();
         reader.style.display = 'none';
         catalogWrap.style.display = '';
@@ -723,6 +924,7 @@ function renderTextbookReader(data) {
 
 async function openTextbookLesson(corpusId, jsonPath) {
     hideTextbookTooltip();
+    textbookFullReadAbort();
     textbookReaderContext = { corpusId, jsonPath };
     const reader = document.getElementById('textbook-reader');
     if (reader) {

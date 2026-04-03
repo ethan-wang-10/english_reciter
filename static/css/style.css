@@ -5139,15 +5139,52 @@ button.import-article-chip--selected:hover {
 .textbook-reader-head {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     margin-bottom: 12px;
+}
+.textbook-reader-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
 }
 .textbook-reader-title {
     font-size: 1.1rem;
     font-weight: 800;
     flex: 1;
     min-width: 0;
+    margin: 0;
+}
+.textbook-fullread-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.textbook-fullread-btn,
+.textbook-fullread-restart-btn {
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.textbook-fullread-btn {
+    border-color: var(--secondary-color);
+    color: var(--secondary-dark);
+}
+.textbook-fullread-btn:hover,
+.textbook-fullread-restart-btn:hover {
+    border-color: var(--secondary-color);
+    background: #f0fbff;
 }
 .textbook-lines {
     display: flex;
@@ -5173,6 +5210,12 @@ button.import-article-chip--selected:hover {
     background: #fafafa;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.textbook-line.textbook-line--speaking {
+    background: #e8f5e9;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 2px rgba(46, 160, 67, 0.18);
 }
 .textbook-line-row {
     display: flex;

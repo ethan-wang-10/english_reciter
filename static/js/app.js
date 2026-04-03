@@ -2064,6 +2064,45 @@ function stopSpeakPlayback() {
     }
 }
 
+/** 暂停当前 Piper / 浏览器语音（不递增 generation，供课文全文朗读等场景） */
+function pauseTtsPlayback() {
+    try {
+        if (ttsPiperAudio) {
+            ttsPiperAudio.pause();
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    try {
+        if (typeof window.speechSynthesis !== 'undefined' && window.speechSynthesis.speaking) {
+            window.speechSynthesis.pause();
+        }
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+/** 恢复暂停的朗读；若无暂停中的 Piper/语音则返回 false */
+function resumeTtsPlayback() {
+    try {
+        if (ttsPiperAudio && ttsPiperAudio.paused) {
+            void ttsPiperAudio.play();
+            return true;
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    try {
+        if (typeof window.speechSynthesis !== 'undefined' && window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+            return true;
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    return false;
+}
+
 // 浏览器端朗读（远程访问时服务端 say 只在服务器出声，用户听不到）
 // Android Chrome：语音列表异步加载、合成队列常处于 paused，需 resume + voiceschanged 后再 speak
 /** @param {string} text @param {(() => void) | undefined} onEnd 朗读结束回调；省略时恢复复习输入框焦点 @param {number} [gen] 与 ttsPlaybackGeneration 对齐，防连点混音 */
