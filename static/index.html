@@ -428,8 +428,13 @@
                     <p class="discover-intro">展示单词、音标与例句，可朗读；仅供浏览，不参与复习计分。「全部」：先待复习再浏览全库；选择「小学」等难度时，仅展示该难度词库中的词（含你在该难度的待复习词）；「今日单词」仅含今日复习任务。</p>
                     <div class="discovery-search-wrap">
                         <label class="discovery-search-label" for="discovery-search">搜索词库</label>
-                        <input type="search" id="discovery-search" class="wordbank-search wordbank-search-full"
-                            placeholder="模糊搜索英文或中文，搜索范围为全部词库" autocomplete="off" spellcheck="false" />
+                        <div class="discovery-search-field">
+                            <input type="search" id="discovery-search" class="wordbank-search wordbank-search-full"
+                                placeholder="英文前缀或中文，如 appl、苹果" autocomplete="off" spellcheck="false"
+                                aria-autocomplete="list" aria-controls="discovery-search-suggestions" aria-expanded="false" />
+                            <div id="discovery-search-suggestions" class="discovery-search-suggestions" role="listbox"
+                                aria-label="匹配词条" hidden></div>
+                        </div>
                     </div>
                     <!-- 词库按钮须在 discovery-root 外：今日无词时仍会隐藏 root，避免用户无法切回「全部」等 -->
                     <div class="discovery-toolbar discovery-top-controls">

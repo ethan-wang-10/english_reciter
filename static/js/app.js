@@ -3766,6 +3766,133 @@ let discoveryModeToday = false;
 /** 搜索框有内容且使用全词库 /wordbank/csv/search 结果作为牌组 */
 let discoverySearchMode = false;
 let discoverySearchDebounceTimer = null;
+let discoverySearchRequestSeq = 0;
+
+/** 单词学习搜索：本地前缀/子串匹配（全量 CSV），上限避免一次渲染过多 */
+const DISCOVERY_SEARCH_MAX_DECK = 280;
+const DISCOVERY_SUGGESTIONS_MAX = 18;
+
+function setDiscoverySearchListboxOpen(open) {
+    const input = document.getElementById('discovery-search');
+    if (input) input.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function hideDiscoverySearchSuggestions() {
+    const box = document.getElementById('discovery-search-suggestions');
+    if (!box) return;
+    box.hidden = true;
+    box.innerHTML = '';
+    setDiscoverySearchListboxOpen(false);
+}
+
+function renderDiscoverySearchSuggestions(rows) {
+    const box = document.getElementById('discovery-search-suggestions');
+    if (!box) return;
+    const slice = rows.slice(0, DISCOVERY_SUGGESTIONS_MAX);
+    if (!slice.length) {
+        box.hidden = true;
+        box.innerHTML = '';
+        setDiscoverySearchListboxOpen(false);
+        return;
+    }
+    box.hidden = false;
+    setDiscoverySearchListboxOpen(true);
+    box.innerHTML = slice
+        .map((row) => {
+            const en = String(row.english || '').trim();
+            const zh = String(row.chinese || '').trim();
+            const enc = encodeURIComponent(en);
+            const zhLine = zh ? `<span class="discovery-suggest-zh">${escapeHtml(zh)}</span>` : '';
+            return `<button type="button" class="discovery-suggest-item" role="option" data-english="${enc}">
+      <span class="discovery-suggest-en">${escapeHtml(en)}</span>${zhLine}
+    </button>`;
+        })
+        .join('');
+}
+
+/**
+ * 从全量词库行中按英文前缀 / 子串 / 中文包含匹配（支持 appl → apple）。
+ */
+function discoveryMatchWordbankRows(q, rows) {
+    const raw = String(q || '').trim();
+    if (!raw) return [];
+    const t = raw.toLowerCase();
+    const hasLatin = /[a-z]/i.test(raw);
+    const scored = [];
+    for (const row of rows) {
+        const en = String(row.english || '').trim();
+        if (!en) continue;
+        const el = en.toLowerCase();
+        const zh = String(row.chinese || '');
+        let score = 0;
+        if (hasLatin) {
+            if (el.startsWith(t)) {
+                score = 2000 - Math.min(el.length, 80);
+            } else if (el.includes(t)) {
+                score = 1000;
+            } else if (zh.includes(raw)) {
+                score = 400;
+            }
+        } else if (zh.includes(raw)) {
+            score = 1500;
+        }
+        if (score > 0) scored.push({ row, score });
+    }
+    scored.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return String(a.row.english).localeCompare(String(b.row.english), 'en');
+    });
+    return scored.map((x) => x.row);
+}
+
+async function getDiscoveryWordbankRows() {
+    const data = await fetchWordbankCsvForDiscovery('');
+    return Array.isArray(data.words) ? data.words : [];
+}
+
+function initDiscoverySearchSuggestUI() {
+    const wrap = document.querySelector('.discovery-search-wrap');
+    const input = document.getElementById('discovery-search');
+    const sug = document.getElementById('discovery-search-suggestions');
+    if (!wrap || !input || !sug) return;
+    sug.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.discovery-suggest-item')) e.preventDefault();
+    });
+    sug.addEventListener('click', (e) => {
+        const btn = e.target.closest('.discovery-suggest-item');
+        if (!btn || !sug.contains(btn)) return;
+        let en = '';
+        try {
+            en = decodeURIComponent(btn.getAttribute('data-english') || '');
+        } catch (_) {
+            return;
+        }
+        if (!en) return;
+        const idx = discoveryDeck.findIndex(
+            (w) => String(w.english).toLowerCase() === en.toLowerCase(),
+        );
+        if (idx >= 0) {
+            discoveryIndex = idx;
+            renderDiscoveryCard();
+        }
+        input.value = en;
+        hideDiscoverySearchSuggestions();
+    });
+    input.addEventListener('focus', () => {
+        const v = input.value.trim();
+        if (v) void loadDiscovery();
+    });
+    input.addEventListener('blur', () => {
+        setTimeout(() => hideDiscoverySearchSuggestions(), 200);
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideDiscoverySearchSuggestions();
+    });
+    document.addEventListener('click', (e) => {
+        if (wrap.contains(e.target)) return;
+        hideDiscoverySearchSuggestions();
+    });
+}
 
 const DISCOVERY_LEVEL_STORAGE_KEY = 'english_reciter_discovery_level';
 
@@ -3874,15 +4001,24 @@ function discoverySortPending(a, b) {
 async function loadDiscoverySearchFromQuery(q) {
     const emptyEl = document.getElementById('discovery-empty');
     const rootEl = document.getElementById('discovery-root');
+    const sug = document.getElementById('discovery-search-suggestions');
     const trimmed = String(q || '').trim();
+    const seq = ++discoverySearchRequestSeq;
     discoverySearchMode = true;
     discoveryModeToday = false;
+    if (sug) {
+        sug.hidden = false;
+        sug.innerHTML = '<p class="discovery-suggest-hint">加载词库…</p>';
+        setDiscoverySearchListboxOpen(true);
+    }
     try {
-        const params = new URLSearchParams({ q: trimmed, heuristics: '0', surface_first: '1' });
-        const data = await apiRequest(`/wordbank/csv/search?${params}`);
-        const rows = Array.isArray(data.words) ? data.words : [];
+        const allRows = await getDiscoveryWordbankRows();
+        if (seq !== discoverySearchRequestSeq) return;
+        const matched = discoveryMatchWordbankRows(trimmed, allRows);
+        if (seq !== discoverySearchRequestSeq) return;
+        const capped = matched.slice(0, DISCOVERY_SEARCH_MAX_DECK);
         discoveryDeck = [];
-        for (const row of rows) {
+        for (const row of capped) {
             const en = String(row.english || '').trim();
             if (!en) continue;
             discoveryDeck.push({
@@ -3894,6 +4030,8 @@ async function loadDiscoverySearchFromQuery(q) {
             });
         }
         discoveryIndex = 0;
+        if (seq !== discoverySearchRequestSeq) return;
+        renderDiscoverySearchSuggestions(matched);
         if (discoveryDeck.length === 0) {
             if (emptyEl) {
                 emptyEl.style.display = 'block';
@@ -3903,13 +4041,16 @@ async function loadDiscoverySearchFromQuery(q) {
             if (rootEl) rootEl.style.display = 'none';
             return;
         }
+        if (seq !== discoverySearchRequestSeq) return;
         if (emptyEl) emptyEl.style.display = 'none';
         if (rootEl) rootEl.style.display = 'block';
         renderDiscoveryCard();
     } catch (_) {
+        if (seq !== discoverySearchRequestSeq) return;
         discoverySearchMode = false;
         discoveryDeck = [];
         discoveryIndex = 0;
+        hideDiscoverySearchSuggestions();
         const wrap = document.getElementById('discovery-card-wrap');
         if (wrap) wrap.innerHTML = '';
         if (emptyEl) {
@@ -3929,6 +4070,7 @@ async function loadDiscovery() {
         await loadDiscoverySearchFromQuery(searchQ);
         return;
     }
+    hideDiscoverySearchSuggestions();
     discoverySearchMode = false;
     const level = String(getDiscoverySelectedLevel() || '').trim();
     discoveryModeToday = false;
@@ -4293,9 +4435,10 @@ function initWordbankPanel() {
             if (discoverySearchDebounceTimer) clearTimeout(discoverySearchDebounceTimer);
             discoverySearchDebounceTimer = setTimeout(() => {
                 void loadDiscovery();
-            }, 350);
+            }, 280);
         });
     }
+    initDiscoverySearchSuggestUI();
 
     document.getElementById('wordbank-select-filtered')?.addEventListener('click', () => {
         for (const w of wbState.filtered) {
