@@ -2415,6 +2415,48 @@ button.import-article-chip--selected:hover {
     box-shadow: none;
 }
 
+.btn-speak:disabled {
+    opacity: 0.52;
+    cursor: not-allowed;
+    filter: grayscale(0.35);
+}
+
+.btn-speak-loading.btn-speak,
+.discovery-example-block .btn-speak-loading.btn-speak {
+    opacity: 1 !important;
+    filter: none !important;
+    cursor: wait !important;
+    position: relative;
+    color: transparent !important;
+}
+
+.btn-speak-loading.btn-speak::after,
+.discovery-example-block .btn-speak-loading.btn-speak::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 18px;
+    height: 18px;
+    margin: -9px 0 0 -9px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: btn-speak-tts-spin 0.7s linear infinite;
+}
+
+@keyframes btn-speak-tts-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.textbook-line-row .btn-speak-loading.textbook-speak-line::after {
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+}
+
 .underline-input {
     flex: 1;
     display: flex;

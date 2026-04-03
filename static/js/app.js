@@ -36,6 +36,35 @@ let articleAiExtractAvailable = false;
 let articleAiExtractEnabled = false;
 /** 服务端是否配置 Piper（神经语音 WAV）；来自 /api/tts/capabilities */
 let serverPiperAvailable = false;
+/** 连续点击朗读：取消上一轮 Piper 请求、音频与浏览器合成 */
+let ttsPlaybackGeneration = 0;
+let ttsFetchAbort = null;
+let ttsPiperAudio = null;
+let ttsPiperObjectUrl = null;
+
+/** 朗读进行中：禁用所有 .btn-speak；triggerButton 显示加载样式 */
+function beginTtsSpeakUi(triggerButton) {
+    document.querySelectorAll('.btn-speak').forEach((btn) => {
+        btn.dataset.ttsWasDisabled = btn.disabled ? '1' : '0';
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+    });
+    const el =
+        triggerButton && triggerButton.classList && triggerButton.classList.contains('btn-speak')
+            ? triggerButton
+            : null;
+    if (el) el.classList.add('btn-speak-loading');
+}
+
+function endTtsSpeakUi() {
+    document.querySelectorAll('.btn-speak').forEach((btn) => {
+        const was = btn.dataset.ttsWasDisabled === '1';
+        delete btn.dataset.ttsWasDisabled;
+        btn.disabled = was;
+        btn.removeAttribute('aria-busy');
+        btn.classList.remove('btn-speak-loading');
+    });
+}
 
 /** 本轮 3 次尝试均错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
 let wrongWordsInThisPass = new Set();
@@ -1998,10 +2027,47 @@ function clearUnderlineInput() {
     updateUnderlineDisplay();
 }
 
+function stopSpeakPlayback() {
+    ttsPlaybackGeneration++;
+    if (ttsFetchAbort) {
+        try {
+            ttsFetchAbort.abort();
+        } catch (_) {
+            /* ignore */
+        }
+        ttsFetchAbort = null;
+    }
+    if (ttsPiperAudio) {
+        try {
+            ttsPiperAudio.pause();
+            ttsPiperAudio.removeAttribute('src');
+            ttsPiperAudio.load();
+        } catch (_) {
+            /* ignore */
+        }
+        ttsPiperAudio = null;
+    }
+    if (ttsPiperObjectUrl) {
+        try {
+            URL.revokeObjectURL(ttsPiperObjectUrl);
+        } catch (_) {
+            /* ignore */
+        }
+        ttsPiperObjectUrl = null;
+    }
+    try {
+        if (typeof window.speechSynthesis !== 'undefined') {
+            window.speechSynthesis.cancel();
+        }
+    } catch (_) {
+        /* ignore */
+    }
+}
+
 // 浏览器端朗读（远程访问时服务端 say 只在服务器出声，用户听不到）
 // Android Chrome：语音列表异步加载、合成队列常处于 paused，需 resume + voiceschanged 后再 speak
-/** @param {string} text @param {(() => void) | undefined} onEnd 朗读结束回调；省略时恢复复习输入框焦点 */
-function speakEnglishInBrowser(text, onEnd) {
+/** @param {string} text @param {(() => void) | undefined} onEnd 朗读结束回调；省略时恢复复习输入框焦点 @param {number} [gen] 与 ttsPlaybackGeneration 对齐，防连点混音 */
+function speakEnglishInBrowser(text, onEnd, gen) {
     const raw = String(text || '').trim().slice(0, 500);
     if (!raw) return false;
     if (typeof window.speechSynthesis === 'undefined') {
@@ -2016,6 +2082,7 @@ function speakEnglishInBrowser(text, onEnd) {
         .trim()
         .slice(0, 500);
     if (!safe) return false;
+    if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
 
     const synth = window.speechSynthesis;
 
@@ -2029,6 +2096,7 @@ function speakEnglishInBrowser(text, onEnd) {
     };
 
     const doSpeak = () => {
+        if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
         try {
             synth.cancel();
         } catch (_) {
@@ -2045,7 +2113,11 @@ function speakEnglishInBrowser(text, onEnd) {
         const en = pickEnglishVoice();
         if (en) u.voice = en;
         u.rate = 0.95;
-        const onDone = typeof onEnd === 'function' ? onEnd : () => focusWordCapture(0);
+        const baseDone = typeof onEnd === 'function' ? onEnd : () => focusWordCapture(0);
+        const onDone = () => {
+            if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
+            baseDone();
+        };
         u.onend = onDone;
         u.onerror = onDone;
         u.onstart = () => {
@@ -2071,6 +2143,7 @@ function speakEnglishInBrowser(text, onEnd) {
     if (voices.length === 0) {
         let settled = false;
         const runOnce = () => {
+            if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
             if (settled) return;
             settled = true;
             synth.removeEventListener('voiceschanged', runOnce);
@@ -2086,19 +2159,25 @@ function speakEnglishInBrowser(text, onEnd) {
 }
 
 /** 使用服务端 Piper 返回的 WAV；失败返回 false（不调用 onEnd） */
-async function speakEnglishViaPiperApi(text, onEnd) {
+async function speakEnglishViaPiperApi(text, onEnd, gen) {
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    const ac = new AbortController();
+    ttsFetchAbort = ac;
     let response;
     try {
         response = await fetch(`${API_BASE}/words/speak-audio`, {
             method: 'POST',
             headers,
             body: JSON.stringify({ text }),
+            signal: ac.signal,
         });
-    } catch (_) {
+    } catch (e) {
+        if (ttsFetchAbort === ac) ttsFetchAbort = null;
         return false;
     }
+    if (ttsFetchAbort === ac) ttsFetchAbort = null;
+    if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
     if (!response.ok) return false;
     const ct = response.headers.get('content-type') || '';
     if (!ct.includes('audio') && !ct.includes('octet-stream')) return false;
@@ -2108,15 +2187,29 @@ async function speakEnglishViaPiperApi(text, onEnd) {
     } catch (_) {
         return false;
     }
+    if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
     if (!blob || blob.size < 100) return false;
     const url = URL.createObjectURL(blob);
+    if (gen !== undefined && gen !== ttsPlaybackGeneration) {
+        try {
+            URL.revokeObjectURL(url);
+        } catch (_) {
+            /* ignore */
+        }
+        return false;
+    }
     const audio = new Audio(url);
+    ttsPiperObjectUrl = url;
+    ttsPiperAudio = audio;
     const cleanup = () => {
         try {
             URL.revokeObjectURL(url);
         } catch (_) {
             /* ignore */
         }
+        if (ttsPiperAudio === audio) ttsPiperAudio = null;
+        if (ttsPiperObjectUrl === url) ttsPiperObjectUrl = null;
+        if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
         if (typeof onEnd === 'function') onEnd();
     };
     audio.onended = cleanup;
@@ -2129,24 +2222,38 @@ async function speakEnglishViaPiperApi(text, onEnd) {
         } catch (_) {
             /* ignore */
         }
+        if (ttsPiperAudio === audio) ttsPiperAudio = null;
+        if (ttsPiperObjectUrl === url) ttsPiperObjectUrl = null;
         return false;
     }
     return true;
 }
 
-/** 优先 Piper，其次 Web Speech，最后服务端 say（仅服务器本机扬声器） */
-async function speakEnglishPreferred(text, onEnd) {
+/** 优先 Piper，其次 Web Speech，最后服务端 say（仅服务器本机扬声器）
+ * @param {string} text
+ * @param {(() => void) | undefined} onEnd
+ * @param {HTMLElement | null | undefined} triggerButton 触发朗读的 .btn-speak，用于加载态 */
+async function speakEnglishPreferred(text, onEnd, triggerButton) {
+    stopSpeakPlayback();
+    endTtsSpeakUi();
+    const myGen = ttsPlaybackGeneration;
     const raw = String(text || '').trim().slice(0, 500);
     if (!raw) {
         if (typeof onEnd === 'function') onEnd();
         return false;
     }
-    const done = typeof onEnd === 'function' ? onEnd : () => focusWordCapture(0);
+    beginTtsSpeakUi(triggerButton || null);
+    const baseDone = typeof onEnd === 'function' ? onEnd : () => focusWordCapture(0);
+    const done = () => {
+        if (myGen !== ttsPlaybackGeneration) return;
+        endTtsSpeakUi();
+        baseDone();
+    };
     if (serverPiperAvailable) {
-        const ok = await speakEnglishViaPiperApi(raw, done);
+        const ok = await speakEnglishViaPiperApi(raw, done, myGen);
         if (ok) return true;
     }
-    if (speakEnglishInBrowser(raw, done)) {
+    if (speakEnglishInBrowser(raw, done, myGen)) {
         return true;
     }
     try {
@@ -2154,9 +2261,11 @@ async function speakEnglishPreferred(text, onEnd) {
             method: 'POST',
             body: JSON.stringify({ text: raw }),
         });
+        if (myGen !== ttsPlaybackGeneration) return false;
         done();
         return true;
     } catch (_) {
+        if (myGen !== ttsPlaybackGeneration) return false;
         done();
         return false;
     }
@@ -2188,7 +2297,7 @@ async function speakExample() {
     if (!enText) enText = String(exampleText).trim();
     if (!enText) return;
 
-    await speakEnglishPreferred(enText, () => focusWordCapture(0));
+    await speakEnglishPreferred(enText, () => focusWordCapture(0), document.getElementById('speak-example-btn'));
 }
 
 /** 解析 JSON 响应；失败时抛出可读错误（Safari 对 SyntaxError 常显示为 “The string did not match the expected pattern.”） */
@@ -3772,8 +3881,8 @@ function renderDiscoveryCard() {
 
     const speakBtn = wrap.querySelector('.discovery-speak-word');
     if (speakBtn) {
-        speakBtn.addEventListener('click', () => {
-            void speakEnglishPreferred(w.english, () => {});
+        speakBtn.addEventListener('click', (e) => {
+            void speakEnglishPreferred(w.english, () => {}, e.currentTarget);
         });
     }
     wrap.querySelectorAll('.discovery-speak-example').forEach((btn) => {
@@ -3781,7 +3890,7 @@ function renderDiscoveryCard() {
         const seg = si != null ? examples[parseInt(si, 10)] : null;
         if (!seg || !seg.en) return;
         btn.addEventListener('click', () => {
-            void speakEnglishPreferred(seg.en, () => {});
+            void speakEnglishPreferred(seg.en, () => {}, btn);
         });
     });
 }
@@ -4914,22 +5023,44 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         const btn = document.getElementById('settings-pending-words-delete-selected');
-        if (btn) btn.disabled = true;
+        const pendingRmBatch = 200;
+        const prevLabel = btn ? btn.textContent : '';
+        if (btn) {
+            btn.disabled = true;
+            if (selected.length > pendingRmBatch) {
+                btn.textContent = '删除中…';
+            }
+        }
         try {
-            const res = await apiRequest('/words/pending/remove', {
-                method: 'POST',
-                body: JSON.stringify({ english: selected }),
-            });
-            const n = res && typeof res.removed === 'number' ? res.removed : 0;
+            let totalRemoved = 0;
+            for (let i = 0; i < selected.length; i += pendingRmBatch) {
+                const chunk = selected.slice(i, i + pendingRmBatch);
+                if (btn && selected.length > pendingRmBatch) {
+                    btn.textContent = `删除中… (${Math.min(i + chunk.length, selected.length)}/${selected.length})`;
+                }
+                const res = await apiRequest('/words/pending/remove', {
+                    method: 'POST',
+                    body: JSON.stringify({ english: chunk }),
+                });
+                const n = res && typeof res.removed === 'number' ? res.removed : 0;
+                totalRemoved += n;
+            }
             setSettingsMessage(
-                n > 0 ? `已从待复习移除 ${n} 个词` : '未能移除（可能已不在待复习中）',
-                !n,
+                totalRemoved > 0
+                    ? `已从待复习移除 ${totalRemoved} 个词`
+                    : '未能移除（可能已不在待复习中）',
+                !totalRemoved,
             );
+            document.getElementById('settings-message')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             await loadSettingsPendingWordsBlock();
         } catch (err) {
             setSettingsMessage(err.message || '移除失败', true);
+            document.getElementById('settings-message')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         } finally {
-            if (btn) btn.disabled = false;
+            if (btn) {
+                btn.disabled = false;
+                if (prevLabel) btn.textContent = prevLabel;
+            }
             syncSettingsPendingBatchToolbar();
         }
     });
