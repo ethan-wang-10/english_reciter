@@ -591,7 +591,7 @@ body {
     display: none;
 }
 
-/* 移动端底部 Tab（小屏显示，大屏隐藏） */
+/* 底部 Tab：默认隐藏，由 max-width:1199px 与 min-width:1200px 规则切换 */
 .mobile-tabbar {
     display: none;
 }
@@ -812,7 +812,8 @@ body {
     background: #eef1f4;
 }
 
-@media (min-width: 769px) {
+/* 仅宽屏桌面隐藏底栏；宽度小于 1200px（含 iPad 竖/横屏）与手机一致用底栏 */
+@media (min-width: 1200px) {
     .mobile-tabbar {
         display: none !important;
     }
@@ -2153,7 +2154,7 @@ button.import-article-chip--selected:hover {
     display: block;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1199px) {
     #main-page {
         padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px));
     }
@@ -2745,7 +2746,7 @@ button.import-article-chip--selected:hover {
 }
 
 /* 桌面顶栏：游戏化区占满中间空隙、药丸靠右，与右侧消息/用户区保持 12px（沿用 .navbar 的 gap） */
-@media (min-width: 769px) {
+@media (min-width: 1200px) {
     .navbar .nav-gamification {
         flex: 1 1 auto;
         min-width: 0;
