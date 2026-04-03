@@ -46,6 +46,64 @@ let tbFullReadLastHighlight = -1;
 /** 句间暂停后，下一句应从该索引开始朗读 */
 let tbFullReadNextLine = 0;
 
+/** Piper 预取下一句（与主请求分用 AbortController） */
+let tbFullReadPrefetchAc = null;
+/** @type {Blob | null} */
+let tbFullReadPrefetchBlob = null;
+let tbFullReadPrefetchLineIndex = -1;
+
+function tbFullReadInvalidatePrefetch() {
+    if (tbFullReadPrefetchAc) {
+        try {
+            tbFullReadPrefetchAc.abort();
+        } catch (_) {
+            /* ignore */
+        }
+        tbFullReadPrefetchAc = null;
+    }
+    tbFullReadPrefetchBlob = null;
+    tbFullReadPrefetchLineIndex = -1;
+}
+
+function tbFullReadFindNextNonEmptyIndex(start) {
+    let i = Math.max(0, start);
+    while (i < tbFullReadLines.length && !String(tbFullReadLines[i] || '').trim()) {
+        i++;
+    }
+    return i < tbFullReadLines.length ? i : -1;
+}
+
+function tbFullReadSchedulePrefetch(session, currentIdx) {
+    if (typeof serverPiperAvailable === 'undefined' || !serverPiperAvailable) return;
+    const nextI = tbFullReadFindNextNonEmptyIndex(currentIdx + 1);
+    if (nextI < 0) return;
+    if (tbFullReadPrefetchLineIndex === nextI && tbFullReadPrefetchBlob) return;
+
+    if (tbFullReadPrefetchAc) {
+        try {
+            tbFullReadPrefetchAc.abort();
+        } catch (_) {
+            /* ignore */
+        }
+        tbFullReadPrefetchAc = null;
+    }
+    tbFullReadPrefetchBlob = null;
+    tbFullReadPrefetchLineIndex = -1;
+
+    const ac = new AbortController();
+    tbFullReadPrefetchAc = ac;
+    const text = tbFullReadLines[nextI];
+    void (async () => {
+        const blob = await fetchPiperAudioBlob(text, ac.signal);
+        if (session !== tbFullReadSession) return;
+        if (tbFullReadPrefetchAc !== ac) return;
+        tbFullReadPrefetchAc = null;
+        if (!blob) return;
+        tbFullReadPrefetchBlob = blob;
+        tbFullReadPrefetchLineIndex = nextI;
+    })();
+}
+
 function tbFullReadClearHighlight() {
     if (tbFullReadLastHighlight >= 0 && tbFullReadLineEls && tbFullReadLineEls[tbFullReadLastHighlight]) {
         tbFullReadLineEls[tbFullReadLastHighlight].classList.remove('textbook-line--speaking');
@@ -76,13 +134,16 @@ function tbFullReadSyncUi() {
     const start = document.getElementById('textbook-fullread-start-btn');
     const bar = document.getElementById('textbook-fullread-icon-bar');
     const toggle = document.getElementById('textbook-fullread-toggle-btn');
+    const exitBtn = document.getElementById('textbook-fullread-exit-btn');
     if (!start || !bar) return;
     if (tbFullReadMode === 'idle') {
         start.hidden = false;
         bar.hidden = true;
+        if (exitBtn) exitBtn.classList.remove('textbook-fullread-exit--active');
     } else {
         start.hidden = true;
         bar.hidden = false;
+        if (exitBtn) exitBtn.classList.add('textbook-fullread-exit--active');
         if (toggle) {
             if (tbFullReadMode === 'playing') {
                 toggle.innerHTML = TB_FR_SVG.pause;
@@ -107,6 +168,7 @@ function tbFullReadFinish() {
 
 function textbookFullReadAbort() {
     tbFullReadSession++;
+    tbFullReadInvalidatePrefetch();
     stopSpeakPlayback();
     tbFullReadClearHighlight();
     tbFullReadMode = 'idle';
@@ -144,6 +206,18 @@ function tbFullReadPlayLine(session, lineIndex) {
         tbFullReadFinish();
         return;
     }
+    if (tbFullReadPrefetchLineIndex !== -1 && tbFullReadPrefetchLineIndex !== idx) {
+        tbFullReadInvalidatePrefetch();
+    }
+    let piperBlob = null;
+    if (tbFullReadPrefetchLineIndex === idx && tbFullReadPrefetchBlob) {
+        piperBlob = tbFullReadPrefetchBlob;
+        tbFullReadPrefetchBlob = null;
+        tbFullReadPrefetchLineIndex = -1;
+    }
+    if (!piperBlob) {
+        tbFullReadInvalidatePrefetch();
+    }
     tbFullReadSetHighlight(idx);
     void speakEnglishPreferred(
         tbFullReadLines[idx],
@@ -151,7 +225,9 @@ function tbFullReadPlayLine(session, lineIndex) {
             tbFullReadOnLineEnd(session, idx);
         },
         null,
+        piperBlob ? { piperBlob } : {},
     );
+    tbFullReadSchedulePrefetch(session, idx);
 }
 
 function tbFullReadStart() {
@@ -191,6 +267,7 @@ function tbFullReadResume() {
 function tbFullReadRestartFromHead() {
     if (!tbFullReadLines.length) return;
     stopSpeakPlayback();
+    tbFullReadInvalidatePrefetch();
     tbFullReadSession++;
     const mySession = tbFullReadSession;
     tbFullReadPaused = false;
@@ -201,6 +278,7 @@ function tbFullReadRestartFromHead() {
 }
 
 function bindTextbookFullRead(reader, lines) {
+    tbFullReadInvalidatePrefetch();
     tbFullReadLines = lines.map((line) => String(line.english || '').trim());
     tbFullReadLineEls = Array.from(reader.querySelectorAll('.textbook-line'));
     tbFullReadMode = 'idle';

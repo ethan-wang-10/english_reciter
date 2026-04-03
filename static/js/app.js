@@ -2197,36 +2197,38 @@ function speakEnglishInBrowser(text, onEnd, gen) {
     return true;
 }
 
-/** 使用服务端 Piper 返回的 WAV；失败返回 false（不调用 onEnd） */
-async function speakEnglishViaPiperApi(text, onEnd, gen) {
+/** 仅请求 Piper WAV，不播放；供课文全文预取下一句等场景 */
+async function fetchPiperAudioBlob(text, signal) {
+    const raw = String(text || '').trim().slice(0, 500);
+    if (!raw) return null;
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const ac = new AbortController();
-    ttsFetchAbort = ac;
     let response;
     try {
         response = await fetch(`${API_BASE}/words/speak-audio`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ text }),
-            signal: ac.signal,
+            body: JSON.stringify({ text: raw }),
+            signal,
         });
-    } catch (e) {
-        if (ttsFetchAbort === ac) ttsFetchAbort = null;
-        return false;
+    } catch (_) {
+        return null;
     }
-    if (ttsFetchAbort === ac) ttsFetchAbort = null;
-    if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
-    if (!response.ok) return false;
+    if (!response.ok) return null;
     const ct = response.headers.get('content-type') || '';
-    if (!ct.includes('audio') && !ct.includes('octet-stream')) return false;
+    if (!ct.includes('audio') && !ct.includes('octet-stream')) return null;
     let blob;
     try {
         blob = await response.blob();
     } catch (_) {
-        return false;
+        return null;
     }
-    if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
+    if (!blob || blob.size < 100) return null;
+    return blob;
+}
+
+/** 播放已拿到的 Piper WAV Blob；失败返回 false（不调用 onEnd） */
+async function playPiperBlob(blob, onEnd, gen) {
     if (!blob || blob.size < 100) return false;
     const url = URL.createObjectURL(blob);
     if (gen !== undefined && gen !== ttsPlaybackGeneration) {
@@ -2268,11 +2270,46 @@ async function speakEnglishViaPiperApi(text, onEnd, gen) {
     return true;
 }
 
+/** 使用服务端 Piper 返回的 WAV；失败返回 false（不调用 onEnd） */
+async function speakEnglishViaPiperApi(text, onEnd, gen) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const ac = new AbortController();
+    ttsFetchAbort = ac;
+    let response;
+    try {
+        response = await fetch(`${API_BASE}/words/speak-audio`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ text }),
+            signal: ac.signal,
+        });
+    } catch (e) {
+        if (ttsFetchAbort === ac) ttsFetchAbort = null;
+        return false;
+    }
+    if (ttsFetchAbort === ac) ttsFetchAbort = null;
+    if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
+    if (!response.ok) return false;
+    const ct = response.headers.get('content-type') || '';
+    if (!ct.includes('audio') && !ct.includes('octet-stream')) return false;
+    let blob;
+    try {
+        blob = await response.blob();
+    } catch (_) {
+        return false;
+    }
+    if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
+    if (!blob || blob.size < 100) return false;
+    return playPiperBlob(blob, onEnd, gen);
+}
+
 /** 优先 Piper，其次 Web Speech，最后服务端 say（仅服务器本机扬声器）
  * @param {string} text
  * @param {(() => void) | undefined} onEnd
- * @param {HTMLElement | null | undefined} triggerButton 触发朗读的 .btn-speak，用于加载态 */
-async function speakEnglishPreferred(text, onEnd, triggerButton) {
+ * @param {HTMLElement | null | undefined} triggerButton 触发朗读的 .btn-speak，用于加载态
+ * @param {{ piperBlob?: Blob } | undefined} opts 可选：课文全文预取的 Piper Blob，跳过网络请求 */
+async function speakEnglishPreferred(text, onEnd, triggerButton, opts = {}) {
     stopSpeakPlayback();
     endTtsSpeakUi();
     const myGen = ttsPlaybackGeneration;
@@ -2289,6 +2326,11 @@ async function speakEnglishPreferred(text, onEnd, triggerButton) {
         baseDone();
     };
     if (serverPiperAvailable) {
+        const pre = opts && opts.piperBlob;
+        if (pre && pre.size > 100) {
+            const okPre = await playPiperBlob(pre, done, myGen);
+            if (okPre) return true;
+        }
         const ok = await speakEnglishViaPiperApi(raw, done, myGen);
         if (ok) return true;
     }
