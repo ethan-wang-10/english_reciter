@@ -3730,7 +3730,7 @@ def wordbank_ocr_extract(username):
         assert pytesseract is not None
         raw_text = pytesseract.image_to_string(
             im,
-            lang="chi_sim+eng",
+            lang="eng",
             config="--psm 6",
         )
     except TesseractNotFoundError:
