@@ -4478,6 +4478,58 @@ button.import-article-chip--selected:hover {
     font-size: 1.35rem;
 }
 
+.discovery-card-word-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.discovery-import-btn {
+    padding: 8px 14px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border-radius: var(--radius-md);
+    min-height: 40px;
+    box-sizing: border-box;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, filter 0.15s ease;
+}
+
+.discovery-import-btn--add {
+    background: #2563eb;
+    color: #fff;
+    border: 2px solid #1d4ed8;
+}
+
+.discovery-import-btn--add:hover {
+    background: #1d4ed8;
+    border-color: #1e40af;
+    color: #fff;
+}
+
+.discovery-import-btn--add:active {
+    filter: brightness(0.95);
+}
+
+.discovery-import-btn--muted {
+    background: var(--surface);
+    color: var(--text-secondary);
+    border: 2px solid var(--border);
+}
+
+.discovery-import-btn--muted:hover {
+    border-color: var(--primary);
+    color: var(--text-primary);
+}
+
+.discovery-import-btn:disabled {
+    opacity: 0.75;
+    cursor: not-allowed;
+    filter: grayscale(0.15);
+}
+
 .discovery-card-phonetic {
     margin: 0 0 20px;
     font-size: 1.1rem;

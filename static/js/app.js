@@ -3917,6 +3917,10 @@ async function loadMastered() {
 
 let discoveryDeck = [];
 let discoveryIndex = 0;
+/** 用于「加入复习」：当前用户待复习 / 已掌握词条（小写英文键），与 loadDiscovery 同步刷新 */
+let discoveryPendingKeys = new Set();
+let discoveryMasteredKeys = new Set();
+let discoveryImportBusy = false;
 /** 「今日单词」模式：牌组仅为今日复习列表 */
 let discoveryModeToday = false;
 /** 搜索框有内容且使用全词库 /wordbank/csv/search 结果作为牌组 */
@@ -4097,6 +4101,120 @@ function getDiscoveryExamplesForCard(w) {
     return [{ en: single.slice(0, i).trim(), cn: single.slice(i + 1).trim() }];
 }
 
+function discoveryEnglishKey(en) {
+    return String(en || '')
+        .trim()
+        .toLowerCase();
+}
+
+function buildDiscoveryImportPayload(w) {
+    const exList = getDiscoveryExamplesForCard(w);
+    let example = '';
+    if (exList.length) {
+        const e0 = exList[0];
+        if (e0.en && e0.cn) example = `${e0.en}_${e0.cn}`;
+        else if (e0.en) example = e0.en;
+    }
+    const english = String(w.english || '').trim();
+    const chinese = String(w.chinese || '').trim();
+    const item = { english, chinese };
+    if (example) item.example = example;
+    return item;
+}
+
+function getDiscoveryImportButtonState(w) {
+    const k = discoveryEnglishKey(w.english);
+    const src = w.source;
+    if (src === 'pending' || src === 'today') {
+        return {
+            variant: 'in_queue',
+            label: '待复习中',
+            banner: '该词已在待复习列表中，无需重复导入。',
+        };
+    }
+    if (discoveryMasteredKeys.has(k)) {
+        return {
+            variant: 'mastered',
+            label: '已掌握',
+            banner: '该词已在「已掌握」列表中。',
+        };
+    }
+    if (discoveryPendingKeys.has(k)) {
+        return {
+            variant: 'in_queue',
+            label: '待复习中',
+            banner: '该词已在待复习列表中，无需重复导入。',
+        };
+    }
+    return {
+        variant: 'add',
+        label: '加入复习',
+        banner: '',
+    };
+}
+
+async function handleDiscoveryImportClick(e) {
+    const btn = e.currentTarget;
+    const w = discoveryDeck[discoveryIndex];
+    if (!w || discoveryImportBusy) return;
+    const st = getDiscoveryImportButtonState(w);
+    if (st.variant !== 'add') {
+        showMainBanner(st.banner);
+        return;
+    }
+    const zh = String(w.chinese || '').trim();
+    if (!zh) {
+        showMainBanner('该词条缺少中文释义，无法加入待复习。');
+        return;
+    }
+    const k = discoveryEnglishKey(w.english);
+    discoveryImportBusy = true;
+    const prevLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '导入中…';
+    try {
+        const payload = buildDiscoveryImportPayload(w);
+        const data = await apiRequest('/words/import-json', {
+            method: 'POST',
+            body: JSON.stringify([payload]),
+        });
+        const added = data.added || 0;
+        const skipped = data.skipped_duplicate || 0;
+        if (added > 0) {
+            discoveryPendingKeys.add(k);
+            showMainBanner(`「${w.english}」已加入待复习`);
+            loadStats();
+            renderDiscoveryCard();
+            return;
+        }
+        if (skipped > 0) {
+            try {
+                const [st, masteredRes] = await Promise.all([
+                    apiRequest('/words/status'),
+                    apiRequest('/words/mastered'),
+                ]);
+                discoveryPendingKeys = new Set((st.words || []).map((x) => discoveryEnglishKey(x.english)));
+                discoveryMasteredKeys = new Set((masteredRes.words || []).map((x) => discoveryEnglishKey(x.english)));
+            } catch (_) {
+                /* 保持本地缓存 */
+            }
+            showMainBanner('该词已在待复习列表或已掌握中，无需重复导入。');
+            loadStats();
+            renderDiscoveryCard();
+            return;
+        }
+        showMainBanner(data.message || '未能加入待复习');
+    } catch (err) {
+        showMainBanner(err.message || '导入失败');
+    } finally {
+        discoveryImportBusy = false;
+        if (btn.isConnected) {
+            btn.disabled = false;
+            btn.textContent = prevLabel;
+        }
+    }
+}
+
 function getDiscoverySelectedLevel() {
     const active = document.querySelector('.discovery-level-btn.is-active');
     if (!active) return '';
@@ -4168,7 +4286,13 @@ async function loadDiscoverySearchFromQuery(q) {
         setDiscoverySearchListboxOpen(true);
     }
     try {
-        const allRows = await getDiscoveryWordbankRows();
+        const [allRows, st, masteredRes] = await Promise.all([
+            getDiscoveryWordbankRows(),
+            apiRequest('/words/status'),
+            apiRequest('/words/mastered'),
+        ]);
+        discoveryPendingKeys = new Set((st.words || []).map((x) => discoveryEnglishKey(x.english)));
+        discoveryMasteredKeys = new Set((masteredRes.words || []).map((x) => discoveryEnglishKey(x.english)));
         if (seq !== discoverySearchRequestSeq) return;
         const matched = discoveryMatchWordbankRows(trimmed, allRows);
         if (seq !== discoverySearchRequestSeq) return;
@@ -4203,6 +4327,8 @@ async function loadDiscoverySearchFromQuery(q) {
         renderDiscoveryCard();
     } catch (_) {
         if (seq !== discoverySearchRequestSeq) return;
+        discoveryPendingKeys = new Set();
+        discoveryMasteredKeys = new Set();
         discoverySearchMode = false;
         discoveryDeck = [];
         discoveryIndex = 0;
@@ -4233,8 +4359,13 @@ async function loadDiscovery() {
     try {
         if (level === 'today') {
             discoveryModeToday = true;
-            const rev = await apiRequest('/words/review');
+            const [rev, masteredRes] = await Promise.all([
+                apiRequest('/words/review'),
+                apiRequest('/words/mastered'),
+            ]);
+            discoveryMasteredKeys = new Set((masteredRes.words || []).map((x) => discoveryEnglishKey(x.english)));
             const list = rev.words || [];
+            discoveryPendingKeys = new Set(list.map((x) => discoveryEnglishKey(x.english)));
             discoveryDeck = list.map((w) => ({
                 english: w.english,
                 chinese: w.chinese,
@@ -4246,6 +4377,7 @@ async function loadDiscovery() {
             if (discoveryIndex >= discoveryDeck.length) discoveryIndex = 0;
 
             if (discoveryDeck.length === 0) {
+                discoveryPendingKeys = new Set();
                 if (emptyEl) {
                     emptyEl.style.display = 'block';
                     emptyEl.innerHTML =
@@ -4265,10 +4397,13 @@ async function loadDiscovery() {
             return;
         }
 
-        const [st, wb] = await Promise.all([
+        const [st, wb, masteredRes] = await Promise.all([
             apiRequest('/words/status'),
             fetchWordbankCsvForDiscovery(level),
+            apiRequest('/words/mastered'),
         ]);
+        discoveryPendingKeys = new Set((st.words || []).map((x) => discoveryEnglishKey(x.english)));
+        discoveryMasteredKeys = new Set((masteredRes.words || []).map((x) => discoveryEnglishKey(x.english)));
 
         let pending = [];
         for (const w of st.words || []) {
@@ -4320,6 +4455,8 @@ async function loadDiscovery() {
         if (rootEl) rootEl.style.display = 'block';
         renderDiscoveryCard();
     } catch (_) {
+        discoveryPendingKeys = new Set();
+        discoveryMasteredKeys = new Set();
         if (emptyEl) {
             emptyEl.style.display = 'block';
             emptyEl.innerHTML = '<p>加载失败，请稍后重试。</p>';
@@ -4348,12 +4485,28 @@ function renderDiscoveryCard() {
             : '<p class="discovery-card-phonetic discovery-card-phonetic--empty">音标暂无</p>';
     const examples = getDiscoveryExamplesForCard(w);
     const exampleBlock = discoveryTwoExampleSlotsHtml(examples);
+    const importState = getDiscoveryImportButtonState(w);
+    const importBtnClass =
+        importState.variant === 'add'
+            ? 'discovery-import-btn discovery-import-btn--add'
+            : 'discovery-import-btn discovery-import-btn--muted';
+    const importAria =
+        importState.variant === 'add'
+            ? `将 ${escapeHtml(w.english)} 加入待复习`
+            : importState.label === '已掌握'
+              ? `${escapeHtml(w.english)} 已掌握`
+              : `${escapeHtml(w.english)} 已在待复习中`;
     const html = `
       <article class="discovery-card" aria-label="单词卡片 ${escapeHtml(w.english)}">
         <div class="discovery-card-body">
           <div class="discovery-card-word-row">
             <h3 class="discovery-card-word">${escapeHtml(w.english)}</h3>
-            <button type="button" class="btn-speak discovery-speak-word" title="朗读单词" aria-label="朗读 ${escapeHtml(w.english)}">🔊</button>
+            <div class="discovery-card-word-actions">
+              <button type="button" class="btn-speak discovery-speak-word" title="朗读单词" aria-label="朗读 ${escapeHtml(w.english)}">🔊</button>
+              <button type="button" class="${importBtnClass}" title="${escapeHtml(importState.label)}" aria-label="${importAria}">${escapeHtml(
+        importState.label,
+    )}</button>
+            </div>
           </div>
           ${phonBlock}
           ${exampleBlock}
@@ -4377,6 +4530,12 @@ function renderDiscoveryCard() {
     if (speakBtn) {
         speakBtn.addEventListener('click', (e) => {
             void speakEnglishPreferred(w.english, () => {}, e.currentTarget);
+        });
+    }
+    const importBtn = wrap.querySelector('.discovery-import-btn');
+    if (importBtn) {
+        importBtn.addEventListener('click', (e) => {
+            void handleDiscoveryImportClick(e);
         });
     }
     wrap.querySelectorAll('.discovery-speak-example').forEach((btn) => {
