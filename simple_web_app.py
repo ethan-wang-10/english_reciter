@@ -9,7 +9,6 @@ import os
 import sys
 import csv
 import json
-import random
 import re
 import tempfile
 import base64
@@ -877,12 +876,19 @@ def csv_word_to_review_item(row: dict, example_key: str = "1") -> dict:
     }
 
 
-def pick_example_for_word(row: dict) -> dict:
-    """从词条的 2 个例句中随机选 1 个返回复习条目。"""
+def _pick_example_slot_key(row: dict, english: str) -> str:
+    """两条例句都存在时，按词条 + 当日日期确定性选例句（与复习列表、练习判分一致）。"""
+    key = (english or row.get("english") or "").strip().lower()
+    h = hashlib.sha256(f"{key}:{date.today().isoformat()}".encode("utf-8")).hexdigest()
+    return "2" if int(h[:8], 16) % 2 else "1"
+
+
+def pick_example_for_word(row: dict, english: str = "") -> dict:
+    """从词条的 2 个例句中选 1 个返回复习条目（双例句时按词条与日期确定性选择）。"""
     has1 = bool(row.get("example1", "").strip())
     has2 = bool(row.get("example2", "").strip())
     if has1 and has2:
-        k = random.choice(["1", "2"])
+        k = _pick_example_slot_key(row, english)
     elif has2:
         k = "2"
     else:
@@ -2309,7 +2315,7 @@ def get_review_list(username):
                 # 尝试从 CSV 中获取更丰富的例句信息
                 csv_row = lookup_csv_word(w.english)
                 if csv_row:
-                    picked = pick_example_for_word(csv_row)
+                    picked = pick_example_for_word(csv_row, w.english)
                     if picked.get('example'):
                         item['example'] = picked['example']
                     item['example_form'] = picked.get('example_form', '')
@@ -2354,7 +2360,7 @@ def get_extra_review_list(username):
                 }
                 csv_row = lookup_csv_word(w.english)
                 if csv_row:
-                    picked_ex = pick_example_for_word(csv_row)
+                    picked_ex = pick_example_for_word(csv_row, w.english)
                     if picked_ex.get('example'):
                         item['example'] = picked_ex['example']
                     item['example_form'] = picked_ex.get('example_form', '')
@@ -2382,6 +2388,8 @@ def practice_word(username):
         remedial = bool(data.get('remedial'))
         # 无今日待复习时的加练：仅计复习次数，不改变掌握进度与排期
         bonus_practice = bool(data.get('bonus_practice'))
+        # True：要求拼写与例句中形式一致（如复数、时态）；False：仅词库原形（lemma）
+        test_inflection = bool(data.get('test_inflection'))
 
         if not word_id or not answer:
             return jsonify({'error': '单词ID和答案不能为空'}), 400
@@ -2402,8 +2410,18 @@ def practice_word(username):
                 return jsonify({'error': '单词未找到'}), 404
 
             submitted = answer.strip().lower()
-            # 仅接受单词原形（词库中的 english），不接受例句中的变形形式
-            is_correct = submitted == word.english.strip().lower()
+            lemma = word.english.strip().lower()
+            if test_inflection:
+                csv_row = lookup_csv_word(word.english)
+                if csv_row:
+                    picked = pick_example_for_word(csv_row, word.english)
+                    eff = (picked.get('example_form') or '').strip().lower()
+                    expected = eff if eff else lemma
+                else:
+                    expected = lemma
+                is_correct = submitted == expected
+            else:
+                is_correct = submitted == lemma
             old_success_count = word.success_count
             old_mastered_count = len(reciter.mastered_words)
 
@@ -3891,14 +3909,14 @@ def import_vocab_to_csv(username):
             t = surface_to_target[s]
             row = lookup_csv_word(t)
             if row:
-                picked = pick_example_for_word(row)
+                picked = pick_example_for_word(row, row.get("english") or "")
                 items_to_queue.append({
                     'english': picked['english'],
                     'chinese': picked['chinese'],
                     'example': picked['example'],
                 })
         for entry in generated_entries:
-            picked = pick_example_for_word(entry)
+            picked = pick_example_for_word(entry, entry.get("english") or "")
             items_to_queue.append({
                 'english': picked['english'],
                 'chinese': picked['chinese'],
@@ -4215,7 +4233,7 @@ def get_mastered_words(username):
                 csv_row = lookup_csv_word(w.english)
                 ex_text = ''
                 if csv_row:
-                    picked = pick_example_for_word(csv_row)
+                    picked = pick_example_for_word(csv_row, w.english)
                     ex_text = (picked.get('example') or '').strip()
                 if not ex_text and getattr(w, 'example', None):
                     ex_text = (w.example or '').strip()

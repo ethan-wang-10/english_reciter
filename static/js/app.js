@@ -1869,6 +1869,12 @@ function initImportResultModal() {
 }
 
 const REVIEW_PHONETIC_STORAGE_KEY = 'english_reciter_review_show_phonetic';
+const REVIEW_TEST_INFLECTION_STORAGE_KEY = 'english_reciter_review_test_inflection';
+
+function getReviewTestInflectionEnabled() {
+    const cb = document.getElementById('review-test-inflection');
+    return Boolean(cb && cb.checked);
+}
 
 function updateReviewPhoneticDisplay(word) {
     const phEl = document.getElementById('current-word-phonetic');
@@ -1995,7 +2001,7 @@ function updateUnderlineDisplay() {
     });
 }
 
-// 获取当前输入值（含固定占位符，与词库原形一致以便后端校验）
+// 获取当前输入值（含固定占位符；与下方 target 一致以便后端校验）
 function getCurrentInput() {
     const container = document.getElementById('underline-input');
     if (!container) return '';
@@ -3489,8 +3495,10 @@ async function showCurrentWord() {
     isSubmitting = false;
     isAdvancing = false;
 
-    // 本题仅填写单词原形（english），例句中可为变形，挖空仍按变形匹配
-    const targetAnswer = (word.english || '').trim();
+    // 未勾选「考察语态」：只考词库原形；勾选：须拼例句中实际形式（与 CSV example*_form / pick 一致）
+    const lemma = (word.english || '').trim();
+    const inflected = (word.example_form || '').trim() || lemma;
+    const targetAnswer = getReviewTestInflectionEnabled() ? inflected : lemma;
     word._targetAnswer = targetAnswer;
     
     const dueHint = document.getElementById('review-due-hint');
@@ -3541,7 +3549,7 @@ async function showCurrentWord() {
     
     document.getElementById('current-word-example').textContent = exampleText;
     
-    // 提示字符串基于原形长度
+    // 提示字符串基于本题目标词长度（原形或句中形式）
     const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
     document.getElementById('current-word-english').textContent = hintString;
     updateReviewPhoneticDisplay(word);
@@ -3586,7 +3594,8 @@ async function submitAnswer() {
                 word_id: word.english,
                 answer: answer,
                 remedial: wrongRoundNumber > 0 && reviewSessionMode !== 'bonus',
-                bonus_practice: reviewSessionMode === 'bonus'
+                bonus_practice: reviewSessionMode === 'bonus',
+                test_inflection: getReviewTestInflectionEnabled(),
             })
         });
 
@@ -5464,6 +5473,18 @@ document.addEventListener('DOMContentLoaded', function() {
             localStorage.setItem(REVIEW_PHONETIC_STORAGE_KEY, phoneticCb.checked ? '1' : '0');
             const word = currentReviewList[currentReviewIndex];
             if (word) updateReviewPhoneticDisplay(word);
+        });
+    }
+
+    const inflectionCb = document.getElementById('review-test-inflection');
+    if (inflectionCb) {
+        inflectionCb.checked = localStorage.getItem(REVIEW_TEST_INFLECTION_STORAGE_KEY) === '1';
+        inflectionCb.addEventListener('change', () => {
+            localStorage.setItem(REVIEW_TEST_INFLECTION_STORAGE_KEY, inflectionCb.checked ? '1' : '0');
+            const word = currentReviewList[currentReviewIndex];
+            if (word && document.getElementById('review-section')?.classList.contains('active')) {
+                void showCurrentWord();
+            }
         });
     }
 
