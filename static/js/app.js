@@ -5284,7 +5284,7 @@ async function importFromArticle() {
 /**
  * 词汇导入：根据输入形态解析为词条数组。
  * - 多行：每行一条（可含空格词组，如 New York）；行内若有逗号则再按逗号拆。
- * - 单行：有逗号/顿号等则按标点拆；否则按空白拆。
+ * - 单行：有逗号/顿号等则按标点拆；否则整行算一条（保留空格词组，如 anything else）。多词请用逗号分隔。
  */
 function parseVocabImportTokens(raw) {
     if (raw == null || typeof raw !== 'string') return [];
@@ -5299,10 +5299,7 @@ function parseVocabImportTokens(raw) {
                 if (t) out.push(t);
             });
         } else {
-            line.split(/\s+/u).forEach((p) => {
-                const t = p.trim();
-                if (t) out.push(t);
-            });
+            out.push(line.trim());
         }
     };
     const tokens = [];

@@ -3353,6 +3353,33 @@ def _lemma_for_vocab_not_in_csv(
     return surface
 
 
+def _vocab_import_spacy_accepts_phrase_surface(s: str) -> bool:
+    """
+    多词英文词组（空格分隔）：字符集与单段一致；开启 spaCy 时逐词须能通过单段 lemma 校验。
+    """
+    if not re.match(r"^[a-z][a-z'\-]*(?: [a-z][a-z'\-]*)+$", s):
+        return False
+    if not _wordbank_lemma_spacy_enabled():
+        return True
+    nlp = _get_spacy_nlp()
+    if nlp is None:
+        return True
+    doc = nlp(s)
+    n_words = 0
+    for tok in doc:
+        if tok.is_space:
+            continue
+        if tok.is_punct:
+            continue
+        t = tok.text.lower()
+        if not t:
+            continue
+        n_words += 1
+        if _spacy_lemma_for_surface(t) is None:
+            return False
+    return n_words >= 2
+
+
 def _vocab_import_spacy_accepts_surface(
     surface: str,
     mappings: dict,
@@ -3360,22 +3387,26 @@ def _vocab_import_spacy_accepts_surface(
 ) -> bool:
     """
     VIP 词汇导入：用 spaCy 原型校验词形是否可识别；管理员映射的词直接通过。
-    关闭 wordbank_lemma_spacy 或模型不可用时，仅用字符规则，避免导入完全不可用。
+    支持空格分隔的多词词组（如 anything else）；关闭 wordbank_lemma_spacy 或模型不可用时放宽。
     """
-    s = str(surface or "").strip().lower()
-    if not s or not re.match(r"^[a-z][a-z'\-]*$", s) or len(s) < 2:
+    s = " ".join(str(surface or "").strip().lower().split())
+    if not s or len(s) < 2:
         return False
     if s in mappings:
         return True
-    if not _wordbank_lemma_spacy_enabled():
-        return True
-    if _get_spacy_nlp() is None:
-        return True
-    if lemma_map:
-        lem = lemma_map.get(s) or lemma_map.get(_normalize_apostrophe_token(s))
-        if lem is not None:
+    if re.match(r"^[a-z][a-z'\-]*$", s):
+        if not _wordbank_lemma_spacy_enabled():
             return True
-    return _spacy_lemma_for_surface(s) is not None
+        if _get_spacy_nlp() is None:
+            return True
+        if lemma_map:
+            lem = lemma_map.get(s) or lemma_map.get(_normalize_apostrophe_token(s))
+            if lem is not None:
+                return True
+        return _spacy_lemma_for_surface(s) is not None
+    if " " in s:
+        return _vocab_import_spacy_accepts_phrase_surface(s)
+    return False
 
 
 @app.route('/api/wordbank/csv/search', methods=['GET'])
