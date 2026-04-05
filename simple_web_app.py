@@ -625,15 +625,25 @@ def _normalize_words_csv_row(row: dict) -> dict:
     return {k: str(row.get(k, "") or "").strip() for k in _CSV_FIELDS}
 
 
+def _is_valid_vocab_csv_english_key(en_low: str) -> bool:
+    """
+    词库 CSV 中 english 键：单段词形，或空格分隔的多词短语（与导入词形校验一致）。
+    """
+    if not en_low or len(en_low) < 1:
+        return False
+    if re.match(r"^[a-z][a-z'\-]*$", en_low):
+        return True
+    return bool(re.match(r"^[a-z][a-z'\-]*(?: [a-z][a-z'\-]*)+$", en_low))
+
+
 def _is_valid_deepseek_word_entry(entry: object) -> bool:
     """DeepSeek 返回的单条：需含合法 english、非空 chinese，与词库 CSV 字段兼容。"""
     if not isinstance(entry, dict):
         return False
-    en = str(entry.get("english", "")).strip()
+    en = " ".join(str(entry.get("english", "")).strip().lower().split())
     if not en:
         return False
-    en_low = en.lower()
-    if not re.match(r"^[a-z][a-z'\-]*$", en_low):
+    if not _is_valid_vocab_csv_english_key(en):
         return False
     if not str(entry.get("chinese", "")).strip():
         return False
@@ -661,7 +671,7 @@ def accumulate_valid_deepseek_word_rows(
         if not _is_valid_deepseek_word_entry(entry):
             continue
         row = _normalize_words_csv_row(entry)
-        en = row["english"].strip().lower()
+        en = " ".join(row["english"].strip().lower().split())
         if not en:
             continue
         if en in csv_so_far:
@@ -1178,6 +1188,7 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
 
 注意：
 - level必须是"小学"、"初中"、"高中"或"GRE"之一{level_hint}
+- 若列表中某项为多个英文单词组成的短语（如 anything else），english 字段必须与该项原文完全一致（含空格），不要只写其中一个词
 - 例句难度要与level相符，小学/初中例句要简单易懂
 - example1_form 和 example2_form：只写在句子中实际出现的变形形式，如与原形完全相同则写空字符串
 """
