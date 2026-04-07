@@ -6033,8 +6033,10 @@ body.chat-sidebar-open {
     max-width: 100%;
 }
 
+/* 自己发的：DOM 顺序为 [文字列][头像]，整行靠右 —— 气泡在左、头像在右（与微信一致） */
 .chat-msg--mine .chat-msg-row {
-    flex-direction: row-reverse;
+    flex-direction: row;
+    justify-content: flex-end;
 }
 
 .chat-msg-avatar {
@@ -6080,6 +6082,8 @@ body.chat-sidebar-open {
 }
 
 .chat-msg--mine .chat-msg-main {
+    flex: 0 1 auto;
+    max-width: min(78%, calc(100% - 52px));
     align-items: flex-end;
 }
 
@@ -6094,6 +6098,7 @@ body.chat-sidebar-open {
 }
 
 .chat-msg-body {
+    position: relative;
     display: inline-block;
     max-width: 100%;
     padding: 0.5rem 0.7rem;
@@ -6108,6 +6113,20 @@ body.chat-sidebar-open {
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
 }
 
+/* 对方消息：小三角指向左侧头像 */
+.chat-msg:not(.chat-msg--mine) .chat-msg-body::before {
+    content: "";
+    position: absolute;
+    left: -5px;
+    top: 12px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 5px 6px 5px 0;
+    border-color: transparent #fff transparent transparent;
+    filter: drop-shadow(-1px 0 0 rgba(0, 0, 0, 0.06));
+}
+
 .chat-msg-time {
     font-size: 0.62rem;
     color: #9aa0a6;
@@ -6119,6 +6138,20 @@ body.chat-sidebar-open {
     background: #95ec69;
     border-color: #6bbf45;
     text-align: left;
+}
+
+/* 自己发的：小三角指向右侧头像 */
+.chat-msg--mine .chat-msg-body::after {
+    content: "";
+    position: absolute;
+    right: -5px;
+    top: 12px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 5px 0 5px 6px;
+    border-color: transparent transparent transparent #95ec69;
+    filter: drop-shadow(1px 0 0 rgba(107, 191, 69, 0.5));
 }
 
 .chat-msg--mine .chat-msg-name {

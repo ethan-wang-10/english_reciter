@@ -4960,7 +4960,13 @@ def _chat_sanitize_body(text: str) -> str:
 
 def _chat_mentionable_usernames() -> Set[str]:
     users = load_users()
-    return {u for u, row in users.items() if isinstance(row, dict) and is_user_enabled(u)}
+    return {
+        u
+        for u, row in users.items()
+        if isinstance(row, dict)
+        and is_user_enabled(u)
+        and not is_parent_user_record(row)
+    }
 
 
 def _chat_extract_mentions(body: str, valid: Set[str]) -> List[str]:
@@ -5052,7 +5058,10 @@ def api_chat_users_suggest(username):
     for u in sorted(users.keys()):
         if len(out) >= 20:
             break
-        if not isinstance(users.get(u), dict) or not is_user_enabled(u):
+        row = users.get(u)
+        if not isinstance(row, dict) or not is_user_enabled(u):
+            continue
+        if is_parent_user_record(row):
             continue
         if not q or u.lower().startswith(q):
             out.append(u)
