@@ -704,15 +704,24 @@ def patch_settings(
     }
 
 
-def build_leaderboard(
-    data_dir: Path,
+def load_states_batch(
+    data_dir: Path, usernames: List[str]
+) -> Dict[str, Dict[str, Any]]:
+    """一次请求内对多个用户各读一次 gamification.json，供排行榜等复用。"""
+    return {un: load_state(data_dir, un) for un in usernames}
+
+
+def build_leaderboard_from_states(
+    states: Dict[str, Dict[str, Any]],
     usernames: List[str],
     *,
     viewer: str,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for un in usernames:
-        st = load_state(data_dir, un)
+        st = states.get(un)
+        if st is None:
+            continue
         if not st.get("leaderboard_opt_in", True):
             continue
         xp = int(st.get("total_xp") or 0)
@@ -731,3 +740,16 @@ def build_leaderboard(
     for i, r in enumerate(rows, start=1):
         r["rank"] = i
     return rows
+
+
+def build_leaderboard(
+    data_dir: Path,
+    usernames: List[str],
+    *,
+    viewer: str,
+) -> List[Dict[str, Any]]:
+    return build_leaderboard_from_states(
+        load_states_batch(data_dir, usernames),
+        usernames,
+        viewer=viewer,
+    )

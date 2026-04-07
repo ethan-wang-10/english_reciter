@@ -102,8 +102,8 @@ def period_label_cn(start: date, end: date) -> str:
     )
 
 
-def build_period_leaderboard(
-    data_dir: Path,
+def build_period_leaderboard_from_states(
+    states: Dict[str, Dict[str, Any]],
     usernames: List[str],
     *,
     viewer: str,
@@ -112,7 +112,9 @@ def build_period_leaderboard(
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for un in usernames:
-        st = gamification_mod.load_state(data_dir, un)
+        st = states.get(un)
+        if st is None:
+            continue
         if not st.get("leaderboard_opt_in", True):
             continue
         px = sum_daily_xp_in_range(st, start, end)
@@ -133,6 +135,20 @@ def build_period_leaderboard(
     for i, r in enumerate(rows, start=1):
         r["rank"] = i
     return rows
+
+
+def build_period_leaderboard(
+    data_dir: Path,
+    usernames: List[str],
+    *,
+    viewer: str,
+    start: date,
+    end: date,
+) -> List[Dict[str, Any]]:
+    states = gamification_mod.load_states_batch(data_dir, usernames)
+    return build_period_leaderboard_from_states(
+        states, usernames, viewer=viewer, start=start, end=end
+    )
 
 
 def _iter_weeks_back(last_sunday: date, max_weeks: int) -> List[Tuple[str, date, date]]:
@@ -171,8 +187,11 @@ def _settle_one_week(
     mon: date,
     sun: date,
     raw: Dict[str, Any],
+    states: Dict[str, Dict[str, Any]],
 ) -> None:
-    rows = build_period_leaderboard(data_dir, usernames, viewer="", start=mon, end=sun)
+    rows = build_period_leaderboard_from_states(
+        states, usernames, viewer="", start=mon, end=sun
+    )
     top: List[Dict[str, Any]] = []
     for i in range(min(3, len(rows))):
         r = rows[i]
@@ -211,8 +230,11 @@ def _settle_one_month(
     mon: date,
     last_d: date,
     raw: Dict[str, Any],
+    states: Dict[str, Dict[str, Any]],
 ) -> None:
-    rows = build_period_leaderboard(data_dir, usernames, viewer="", start=mon, end=last_d)
+    rows = build_period_leaderboard_from_states(
+        states, usernames, viewer="", start=mon, end=last_d
+    )
     top: List[Dict[str, Any]] = []
     for i in range(min(3, len(rows))):
         r = rows[i]
@@ -243,8 +265,17 @@ def _settle_one_month(
     }
 
 
-def settle_periods_if_needed(data_dir: Path, usernames: List[str]) -> None:
-    """惰性结算：从最近已结束周/月往回，连续未结算的周、月（单次请求有上限）。"""
+def settle_periods_if_needed(
+    data_dir: Path,
+    usernames: List[str],
+    states: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> None:
+    """惰性结算：从最近已结束周/月往回，连续未结算的周、月（单次请求有上限）。
+
+    若传入 states（与 usernames 对应的 gamification 快照），则结算与排名计算不再重复读盘。
+    """
+    if states is None:
+        states = gamification_mod.load_states_batch(data_dir, usernames)
     today = date.today()
     path = _rewards_path(data_dir)
     with _period_lock:
@@ -270,7 +301,15 @@ def settle_periods_if_needed(data_dir: Path, usernames: List[str]) -> None:
                 break
         to_week.sort(key=lambda x: x[1])
         for wid, mon, sun in to_week:
-            _settle_one_week(data_dir, usernames, week_id=wid, mon=mon, sun=sun, raw=raw)
+            _settle_one_week(
+                data_dir,
+                usernames,
+                week_id=wid,
+                mon=mon,
+                sun=sun,
+                raw=raw,
+                states=states,
+            )
         if to_week:
             _save_json(path, raw)
 
@@ -283,14 +322,20 @@ def settle_periods_if_needed(data_dir: Path, usernames: List[str]) -> None:
                 break
         to_month.sort(key=lambda x: x[1])
         for ym, mon, last_d in to_month:
-            _settle_one_month(data_dir, usernames, ym=ym, mon=mon, last_d=last_d, raw=raw)
+            _settle_one_month(
+                data_dir,
+                usernames,
+                ym=ym,
+                mon=mon,
+                last_d=last_d,
+                raw=raw,
+                states=states,
+            )
         if to_month:
             _save_json(path, raw)
 
 
-def _last_settled_week_info(data_dir: Path) -> Optional[Dict[str, Any]]:
-    path = _rewards_path(data_dir)
-    raw = _load_json(path, {"weeks": {}, "months": {}})
+def _last_settled_week_info_from_raw(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     weeks = raw.get("weeks") or {}
     if not isinstance(weeks, dict) or not weeks:
         return None
@@ -309,9 +354,7 @@ def _last_settled_week_info(data_dir: Path) -> Optional[Dict[str, Any]]:
     return {"period_id": best_key, **block}
 
 
-def _last_settled_month_info(data_dir: Path) -> Optional[Dict[str, Any]]:
-    path = _rewards_path(data_dir)
-    raw = _load_json(path, {"weeks": {}, "months": {}})
+def _last_settled_month_info_from_raw(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     months = raw.get("months") or {}
     if not isinstance(months, dict) or not months:
         return None
@@ -330,18 +373,34 @@ def _last_settled_month_info(data_dir: Path) -> Optional[Dict[str, Any]]:
     return {"period_id": best_key, **block}
 
 
+def _last_settled_week_info(data_dir: Path) -> Optional[Dict[str, Any]]:
+    raw = _load_json(_rewards_path(data_dir), {"weeks": {}, "months": {}})
+    return _last_settled_week_info_from_raw(raw)
+
+
+def _last_settled_month_info(data_dir: Path) -> Optional[Dict[str, Any]]:
+    raw = _load_json(_rewards_path(data_dir), {"weeks": {}, "months": {}})
+    return _last_settled_month_info_from_raw(raw)
+
+
 def build_week_leaderboard_payload(
     data_dir: Path,
     usernames: List[str],
     *,
     viewer: str,
+    states: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
+    if states is None:
+        states = gamification_mod.load_states_batch(data_dir, usernames)
     today = date.today()
     mon, sun = week_monday_sunday(today)
     end = min(today, sun)
-    rows = build_period_leaderboard(data_dir, usernames, viewer=viewer, start=mon, end=end)
+    rows = build_period_leaderboard_from_states(
+        states, usernames, viewer=viewer, start=mon, end=end
+    )
     wid = iso_week_id(today)
-    week_last = _last_settled_week_info(data_dir)
+    rewards_raw = _load_json(_rewards_path(data_dir), {"weeks": {}, "months": {}})
+    week_last = _last_settled_week_info_from_raw(rewards_raw)
     return {
         "scope": "week",
         "period_id": wid,
@@ -359,13 +418,19 @@ def build_month_leaderboard_payload(
     usernames: List[str],
     *,
     viewer: str,
+    states: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
+    if states is None:
+        states = gamification_mod.load_states_batch(data_dir, usernames)
     today = date.today()
     ym = today.strftime("%Y-%m")
     mon, last_d = month_calendar_bounds(ym)
     end = min(today, last_d)
-    rows = build_period_leaderboard(data_dir, usernames, viewer=viewer, start=mon, end=end)
-    month_last = _last_settled_month_info(data_dir)
+    rows = build_period_leaderboard_from_states(
+        states, usernames, viewer=viewer, start=mon, end=end
+    )
+    rewards_raw = _load_json(_rewards_path(data_dir), {"weeks": {}, "months": {}})
+    month_last = _last_settled_month_info_from_raw(rewards_raw)
     return {
         "scope": "month",
         "period_id": ym,

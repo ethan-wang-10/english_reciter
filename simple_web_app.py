@@ -1319,11 +1319,25 @@ def user_avatar_disk_path(username: str) -> Optional[Path]:
     if not is_valid_username(username):
         return None
     d = DATA_DIR / username
+    if not d.is_dir():
+        return None
+    try:
+        names = set(os.listdir(d))
+    except OSError:
+        return None
     for name in ("avatar.webp", "avatar.jpg", "avatar.jpeg", "avatar.png"):
-        p = d / name
-        if p.exists():
-            return p
+        if name in names:
+            return d / name
     return None
+
+
+def _leaderboard_avatar_url(username: str, cache: Dict[str, Optional[str]]) -> Optional[str]:
+    u = str(username or "")
+    if u in cache:
+        return cache[u]
+    url = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
+    cache[u] = url
+    return url
 
 
 def _avatar_pil_to_rgb(im: "PILImage.Image") -> "PILImage.Image":
@@ -2060,34 +2074,33 @@ def get_leaderboard(username):
         if scope not in ("total", "week", "month"):
             return jsonify({"error": "scope 须为 total、week 或 month"}), 400
 
+        states = gamification_mod.load_states_batch(DATA_DIR, enabled)
         if scope in ("week", "month"):
-            leaderboard_periods_mod.settle_periods_if_needed(DATA_DIR, enabled)
+            leaderboard_periods_mod.settle_periods_if_needed(DATA_DIR, enabled, states)
 
+        avatar_cache: Dict[str, Optional[str]] = {}
         if scope == "total":
-            rows = gamification_mod.build_leaderboard(
-                DATA_DIR, enabled, viewer=username
+            rows = gamification_mod.build_leaderboard_from_states(
+                states, enabled, viewer=username
             )
             for r in rows:
-                u = r.get("username") or ""
-                r["avatar_url"] = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
+                r["avatar_url"] = _leaderboard_avatar_url(r.get("username") or "", avatar_cache)
             return jsonify({"scope": "total", "leaderboard": rows}), 200
 
         if scope == "week":
             payload = leaderboard_periods_mod.build_week_leaderboard_payload(
-                DATA_DIR, enabled, viewer=username
+                DATA_DIR, enabled, viewer=username, states=states
             )
         else:
             payload = leaderboard_periods_mod.build_month_leaderboard_payload(
-                DATA_DIR, enabled, viewer=username
+                DATA_DIR, enabled, viewer=username, states=states
             )
         for r in payload.get("leaderboard") or []:
-            u = r.get("username") or ""
-            r["avatar_url"] = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
+            r["avatar_url"] = _leaderboard_avatar_url(r.get("username") or "", avatar_cache)
         pl = payload.get("podium_last_period")
         if pl and isinstance(pl.get("top"), list):
             for t in pl["top"]:
-                u = t.get("username") or ""
-                t["avatar_url"] = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
+                t["avatar_url"] = _leaderboard_avatar_url(t.get("username") or "", avatar_cache)
         return jsonify(payload), 200
     except Exception as e:
         logger.error(f"获取排行榜失败: {e}")
