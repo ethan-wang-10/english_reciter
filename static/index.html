@@ -107,9 +107,6 @@
                             <span class="btn-nav-pk-invite-icon" aria-hidden="true">💬</span>
                             <span id="pk-invite-badge" class="pk-invite-badge" hidden aria-hidden="true"></span>
                         </button>
-                        <button type="button" id="chat-sidebar-btn" class="btn-nav-chat" title="聊天室" aria-label="聊天室">
-                            <span class="btn-nav-chat-icon" aria-hidden="true">🗨</span>
-                        </button>
                         <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
                     </div>
                     <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
@@ -497,7 +494,7 @@
             <div id="leaderboard-section" class="section">
                 <div class="container leaderboard-page">
                     <h2>学习排行榜</h2>
-                    <p class="leaderboard-intro" id="leaderboard-intro">按累计 XP 排名，看看谁卷得最优雅。再往上翻翻：群体赛跑是「大家一起卷」，PK 榜是「点名卷」——上月谁赢了嘴仗，本月谁还在硬撑，都写在上面。</p>
+                    <p class="leaderboard-intro" id="leaderboard-intro">先选总榜 / 周榜 / 月榜，再看领奖台与下方主榜；中间有月度群体赛跑，主榜下面还有每月 PK 风云榜。</p>
                     <div class="leaderboard-scope-tabs" role="tablist" aria-label="排行榜类型">
                         <button type="button" class="leaderboard-tab active" data-lb-scope="total" role="tab" aria-selected="true">总榜</button>
                         <button type="button" class="leaderboard-tab" data-lb-scope="week" role="tab" aria-selected="false">周榜</button>
@@ -509,9 +506,9 @@
                         <span>在排行榜中展示我的学习数据</span>
                     </label>
                     <div id="monthly-pool-race-wrap" class="monthly-pool-race-wrap"></div>
-                    <div id="monthly-pk-board-wrap" class="monthly-pk-board-wrap" aria-label="每月 PK 榜"></div>
                     <div id="leaderboard-loading" class="leaderboard-loading" style="display: none;">加载中…</div>
                     <div id="leaderboard-table-wrap" class="leaderboard-table-wrap"></div>
+                    <div id="monthly-pk-board-wrap" class="monthly-pk-board-wrap" aria-label="每月 PK 榜"></div>
 
                     <h3 class="achievements-section-title">我的成就</h3>
                     <div id="achievements-grid" class="achievements-grid"></div>
@@ -547,6 +544,13 @@
                     </div>
                 </div>
             </div>
+
+            <button type="button" id="chat-side-trigger" class="chat-side-trigger" title="聊天室" aria-label="打开聊天室" aria-expanded="false" aria-controls="chat-sidebar">
+                <span class="chat-side-trigger-inner">
+                    <span class="chat-side-trigger-icon" aria-hidden="true">🗨</span>
+                    <span class="chat-side-trigger-text">聊天</span>
+                </span>
+            </button>
         </div>
 
         <template id="deferred-app-shell">

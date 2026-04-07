@@ -235,12 +235,14 @@
     async function openChatSidebar() {
         const side = document.getElementById("chat-sidebar");
         const bd = document.getElementById("chat-sidebar-backdrop");
+        const trig = document.getElementById("chat-side-trigger");
         if (!side || !bd) return;
         bd.hidden = false;
         side.classList.add("chat-sidebar--open");
         side.setAttribute("aria-hidden", "false");
         bd.classList.add("chat-sidebar-backdrop--visible");
         document.body.classList.add("chat-sidebar-open");
+        if (trig) trig.setAttribute("aria-expanded", "true");
         await loadInitial();
         connectChatSSE();
         const ta = document.getElementById("chat-input");
@@ -250,6 +252,7 @@
     function closeChatSidebar() {
         const side = document.getElementById("chat-sidebar");
         const bd = document.getElementById("chat-sidebar-backdrop");
+        const trig = document.getElementById("chat-side-trigger");
         if (side) {
             side.classList.remove("chat-sidebar--open");
             side.setAttribute("aria-hidden", "true");
@@ -259,6 +262,7 @@
             bd.hidden = true;
         }
         document.body.classList.remove("chat-sidebar-open");
+        if (trig) trig.setAttribute("aria-expanded", "false");
         disconnectChatSSE();
     }
 
@@ -296,7 +300,7 @@
     }
 
     function bind() {
-        document.getElementById("chat-sidebar-btn")?.addEventListener("click", () => void openChatSidebar());
+        document.getElementById("chat-side-trigger")?.addEventListener("click", () => void openChatSidebar());
         document.getElementById("mobile-open-chat")?.addEventListener("click", () => {
             if (typeof closeMobileMoreSheet === "function") closeMobileMoreSheet();
             void openChatSidebar();
