@@ -187,6 +187,16 @@
         atSuggestIndex = 0;
     }
 
+    /** 当列表已渲染但内存数组不同步时，从 DOM 拉回用户名（避免键盘导航条件不满足） */
+    function syncChatAtSuggestUsersFromDom() {
+        const box = document.getElementById("chat-at-suggest");
+        if (!box || box.hidden) return;
+        const list = Array.from(box.querySelectorAll("[data-chat-at-user]"))
+            .map((b) => b.getAttribute("data-chat-at-user"))
+            .filter(Boolean);
+        if (list.length) atSuggestUsers = list;
+    }
+
     function renderChatAtSuggest() {
         hideChatEmojiPanel();
         const box = document.getElementById("chat-at-suggest");
@@ -220,6 +230,8 @@
                 if (u) applyChatMention(u);
             });
         });
+        const activeEl = box.querySelector(".chat-at-option--active");
+        if (activeEl) activeEl.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
 
     function applyChatMention(username) {
@@ -787,11 +799,17 @@
                 return;
             }
             const box = document.getElementById("chat-at-suggest");
-            const suggestOpen = box && !box.hidden && atSuggestUsers.length > 0;
+            const hasVisibleOptions = !!(box && !box.hidden && box.querySelector(".chat-at-option"));
+            if (hasVisibleOptions) syncChatAtSuggestUsersFromDom();
+            const suggestOpen = hasVisibleOptions && atSuggestUsers.length > 0;
 
-            if (suggestOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            const isArrowDown =
+                e.key === "ArrowDown" || e.key === "Down" || e.code === "ArrowDown";
+            const isArrowUp = e.key === "ArrowUp" || e.key === "Up" || e.code === "ArrowUp";
+
+            if (suggestOpen && (isArrowDown || isArrowUp)) {
                 e.preventDefault();
-                if (e.key === "ArrowDown") {
+                if (isArrowDown) {
                     atSuggestIndex = Math.min(atSuggestIndex + 1, atSuggestUsers.length - 1);
                 } else {
                     atSuggestIndex = Math.max(atSuggestIndex - 1, 0);
