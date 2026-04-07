@@ -96,17 +96,13 @@
                     <span class="ng-xp" id="ng-xp">0 XP</span>
                     <span class="ng-streak" id="ng-streak" title="连续有效打卡（每日至少答对 5 词）">🔥 0</span>
                     <span class="ng-checkin" id="ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
-                    <button type="button" class="ng-pk js-pk-status-open" id="ng-pk-active" title="进行中的 PK">
+                    <button type="button" class="ng-pk js-pk-hub-open" id="ng-pk-active" title="1v1 打卡 PK">
                         <span class="ng-pk-label" aria-hidden="true">PK</span>
                         <span id="ng-pk-badge" class="ng-pk-badge" hidden aria-hidden="true"></span>
                     </button>
                 </div>
                 <div class="nav-user">
                     <div class="nav-user-gear-cluster">
-                        <button type="button" id="pk-invite-btn" class="btn-nav-pk-invite" title="PK 邀约" aria-label="PK 邀约">
-                            <span class="btn-nav-pk-invite-icon" aria-hidden="true">💬</span>
-                            <span id="pk-invite-badge" class="pk-invite-badge" hidden aria-hidden="true"></span>
-                        </button>
                         <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
                     </div>
                     <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
@@ -145,7 +141,7 @@
                         <span class="ng-xp" id="mobile-ng-xp">0 XP</span>
                         <span class="ng-streak" id="mobile-ng-streak" title="连续有效打卡（每日至少答对 5 词）">🔥 0</span>
                         <span class="ng-checkin" id="mobile-ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
-                        <button type="button" class="ng-pk js-pk-status-open" id="mobile-ng-pk-active" title="进行中的 PK">
+                        <button type="button" class="ng-pk js-pk-hub-open" id="mobile-ng-pk-active" title="1v1 打卡 PK">
                             <span class="ng-pk-label" aria-hidden="true">PK</span>
                             <span id="mobile-ng-pk-badge" class="ng-pk-badge" hidden aria-hidden="true"></span>
                         </button>
@@ -623,22 +619,6 @@
                         <p class="settings-hint" id="settings-pool-hint">—</p>
                         <button type="button" class="btn btn-primary" id="settings-pool-join">加入奖池（150 XP）</button>
                     </div>
-                    <div class="settings-block">
-                        <h3 class="settings-subtitle">1v1 打卡 PK</h3>
-                        <div class="settings-goal-row settings-duel-row">
-                            <select id="settings-duel-target-select" class="settings-duel-input settings-duel-select" aria-label="选择对手">
-                                <option value="">选择对手</option>
-                            </select>
-                            <select id="settings-duel-wager" class="settings-duel-wager">
-                                <option value="0">无赌注</option>
-                                <option value="50">50 XP</option>
-                                <option value="100" selected>100 XP</option>
-                                <option value="200">200 XP</option>
-                            </select>
-                            <button type="button" class="btn btn-primary" id="settings-duel-send">发起</button>
-                        </div>
-                        <ul class="settings-duel-list" id="settings-duel-list"></ul>
-                    </div>
                     </div>
                     <div id="settings-parent-block" class="settings-block" style="display: none;">
                         <h3 class="settings-subtitle">家长密码</h3>
@@ -658,27 +638,37 @@
             </div>
         </div>
 
-        <!-- 1v1 PK 邀约（顶栏消息入口） -->
-        <div id="pk-invite-modal" class="pk-invite-modal" style="display: none;" aria-hidden="true">
-            <div class="pk-invite-backdrop" id="pk-invite-backdrop"></div>
-            <div class="pk-invite-card" role="dialog" aria-modal="true" aria-labelledby="pk-invite-title">
+        <!-- 1v1 PK：顶栏 PK 入口（发起/挑战列表） -->
+        <div id="pk-hub-modal" class="pk-invite-modal pk-hub-modal" style="display: none;" aria-hidden="true">
+            <div class="pk-invite-backdrop" id="pk-hub-backdrop"></div>
+            <div class="pk-invite-card pk-hub-card" role="dialog" aria-modal="true" aria-labelledby="pk-hub-title">
                 <div class="pk-invite-card-head">
-                    <h3 id="pk-invite-title">1v1 PK 邀约</h3>
-                    <button type="button" class="pk-invite-close" id="pk-invite-close" aria-label="关闭">×</button>
+                    <h3 id="pk-hub-title">1v1 打卡 PK</h3>
+                    <button type="button" class="pk-invite-close" id="pk-hub-close" aria-label="关闭">×</button>
                 </div>
-                <div id="pk-invite-body" class="pk-invite-body"></div>
-            </div>
-        </div>
-
-        <!-- 进行中 PK 状态（打卡旁入口） -->
-        <div id="pk-status-modal" class="pk-invite-modal pk-status-modal" style="display: none;" aria-hidden="true">
-            <div class="pk-invite-backdrop" id="pk-status-backdrop"></div>
-            <div class="pk-invite-card pk-status-card" role="dialog" aria-modal="true" aria-labelledby="pk-status-title">
-                <div class="pk-invite-card-head">
-                    <h3 id="pk-status-title">进行中的 PK</h3>
-                    <button type="button" class="pk-invite-close" id="pk-status-close" aria-label="关闭">×</button>
+                <div id="pk-hub-body" class="pk-invite-body pk-hub-body">
+                    <p id="pk-hub-loading" class="pk-invite-loading" hidden>加载中…</p>
+                    <div id="pk-hub-content">
+                        <div class="pk-hub-section">
+                            <h4 class="pk-hub-section-title">发起 PK</h4>
+                            <div class="settings-goal-row settings-duel-row">
+                                <select id="pk-hub-duel-target-select" class="settings-duel-input settings-duel-select" aria-label="选择对手">
+                                    <option value="">选择对手</option>
+                                </select>
+                                <select id="pk-hub-duel-wager" class="settings-duel-wager" aria-label="赌注">
+                                    <option value="0">无赌注</option>
+                                    <option value="100" selected>100 XP</option>
+                                </select>
+                                <button type="button" class="btn btn-primary" id="pk-hub-duel-send">发起</button>
+                            </div>
+                        </div>
+                        <div class="pk-hub-section">
+                            <h4 class="pk-hub-section-title">我的挑战</h4>
+                            <ul class="settings-duel-list" id="pk-hub-duel-list"></ul>
+                        </div>
+                    </div>
+                    <p id="pk-hub-error" class="pk-invite-empty" style="color:var(--error-dark); display:none;" role="alert"></p>
                 </div>
-                <div id="pk-status-body" class="pk-invite-body pk-status-body"></div>
             </div>
         </div>
 

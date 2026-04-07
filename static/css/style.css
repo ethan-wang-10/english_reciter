@@ -387,48 +387,6 @@ body {
     flex-shrink: 0;
 }
 
-.btn-nav-pk-invite {
-    position: relative;
-    width: 42px;
-    height: 42px;
-    border-radius: 10px;
-    border: 2px solid var(--border);
-    background: var(--surface);
-    font-size: 1.15rem;
-    line-height: 1;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s, border-color 0.2s;
-    padding: 0;
-    font-family: inherit;
-}
-
-.btn-nav-pk-invite:hover {
-    background: #eef1f4;
-    border-color: var(--secondary-color);
-}
-
-.pk-invite-badge {
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    min-width: 17px;
-    height: 17px;
-    padding: 0 4px;
-    border-radius: var(--radius-pill);
-    background: var(--error-color);
-    color: #fff;
-    font-size: 0.65rem;
-    font-weight: 800;
-    line-height: 13px;
-    text-align: center;
-    border: 2px solid var(--surface);
-    box-sizing: border-box;
-    pointer-events: none;
-}
-
 .nav-user > .nav-user-avatar-wrap {
     flex-shrink: 0;
     line-height: 0;
@@ -1295,6 +1253,34 @@ body {
 
 .pk-status-meta + .pk-status-meta {
     margin-top: 4px;
+}
+
+/* PK 中心弹层（发起 + 挑战列表） */
+.pk-hub-modal .pk-hub-card {
+    background: linear-gradient(180deg, #f4eefe 0%, var(--surface) 40%);
+    box-shadow: 0 var(--tactile-depth) 0 #9b6fd6, 0 16px 48px rgba(0, 0, 0, 0.18);
+    max-height: min(92vh, 640px);
+    max-width: 440px;
+}
+
+.pk-hub-modal .pk-invite-card-head h3 {
+    color: #5b2c92;
+}
+
+.pk-hub-section {
+    margin-bottom: 18px;
+}
+
+.pk-hub-section:last-of-type {
+    margin-bottom: 0;
+}
+
+.pk-hub-section-title {
+    margin: 0 0 8px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: var(--secondary-dark);
+    letter-spacing: 0.02em;
 }
 
 .review-box {
@@ -2270,23 +2256,6 @@ button.import-article-chip--selected:hover {
         font-size: 1.05rem;
         border-radius: 8px;
         border-width: 1px;
-    }
-
-    .navbar .btn-nav-pk-invite {
-        width: 32px;
-        height: 32px;
-        font-size: 1rem;
-        border-radius: 8px;
-        border-width: 1px;
-    }
-
-    .navbar .pk-invite-badge {
-        min-width: 15px;
-        height: 15px;
-        font-size: 0.6rem;
-        line-height: 11px;
-        top: -2px;
-        right: -2px;
     }
 
     .nav-user .btn-secondary {

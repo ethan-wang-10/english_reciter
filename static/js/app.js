@@ -578,8 +578,11 @@ function getPkOngoingDuels(duels) {
     return duels.filter((d) => d.status === 'active' && !d.settled);
 }
 
-function updatePkActiveChipsFromDuels(duels) {
-    const n = getPkOngoingDuels(duels).length;
+/** 顶栏 PK 角标：待处理邀约 + 进行中（合并原 💬 与 PK 两处提示） */
+function updatePkNavBadgesFromDuels(duels) {
+    const pending = getPendingIncomingDuels(duels).length;
+    const ongoing = getPkOngoingDuels(duels).length;
+    const n = pending + ongoing;
     const pairs = [
         [document.getElementById('ng-pk-badge'), document.getElementById('ng-pk-active')],
         [document.getElementById('mobile-ng-pk-badge'), document.getElementById('mobile-ng-pk-active')],
@@ -597,44 +600,26 @@ function updatePkActiveChipsFromDuels(duels) {
                 badge.textContent = '';
             }
         }
-        btn.setAttribute('aria-label', n > 0 ? `进行中的 PK，共 ${n} 场` : '进行中的 PK');
+        const parts = [];
+        if (ongoing > 0) parts.push(`${ongoing} 场进行中`);
+        if (pending > 0) parts.push(`${pending} 条待处理邀约`);
+        btn.setAttribute('aria-label', parts.length ? `PK：${parts.join('，')}` : '1v1 打卡 PK');
     });
-}
-
-function updatePkInviteBadgeFromDuels(duels) {
-    const badge = document.getElementById('pk-invite-badge');
-    const btn = document.getElementById('pk-invite-btn');
-    if (!badge || !btn) return;
-    const n = getPendingIncomingDuels(duels).length;
-    if (n > 0) {
-        badge.hidden = false;
-        badge.setAttribute('aria-hidden', 'false');
-        badge.textContent = n > 9 ? '9+' : String(n);
-        btn.setAttribute('aria-label', `PK 邀约，${n} 条待处理`);
-    } else {
-        badge.hidden = true;
-        badge.setAttribute('aria-hidden', 'true');
-        badge.textContent = '';
-        btn.setAttribute('aria-label', 'PK 邀约');
-    }
 }
 
 async function refreshPkInviteIndicator() {
     if (!token || !username) {
-        updatePkInviteBadgeFromDuels([]);
-        updatePkActiveChipsFromDuels([]);
+        updatePkNavBadgesFromDuels([]);
         return;
     }
     if (isParentSession) {
-        updatePkInviteBadgeFromDuels([]);
-        updatePkActiveChipsFromDuels([]);
+        updatePkNavBadgesFromDuels([]);
         return;
     }
     try {
         const data = await apiRequest('/challenges');
         const list = data.challenges || [];
-        updatePkInviteBadgeFromDuels(list);
-        updatePkActiveChipsFromDuels(list);
+        updatePkNavBadgesFromDuels(list);
     } catch (_) {
         /* ignore */
     }
@@ -661,127 +646,83 @@ function startPkInvitePolling() {
     pkInvitePollTimer = window.setInterval(tickPkInvitePoll, PK_INVITE_POLL_MS);
 }
 
-function renderPkInviteCard(d) {
-    const from = escapeHtml(d.from_user || '');
-    const wager = Number(d.wager_xp) || 0;
-    const id = escapeHtml(String(d.id || ''));
-    const exp =
-        d.expires_at && d.status === 'pending'
-            ? `<p class="pk-invite-expiry">邀约有效期至 ${escapeHtml(
-                  String(d.expires_at).replace('T', ' ').slice(0, 16),
-              )}</p>`
-            : '';
-    const wagerLabel = wager === 0 ? '无赌注' : `${wager} XP`;
-    return `<div class="pk-invite-item" data-duel-id="${id}">
-    <p class="pk-invite-lead"><strong>${from}</strong> 向你发起 1v1 打卡 PK</p>
-    <p class="pk-invite-meta">赌注：${escapeHtml(wagerLabel)}</p>
-    ${exp}
-    <div class="pk-invite-item-actions">
-      <button type="button" class="btn btn-secondary pk-invite-respond-btn" data-duel-id="${id}" data-duel-accept="0">拒绝</button>
-      <button type="button" class="btn btn-primary pk-invite-respond-btn" data-duel-id="${id}" data-duel-accept="1">同意</button>
-    </div>
-  </div>`;
+function populatePkHubFromProfile(s) {
+    const sel = document.getElementById('pk-hub-duel-wager');
+    if (sel && Array.isArray(s.wager_tiers) && s.wager_tiers.length) {
+        const tiers = s.wager_tiers.map(Number);
+        const preferred = tiers.includes(100) ? 100 : tiers[0];
+        sel.innerHTML = tiers
+            .map((w) => {
+                const n = Number(w);
+                const label = n === 0 ? '无赌注' : `${n} XP`;
+                const optSel = n === preferred ? ' selected' : '';
+                return `<option value="${n}"${optSel}>${label}</option>`;
+            })
+            .join('');
+    }
+
+    const list = document.getElementById('pk-hub-duel-list');
+    if (list && Array.isArray(s.duels)) {
+        list.innerHTML = s.duels.length
+            ? s.duels.map((d) => renderDuelRow(d, username)).join('')
+            : '<li class="settings-duel-empty">暂无挑战</li>';
+    }
+
+    const duelSel = document.getElementById('pk-hub-duel-target-select');
+    if (duelSel && Array.isArray(s.duel_opponents)) {
+        const prev = duelSel.value;
+        duelSel.innerHTML =
+            '<option value="">选择对手</option>' +
+            s.duel_opponents.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+        if (prev && s.duel_opponents.includes(prev)) duelSel.value = prev;
+    }
 }
 
-function openPkInviteModal() {
-    const modal = document.getElementById('pk-invite-modal');
+function openPkHubModal() {
+    const modal = document.getElementById('pk-hub-modal');
     if (modal) {
         modal.style.display = 'flex';
         modal.setAttribute('aria-hidden', 'false');
     }
 }
 
-function closePkInviteModal() {
-    const modal = document.getElementById('pk-invite-modal');
+function closePkHubModal() {
+    const modal = document.getElementById('pk-hub-modal');
     if (modal) {
         modal.style.display = 'none';
         modal.setAttribute('aria-hidden', 'true');
     }
-}
-
-function pkCheckinDaysLine(d) {
-    const raw = d.pk_checkin_days;
-    if (!raw || typeof raw !== 'object') return '';
-    const a = d.from_user;
-    const b = d.target_user;
-    if (!a || !b) return '';
-    const na = Number(raw[a] ?? raw[String(a)]) || 0;
-    const nb = Number(raw[b] ?? raw[String(b)]) || 0;
-    return `<p class="pk-status-meta">有效打卡天数（计分区间内）：${escapeHtml(String(a))} <strong>${na}</strong> 天 · ${escapeHtml(
-        String(b),
-    )} <strong>${nb}</strong> 天</p>`;
-}
-
-function renderPkStatusCard(d, me) {
-    const other = d.from_user === me ? d.target_user : d.from_user;
-    const role = d.from_user === me ? '你是发起方' : '你是应战方';
-    const wager = Number(d.wager_xp) || 0;
-    const wagerLabel = wager === 0 ? '无赌注' : `${wager} XP`;
-    const pkRange =
-        d.pk_stats_start_date && d.pk_stats_end_date
-            ? `<p class="pk-status-meta">PK 计分区间：${escapeHtml(d.pk_stats_start_date)} ～ ${escapeHtml(
-                  d.pk_stats_end_date,
-              )}</p>`
-            : '';
-    const monthLine = d.month
-        ? `<p class="pk-status-meta">计分月份：${escapeHtml(String(d.month))}</p>`
-        : '';
-    const daysLine = pkCheckinDaysLine(d);
-    return `<div class="pk-status-item">
-    <p class="pk-status-lead"><strong>${escapeHtml(other)}</strong> · ${escapeHtml(wagerLabel)}</p>
-    <p class="pk-status-line">${escapeHtml(role)} · 状态：<strong>进行中</strong></p>
-    ${monthLine}
-    ${pkRange}
-    ${daysLine}
-  </div>`;
-}
-
-async function loadPkStatusModalBody() {
-    const body = document.getElementById('pk-status-body');
-    if (!body) return;
-    body.innerHTML = '<p class="pk-invite-loading">加载中…</p>';
-    const data = await apiRequest('/challenges');
-    const list = data.challenges || [];
-    updatePkInviteBadgeFromDuels(list);
-    updatePkActiveChipsFromDuels(list);
-    const ongoing = getPkOngoingDuels(list);
-    if (!ongoing.length) {
-        body.innerHTML = '<p class="pk-invite-empty">当前没有进行中的 PK。</p>';
-        return;
-    }
-    body.innerHTML = ongoing.map((d) => renderPkStatusCard(d, username)).join('');
-}
-
-function openPkStatusModal() {
-    const modal = document.getElementById('pk-status-modal');
-    if (modal) {
-        modal.style.display = 'flex';
-        modal.setAttribute('aria-hidden', 'false');
+    const err = document.getElementById('pk-hub-error');
+    if (err) {
+        err.style.display = 'none';
+        err.textContent = '';
     }
 }
 
-function closePkStatusModal() {
-    const modal = document.getElementById('pk-status-modal');
-    if (modal) {
-        modal.style.display = 'none';
-        modal.setAttribute('aria-hidden', 'true');
+async function loadPkHubModalBody() {
+    const loading = document.getElementById('pk-hub-loading');
+    const content = document.getElementById('pk-hub-content');
+    const errEl = document.getElementById('pk-hub-error');
+    if (loading) loading.hidden = false;
+    if (content) content.hidden = true;
+    if (errEl) {
+        errEl.style.display = 'none';
+        errEl.textContent = '';
     }
-}
-
-async function loadPkInviteModalBody() {
-    const body = document.getElementById('pk-invite-body');
-    if (!body) return;
-    body.innerHTML = '<p class="pk-invite-loading">加载中…</p>';
-    const data = await apiRequest('/challenges');
-    const list = data.challenges || [];
-    updatePkInviteBadgeFromDuels(list);
-    updatePkActiveChipsFromDuels(list);
-    const pending = getPendingIncomingDuels(list);
-    if (!pending.length) {
-        body.innerHTML = '<p class="pk-invite-empty">暂无待处理的 1v1 PK 邀约。</p>';
-        return;
+    try {
+        const s = await apiRequest('/user/settings');
+        populatePkHubFromProfile(s);
+        updatePkNavBadgesFromDuels(s.duels);
+        if (loading) loading.hidden = true;
+        if (content) content.hidden = false;
+    } catch (e) {
+        if (loading) loading.hidden = true;
+        if (content) content.hidden = true;
+        if (errEl) {
+            errEl.textContent = e.message || '加载失败';
+            errEl.style.display = 'block';
+        }
     }
-    body.innerHTML = pending.map((d) => renderPkInviteCard(d)).join('');
 }
 
 function renderUserSettingsPanel(s) {
@@ -874,38 +815,7 @@ function renderUserSettingsPanel(s) {
         joinBtn.textContent = pool.joined ? '已加入本月奖池' : `加入奖池（${pool.fee_xp || 150} XP）`;
     }
 
-    const sel = document.getElementById('settings-duel-wager');
-    if (sel && Array.isArray(s.wager_tiers) && s.wager_tiers.length) {
-        const tiers = s.wager_tiers.map(Number);
-        const preferred = tiers.includes(100) ? 100 : tiers[0];
-        sel.innerHTML = tiers
-            .map((w) => {
-                const n = Number(w);
-                const label = n === 0 ? '无赌注' : `${n} XP`;
-                const optSel = n === preferred ? ' selected' : '';
-                return `<option value="${n}"${optSel}>${label}</option>`;
-            })
-            .join('');
-    }
-
-    const list = document.getElementById('settings-duel-list');
-    if (list && Array.isArray(s.duels)) {
-        list.innerHTML = s.duels.length
-            ? s.duels.map((d) => renderDuelRow(d, username)).join('')
-            : '<li class="settings-duel-empty">暂无挑战</li>';
-    }
-
-    const duelSel = document.getElementById('settings-duel-target-select');
-    if (duelSel && Array.isArray(s.duel_opponents)) {
-        const prev = duelSel.value;
-        duelSel.innerHTML =
-            '<option value="">选择对手</option>' +
-            s.duel_opponents.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
-        if (prev && s.duel_opponents.includes(prev)) duelSel.value = prev;
-    }
-
-    updatePkInviteBadgeFromDuels(s.duels);
-    updatePkActiveChipsFromDuels(s.duels);
+    updatePkNavBadgesFromDuels(s.duels);
 }
 
 const AVATAR_CROP_VIEW = 280;
@@ -1460,14 +1370,14 @@ const PK_SECTION_CUR_SUFFIX_ROASTS = [
 
 const PK_EMPTY_SETTLED_ROASTS = [
     '上月擂台比图书馆还安静——要么全员佛系，要么全在别的赛道偷偷上分。',
-    '上月居然一场没有？合理怀疑大家都在假装没看见「发起 PK」按钮。',
+    '上月居然一场没有？合理怀疑大家都在假装没看见顶栏的 PK。',
     '空空如也。不是世界和平，是大家都把火药留到本月了。',
     '上月无人约战——建议反思：是友谊太铁，还是赌注不够刺激。',
     '此处本应锣鼓喧天，实际上连表情包都没人发。',
 ];
 
 const PK_EMPTY_ONGOING_ROASTS = [
-    '本月居然没人约战？去「设置」里点一发 PK，让友谊在赌注里升华一下。',
+    '本月居然没人约战？点顶栏 PK 发起一场，让友谊在赌注里升华一下。',
     '本月擂台闲置中。再不动手，下个月吐槽文案都要重复了。',
     '零场进行中——是给对手留面子，还是给自己留退路？',
     '静悄悄，未必在憋大招，也可能真的在摸鱼。',
@@ -2843,10 +2753,8 @@ function showLoginPage() {
     if (gl) gl.style.display = '';
     document.querySelector('#main-page .nav-user')?.removeAttribute('aria-label');
     updateNavUserAvatar(null);
-    updatePkInviteBadgeFromDuels([]);
-    updatePkActiveChipsFromDuels([]);
-    closePkInviteModal();
-    closePkStatusModal();
+    updatePkNavBadgesFromDuels([]);
+    closePkHubModal();
     stopPkInvitePolling();
 }
 
@@ -2863,7 +2771,7 @@ function applyParentNavMode() {
             el.style.display = hide ? 'none' : '';
         });
     });
-    document.querySelectorAll('#pk-invite-btn, #ng-pk-active, #mobile-ng-pk-active').forEach((el) => {
+    document.querySelectorAll('#ng-pk-active, #mobile-ng-pk-active').forEach((el) => {
         if (el) el.style.display = hide ? 'none' : '';
     });
     const lb = document.getElementById('leaderboard-opt-in');
@@ -5750,76 +5658,16 @@ document.addEventListener('DOMContentLoaded', function() {
         openSettings();
     });
 
-    document.getElementById('pk-invite-btn')?.addEventListener('click', () => {
-        void (async () => {
-            openPkInviteModal();
-            const body = document.getElementById('pk-invite-body');
-            if (body) body.innerHTML = '<p class="pk-invite-loading">加载中…</p>';
-            try {
-                await loadPkInviteModalBody();
-            } catch (err) {
-                if (body) {
-                    body.innerHTML = `<p class="pk-invite-empty" style="color:var(--error-dark)">${escapeHtml(
-                        err.message || '加载失败',
-                    )}</p>`;
-                }
-            }
-        })();
-    });
-    document.querySelectorAll('.js-pk-status-open').forEach((btn) => {
+    document.querySelectorAll('.js-pk-hub-open').forEach((btn) => {
         btn.addEventListener('click', () => {
             void (async () => {
-                openPkStatusModal();
-                const body = document.getElementById('pk-status-body');
-                if (body) body.innerHTML = '<p class="pk-invite-loading">加载中…</p>';
-                try {
-                    await loadPkStatusModalBody();
-                } catch (err) {
-                    if (body) {
-                        body.innerHTML = `<p class="pk-invite-empty" style="color:var(--error-dark)">${escapeHtml(
-                            err.message || '加载失败',
-                        )}</p>`;
-                    }
-                }
+                openPkHubModal();
+                await loadPkHubModalBody();
             })();
         });
     });
-    document.getElementById('pk-status-backdrop')?.addEventListener('click', closePkStatusModal);
-    document.getElementById('pk-status-close')?.addEventListener('click', closePkStatusModal);
-
-    document.getElementById('pk-invite-backdrop')?.addEventListener('click', closePkInviteModal);
-    document.getElementById('pk-invite-close')?.addEventListener('click', closePkInviteModal);
-    document.getElementById('pk-invite-body')?.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.pk-invite-respond-btn[data-duel-id]');
-        if (!btn) return;
-        const id = btn.getAttribute('data-duel-id');
-        const accept = btn.getAttribute('data-duel-accept') === '1';
-        if (!id) return;
-        btn.disabled = true;
-        document.querySelectorAll('.pk-invite-respond-btn').forEach((b) => {
-            b.disabled = true;
-        });
-        try {
-            await apiRequest(`/challenges/${encodeURIComponent(id)}/respond`, {
-                method: 'POST',
-                body: JSON.stringify({ accept }),
-            });
-            showMainBanner(accept ? '已接受 PK 邀约' : '已拒绝 PK 邀约');
-            await refreshPkInviteIndicator();
-            if (isSettingsOverlayOpen()) await loadUserSettingsPanel();
-            await loadPkInviteModalBody();
-            const b = document.getElementById('pk-invite-body');
-            if (b && b.querySelector('.pk-invite-empty')) {
-                closePkInviteModal();
-            }
-        } catch (err) {
-            showMainBanner(err.message || '操作失败');
-        } finally {
-            document.querySelectorAll('.pk-invite-respond-btn').forEach((x) => {
-                x.disabled = false;
-            });
-        }
-    });
+    document.getElementById('pk-hub-backdrop')?.addEventListener('click', closePkHubModal);
+    document.getElementById('pk-hub-close')?.addEventListener('click', closePkHubModal);
 
     document.getElementById('settings-backdrop')?.addEventListener('click', closeSettings);
     document.getElementById('settings-close')?.addEventListener('click', closeSettings);
@@ -6008,13 +5856,13 @@ document.addEventListener('DOMContentLoaded', function() {
             setSettingsMessage(err.message || '加入失败', true);
         }
     });
-    document.getElementById('settings-duel-send')?.addEventListener('click', async () => {
-        const tin = document.getElementById('settings-duel-target-select');
+    document.getElementById('pk-hub-duel-send')?.addEventListener('click', async () => {
+        const tin = document.getElementById('pk-hub-duel-target-select');
         const t = (tin && tin.value) || '';
-        const w = document.getElementById('settings-duel-wager');
+        const w = document.getElementById('pk-hub-duel-wager');
         const wager = w ? parseInt(w.value, 10) : 0;
         if (!t.trim()) {
-            setSettingsMessage('请选择对手', true);
+            showMainBanner('请选择对手');
             return;
         }
         try {
@@ -6022,14 +5870,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 body: JSON.stringify({ target_username: t.trim(), wager_xp: wager }),
             });
-            setSettingsMessage('挑战已发出');
+            showMainBanner('挑战已发出');
             if (tin) tin.value = '';
-            await loadUserSettingsPanel();
+            await loadPkHubModalBody();
+            if (isSettingsOverlayOpen()) await loadUserSettingsPanel();
         } catch (err) {
-            setSettingsMessage(err.message || '发起失败', true);
+            showMainBanner(err.message || '发起失败');
         }
     });
-    document.getElementById('settings-duel-list')?.addEventListener('click', async (e) => {
+    document.getElementById('pk-hub-duel-list')?.addEventListener('click', async (e) => {
         const btn = e.target.closest('.settings-duel-btn[data-duel-id]');
         if (!btn) return;
         const id = btn.getAttribute('data-duel-id');
@@ -6040,10 +5889,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 body: JSON.stringify({ accept }),
             });
-            setSettingsMessage(accept ? '已接受挑战' : '已拒绝');
-            await loadUserSettingsPanel();
+            showMainBanner(accept ? '已接受挑战' : '已拒绝');
+            await loadPkHubModalBody();
+            if (isSettingsOverlayOpen()) await loadUserSettingsPanel();
         } catch (err) {
-            setSettingsMessage(err.message || '操作失败', true);
+            showMainBanner(err.message || '操作失败');
         }
     });
     document.addEventListener('keydown', (e) => {
@@ -6053,14 +5903,9 @@ document.addEventListener('DOMContentLoaded', function() {
             closeAvatarCropModal();
             return;
         }
-        const pkStatusModal = document.getElementById('pk-status-modal');
-        if (pkStatusModal && pkStatusModal.style.display !== 'none') {
-            closePkStatusModal();
-            return;
-        }
-        const pkModal = document.getElementById('pk-invite-modal');
-        if (pkModal && pkModal.style.display !== 'none') {
-            closePkInviteModal();
+        const pkHubModal = document.getElementById('pk-hub-modal');
+        if (pkHubModal && pkHubModal.style.display !== 'none') {
+            closePkHubModal();
             return;
         }
         const ov = document.getElementById('settings-overlay');
