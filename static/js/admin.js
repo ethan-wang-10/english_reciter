@@ -98,33 +98,44 @@ function renderAdminUsers(users) {
         const planLabel = plan === 'paid' ? '<span class="plan-badge-vip">VIP</span>' : '<span class="plan-badge-free">免费</span>';
         const pchk = u.parent_account_enabled ? 'checked' : '';
         const parentLogin = `${escapeHtml(u.username)}_parent`;
+        const planTitle = plan === 'paid' ? '降为免费版' : '升为 VIP';
+        /* 皇冠 = 升为 VIP；星形 = 降为免费（普通版） */
+        const planSvg =
+            plan === 'paid'
+                ? '<svg class="btn-admin-plan-svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 2.2l1.75 3.55L14 6.45l-2.9 2.85.68 3.95L8 11.4l-3.78 2.85.68-3.95L2 6.45l4.25-.7L8 2.2z"/></svg>'
+                : '<svg class="btn-admin-plan-svg btn-admin-plan-svg--crown" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3 12.5h10v1.5H3v-1.5z"/><path fill="currentColor" d="M3 12.5L5 6.5 8 2.5 11 6.5 13 12.5H3z"/></svg>';
         return `
             <tr>
-                <td>${escapeHtml(u.username)}</td>
-                <td>${escapeHtml(u.pending_words)}</td>
-                <td>${escapeHtml(u.mastered_words)}</td>
+                <td class="admin-table--users-name">${escapeHtml(u.username)}</td>
+                <td class="admin-table-num">${escapeHtml(u.pending_words)}</td>
+                <td class="admin-table-num">${escapeHtml(u.mastered_words)}</td>
                 <td>${planLabel}</td>
-                <td>${en ? '正常' : '已禁用'}</td>
-                <td>
-                    <label class="admin-toggle" title="勾选后家长可用「用户名_parent」登录（默认密码见开通提示），仅查看孩子进度与导入等">
-                        <input type="checkbox" data-admin-parent="${escapeHtml(u.username)}" ${pchk} ${en ? '' : 'disabled'} />
-                        开通家长登录
-                    </label>
-                    <span class="admin-parent-login-hint" style="font-size:12px;color:#666;display:block;margin-top:4px;">${parentLogin}</span>
-                    <button type="button" class="btn btn-secondary btn-admin-parent-pw" style="margin-top:6px;font-size:12px;padding:4px 8px;"
-                        data-admin-parent-password="${escapeHtml(u.username)}"
-                        ${u.parent_account_enabled && en ? '' : 'disabled'}>家长密码</button>
+                <td class="admin-table-nowrap">${en ? '正常' : '已禁用'}</td>
+                <td class="admin-user-col-parent">
+                    <div class="admin-user-cell-stack">
+                        <label class="admin-toggle admin-toggle--compact" title="勾选后家长可用「用户名_parent」登录（默认密码见开通提示），仅查看孩子进度与导入等">
+                            <input type="checkbox" data-admin-parent="${escapeHtml(u.username)}" ${pchk} ${en ? '' : 'disabled'} />
+                            家长登录
+                        </label>
+                        <code class="admin-parent-id">${parentLogin}</code>
+                        <button type="button" class="btn-admin-parent-pw"
+                            data-admin-parent-password="${escapeHtml(u.username)}"
+                            title="重置家长账户密码"
+                            ${u.parent_account_enabled && en ? '' : 'disabled'}>家长密码</button>
+                    </div>
                 </td>
-                <td>
-                    <label class="admin-toggle" title="关闭后该学生无法登录本系统（家长登录一并关闭）">
+                <td class="admin-user-col-student">
+                    <label class="admin-toggle admin-toggle--compact" title="关闭后该学生无法登录本系统（家长登录一并关闭）">
                         <input type="checkbox" data-admin-user="${escapeHtml(u.username)}" ${chk} />
-                        允许学生登录
+                        允许登录
                     </label>
                 </td>
-                <td>
-                    <button type="button" class="btn-admin-pw" data-admin-set-password="${escapeHtml(u.username)}">设置密码</button>
-                    <button type="button" class="btn-admin-plan" data-admin-set-plan="${escapeHtml(u.username)}" data-current-plan="${escapeHtml(plan)}">${plan === 'paid' ? '降为免费' : '升为 VIP'}</button>
-                    <button type="button" class="btn btn-danger-outline btn-admin-delete-user" data-admin-delete-user="${escapeHtml(u.username)}">删除用户</button>
+                <td class="admin-user-col-actions">
+                    <div class="admin-user-actions">
+                        <button type="button" class="btn-admin-pw" data-admin-set-password="${escapeHtml(u.username)}" title="设置学生登录密码">密码</button>
+                        <button type="button" class="btn-admin-plan btn-admin-plan--icon" data-admin-set-plan="${escapeHtml(u.username)}" data-current-plan="${escapeHtml(plan)}" title="${planTitle}" aria-label="${planTitle}">${planSvg}</button>
+                        <button type="button" class="btn btn-danger-outline btn-admin-delete-user btn-admin-del" data-admin-delete-user="${escapeHtml(u.username)}" title="永久删除该用户及全部学习数据">删除</button>
+                    </div>
                 </td>
             </tr>`;
     }).join('');

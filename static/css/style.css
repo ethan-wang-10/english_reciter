@@ -2720,6 +2720,174 @@ button.import-article-chip--selected:hover {
     font-weight: 700;
 }
 
+/* 管理后台「用户」表：紧凑排版，操作列横向排列小号按钮 */
+.admin-table-wrap--users {
+    margin-bottom: 12px;
+}
+
+.admin-table--users {
+    font-size: 0.82rem;
+    table-layout: auto;
+}
+
+.admin-table--users th,
+.admin-table--users td {
+    padding: 4px 5px;
+    vertical-align: top;
+}
+
+.admin-table--users th:nth-child(1),
+.admin-table--users td:nth-child(1) {
+    min-width: 4.5rem;
+}
+
+.admin-table--users th:nth-child(2),
+.admin-table--users td:nth-child(2),
+.admin-table--users th:nth-child(3),
+.admin-table--users td:nth-child(3) {
+    min-width: 2.5rem;
+}
+
+.admin-table--users th:nth-child(6),
+.admin-table--users td:nth-child(6) {
+    min-width: 7.5rem;
+}
+
+.admin-table--users th:nth-child(8),
+.admin-table--users td:nth-child(8) {
+    min-width: 9rem;
+}
+
+.admin-table--users-name {
+    word-break: break-all;
+}
+
+.admin-table-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-table-nowrap {
+    white-space: nowrap;
+}
+
+.admin-user-cell-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.admin-toggle--compact {
+    font-size: 0.76rem;
+    line-height: 1.15;
+}
+
+.admin-parent-id {
+    display: block;
+    font-size: 0.64rem;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    color: #666;
+    background: #f3f4f6;
+    padding: 1px 5px;
+    border-radius: 4px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-user-col-actions {
+    min-width: 0;
+}
+
+.admin-user-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px 5px;
+}
+
+.admin-user-actions .btn-admin-pw,
+.admin-user-actions .btn-admin-plan:not(.btn-admin-plan--icon) {
+    margin: 0;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.3;
+    border-radius: 5px;
+}
+
+.admin-user-actions .btn-admin-pw {
+    border-width: 1px;
+}
+
+.admin-user-actions .btn-admin-plan:not(.btn-admin-plan--icon) {
+    border-width: 1px;
+}
+
+/* 套餐升/降：仅图标，方形小块 */
+.admin-user-actions .btn-admin-plan--icon {
+    margin: 0;
+    padding: 0;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-width: 1px;
+    border-radius: 5px;
+    line-height: 0;
+}
+
+.admin-user-actions .btn-admin-plan-svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+    flex-shrink: 0;
+}
+
+/* 与上方按钮同高同风格，去掉全局危险按钮的立体阴影以免「删除」格外抢眼 */
+.admin-user-actions .btn-admin-del.btn-danger-outline {
+    outline-width: 1px;
+    outline-offset: -1px;
+    box-shadow: none;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.3;
+    border-radius: 5px;
+}
+
+.admin-user-actions .btn-admin-del.btn-danger-outline:active {
+    transform: none;
+    box-shadow: none;
+}
+
+.admin-user-col-parent .btn-admin-parent-pw {
+    margin: 0;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.3;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.admin-user-col-parent .btn-admin-parent-pw:hover:not(:disabled) {
+    border-color: var(--primary-color);
+    color: var(--primary-dark);
+}
+
+.admin-user-col-parent .btn-admin-parent-pw:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .admin-toggle {
     cursor: pointer;
     user-select: none;
