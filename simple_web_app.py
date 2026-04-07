@@ -26,11 +26,11 @@ from datetime import datetime, timedelta, date
 from io import BytesIO, StringIO
 from pathlib import Path
 from functools import wraps
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 from time import sleep, time
 import uuid
 
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response, g
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response, g, stream_with_context
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -43,6 +43,7 @@ from reciter import (
 import gamification as gamification_mod
 import challenges as challenges_mod
 import leaderboard_periods as leaderboard_periods_mod
+import chat_room
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -1254,6 +1255,9 @@ _RATE_MAX_LOGIN = 20
 _RATE_MAX_REGISTER = 10
 _RATE_MAX_ADMIN_LOGIN = 10
 _RATE_MAX_ADMIN_DELETE_USER = 8
+_RATE_MAX_CHAT_POST = 30
+
+_CHAT_MENTION_RE = re.compile(r"@([a-zA-Z0-9_]{3,32})")
 
 INVITES_FILE = DATA_DIR / "invites.json"
 _invites_lock = threading.Lock()
@@ -4943,6 +4947,134 @@ def admin_wordbank_csv_incremental_upload():
         'message': '词库已增量合并',
         'stats': stats,
     }), 200
+
+
+def _chat_sanitize_body(text: str) -> str:
+    text = (text or "").strip()
+    if not text:
+        return ""
+    text = text[:2000]
+    text = "".join(ch for ch in text if ch.isprintable() or ch.isspace()).strip()[:2000]
+    return text
+
+
+def _chat_mentionable_usernames() -> Set[str]:
+    users = load_users()
+    return {u for u, row in users.items() if isinstance(row, dict) and is_user_enabled(u)}
+
+
+def _chat_extract_mentions(body: str, valid: Set[str]) -> List[str]:
+    seen: Set[str] = set()
+    out: List[str] = []
+    for m in _CHAT_MENTION_RE.finditer(body):
+        u = m.group(1)
+        if u in valid and u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+def _verify_chat_stream_auth() -> Optional[str]:
+    """校验 SSE 查询参数 access_token；成功返回 login_username。"""
+    token = (request.args.get("access_token") or "").strip()
+    if not token:
+        return None
+    login_username = verify_token(token)
+    if not login_username:
+        return None
+    if not is_user_enabled(login_username):
+        _revoke_user_tokens(login_username)
+        return None
+    users = load_users()
+    urow = users.get(login_username)
+    if isinstance(urow, dict) and is_parent_user_record(urow):
+        child = (urow.get("child_username") or "").strip()
+        if not child or not is_valid_username(child):
+            return None
+        ch = users.get(child)
+        if not isinstance(ch, dict) or is_parent_user_record(ch):
+            return None
+        if not is_user_enabled(child):
+            return None
+    return login_username
+
+
+# ==================== 聊天室（JSONL + SSE）====================
+
+@app.route("/api/chat/messages", methods=["GET"])
+@token_required
+def api_chat_messages_get(username):
+    before_id = (request.args.get("before_id") or "").strip() or None
+    after_id = (request.args.get("after_id") or "").strip() or None
+    try:
+        limit = int(request.args.get("limit") or 50)
+    except ValueError:
+        return jsonify({"error": "参数 limit 无效"}), 400
+    try:
+        msgs = chat_room.get_messages(before_id=before_id, after_id=after_id, limit=limit)
+    except OSError as e:
+        logger.warning("聊天历史读取失败: %s", e)
+        return jsonify({"error": "聊天记录不可用"}), 503
+    except Exception as e:
+        logger.exception("聊天历史读取异常: %s", e)
+        return jsonify({"error": "服务器内部错误"}), 500
+    return jsonify({"messages": msgs}), 200
+
+
+@app.route("/api/chat/messages", methods=["POST"])
+@token_required
+def api_chat_messages_post(username):
+    if not _rate_allow(f"chat_post:{username}", _RATE_MAX_CHAT_POST):
+        return jsonify({"error": "发送过于频繁，请稍后再试"}), 429
+    data = request.get_json(silent=True) or {}
+    body = _chat_sanitize_body(data.get("body") or "")
+    if not body:
+        return jsonify({"error": "消息不能为空"}), 400
+    valid = _chat_mentionable_usernames()
+    mentions = _chat_extract_mentions(body, valid)
+    try:
+        msg = chat_room.append_message(username, body, mentions)
+    except OSError as e:
+        logger.warning("聊天写入失败: %s", e)
+        return jsonify({"error": "聊天服务不可用"}), 503
+    except Exception as e:
+        logger.exception("聊天写入异常: %s", e)
+        return jsonify({"error": "服务器内部错误"}), 500
+    return jsonify(msg), 201
+
+
+@app.route("/api/chat/users", methods=["GET"])
+@token_required
+def api_chat_users_suggest(username):
+    q = (request.args.get("q") or "").strip().lower()
+    if len(q) < 1:
+        return jsonify({"users": []}), 200
+    users = load_users()
+    out: List[str] = []
+    for u in sorted(users.keys()):
+        if len(out) >= 20:
+            break
+        if not isinstance(users.get(u), dict) or not is_user_enabled(u):
+            continue
+        if u.lower().startswith(q):
+            out.append(u)
+    return jsonify({"users": out}), 200
+
+
+@app.route("/api/chat/stream")
+def api_chat_stream():
+    if _verify_chat_stream_auth() is None:
+        return jsonify({"error": "需要有效登录"}), 401
+
+    return Response(
+        stream_with_context(chat_room.sse_generator()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ==================== 健康检查 ====================

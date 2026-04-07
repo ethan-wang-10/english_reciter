@@ -107,6 +107,9 @@
                             <span class="btn-nav-pk-invite-icon" aria-hidden="true">💬</span>
                             <span id="pk-invite-badge" class="pk-invite-badge" hidden aria-hidden="true"></span>
                         </button>
+                        <button type="button" id="chat-sidebar-btn" class="btn-nav-chat" title="聊天室" aria-label="聊天室">
+                            <span class="btn-nav-chat-icon" aria-hidden="true">🗨</span>
+                        </button>
                         <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
                     </div>
                     <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
@@ -155,6 +158,7 @@
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
                     <button type="button" class="mobile-more-link" id="mobile-open-settings">用户设置</button>
+                    <button type="button" class="mobile-more-link" id="mobile-open-chat">聊天室</button>
                 </div>
             </div>
 
@@ -905,9 +909,23 @@
             </div>
         </div>
         </template>
+
+        <div id="chat-sidebar-backdrop" class="chat-sidebar-backdrop" hidden></div>
+        <aside id="chat-sidebar" class="chat-sidebar" aria-label="聊天室" aria-hidden="true">
+            <div class="chat-sidebar-head">
+                <h2 class="chat-sidebar-title">大厅</h2>
+                <button type="button" id="chat-sidebar-close" class="chat-sidebar-close" aria-label="关闭聊天室">×</button>
+            </div>
+            <div id="chat-log" class="chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
+            <div class="chat-compose">
+                <textarea id="chat-input" class="chat-input" rows="2" maxlength="2000" placeholder="说点什么… 使用 @用户名 提及他人" autocomplete="off"></textarea>
+                <button type="button" id="chat-send" class="btn btn-primary chat-send">发送</button>
+            </div>
+        </aside>
     </div>
     
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/chat-sidebar.js"></script>
     <script src="/static/js/textbook.js"></script>
     <script src="/static/js/admin.js"></script>
 </body>
