@@ -1283,6 +1283,51 @@ body {
     letter-spacing: 0.02em;
 }
 
+.pk-hub-challenges-root {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pk-hub-duel-group {
+    border-radius: var(--radius-md);
+    padding: 10px 12px 12px;
+    border: 2px solid var(--border);
+    background: rgba(255, 255, 255, 0.72);
+}
+
+.pk-hub-duel-group[data-pk-group='pending'] {
+    border-color: #f59e0b;
+    background: linear-gradient(180deg, #fffbeb 0%, #fff 100%);
+}
+
+.pk-hub-duel-group[data-pk-group='active'] {
+    border-color: #22c55e;
+    background: linear-gradient(180deg, #ecfdf5 0%, #fff 100%);
+}
+
+.pk-hub-duel-group[data-pk-group='done'] {
+    border-color: #94a3b8;
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+}
+
+.pk-hub-duel-group[data-pk-group='declined'] {
+    border-color: #f87171;
+    background: linear-gradient(180deg, #fef2f2 0%, #fff 100%);
+}
+
+.pk-hub-duel-group-title {
+    margin: 0 0 8px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.pk-hub-duel-sublist.settings-duel-list {
+    margin-top: 0;
+}
+
 .review-box {
     background: linear-gradient(180deg, var(--primary-light) 0%, var(--surface) 42%);
     padding: 32px 28px 36px;

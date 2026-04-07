@@ -646,6 +646,52 @@ function startPkInvitePolling() {
     pkInvitePollTimer = window.setInterval(tickPkInvitePoll, PK_INVITE_POLL_MS);
 }
 
+/** 将挑战分为四组：待处理 → 进行中 → 已完成 → 已拒绝（顺序由渲染侧保证） */
+function partitionDuelsForPkHub(duels) {
+    const pending = [];
+    const active = [];
+    const done = [];
+    const declined = [];
+    if (!Array.isArray(duels)) return { pending, active, done, declined };
+    for (const d of duels) {
+        const st = d.status;
+        if (st === 'pending') {
+            pending.push(d);
+        } else if (st === 'declined') {
+            declined.push(d);
+        } else if (d.settled === true || st === 'expired') {
+            done.push(d);
+        } else if (st === 'active') {
+            active.push(d);
+        } else {
+            done.push(d);
+        }
+    }
+    return { pending, active, done, declined };
+}
+
+function renderPkHubChallengesGroupedHtml(duels, me) {
+    const groups = partitionDuelsForPkHub(duels);
+    const order = [
+        { key: 'pending', title: '待处理' },
+        { key: 'active', title: '进行中' },
+        { key: 'done', title: '已完成' },
+        { key: 'declined', title: '已拒绝' },
+    ];
+    let html = '';
+    for (const { key, title } of order) {
+        const items = groups[key];
+        const listContent = items.length
+            ? items.map((d) => renderDuelRow(d, me)).join('')
+            : '<li class="settings-duel-empty">暂无</li>';
+        html += `<div class="pk-hub-duel-group" data-pk-group="${escapeHtml(key)}">
+    <h5 class="pk-hub-duel-group-title">${escapeHtml(title)}</h5>
+    <ul class="settings-duel-list pk-hub-duel-sublist">${listContent}</ul>
+  </div>`;
+    }
+    return html;
+}
+
 function populatePkHubFromProfile(s) {
     const sel = document.getElementById('pk-hub-duel-wager');
     if (sel && Array.isArray(s.wager_tiers) && s.wager_tiers.length) {
@@ -661,11 +707,11 @@ function populatePkHubFromProfile(s) {
             .join('');
     }
 
-    const list = document.getElementById('pk-hub-duel-list');
-    if (list && Array.isArray(s.duels)) {
-        list.innerHTML = s.duels.length
-            ? s.duels.map((d) => renderDuelRow(d, username)).join('')
-            : '<li class="settings-duel-empty">暂无挑战</li>';
+    const root = document.getElementById('pk-hub-challenges-root');
+    if (root) {
+        root.innerHTML = Array.isArray(s.duels)
+            ? renderPkHubChallengesGroupedHtml(s.duels, username)
+            : renderPkHubChallengesGroupedHtml([], username);
     }
 
     const duelSel = document.getElementById('pk-hub-duel-target-select');
@@ -5878,7 +5924,7 @@ document.addEventListener('DOMContentLoaded', function() {
             showMainBanner(err.message || '发起失败');
         }
     });
-    document.getElementById('pk-hub-duel-list')?.addEventListener('click', async (e) => {
+    document.getElementById('pk-hub-challenges-root')?.addEventListener('click', async (e) => {
         const btn = e.target.closest('.settings-duel-btn[data-duel-id]');
         if (!btn) return;
         const id = btn.getAttribute('data-duel-id');
