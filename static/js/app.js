@@ -1413,15 +1413,17 @@ function pickRandom(arr) {
 /** 排行榜 Tab：总榜 / 周榜 / 月榜（与 /api/leaderboard?scope= 同步） */
 let leaderboardScope = 'total';
 let leaderboardTabsBound = false;
+/** 最近一次渲染排行榜表格时的数据，供展开/收起时复用 */
+let lastLeaderboardTablePayload = null;
 
 const LEADERBOARD_INTRO_ROASTS = [
-    '先选总榜 / 周榜 / 月榜，领奖台和主榜紧跟在 Tab 下面；月度群体赛跑在中间，每月 PK 风云榜在主榜下面——上月谁赢了嘴仗往下翻就能看到。',
-    'XP 榜是面子工程，PK 榜是里子工程：主榜比总分，翻到下面 PK 区比打卡天数谁能把对面气笑。',
-    '温馨提示：排行榜解决不了人生，但能解决「我到底有没有在学」的焦虑——主榜下面还有 PK 区围观对线。',
-    '上面 Tab 定范围，中间赛跑图一乐，主榜看完再往下：PK 区有人赢积分有人赢对面少打一天卡。',
+    '先选总榜 / 周榜 / 月榜，领奖台和主榜紧跟在 Tab 下面；主榜下面是月度群体赛跑，再往下是每月 PK 风云榜——上月谁赢了嘴仗往下翻就能看到。',
+    'XP 榜是面子工程，PK 榜是里子工程：主榜比总分，再往下 PK 区比打卡天数谁能把对面气笑。',
+    '温馨提示：排行榜解决不了人生，但能解决「我到底有没有在学」的焦虑——主榜、群体赛、PK 从上到下一条龙围观。',
+    '上面 Tab 定范围，主榜看完往下：赛跑图一乐，再往下 PK 区有人赢积分有人赢对面少打一天卡。',
     '数据不会说谎，除非你没打卡。XP 主榜、群体赛、PK 榜三连——总有一个让你坐不住。',
-    '学习这件事，要么自己卷，要么拉人一起卷；翻到主榜下面的 PK 榜专门公示第二种。',
-    '别光盯着主榜：月度赛是众筹内卷，1v1 PK 在下方，请按需食用。',
+    '学习这件事，要么自己卷，要么拉人一起卷；主榜下面的 PK 榜专门公示第二种。',
+    '别光盯着主榜：月度赛在主榜下面众筹内卷，1v1 PK 再往下，请按需食用。',
 ];
 
 const PK_BOARD_TITLE_ROASTS = [
@@ -1617,6 +1619,46 @@ function renderMonthlyPkBoard(board) {
         `</div>`;
 }
 
+function leaderboardTableRowHtml(r, sc) {
+    const me = r.is_viewer ? 'leaderboard-row-me' : '';
+    const av = r.avatar_url
+        ? `<img class="lb-avatar" src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="32" height="32" loading="lazy" />`
+        : '<span class="lb-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
+    const xpVal = sc === 'total' ? r.total_xp : r.period_xp;
+    return `<tr class="${me}">
+                <td>${escapeHtml(r.rank)}</td>
+                <td class="lb-user-cell">${av}<span class="lb-username">${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</span></td>
+                <td>Lv.${escapeHtml(r.level)}</td>
+                <td>${escapeHtml(formatNumber(xpVal))}</td>
+                <td>🔥 ${escapeHtml(r.streak)}</td>
+                <td>${escapeHtml(r.achievements_count)}</td>
+            </tr>`;
+}
+
+function leaderboardTableEllipsisRowHtml(hiddenCount) {
+    const hint =
+        hiddenCount > 0
+            ? `中间还有 ${hiddenCount} 人`
+            : '···';
+    return `<tr class="leaderboard-row-ellipsis">
+                <td colspan="6">${escapeHtml(hint)}</td>
+            </tr>`;
+}
+
+/** 折叠模式下要显示的行下标（已排序）；若人数不超过 3 则全部展示。 */
+function leaderboardCollapsedRowIndices(rows) {
+    const n = rows.length;
+    if (n <= 3) {
+        return [...Array(n).keys()];
+    }
+    const set = new Set([0, 1, 2]);
+    const vi = rows.findIndex((r) => r.is_viewer);
+    if (vi >= 0 && vi > 2) {
+        set.add(vi);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+}
+
 function renderLeaderboardPodium(apiData) {
     const wrap = document.getElementById('leaderboard-podium-wrap');
     if (!wrap) return;
@@ -1657,45 +1699,74 @@ function renderLeaderboardPodium(apiData) {
         `</div>`;
 }
 
-function renderLeaderboardTable(rows, scope, meta) {
+function renderLeaderboardTable(rows, scope, meta, options) {
     const wrap = document.getElementById('leaderboard-table-wrap');
     if (!wrap) return;
     const sc = scope === 'week' || scope === 'month' ? scope : 'total';
     const m = meta && typeof meta === 'object' ? meta : {};
+    lastLeaderboardTablePayload = { rows, scope, meta: m };
+    const expanded = options && options.expanded === true;
+
     if (!rows || rows.length === 0) {
+        lastLeaderboardTablePayload = null;
         wrap.innerHTML =
             '<p class="leaderboard-empty">暂无排行数据。开启「在排行榜中展示」并学习后即可上榜。</p>';
         return;
     }
+
     const xpTh = sc === 'total' ? '累计 XP' : '本期 XP';
     const head =
         '<table class="leaderboard-table"><thead><tr>' +
         `<th>排名</th><th>用户</th><th>等级</th><th>${xpTh}</th><th>连续</th><th>成就</th>` +
         '</tr></thead><tbody>';
-    const body = rows
-        .map((r) => {
-            const me = r.is_viewer ? 'leaderboard-row-me' : '';
-            const av = r.avatar_url
-                ? `<img class="lb-avatar" src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="32" height="32" loading="lazy" />`
-                : '<span class="lb-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
-            const xpVal = sc === 'total' ? r.total_xp : r.period_xp;
-            return `<tr class="${me}">
-                <td>${escapeHtml(r.rank)}</td>
-                <td class="lb-user-cell">${av}<span class="lb-username">${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</span></td>
-                <td>Lv.${escapeHtml(r.level)}</td>
-                <td>${escapeHtml(formatNumber(xpVal))}</td>
-                <td>🔥 ${escapeHtml(r.streak)}</td>
-                <td>${escapeHtml(r.achievements_count)}</td>
-            </tr>`;
-        })
-        .join('');
+
+    let body = '';
+    if (expanded || rows.length <= 3) {
+        body = rows.map((r) => leaderboardTableRowHtml(r, sc)).join('');
+    } else {
+        const idx = leaderboardCollapsedRowIndices(rows);
+        const shown = new Set(idx);
+        const hiddenCount = rows.length - shown.size;
+        const parts = [];
+        for (let i = 0; i < idx.length; i++) {
+            if (i > 0 && idx[i] > idx[i - 1] + 1) {
+                parts.push(leaderboardTableEllipsisRowHtml(hiddenCount));
+            }
+            parts.push(leaderboardTableRowHtml(rows[idx[i]], sc));
+        }
+        body = parts.join('');
+    }
+
+    const showToggle = rows.length > 3;
+    const toolbar = showToggle
+        ? `<div class="leaderboard-table-toolbar">
+            <button type="button" class="btn btn-secondary leaderboard-expand-toggle" aria-expanded="${expanded ? 'true' : 'false'}" data-lb-expand="${expanded ? '0' : '1'}">
+                ${expanded ? '收起' : `展开全部（共 ${rows.length} 人）`}
+            </button>
+        </div>`
+        : '';
+
     const footer =
         sc !== 'total' && (m.period_label || m.period_sum_end)
             ? `<p class="leaderboard-period-hint">${escapeHtml(m.period_label || '')}${
                   m.period_sum_end ? ` · 统计截至 ${escapeHtml(m.period_sum_end)}` : ''
               }</p>`
             : '';
-    wrap.innerHTML = head + body + '</tbody></table>' + footer;
+    wrap.innerHTML = head + body + '</tbody></table>' + toolbar + footer;
+
+    const btn = wrap.querySelector('.leaderboard-expand-toggle');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            const wantExpand = btn.getAttribute('data-lb-expand') === '1';
+            if (!lastLeaderboardTablePayload) return;
+            renderLeaderboardTable(
+                lastLeaderboardTablePayload.rows,
+                lastLeaderboardTablePayload.scope,
+                lastLeaderboardTablePayload.meta,
+                { expanded: wantExpand },
+            );
+        });
+    }
 }
 
 function bindLeaderboardTabs() {
@@ -1725,7 +1796,7 @@ async function reloadLeaderboardTableOnly() {
             b.setAttribute('aria-selected', on ? 'true' : 'false');
         });
         const sc = data.scope || leaderboardScope;
-        renderLeaderboardTable(data.leaderboard, sc, data);
+        renderLeaderboardTable(data.leaderboard, sc, data, { expanded: false });
         renderLeaderboardPodium(data);
     } catch (e) {
         const wrap = document.getElementById('leaderboard-table-wrap');
@@ -1787,7 +1858,7 @@ async function loadLeaderboardSection() {
         renderMonthlyPoolRace(pool);
         renderMonthlyPkBoard(pkBoard);
         const sc = data.scope || leaderboardScope;
-        renderLeaderboardTable(data.leaderboard, sc, data);
+        renderLeaderboardTable(data.leaderboard, sc, data, { expanded: false });
         renderLeaderboardPodium(data);
         renderAchievementsGrid(lastGamificationProfile);
     } catch (e) {

@@ -4183,6 +4183,25 @@ button.import-article-chip--selected:hover {
     color: var(--text-secondary);
 }
 
+.leaderboard-table-toolbar {
+    margin-top: 12px;
+    margin-bottom: 4px;
+}
+
+.leaderboard-expand-toggle {
+    font-weight: 800;
+}
+
+.leaderboard-table tbody tr.leaderboard-row-ellipsis td {
+    text-align: center;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: #f3f6f9;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+}
+
 .achievements-section-title {
     margin-bottom: 12px;
     font-size: 1.15rem;
