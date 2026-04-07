@@ -5047,8 +5047,6 @@ def api_chat_messages_post(username):
 @token_required
 def api_chat_users_suggest(username):
     q = (request.args.get("q") or "").strip().lower()
-    if len(q) < 1:
-        return jsonify({"users": []}), 200
     users = load_users()
     out: List[str] = []
     for u in sorted(users.keys()):
@@ -5056,7 +5054,7 @@ def api_chat_users_suggest(username):
             break
         if not isinstance(users.get(u), dict) or not is_user_enabled(u):
             continue
-        if u.lower().startswith(q):
+        if not q or u.lower().startswith(q):
             out.append(u)
     return jsonify({"users": out}), 200
 

@@ -2749,6 +2749,7 @@ async function logout() {
     } catch (e) {
         /* 网络错误仍清除本地会话 */
     }
+    if (typeof window.chatRoomOnLogout === 'function') window.chatRoomOnLogout();
     token = null;
     username = null;
     setSessionParentFlags(false, '');
@@ -2838,6 +2839,7 @@ async function showMainPage() {
     } else {
         showSection('review');
     }
+    if (typeof window.chatRoomEnsureSse === 'function') window.chatRoomEnsureSse();
 }
 
 async function loadUserPlan() {

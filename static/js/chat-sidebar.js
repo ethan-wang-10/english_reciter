@@ -11,8 +11,409 @@
     let chatLoadingOlder = false;
     let chatHasMoreOlder = true;
 
+    /** 最新消息 id（用于 SSE 断线补拉；收起侧栏时 DOM 可能未更新） */
+    let lastChatMessageId = null;
+    /** 侧栏收起时未读条数（不含自己发的） */
+    let chatUnreadCount = 0;
+    /** 侧栏收起时是否有人 @ 我 */
+    let chatMentionPending = false;
+
+    let atSuggestTimer = null;
+    let atSuggestUsers = [];
+    let atSuggestIndex = 0;
+    let atSuggestFetchId = 0;
+
+    /** 常用表情（Unicode），点击插入到输入框光标处 */
+    const CHAT_EMOJI_LIST = [
+        "😀",
+        "😃",
+        "😄",
+        "😁",
+        "😅",
+        "😂",
+        "🤣",
+        "😊",
+        "😍",
+        "🥰",
+        "😘",
+        "😋",
+        "😎",
+        "🤩",
+        "🥳",
+        "😏",
+        "😴",
+        "🤔",
+        "😮",
+        "😢",
+        "😭",
+        "😤",
+        "👍",
+        "👎",
+        "👌",
+        "✌️",
+        "🙏",
+        "👏",
+        "💪",
+        "🔥",
+        "✨",
+        "💯",
+        "❤️",
+        "💔",
+        "💬",
+        "🎉",
+        "🎁",
+        "🏆",
+        "⭐",
+        "☀️",
+        "🌙",
+        "☕",
+        "🍀",
+        "📚",
+        "✅",
+        "❌",
+        "❓",
+        "💡",
+        "🚀",
+        "👋",
+        "🤷",
+        "🤦",
+        "💀",
+        "👀",
+        "🙈",
+        "🍕",
+        "🍰",
+        "🐶",
+        "🐱",
+        "🌈",
+        "🌸",
+        "🎵",
+        "🎮",
+        "📱",
+        "💻",
+        "🧧",
+        "🎃",
+        "🎄",
+        "🥟",
+        "🍜",
+        "🍻",
+        "🧋",
+        "🍿",
+        "🧁",
+        "🍦",
+        "🍩",
+        "🫶",
+        "🫡",
+        "🥹",
+        "🫠",
+        "🤌",
+        "🆗",
+        "⚡",
+        "🌊",
+        "🍉",
+        "🍓",
+        "🥑",
+        "🍳",
+        "🍲",
+        "🍱",
+        "🎂",
+        "🍪",
+        "🍼",
+        "🍵",
+        "🍺",
+        "🥤",
+        "🥢",
+        "🌶️",
+        "🐰",
+        "🐻",
+        "🐼",
+        "🐸",
+        "🦄",
+        "🐝",
+        "🦋",
+        "🐳",
+        "🐧",
+        "🦆",
+        "🌺",
+        "🌻",
+        "🍁",
+        "🍂",
+        "💎",
+        "🎀",
+        "🎈",
+        "🎊",
+        "🔔",
+        "📌",
+        "📎",
+        "✏️",
+        "📝",
+        "🔒",
+        "🔑",
+        "🤝",
+        "🫰",
+        "💅",
+        "🧘",
+        "🏃",
+        "🚴",
+        "🎯",
+        "🎲",
+        "🃏",
+        "🀄",
+        "♠️",
+        "♥️",
+        "♦️",
+        "♣️",
+    ];
+
+    /** @ 提及：光标前从最后一个 @ 到光标为前缀（不含空格） */
+    function getChatMentionState(text, cursor) {
+        const before = text.slice(0, cursor);
+        const at = before.lastIndexOf("@");
+        if (at === -1) return null;
+        if (at > 0 && /[a-zA-Z0-9_]/.test(before[at - 1])) return null;
+        const after = before.slice(at + 1);
+        if (/\s/.test(after)) return null;
+        if (!/^[a-zA-Z0-9_]*$/.test(after)) return null;
+        if (after.length > 32) return null;
+        return { atIndex: at, query: after };
+    }
+
+    function hideChatAtSuggest() {
+        const box = document.getElementById("chat-at-suggest");
+        if (box) {
+            box.hidden = true;
+            box.innerHTML = "";
+        }
+        atSuggestUsers = [];
+        atSuggestIndex = 0;
+    }
+
+    function renderChatAtSuggest() {
+        hideChatEmojiPanel();
+        const box = document.getElementById("chat-at-suggest");
+        if (!box) return;
+        if (!atSuggestUsers.length) {
+            box.hidden = false;
+            box.innerHTML = '<div class="chat-at-suggest-empty">无匹配用户</div>';
+            return;
+        }
+        if (atSuggestIndex >= atSuggestUsers.length) atSuggestIndex = 0;
+        if (atSuggestIndex < 0) atSuggestIndex = atSuggestUsers.length - 1;
+        box.hidden = false;
+        box.innerHTML = atSuggestUsers
+            .map((u, i) => {
+                const active = i === atSuggestIndex ? " chat-at-option--active" : "";
+                return (
+                    '<button type="button" class="chat-at-option' +
+                    active +
+                    '" role="option" data-chat-at-user="' +
+                    escapeHtml(u) +
+                    '">' +
+                    escapeHtml(u) +
+                    "</button>"
+                );
+            })
+            .join("");
+        box.querySelectorAll("[data-chat-at-user]").forEach((btn) => {
+            btn.addEventListener("mousedown", (ev) => {
+                ev.preventDefault();
+                const u = btn.getAttribute("data-chat-at-user");
+                if (u) applyChatMention(u);
+            });
+        });
+    }
+
+    function applyChatMention(username) {
+        const ta = document.getElementById("chat-input");
+        if (!ta || !username) return;
+        const st = getChatMentionState(ta.value, ta.selectionStart);
+        if (!st) return;
+        const end = ta.selectionStart;
+        const before = ta.value.slice(0, st.atIndex);
+        const after = ta.value.slice(end);
+        const insert = "@" + username + " ";
+        ta.value = before + insert + after;
+        const pos = before.length + insert.length;
+        ta.selectionStart = ta.selectionEnd = pos;
+        ta.focus();
+        hideChatAtSuggest();
+    }
+
+    function hideChatEmojiPanel() {
+        const panel = document.getElementById("chat-emoji-panel");
+        const btn = document.getElementById("chat-emoji-btn");
+        if (panel) panel.hidden = true;
+        if (btn) btn.setAttribute("aria-expanded", "false");
+    }
+
+    function buildChatEmojiPanel() {
+        const panel = document.getElementById("chat-emoji-panel");
+        if (!panel || panel.querySelector(".chat-emoji-grid")) return;
+        const grid = document.createElement("div");
+        grid.className = "chat-emoji-grid";
+        CHAT_EMOJI_LIST.forEach((emoji) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "chat-emoji-cell";
+            b.setAttribute("aria-label", "插入表情 " + emoji);
+            b.textContent = emoji;
+            b.addEventListener("mousedown", (ev) => {
+                ev.preventDefault();
+                insertChatEmoji(emoji);
+            });
+            grid.appendChild(b);
+        });
+        panel.appendChild(grid);
+    }
+
+    function insertChatEmoji(emoji) {
+        const ta = document.getElementById("chat-input");
+        if (!ta || !emoji) return;
+        const max = parseInt(ta.getAttribute("maxlength") || "2000", 10);
+        const val = ta.value || "";
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const next = val.slice(0, start) + emoji + val.slice(end);
+        if (next.length > max) return;
+        ta.value = next;
+        const pos = start + emoji.length;
+        ta.selectionStart = ta.selectionEnd = pos;
+        ta.focus();
+    }
+
+    function toggleChatEmojiPanel() {
+        const panel = document.getElementById("chat-emoji-panel");
+        const btn = document.getElementById("chat-emoji-btn");
+        if (!panel || !btn) return;
+        if (panel.hidden) {
+            hideChatAtSuggest();
+            buildChatEmojiPanel();
+            panel.hidden = false;
+            btn.setAttribute("aria-expanded", "true");
+        } else {
+            hideChatEmojiPanel();
+        }
+    }
+
+    function scheduleChatAtSuggest() {
+        clearTimeout(atSuggestTimer);
+        atSuggestTimer = setTimeout(() => void runChatAtSuggest(), 180);
+    }
+
+    async function runChatAtSuggest() {
+        const ta = document.getElementById("chat-input");
+        if (!ta || !token) return;
+        const st = getChatMentionState(ta.value, ta.selectionStart);
+        if (!st) {
+            hideChatAtSuggest();
+            return;
+        }
+        const myFetch = ++atSuggestFetchId;
+        try {
+            const r = await fetch(
+                `${base}/chat/users?q=${encodeURIComponent(st.query)}`,
+                { headers: { Authorization: "Bearer " + token } }
+            );
+            if (myFetch !== atSuggestFetchId) return;
+            if (!r.ok) {
+                hideChatAtSuggest();
+                return;
+            }
+            const data = await r.json();
+            atSuggestUsers = Array.isArray(data.users) ? data.users : [];
+            atSuggestIndex = 0;
+            renderChatAtSuggest();
+        } catch (_) {
+            if (myFetch === atSuggestFetchId) hideChatAtSuggest();
+        }
+    }
+
     function me() {
         return typeof sessionStudentUsername === "function" ? sessionStudentUsername() : username;
+    }
+
+    function isChatSidebarOpen() {
+        const side = document.getElementById("chat-sidebar");
+        return !!(side && side.classList.contains("chat-sidebar--open"));
+    }
+
+    function mentionsMe(msg) {
+        const m = me();
+        if (!m || !msg || !Array.isArray(msg.mentions)) return false;
+        return msg.mentions.indexOf(m) >= 0;
+    }
+
+    function clearChatUnreadState() {
+        chatUnreadCount = 0;
+        chatMentionPending = false;
+        updateChatBadges();
+    }
+
+    function updateChatBadges() {
+        const trig = document.getElementById("chat-side-trigger");
+        const badge = document.getElementById("chat-side-badge");
+        const mb = document.getElementById("mobile-chat-badge");
+        const n = chatUnreadCount;
+        const hasAt = chatMentionPending;
+
+        if (trig) {
+            trig.classList.toggle("chat-side-trigger--at", hasAt);
+            trig.title = hasAt ? "聊天室：有人 @ 你" : n > 0 ? "聊天室：新消息" : "聊天室";
+        }
+        if (badge) {
+            if (n > 0 || hasAt) {
+                badge.hidden = false;
+                badge.classList.toggle("chat-side-trigger-badge--at", hasAt);
+                badge.textContent = hasAt ? (n > 1 ? "@" + (n > 99 ? "99+" : n) : "@") : n > 99 ? "99+" : String(n);
+            } else {
+                badge.hidden = true;
+                badge.classList.remove("chat-side-trigger-badge--at");
+                badge.textContent = "";
+            }
+        }
+        if (mb) {
+            if (n > 0 || hasAt) {
+                mb.hidden = false;
+                mb.classList.toggle("mobile-chat-badge--at", hasAt);
+                mb.textContent = hasAt ? (n > 1 ? "@" + (n > 99 ? "99+" : n) : "@") : n > 99 ? "99+" : String(n);
+            } else {
+                mb.hidden = true;
+                mb.classList.remove("mobile-chat-badge--at");
+                mb.textContent = "";
+            }
+        }
+    }
+
+    function handleInboundChatMessage(msg) {
+        if (!msg || !msg.id) return;
+        if (chatSeenIds.has(msg.id)) return;
+        lastChatMessageId = msg.id;
+
+        const mine = msg.from === me();
+        const open = isChatSidebarOpen();
+
+        if (mine) {
+            if (open) {
+                appendMessageIfNew(msg, true);
+                const empty = document.querySelector("#chat-log .chat-log-empty");
+                if (empty) empty.remove();
+                scrollChatToBottom();
+            } else {
+                chatSeenIds.add(msg.id);
+            }
+            return;
+        }
+
+        if (open) {
+            appendMessageIfNew(msg, true);
+            const empty = document.querySelector("#chat-log .chat-log-empty");
+            if (empty) empty.remove();
+            scrollChatToBottom();
+        } else {
+            chatSeenIds.add(msg.id);
+            chatUnreadCount++;
+            if (mentionsMe(msg)) chatMentionPending = true;
+            updateChatBadges();
+        }
     }
 
     function formatChatBody(body, mentions) {
@@ -47,6 +448,27 @@
         }
     }
 
+    /** 与顶栏头像同源：/api/user/avatar/{user}?w= */
+    function chatAvatarUrlForUser(uname) {
+        const path = "/api/user/avatar/" + encodeURIComponent(String(uname || "").trim());
+        if (typeof avatarDisplayUrl === "function") {
+            return avatarDisplayUrl(path, 48);
+        }
+        return path + "?w=48";
+    }
+
+    function chatAvatarHtml(uname) {
+        const url = chatAvatarUrlForUser(uname);
+        return (
+            '<div class="chat-msg-avatar">' +
+            '<img class="chat-msg-avatar-img" src="' +
+            escapeHtml(url) +
+            '" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.onerror=null;this.parentElement.classList.add(\'chat-msg-avatar--fallback\');this.removeAttribute(\'src\');" />' +
+            '<span class="chat-msg-avatar-ph" aria-hidden="true">👤</span>' +
+            "</div>"
+        );
+    }
+
     function appendMessageEl(msg, atBottom) {
         const log = document.getElementById("chat-log");
         if (!log || !msg || !msg.id) return;
@@ -54,23 +476,33 @@
         chatSeenIds.add(msg.id);
 
         const row = document.createElement("div");
-        row.className = "chat-msg" + (msg.from === me() ? " chat-msg--mine" : "");
+        const isMine = msg.from === me();
+        row.className = "chat-msg" + (isMine ? " chat-msg--mine" : "");
         row.dataset.id = msg.id;
         const who = escapeHtml(msg.from || "");
         const when = formatChatTime(msg.ts);
         const bodyHtml = formatChatBody(msg.body || "", msg.mentions);
+        const av = chatAvatarHtml(msg.from || "");
         row.innerHTML =
-            '<div class="chat-msg-meta"><span class="chat-msg-from">' +
+            '<div class="chat-msg-row">' +
+            (isMine ? "" : av) +
+            '<div class="chat-msg-main">' +
+            '<div class="chat-msg-name">' +
             who +
-            '</span><span class="chat-msg-ts">' +
-            when +
-            "</span></div>" +
+            "</div>" +
             '<div class="chat-msg-body">' +
             bodyHtml +
+            "</div>" +
+            '<div class="chat-msg-time">' +
+            when +
+            "</div>" +
+            "</div>" +
+            (isMine ? av : "") +
             "</div>";
 
         if (atBottom) {
             log.appendChild(row);
+            if (msg.id) lastChatMessageId = msg.id;
         } else {
             log.insertBefore(row, log.firstChild);
         }
@@ -129,6 +561,7 @@
             }
             scrollChatToBottom();
             chatHasMoreOlder = msgs.length >= 50;
+            if (msgs.length) lastChatMessageId = msgs[msgs.length - 1].id;
         } catch (e) {
             log.innerHTML =
                 '<p class="chat-log-error">' + escapeHtml(String(e.message || "网络错误")) + "</p>";
@@ -174,7 +607,7 @@
     }
 
     async function fetchMissedThenReconnect() {
-        const last = getLastMessageId();
+        const last = lastChatMessageId || getLastMessageId();
         if (last && token) {
             try {
                 const r = await fetch(
@@ -183,15 +616,13 @@
                 );
                 if (r.ok) {
                     const data = await r.json();
-                    (data.messages || []).forEach((m) => {
-                        appendMessageIfNew(m, true);
-                    });
-                    scrollChatToBottom();
+                    (data.messages || []).forEach((m) => handleInboundChatMessage(m));
+                    if (isChatSidebarOpen()) scrollChatToBottom();
                 }
             } catch (_) {}
         }
-        const side = document.getElementById("chat-sidebar");
-        if (side && side.classList.contains("chat-sidebar--open")) {
+        const main = document.getElementById("main-page");
+        if (main && main.classList.contains("active") && token) {
             connectChatSSE();
         }
     }
@@ -207,7 +638,7 @@
 
     function connectChatSSE() {
         if (!token) return;
-        disconnectChatSSE();
+        if (chatEventSource) return;
         const url =
             base.replace(/\/$/, "") +
             "/chat/stream?access_token=" +
@@ -217,10 +648,7 @@
         chatEventSource.addEventListener("message", (e) => {
             try {
                 const msg = JSON.parse(e.data);
-                appendMessageIfNew(msg, true);
-                const empty = document.querySelector("#chat-log .chat-log-empty");
-                if (empty) empty.remove();
-                scrollChatToBottom();
+                handleInboundChatMessage(msg);
             } catch (_) {}
         });
         chatEventSource.onerror = () => {
@@ -232,11 +660,26 @@
         };
     }
 
+    function ensureChatSse() {
+        if (!token) return;
+        const main = document.getElementById("main-page");
+        if (!main || !main.classList.contains("active")) return;
+        connectChatSSE();
+    }
+
+    function onChatLogout() {
+        disconnectChatSSE();
+        lastChatMessageId = null;
+        chatSeenIds.clear();
+        clearChatUnreadState();
+    }
+
     async function openChatSidebar() {
         const side = document.getElementById("chat-sidebar");
         const bd = document.getElementById("chat-sidebar-backdrop");
         const trig = document.getElementById("chat-side-trigger");
         if (!side || !bd) return;
+        clearChatUnreadState();
         bd.hidden = false;
         side.classList.add("chat-sidebar--open");
         side.setAttribute("aria-hidden", "false");
@@ -263,7 +706,8 @@
         }
         document.body.classList.remove("chat-sidebar-open");
         if (trig) trig.setAttribute("aria-expanded", "false");
-        disconnectChatSSE();
+        hideChatAtSuggest();
+        hideChatEmojiPanel();
     }
 
     async function sendChat() {
@@ -291,6 +735,8 @@
             const empty = document.querySelector("#chat-log .chat-log-empty");
             if (empty) empty.remove();
             ta.value = "";
+            hideChatAtSuggest();
+            hideChatEmojiPanel();
             scrollChatToBottom();
         } catch (e) {
             alert(e.message || "网络错误");
@@ -308,8 +754,68 @@
         document.getElementById("chat-sidebar-close")?.addEventListener("click", closeChatSidebar);
         document.getElementById("chat-sidebar-backdrop")?.addEventListener("click", closeChatSidebar);
         document.getElementById("chat-send")?.addEventListener("click", () => void sendChat());
+        document.getElementById("chat-emoji-btn")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleChatEmojiPanel();
+        });
+        document.addEventListener("mousedown", (e) => {
+            const panel = document.getElementById("chat-emoji-panel");
+            const btn = document.getElementById("chat-emoji-btn");
+            if (!panel || panel.hidden) return;
+            const t = e.target;
+            if (btn && (btn === t || btn.contains(t))) return;
+            if (panel.contains(t)) return;
+            hideChatEmojiPanel();
+        });
         const ta = document.getElementById("chat-input");
+        ta?.addEventListener("input", () => {
+            scheduleChatAtSuggest();
+        });
+        ta?.addEventListener("keyup", (e) => {
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
+                scheduleChatAtSuggest();
+            }
+        });
+        ta?.addEventListener("blur", () => {
+            setTimeout(() => hideChatAtSuggest(), 200);
+        });
         ta?.addEventListener("keydown", (e) => {
+            const emoPanel = document.getElementById("chat-emoji-panel");
+            if (emoPanel && !emoPanel.hidden && e.key === "Escape") {
+                e.preventDefault();
+                hideChatEmojiPanel();
+                return;
+            }
+            const box = document.getElementById("chat-at-suggest");
+            const suggestOpen = box && !box.hidden && atSuggestUsers.length > 0;
+
+            if (suggestOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+                e.preventDefault();
+                if (e.key === "ArrowDown") {
+                    atSuggestIndex = Math.min(atSuggestIndex + 1, atSuggestUsers.length - 1);
+                } else {
+                    atSuggestIndex = Math.max(atSuggestIndex - 1, 0);
+                }
+                renderChatAtSuggest();
+                return;
+            }
+            if (suggestOpen && e.key === "Enter") {
+                e.preventDefault();
+                const u = atSuggestUsers[atSuggestIndex];
+                if (u) applyChatMention(u);
+                return;
+            }
+            if (suggestOpen && e.key === "Tab" && atSuggestUsers.length) {
+                e.preventDefault();
+                const u = atSuggestUsers[atSuggestIndex];
+                if (u) applyChatMention(u);
+                return;
+            }
+            if (box && !box.hidden && e.key === "Escape") {
+                e.preventDefault();
+                hideChatAtSuggest();
+                return;
+            }
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void sendChat();
@@ -322,6 +828,18 @@
         });
         document.addEventListener("keydown", (e) => {
             if (e.key !== "Escape") return;
+            const emo = document.getElementById("chat-emoji-panel");
+            if (emo && !emo.hidden) {
+                hideChatEmojiPanel();
+                e.stopPropagation();
+                return;
+            }
+            const box = document.getElementById("chat-at-suggest");
+            if (box && !box.hidden && box.querySelector(".chat-at-option, .chat-at-suggest-empty")) {
+                hideChatAtSuggest();
+                e.stopPropagation();
+                return;
+            }
             const side = document.getElementById("chat-sidebar");
             if (side && side.classList.contains("chat-sidebar--open")) closeChatSidebar();
         });
@@ -331,5 +849,12 @@
         document.addEventListener("DOMContentLoaded", bind);
     } else {
         bind();
+    }
+
+    window.chatRoomEnsureSse = ensureChatSse;
+    window.chatRoomOnLogout = onChatLogout;
+
+    if (typeof token !== "undefined" && token && document.getElementById("main-page")?.classList.contains("active")) {
+        ensureChatSse();
     }
 })();

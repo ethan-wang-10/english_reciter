@@ -155,7 +155,7 @@
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
                     <button type="button" class="mobile-more-link" id="mobile-open-settings">用户设置</button>
-                    <button type="button" class="mobile-more-link" id="mobile-open-chat">聊天室</button>
+                    <button type="button" class="mobile-more-link" id="mobile-open-chat">聊天室<span id="mobile-chat-badge" class="mobile-chat-badge" hidden aria-hidden="true"></span></button>
                 </div>
             </div>
 
@@ -550,6 +550,7 @@
                     <span class="chat-side-trigger-icon" aria-hidden="true">🗨</span>
                     <span class="chat-side-trigger-text">聊天</span>
                 </span>
+                <span id="chat-side-badge" class="chat-side-trigger-badge" hidden aria-hidden="true"></span>
             </button>
         </div>
 
@@ -922,8 +923,15 @@
             </div>
             <div id="chat-log" class="chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
             <div class="chat-compose">
-                <textarea id="chat-input" class="chat-input" rows="2" maxlength="2000" placeholder="说点什么… 使用 @用户名 提及他人" autocomplete="off"></textarea>
-                <button type="button" id="chat-send" class="btn btn-primary chat-send">发送</button>
+                <div class="chat-compose-input-wrap">
+                    <div id="chat-at-suggest" class="chat-at-suggest" role="listbox" aria-label="提及用户" hidden></div>
+                    <div id="chat-emoji-panel" class="chat-emoji-panel" role="listbox" aria-label="表情" hidden></div>
+                    <textarea id="chat-input" class="chat-input" rows="2" maxlength="2000" placeholder="说点什么… 输入 @ 选择用户" autocomplete="off"></textarea>
+                </div>
+                <div class="chat-compose-actions">
+                    <button type="button" id="chat-emoji-btn" class="chat-emoji-btn" title="表情" aria-label="插入表情" aria-expanded="false" aria-controls="chat-emoji-panel">😊</button>
+                    <button type="button" id="chat-send" class="btn btn-primary chat-send">发送</button>
+                </div>
             </div>
         </aside>
     </div>
