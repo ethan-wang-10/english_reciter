@@ -583,3 +583,34 @@ def monthly_pk_board(data_dir: Path) -> Dict[str, Any]:
         "settled_last_month": settled_last,
         "ongoing_this_month": ongoing,
     }
+
+
+def purge_user_challenges_refs(data_dir: Path, username: str) -> None:
+    """
+    管理员删除学生账号时：从月度奖池参与者与 1v1 决斗记录中移除该用户。
+    不尝试回退已扣除的 XP；删除账号视为放弃相关挑战数据。
+    """
+    if not username:
+        return
+    with _challenges_lock:
+        path = monthly_pool_path(data_dir)
+        raw = _load_json(path, {"months": {}})
+        months = raw.setdefault("months", {})
+        for _ym, block in list(months.items()):
+            if not isinstance(block, dict):
+                continue
+            participants = [
+                str(x) for x in (block.get("participants") or []) if x and str(x) != username
+            ]
+            block["participants"] = participants
+        _save_json(path, raw)
+
+        data = _load_duels(data_dir)
+        duels = data.get("duels") or []
+        data["duels"] = [
+            d
+            for d in duels
+            if str(d.get("from_user") or "") != username
+            and str(d.get("target_user") or "") != username
+        ]
+        _save_duels(data_dir, data)

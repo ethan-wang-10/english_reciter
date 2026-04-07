@@ -2587,6 +2587,46 @@ button.import-article-chip--selected:hover {
     overflow-y: auto;
 }
 
+.admin-delete-user-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 2100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.admin-delete-user-dialog-inner {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    max-width: 420px;
+    width: 100%;
+    padding: 20px 22px 22px;
+    border: 2px solid var(--border);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+
+.admin-delete-user-title {
+    margin: 0 0 10px;
+    font-size: 1.15rem;
+}
+
+.admin-delete-user-name {
+    font-weight: 700;
+    margin: 0 0 14px;
+    word-break: break-all;
+}
+
+.admin-delete-user-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
 .admin-panel {
     background: var(--surface);
     border-radius: var(--radius-lg);

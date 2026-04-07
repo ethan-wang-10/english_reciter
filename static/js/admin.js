@@ -124,6 +124,7 @@ function renderAdminUsers(users) {
                 <td>
                     <button type="button" class="btn-admin-pw" data-admin-set-password="${escapeHtml(u.username)}">设置密码</button>
                     <button type="button" class="btn-admin-plan" data-admin-set-plan="${escapeHtml(u.username)}" data-current-plan="${escapeHtml(plan)}">${plan === 'paid' ? '降为免费' : '升为 VIP'}</button>
+                    <button type="button" class="btn btn-danger-outline btn-admin-delete-user" data-admin-delete-user="${escapeHtml(u.username)}">删除用户</button>
                 </td>
             </tr>`;
     }).join('');
@@ -493,7 +494,91 @@ async function loadAdminTroubles() {
     }
 }
 
+let adminDeleteTargetUser = null;
+
+function closeAdminDeleteUserDialog() {
+    const d = document.getElementById('admin-delete-user-dialog');
+    if (d) {
+        d.style.display = 'none';
+        d.setAttribute('aria-hidden', 'true');
+    }
+    const p1 = document.getElementById('admin-delete-pw1');
+    const p2 = document.getElementById('admin-delete-pw2');
+    if (p1) p1.value = '';
+    if (p2) p2.value = '';
+    adminDeleteTargetUser = null;
+}
+
+function openAdminDeleteUserDialog(username) {
+    adminDeleteTargetUser = username;
+    const d = document.getElementById('admin-delete-user-dialog');
+    const disp = document.getElementById('admin-delete-user-display');
+    if (disp) disp.textContent = `用户名：${username}`;
+    if (d) {
+        d.style.display = 'flex';
+        d.setAttribute('aria-hidden', 'false');
+    }
+    const p1 = document.getElementById('admin-delete-pw1');
+    const p2 = document.getElementById('admin-delete-pw2');
+    if (p2) p2.value = '';
+    if (p1) {
+        p1.value = '';
+        p1.focus();
+    }
+    showAdminNotice('');
+}
+
+let adminDeleteUserHandlersBound = false;
+
+function bindAdminDeleteUserOnce() {
+    if (adminDeleteUserHandlersBound) return;
+    adminDeleteUserHandlersBound = true;
+    document.getElementById('admin-dashboard')?.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('[data-admin-delete-user]');
+        if (!btn) return;
+        const un = btn.getAttribute('data-admin-delete-user');
+        if (!un) return;
+        openAdminDeleteUserDialog(un);
+    });
+    document.getElementById('admin-delete-user-cancel')?.addEventListener('click', () => {
+        closeAdminDeleteUserDialog();
+    });
+    document.getElementById('admin-delete-user-dialog')?.addEventListener('click', (e) => {
+        if (e.target.id === 'admin-delete-user-dialog') closeAdminDeleteUserDialog();
+    });
+    document.getElementById('admin-delete-user-confirm')?.addEventListener('click', async () => {
+        const un = adminDeleteTargetUser;
+        if (!un) return;
+        const pw1 = document.getElementById('admin-delete-pw1')?.value || '';
+        const pw2 = document.getElementById('admin-delete-pw2')?.value || '';
+        if (!pw1.trim() || !pw2.trim()) {
+            showAdminNotice('请填写两遍管理员密码');
+            return;
+        }
+        if (pw1 !== pw2) {
+            showAdminNotice('两次输入的管理员密码不一致');
+            return;
+        }
+        showAdminNotice('');
+        try {
+            await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}`, {
+                method: 'DELETE',
+                body: JSON.stringify({
+                    admin_password: pw1,
+                    admin_password_confirm: pw2,
+                }),
+            });
+            closeAdminDeleteUserDialog();
+            await loadAdminDashboard();
+            showAdminNotice(`用户 ${un} 已删除`);
+        } catch (err) {
+            showAdminNotice(err.message || '删除失败');
+        }
+    });
+}
+
 async function loadAdminDashboard() {
+    bindAdminDeleteUserOnce();
     const [usersRes, invRes, cfgRes] = await Promise.all([
         apiAdminRequest('/admin/users'),
         apiAdminRequest('/admin/invites'),
@@ -569,6 +654,7 @@ async function openAdminOverlay() {
 }
 
 function closeAdminOverlay() {
+    closeAdminDeleteUserDialog();
     const ov = document.getElementById('admin-overlay');
     if (!ov) return;
     ov.style.display = 'none';

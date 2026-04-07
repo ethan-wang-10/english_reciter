@@ -878,6 +878,25 @@
                     </div>
                 </div>
             </div>
+            <div id="admin-delete-user-dialog" class="admin-delete-user-dialog" style="display: none;" aria-hidden="true">
+                <div class="admin-delete-user-dialog-inner" role="dialog" aria-modal="true" aria-labelledby="admin-delete-user-title">
+                    <h3 id="admin-delete-user-title" class="admin-delete-user-title">删除用户</h3>
+                    <p class="admin-hint" id="admin-delete-user-warning">将<strong>永久删除</strong>该用户账号及全部学习数据，且无法恢复。请输入<strong>两遍</strong>管理员密码以确认。</p>
+                    <p class="admin-delete-user-name" id="admin-delete-user-display"></p>
+                    <div class="form-group">
+                        <label for="admin-delete-pw1">管理员密码</label>
+                        <input type="password" id="admin-delete-pw1" autocomplete="off" />
+                    </div>
+                    <div class="form-group">
+                        <label for="admin-delete-pw2">再次输入管理员密码</label>
+                        <input type="password" id="admin-delete-pw2" autocomplete="off" />
+                    </div>
+                    <div class="admin-delete-user-actions">
+                        <button type="button" class="btn btn-secondary" id="admin-delete-user-cancel">取消</button>
+                        <button type="button" class="btn btn-danger-outline" id="admin-delete-user-confirm">确认删除</button>
+                    </div>
+                </div>
+            </div>
         </div>
         </template>
     </div>

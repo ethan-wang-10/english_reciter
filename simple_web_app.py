@@ -1252,6 +1252,7 @@ _RATE_WINDOW_SEC = 60
 _RATE_MAX_LOGIN = 20
 _RATE_MAX_REGISTER = 10
 _RATE_MAX_ADMIN_LOGIN = 10
+_RATE_MAX_ADMIN_DELETE_USER = 8
 
 INVITES_FILE = DATA_DIR / "invites.json"
 _invites_lock = threading.Lock()
@@ -1523,6 +1524,36 @@ def _revoke_user_tokens(username: str) -> None:
 def _invalidate_user_reciter_cache(username: str) -> None:
     with _reciter_registry_lock:
         _user_reciter_cache.pop(username, None)
+
+
+def _purge_student_account_completely(username: str) -> None:
+    """
+    删除学生账号：users.json、家长账号条目、用户目录、挑战相关引用、会话。
+    仅用于学生主账号；调用前须已校验非家长记录且用户名有效。
+    """
+    users = load_users()
+    u = users.get(username)
+    if not isinstance(u, dict) or is_parent_user_record(u):
+        return
+
+    pname = parent_login_username_for_child(username)
+    if pname and pname in users and is_parent_user_record(users.get(pname)):
+        del users[pname]
+        _revoke_user_tokens(pname)
+
+    if username in users:
+        del users[username]
+
+    save_users(users)
+    _revoke_user_tokens(username)
+    with _reciter_registry_lock:
+        _user_reciter_cache.pop(username, None)
+        _user_reciter_locks.pop(username, None)
+    challenges_mod.purge_user_challenges_refs(DATA_DIR, username)
+
+    user_dir = DATA_DIR / username
+    if user_dir.is_dir():
+        shutil.rmtree(user_dir, ignore_errors=True)
 
 
 def verify_user(username: str, password: str) -> bool:
@@ -4522,6 +4553,41 @@ def admin_set_user_password(username):
     _invalidate_user_reciter_cache(username)
     logger.info("管理员重置用户密码: %s", username)
     return jsonify({'username': username, 'message': '密码已更新，该用户需重新登录'}), 200
+
+
+@app.route('/api/admin/users/<username>', methods=['DELETE'])
+@admin_required
+def admin_delete_user(username):
+    """
+    永久删除学生用户及其数据目录；须同时提供管理员密码两次且一致，并与配置中的管理员密码匹配。
+    """
+    if not _rate_allow(f"admin_delete_user:{_client_ip()}", _RATE_MAX_ADMIN_DELETE_USER):
+        return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+
+    data = request.get_json(silent=True) or {}
+    p1 = (data.get('admin_password') or '').strip()
+    p2 = (data.get('admin_password_confirm') or '').strip()
+    if not p1 or not p2:
+        return jsonify({'error': '请填写两遍管理员密码'}), 400
+    if p1 != p2:
+        return jsonify({'error': '两次输入的管理员密码不一致'}), 400
+
+    cfg = _get_admin_config()
+    if not verify_admin_credentials(cfg['username'], p1):
+        logger.warning("管理员删除用户失败（密码错误）: target=%s ip=%s", username, _client_ip())
+        return jsonify({'error': '管理员密码错误'}), 401
+
+    users = load_users()
+    if username not in users:
+        return jsonify({'error': '用户不存在'}), 404
+    if is_parent_user_record(users[username]):
+        return jsonify({'error': '不能单独删除家长账号，请删除对应学生账号'}), 400
+
+    _purge_student_account_completely(username)
+    logger.info("管理员已删除用户: %s ip=%s", username, _client_ip())
+    return jsonify({'username': username, 'message': '用户已删除'}), 200
 
 
 @app.route('/api/admin/config', methods=['GET'])
