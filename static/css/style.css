@@ -4070,6 +4070,118 @@ button.import-article-chip--selected:hover {
     color: var(--text-secondary);
 }
 
+.leaderboard-scope-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.leaderboard-tab {
+    padding: 8px 16px;
+    font-weight: 800;
+    font-size: 0.9rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.leaderboard-tab:hover {
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+}
+
+.leaderboard-tab.active {
+    background: var(--primary-light);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.leaderboard-podium-wrap {
+    margin-bottom: 20px;
+}
+
+.leaderboard-podium {
+    padding: 16px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border);
+    background: linear-gradient(180deg, #fff9e6 0%, var(--surface) 48%);
+    box-shadow: var(--shadow);
+}
+
+.leaderboard-podium-title {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.leaderboard-podium-sub {
+    margin: 0 0 14px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+
+.leaderboard-podium-cards {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 16px;
+}
+
+.leaderboard-podium-card {
+    flex: 0 1 140px;
+    text-align: center;
+    padding: 12px 10px;
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    border: 2px solid var(--border);
+}
+
+.leaderboard-podium-card.rank-1 {
+    border-color: #e6c200;
+    box-shadow: 0 4px 12px rgba(230, 194, 0, 0.25);
+}
+
+.lb-podium-medal {
+    font-size: 1.5rem;
+    line-height: 1;
+    margin-bottom: 6px;
+}
+
+.lb-podium-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: inline-block;
+    vertical-align: middle;
+    border: 2px solid var(--border);
+}
+
+.lb-podium-name {
+    font-weight: 800;
+    font-size: 0.92rem;
+    margin-top: 8px;
+    word-break: break-all;
+}
+
+.lb-podium-meta {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.leaderboard-period-hint {
+    margin-top: 12px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
 .achievements-section-title {
     margin-bottom: 12px;
     font-size: 1.15rem;

@@ -42,6 +42,7 @@ from reciter import (
 )
 import gamification as gamification_mod
 import challenges as challenges_mod
+import leaderboard_periods as leaderboard_periods_mod
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -2043,7 +2044,7 @@ def patch_gamification_settings(username):
 @app.route('/api/leaderboard', methods=['GET'])
 @token_required
 def get_leaderboard(username):
-    """按总 XP 排序的小伙伴排行榜（仅含开启展示的用户）"""
+    """排行榜：scope=total 为累计 XP；week=本周（周一至周日 ISO 周）；month=本月。周/月榜仅统计 daily_xp 汇总。"""
     try:
         users = load_users()
         enabled = [
@@ -2051,13 +2052,39 @@ def get_leaderboard(username):
             if isinstance(users.get(u), dict) and is_user_enabled(u)
             and not is_parent_user_record(users[u])
         ]
-        rows = gamification_mod.build_leaderboard(
-            DATA_DIR, enabled, viewer=username
-        )
-        for r in rows:
+        scope = (request.args.get("scope") or "total").strip().lower()
+        if scope not in ("total", "week", "month"):
+            return jsonify({"error": "scope 须为 total、week 或 month"}), 400
+
+        if scope in ("week", "month"):
+            leaderboard_periods_mod.settle_periods_if_needed(DATA_DIR, enabled)
+
+        if scope == "total":
+            rows = gamification_mod.build_leaderboard(
+                DATA_DIR, enabled, viewer=username
+            )
+            for r in rows:
+                u = r.get("username") or ""
+                r["avatar_url"] = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
+            return jsonify({"scope": "total", "leaderboard": rows}), 200
+
+        if scope == "week":
+            payload = leaderboard_periods_mod.build_week_leaderboard_payload(
+                DATA_DIR, enabled, viewer=username
+            )
+        else:
+            payload = leaderboard_periods_mod.build_month_leaderboard_payload(
+                DATA_DIR, enabled, viewer=username
+            )
+        for r in payload.get("leaderboard") or []:
             u = r.get("username") or ""
             r["avatar_url"] = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
-        return jsonify({'leaderboard': rows}), 200
+        pl = payload.get("podium_last_period")
+        if pl and isinstance(pl.get("top"), list):
+            for t in pl["top"]:
+                u = t.get("username") or ""
+                t["avatar_url"] = f"/api/user/avatar/{u}" if user_avatar_disk_path(u) else None
+        return jsonify(payload), 200
     except Exception as e:
         logger.error(f"获取排行榜失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500

@@ -1410,6 +1410,10 @@ function pickRandom(arr) {
 }
 
 /** 排行榜页顶部说明：每次打开页随机一条 */
+/** 排行榜 Tab：总榜 / 周榜 / 月榜（与 /api/leaderboard?scope= 同步） */
+let leaderboardScope = 'total';
+let leaderboardTabsBound = false;
+
 const LEADERBOARD_INTRO_ROASTS = [
     '按累计 XP 排名，看看谁卷得最优雅。再往上翻翻：群体赛跑是「大家一起卷」，PK 榜是「点名卷」——上月谁赢了嘴仗，本月谁还在硬撑，都写在上面。',
     'XP 榜是面子工程，PK 榜是里子工程：一个比谁总分高，一个比谁打卡天数能把对面气笑。',
@@ -1613,17 +1617,60 @@ function renderMonthlyPkBoard(board) {
         `</div>`;
 }
 
-function renderLeaderboardTable(rows) {
+function renderLeaderboardPodium(apiData) {
+    const wrap = document.getElementById('leaderboard-podium-wrap');
+    if (!wrap) return;
+    const scope = apiData && apiData.scope ? apiData.scope : 'total';
+    if (scope === 'total' || !apiData.podium_last_period) {
+        wrap.innerHTML = '';
+        return;
+    }
+    const p = apiData.podium_last_period;
+    const kind = scope === 'week' ? '周榜' : '月榜';
+    const medals = ['🥇', '🥈', '🥉'];
+    const top = Array.isArray(p.top) ? p.top : [];
+    if (top.length === 0) {
+        wrap.innerHTML = '';
+        return;
+    }
+    const cards = top
+        .map((t, i) => {
+            const rx = Number(t.reward_xp) || 0;
+            const rxNote = rx > 0 ? ` · 奖励 +${rx} XP` : '';
+            const av = t.avatar_url
+                ? `<img class="lb-podium-avatar" src="${escapeHtml(avatarDisplayUrl(t.avatar_url, 96))}" alt="" width="48" height="48" loading="lazy" />`
+                : '<span class="lb-podium-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
+            const rk = Number(t.rank) || i + 1;
+            return `<div class="leaderboard-podium-card rank-${rk}">
+                <div class="lb-podium-medal">${medals[i] || '🏅'}</div>
+                ${av}
+                <div class="lb-podium-name">${escapeHtml(t.username)}</div>
+                <div class="lb-podium-meta">${escapeHtml(formatNumber(t.period_xp))} XP${escapeHtml(rxNote)}</div>
+            </div>`;
+        })
+        .join('');
+    wrap.innerHTML =
+        `<div class="leaderboard-podium">` +
+        `<h3 class="leaderboard-podium-title">上期${kind}三甲</h3>` +
+        `<p class="leaderboard-podium-sub">${escapeHtml(p.period_label || p.period_id || '')}</p>` +
+        `<div class="leaderboard-podium-cards">${cards}</div>` +
+        `</div>`;
+}
+
+function renderLeaderboardTable(rows, scope, meta) {
     const wrap = document.getElementById('leaderboard-table-wrap');
     if (!wrap) return;
+    const sc = scope === 'week' || scope === 'month' ? scope : 'total';
+    const m = meta && typeof meta === 'object' ? meta : {};
     if (!rows || rows.length === 0) {
         wrap.innerHTML =
             '<p class="leaderboard-empty">暂无排行数据。开启「在排行榜中展示」并学习后即可上榜。</p>';
         return;
     }
+    const xpTh = sc === 'total' ? '累计 XP' : '本期 XP';
     const head =
         '<table class="leaderboard-table"><thead><tr>' +
-        '<th>排名</th><th>用户</th><th>等级</th><th>XP</th><th>连续</th><th>成就</th>' +
+        `<th>排名</th><th>用户</th><th>等级</th><th>${xpTh}</th><th>连续</th><th>成就</th>` +
         '</tr></thead><tbody>';
     const body = rows
         .map((r) => {
@@ -1631,17 +1678,65 @@ function renderLeaderboardTable(rows) {
             const av = r.avatar_url
                 ? `<img class="lb-avatar" src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="32" height="32" loading="lazy" />`
                 : '<span class="lb-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
+            const xpVal = sc === 'total' ? r.total_xp : r.period_xp;
             return `<tr class="${me}">
                 <td>${escapeHtml(r.rank)}</td>
                 <td class="lb-user-cell">${av}<span class="lb-username">${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</span></td>
                 <td>Lv.${escapeHtml(r.level)}</td>
-                <td>${escapeHtml(formatNumber(r.total_xp))}</td>
+                <td>${escapeHtml(formatNumber(xpVal))}</td>
                 <td>🔥 ${escapeHtml(r.streak)}</td>
                 <td>${escapeHtml(r.achievements_count)}</td>
             </tr>`;
         })
         .join('');
-    wrap.innerHTML = head + body + '</tbody></table>';
+    const footer =
+        sc !== 'total' && (m.period_label || m.period_sum_end)
+            ? `<p class="leaderboard-period-hint">${escapeHtml(m.period_label || '')}${
+                  m.period_sum_end ? ` · 统计截至 ${escapeHtml(m.period_sum_end)}` : ''
+              }</p>`
+            : '';
+    wrap.innerHTML = head + body + '</tbody></table>' + footer;
+}
+
+function bindLeaderboardTabs() {
+    if (leaderboardTabsBound) return;
+    const tablist = document.querySelector('.leaderboard-scope-tabs');
+    if (!tablist) return;
+    leaderboardTabsBound = true;
+    tablist.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-lb-scope]');
+        if (!btn) return;
+        const scope = btn.getAttribute('data-lb-scope');
+        if (!scope || scope === leaderboardScope) return;
+        leaderboardScope = scope;
+        await reloadLeaderboardTableOnly();
+    });
+}
+
+async function reloadLeaderboardTableOnly() {
+    const loading = document.getElementById('leaderboard-loading');
+    if (loading) loading.style.display = 'block';
+    try {
+        const data = await apiRequest('/leaderboard?scope=' + encodeURIComponent(leaderboardScope));
+        document.querySelectorAll('[data-lb-scope]').forEach((b) => {
+            const s = b.getAttribute('data-lb-scope');
+            const on = s === leaderboardScope;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        const sc = data.scope || leaderboardScope;
+        renderLeaderboardTable(data.leaderboard, sc, data);
+        renderLeaderboardPodium(data);
+    } catch (e) {
+        const wrap = document.getElementById('leaderboard-table-wrap');
+        if (wrap) {
+            wrap.innerHTML = `<p class="leaderboard-empty">${escapeHtml(e.message || '加载失败')}</p>`;
+        }
+        const podium = document.getElementById('leaderboard-podium-wrap');
+        if (podium) podium.innerHTML = '';
+    } finally {
+        if (loading) loading.style.display = 'none';
+    }
 }
 
 function renderAchievementsGrid(g) {
@@ -1669,6 +1764,7 @@ function renderAchievementsGrid(g) {
 }
 
 async function loadLeaderboardSection() {
+    bindLeaderboardTabs();
     const loading = document.getElementById('leaderboard-loading');
     if (loading) loading.style.display = 'block';
     try {
@@ -1678,19 +1774,29 @@ async function loadLeaderboardSection() {
             introEl.textContent = pickRandom(LEADERBOARD_INTRO_ROASTS);
         }
         const [data, pool, pkBoard] = await Promise.all([
-            apiRequest('/leaderboard'),
+            apiRequest('/leaderboard?scope=' + encodeURIComponent(leaderboardScope)),
             apiRequest('/monthly-pool'),
             apiRequest('/challenges/monthly-pk-board'),
         ]);
+        document.querySelectorAll('[data-lb-scope]').forEach((b) => {
+            const s = b.getAttribute('data-lb-scope');
+            const on = s === leaderboardScope;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
         renderMonthlyPoolRace(pool);
         renderMonthlyPkBoard(pkBoard);
-        renderLeaderboardTable(data.leaderboard);
+        const sc = data.scope || leaderboardScope;
+        renderLeaderboardTable(data.leaderboard, sc, data);
+        renderLeaderboardPodium(data);
         renderAchievementsGrid(lastGamificationProfile);
     } catch (e) {
         const wrap = document.getElementById('leaderboard-table-wrap');
         if (wrap) {
             wrap.innerHTML = `<p class="leaderboard-empty">${escapeHtml(e.message || '加载失败')}</p>`;
         }
+        const podium = document.getElementById('leaderboard-podium-wrap');
+        if (podium) podium.innerHTML = '';
         const raceWrap = document.getElementById('monthly-pool-race-wrap');
         if (raceWrap) raceWrap.innerHTML = '';
         const pkWrap = document.getElementById('monthly-pk-board-wrap');
