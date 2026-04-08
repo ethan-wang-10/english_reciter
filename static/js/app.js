@@ -98,11 +98,48 @@ const PK_INVITE_POLL_MS = 3600000;
 // API 基础 URL
 const API_BASE = '/api';
 
+// ---- 性能优化：页面切换数据缓存 & 滚动位置记忆 ----
+const _sectionLastLoad = {};
+const _SECTION_STALE_MS = 30000;
+function _isSectionFresh(id) {
+    return _sectionLastLoad[id] && (Date.now() - _sectionLastLoad[id] < _SECTION_STALE_MS);
+}
+function _markSectionLoaded(id) {
+    _sectionLastLoad[id] = Date.now();
+}
+function _invalidateSectionCache(id) {
+    delete _sectionLastLoad[id];
+}
+
+const _sectionScrollPos = {};
+let _currentSectionId = 'review';
+
+function _saveScrollPos(sectionId) {
+    const el = document.getElementById(sectionId + '-section');
+    if (el) _sectionScrollPos[sectionId] = el.scrollTop || window.scrollY;
+}
+function _restoreScrollPos(sectionId) {
+    const saved = _sectionScrollPos[sectionId];
+    if (saved > 0) {
+        requestAnimationFrame(() => {
+            const el = document.getElementById(sectionId + '-section');
+            if (el && el.scrollTop !== undefined) {
+                el.scrollTop = saved;
+            } else {
+                window.scrollTo(0, saved);
+            }
+        });
+    }
+}
+
 function escapeHtml(text) {
     if (text == null || text === undefined) return '';
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function escapeRegExp(str) {
@@ -1817,6 +1854,7 @@ async function loadLeaderboardSection() {
         renderLeaderboardTable(data.leaderboard, sc, data, { expanded: false });
         renderLeaderboardPodium(data);
         renderAchievementsGrid(lastGamificationProfile);
+        _markSectionLoaded('leaderboard');
     } catch (e) {
         const wrap = document.getElementById('leaderboard-table-wrap');
         if (wrap) {
@@ -2958,6 +2996,9 @@ function updatePlanUI() {
 
 function showSection(sectionId) {
     closeDailySummaryPopover();
+
+    _saveScrollPos(_currentSectionId);
+
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     const sectionElement = document.getElementById(sectionId + '-section');
     if (sectionElement) {
@@ -2978,6 +3019,7 @@ function showSection(sectionId) {
     }
 
     closeMobileMoreSheet();
+    _currentSectionId = sectionId;
 
     if (sectionId === 'review') {
         loadReviewList();
@@ -2987,10 +3029,13 @@ function showSection(sectionId) {
     } else if (sectionId === 'textbook') {
         loadTextbookSection();
     } else if (sectionId === 'progress') {
+        if (_isSectionFresh('progress')) { _restoreScrollPos('progress'); return; }
         loadProgress();
     } else if (sectionId === 'mastered') {
+        if (_isSectionFresh('mastered')) { _restoreScrollPos('mastered'); return; }
         loadMastered();
     } else if (sectionId === 'leaderboard') {
+        if (_isSectionFresh('leaderboard')) { _restoreScrollPos('leaderboard'); return; }
         loadLeaderboardSection();
     } else if (sectionId === 'import') {
         void ensureImportNceLessonOptions();
@@ -3001,6 +3046,9 @@ function showSection(sectionId) {
 // ==================== 统计功能 ====================
 
 async function loadStats() {
+    _invalidateSectionCache('progress');
+    _invalidateSectionCache('mastered');
+    _invalidateSectionCache('leaderboard');
     try {
         const data = await apiRequest('/words/status');
 
@@ -3719,6 +3767,8 @@ async function submitAnswer() {
     }
 
     isSubmitting = true;
+    const submitBtn = document.getElementById('submit-answer');
+    if (submitBtn) submitBtn.classList.add('btn-submit-loading');
     
     try {
         const result = await apiRequest('/words/practice', {
@@ -3778,6 +3828,7 @@ async function submitAnswer() {
         messageDiv.textContent = msgText;
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
         messageDiv.style.display = 'block';
+        if (submitBtn) submitBtn.classList.remove('btn-submit-loading');
         
         const targetAnswer = word._targetAnswer || word.english;
         if (result.correct) {
@@ -3833,6 +3884,7 @@ async function submitAnswer() {
     } catch (error) {
         isSubmitting = false;
         isAdvancing = false;
+        if (submitBtn) submitBtn.classList.remove('btn-submit-loading');
         const msg = error.message || '提交失败，请重试';
         const reviewSection = document.getElementById('review-section');
         const messageDiv = document.getElementById('word-message');
@@ -3959,13 +4011,66 @@ function renderLearningMap(masteredWords) {
 
 // ==================== 进度功能 ====================
 
+function _renderProgressWordItem(word) {
+    const nextLine = escapeHtml(formatNextReviewLine(word));
+    const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
+    const coTag = word.is_carryover
+        ? `<span class="word-item-carryover-tag">遗留${word.carryover_days ? ` · 逾期${word.carryover_days}天` : ''}</span>`
+        : '';
+    return `<div class="word-item">
+        <div class="word-item-info">
+            <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
+            <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
+            <div class="word-item-next-review">下次复习：${nextLine} ${coTag}</div>
+        </div>
+        <div class="word-item-stats">
+            <div class="word-stat">
+                <div class="word-stat-value">${escapeHtml(word.success_count)}/${escapeHtml(word.max_success_count)}</div>
+                <div class="word-stat-label">掌握进度</div>
+            </div>
+            <div class="word-stat">
+                <div class="word-stat-value">${escapeHtml(word.review_count)}</div>
+                <div class="word-stat-label">复习次数</div>
+            </div>
+        </div>
+    </div>`;
+}
+
+const _LIST_BATCH_SIZE = 50;
+
+function _batchRenderList(container, items, renderFn) {
+    let rendered = 0;
+    function renderBatch() {
+        const slice = items.slice(rendered, rendered + _LIST_BATCH_SIZE);
+        if (!slice.length) return;
+        container.insertAdjacentHTML('beforeend', slice.map(renderFn).join(''));
+        rendered += slice.length;
+    }
+    renderBatch();
+    if (rendered < items.length) {
+        const io = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && rendered < items.length) {
+                renderBatch();
+                if (rendered >= items.length) { io.disconnect(); sentinel.remove(); }
+            }
+        }, { rootMargin: '200px' });
+        const sentinel = document.createElement('div');
+        sentinel.className = 'section-loading-hint';
+        sentinel.textContent = '加载更多…';
+        container.appendChild(sentinel);
+        io.observe(sentinel);
+    }
+}
+
 async function loadProgress() {
+    const wordList = document.getElementById('word-list');
+    const statsEl = document.getElementById('progress-stats');
+    if (wordList) wordList.innerHTML = '<p class="section-loading-hint">加载中…</p>';
     try {
         const data = await apiRequest('/words/status');
 
         renderLearningMap(data.stats.mastered_words);
 
-        // 显示统计
         const statsHtml = `
             <div class="stat-card">
                 <div class="stat-icon">📝</div>
@@ -3989,37 +4094,17 @@ async function loadProgress() {
                 </div>
             </div>
         `;
-        document.getElementById('progress-stats').innerHTML = statsHtml;
-        
-        // 显示单词列表
-        const listHtml = data.words.map((word) => {
-            const nextLine = escapeHtml(formatNextReviewLine(word));
-            const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
-            const coTag = word.is_carryover
-                ? `<span class="word-item-carryover-tag">遗留${word.carryover_days ? ` · 逾期${word.carryover_days}天` : ''}</span>`
-                : '';
-            return `
-            <div class="word-item">
-                <div class="word-item-info">
-                    <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
-                    <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
-                    <div class="word-item-next-review">下次复习：${nextLine} ${coTag}</div>
-                </div>
-                <div class="word-item-stats">
-                    <div class="word-stat">
-                        <div class="word-stat-value">${escapeHtml(word.success_count)}/${escapeHtml(word.max_success_count)}</div>
-                        <div class="word-stat-label">掌握进度</div>
-                    </div>
-                    <div class="word-stat">
-                        <div class="word-stat-value">${escapeHtml(word.review_count)}</div>
-                        <div class="word-stat-label">复习次数</div>
-                    </div>
-                </div>
-            </div>
-        `;
-        }).join('');
-        
-        document.getElementById('word-list').innerHTML = listHtml || '<p style="padding: 20px; text-align: center; color: #999;">暂无单词</p>';
+        if (statsEl) statsEl.innerHTML = statsHtml;
+
+        if (wordList) {
+            wordList.innerHTML = '';
+            if (data.words.length === 0) {
+                wordList.innerHTML = '<p style="padding: 20px; text-align: center; color: #999;">暂无单词</p>';
+            } else {
+                _batchRenderList(wordList, data.words, _renderProgressWordItem);
+            }
+        }
+        _markSectionLoaded('progress');
     } catch (error) {
         showMainBanner('加载进度失败，请稍后重试');
     }
@@ -4027,29 +4112,37 @@ async function loadProgress() {
 
 // ==================== 已掌握功能 ====================
 
+function _renderMasteredWordItem(word) {
+    const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
+    return `<div class="word-item">
+        <div class="word-item-info">
+            <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
+            <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
+        </div>
+        <div class="word-item-stats">
+            <div class="word-stat">
+                <div class="word-stat-value">${escapeHtml(word.review_count)}</div>
+                <div class="word-stat-label">复习次数</div>
+            </div>
+        </div>
+    </div>`;
+}
+
 async function loadMastered() {
+    const container = document.getElementById('mastered-list');
+    if (container) container.innerHTML = '<p class="section-loading-hint">加载中…</p>';
     try {
         const data = await apiRequest('/words/mastered');
-        
-        const listHtml = data.words.map(word => {
-            const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
-            return `
-            <div class="word-item">
-                <div class="word-item-info">
-                    <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
-                    <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
-                </div>
-                <div class="word-item-stats">
-                    <div class="word-stat">
-                        <div class="word-stat-value">${escapeHtml(word.review_count)}</div>
-                        <div class="word-stat-label">复习次数</div>
-                    </div>
-                </div>
-            </div>
-        `;
-        }).join('');
-        
-        document.getElementById('mastered-list').innerHTML = listHtml || '<p style="padding: 20px; text-align: center; color: #999;">暂无已掌握单词</p>';
+
+        if (container) {
+            container.innerHTML = '';
+            if (data.words.length === 0) {
+                container.innerHTML = '<p style="padding: 20px; text-align: center; color: #999;">暂无已掌握单词</p>';
+            } else {
+                _batchRenderList(container, data.words, _renderMasteredWordItem);
+            }
+        }
+        _markSectionLoaded('mastered');
     } catch (error) {
         showMainBanner('加载已掌握列表失败，请稍后重试');
     }
@@ -5582,6 +5675,17 @@ document.addEventListener('DOMContentLoaded', function() {
     mountDeferredAppShell();
     setupVisualViewportKeyboardAvoid();
     setupDailySummaryPopover();
+
+    document.querySelectorAll('.btn-toggle-pw').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            const inp = targetId && document.getElementById(targetId);
+            if (!inp) return;
+            const show = inp.type === 'password';
+            inp.type = show ? 'text' : 'password';
+            btn.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
+        });
+    });
 
     // 预加载语音列表（Android 等环境首次 getVoices() 可能为空）
     if (typeof window.speechSynthesis !== 'undefined') {

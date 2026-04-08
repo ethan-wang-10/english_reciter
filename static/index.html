@@ -33,11 +33,16 @@
                     <form id="login-form" class="auth-form">
                         <div class="form-group">
                             <label>用户名</label>
-                            <input type="text" id="login-username" required>
+                            <input type="text" id="login-username" required autocomplete="username">
                         </div>
                         <div class="form-group">
                             <label>密码</label>
-                            <input type="password" id="login-password" required>
+                            <div class="password-input-wrap">
+                                <input type="password" id="login-password" required autocomplete="current-password">
+                                <button type="button" class="btn-toggle-pw" data-target="login-password" aria-label="显示密码" tabindex="-1">
+                                    <span class="pw-eye-icon">👁</span>
+                                </button>
+                            </div>
                         </div>
                         <button type="submit" class="btn btn-primary">登录</button>
                     </form>
@@ -56,11 +61,21 @@
                         </div>
                         <div class="form-group">
                             <label>密码</label>
-                            <input type="password" id="reg-password" required minlength="6">
+                            <div class="password-input-wrap">
+                                <input type="password" id="reg-password" required minlength="6" autocomplete="new-password">
+                                <button type="button" class="btn-toggle-pw" data-target="reg-password" aria-label="显示密码" tabindex="-1">
+                                    <span class="pw-eye-icon">👁</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>确认密码</label>
-                            <input type="password" id="reg-password-confirm" required>
+                            <div class="password-input-wrap">
+                                <input type="password" id="reg-password-confirm" required autocomplete="new-password">
+                                <button type="button" class="btn-toggle-pw" data-target="reg-password-confirm" aria-label="显示密码" tabindex="-1">
+                                    <span class="pw-eye-icon">👁</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>邀请码</label>
@@ -926,9 +941,9 @@
         </aside>
     </div>
     
-    <script src="/static/js/app.js"></script>
-    <script src="/static/js/chat-sidebar.js"></script>
-    <script src="/static/js/textbook.js"></script>
-    <script src="/static/js/admin.js"></script>
+    <script src="/static/js/app.js" defer></script>
+    <script src="/static/js/chat-sidebar.js" defer></script>
+    <script src="/static/js/textbook.js" defer></script>
+    <script src="/static/js/admin.js" defer></script>
 </body>
 </html>

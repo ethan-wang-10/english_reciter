@@ -1828,7 +1828,15 @@ def index():
 @app.route('/static/<path:path>')
 def send_static(path):
     """静态文件服务"""
-    return send_from_directory('static', path)
+    resp = send_from_directory('static', path)
+    ext = path.rsplit('.', 1)[-1].lower() if '.' in path else ''
+    if ext in ('css', 'js'):
+        resp.cache_control.max_age = 3600
+        resp.cache_control.public = True
+    elif ext in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'woff', 'woff2'):
+        resp.cache_control.max_age = 86400
+        resp.cache_control.public = True
+    return resp
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():

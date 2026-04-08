@@ -7,6 +7,9 @@
     let chatEventSource = null;
     let chatReconnectTimer = null;
     let chatBackoffMs = 1000;
+    /** 侧栏折叠时用轮询代替 SSE，降低长连接与解析开销（毫秒） */
+    let chatPollTimer = null;
+    const CHAT_COLLAPSED_POLL_MS = 20000;
     const chatSeenIds = new Set();
     let chatLoadingOlder = false;
     let chatHasMoreOlder = true;
@@ -618,6 +621,60 @@
         }
     }
 
+    function stopChatPoll() {
+        if (chatPollTimer) {
+            clearInterval(chatPollTimer);
+            chatPollTimer = null;
+        }
+    }
+
+    /**
+     * 折叠状态下仅定期拉取新消息，更新未读 / @ 提醒（不维持 SSE）。
+     * 首次无游标时拉一页历史并视为已读，避免把旧消息算成未读。
+     */
+    async function pollChatOnce() {
+        if (!token) return;
+        if (isChatSidebarOpen()) return;
+        const main = document.getElementById("main-page");
+        if (!main || !main.classList.contains("active")) return;
+        try {
+            if (!lastChatMessageId) {
+                const r = await fetch(`${base}/chat/messages?limit=50`, {
+                    headers: { Authorization: "Bearer " + token },
+                });
+                if (!r.ok) return;
+                if (isChatSidebarOpen()) return;
+                const data = await r.json();
+                const msgs = data.messages || [];
+                for (const m of msgs) {
+                    if (m && m.id) chatSeenIds.add(m.id);
+                }
+                if (msgs.length) lastChatMessageId = msgs[msgs.length - 1].id;
+                return;
+            }
+            const r = await fetch(
+                `${base}/chat/messages?after_id=${encodeURIComponent(lastChatMessageId)}&limit=100`,
+                { headers: { Authorization: "Bearer " + token } }
+            );
+            if (!r.ok) return;
+            if (isChatSidebarOpen()) return;
+            const data = await r.json();
+            for (const m of data.messages || []) {
+                handleInboundChatMessage(m);
+            }
+        } catch (_) {}
+    }
+
+    function startChatPoll() {
+        stopChatPoll();
+        if (!token) return;
+        const main = document.getElementById("main-page");
+        if (!main || !main.classList.contains("active")) return;
+        if (isChatSidebarOpen()) return;
+        void pollChatOnce();
+        chatPollTimer = setInterval(() => void pollChatOnce(), CHAT_COLLAPSED_POLL_MS);
+    }
+
     async function fetchMissedThenReconnect() {
         const last = lastChatMessageId || getLastMessageId();
         if (last && token) {
@@ -635,7 +692,7 @@
         }
         const main = document.getElementById("main-page");
         if (main && main.classList.contains("active") && token) {
-            connectChatSSE();
+            ensureChatSse();
         }
     }
 
@@ -673,13 +730,28 @@
     }
 
     function ensureChatSse() {
-        if (!token) return;
+        if (!token) {
+            stopChatPoll();
+            disconnectChatSSE();
+            return;
+        }
         const main = document.getElementById("main-page");
-        if (!main || !main.classList.contains("active")) return;
-        connectChatSSE();
+        if (!main || !main.classList.contains("active")) {
+            stopChatPoll();
+            disconnectChatSSE();
+            return;
+        }
+        if (isChatSidebarOpen()) {
+            stopChatPoll();
+            connectChatSSE();
+        } else {
+            disconnectChatSSE();
+            startChatPoll();
+        }
     }
 
     function onChatLogout() {
+        stopChatPoll();
         disconnectChatSSE();
         lastChatMessageId = null;
         chatSeenIds.clear();
@@ -691,6 +763,7 @@
         const bd = document.getElementById("chat-sidebar-backdrop");
         const trig = document.getElementById("chat-side-trigger");
         if (!side || !bd) return;
+        stopChatPoll();
         clearChatUnreadState();
         bd.hidden = false;
         side.classList.add("chat-sidebar--open");
@@ -720,6 +793,22 @@
         if (trig) trig.setAttribute("aria-expanded", "false");
         hideChatAtSuggest();
         hideChatEmojiPanel();
+        ensureChatSse();
+    }
+
+    let _chatErrorTimer = null;
+    function showChatError(msg) {
+        clearTimeout(_chatErrorTimer);
+        const compose = document.querySelector(".chat-compose");
+        if (!compose) return;
+        let el = compose.querySelector(".chat-compose-error");
+        if (!el) {
+            el = document.createElement("div");
+            el.className = "chat-compose-error";
+            compose.insertBefore(el, compose.firstChild);
+        }
+        el.textContent = msg || "发送失败";
+        _chatErrorTimer = setTimeout(() => { if (el.parentNode) el.remove(); }, 4000);
     }
 
     async function sendChat() {
@@ -740,7 +829,7 @@
             });
             const data = await r.json().catch(() => ({}));
             if (!r.ok) {
-                alert(data.error || "发送失败");
+                showChatError(data.error || "发送失败");
                 return;
             }
             appendMessageIfNew(data, true);
@@ -751,7 +840,7 @@
             hideChatEmojiPanel();
             scrollChatToBottom();
         } catch (e) {
-            alert(e.message || "网络错误");
+            showChatError(e.message || "网络错误");
         } finally {
             if (btn) btn.disabled = false;
         }
