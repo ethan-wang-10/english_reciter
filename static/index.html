@@ -118,6 +118,10 @@
                 </div>
                 <div class="nav-user">
                     <div class="nav-user-gear-cluster">
+                        <button type="button" id="chat-side-trigger" class="btn-gear btn-gear-chat" title="聊天室" aria-label="打开聊天室" aria-expanded="false" aria-controls="chat-sidebar">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            <span id="chat-side-badge" class="btn-gear-badge" hidden aria-hidden="true"></span>
+                        </button>
                         <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
                     </div>
                     <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
@@ -556,13 +560,6 @@
                 </div>
             </div>
 
-            <button type="button" id="chat-side-trigger" class="chat-side-trigger" title="聊天室" aria-label="打开聊天室" aria-expanded="false" aria-controls="chat-sidebar">
-                <span class="chat-side-trigger-inner">
-                    <span class="chat-side-trigger-icon" aria-hidden="true">🗨</span>
-                    <span class="chat-side-trigger-text">聊天</span>
-                </span>
-                <span id="chat-side-badge" class="chat-side-trigger-badge" hidden aria-hidden="true"></span>
-            </button>
         </div>
 
         <template id="deferred-app-shell">

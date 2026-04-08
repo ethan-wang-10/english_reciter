@@ -371,17 +371,17 @@
         const hasAt = chatMentionPending;
 
         if (trig) {
-            trig.classList.toggle("chat-side-trigger--at", hasAt);
+            trig.classList.toggle("btn-gear-chat--at", hasAt);
             trig.title = hasAt ? "聊天室：有人 @ 你" : n > 0 ? "聊天室：新消息" : "聊天室";
         }
         if (badge) {
             if (n > 0 || hasAt) {
                 badge.hidden = false;
-                badge.classList.toggle("chat-side-trigger-badge--at", hasAt);
+                badge.classList.toggle("btn-gear-badge--at", hasAt);
                 badge.textContent = hasAt ? (n > 1 ? "@" + (n > 99 ? "99+" : n) : "@") : n > 99 ? "99+" : String(n);
             } else {
                 badge.hidden = true;
-                badge.classList.remove("chat-side-trigger-badge--at");
+                badge.classList.remove("btn-gear-badge--at");
                 badge.textContent = "";
             }
         }
