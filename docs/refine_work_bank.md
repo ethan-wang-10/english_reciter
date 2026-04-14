@@ -34,13 +34,15 @@
 ```text
 LexicalEntryV2 {
   english: string              # 主键；规范化后与查询键一致（如小写 strip，与现网一致）
-  chinese_summary: string       # 由 senses 生成的展示/兼容摘要（确定性算法，见 §2.2）
   entry_kind: "word" | "phrase"  # 可缺省，由启发式推断（含空格 → phrase 等）
   level: string                 # 可选，与现有一致
   phonetic: string | null       # 行级音标
-  senses: Sense[]               # 必填，至少 1 条
+  senses: Sense[]               # 必填，至少 1 条（**权威**：释义与例句均在此）
 
-  # 行级 example1…exampleN：由 senses 内例句展开（N 与义项数一致，至多 8 组）
+  # 以下字段不落盘（新写入）：由 senses 在读取时派生，供与 CSV 扁平行兼容
+  # chinese_summary — build_chinese_summary(senses)
+  # example1…exampleN / *_form / *_cn — 与义项顺序一一对应，至多 8 组
+  # 旧文件若仍含上述冗余键，读取时以 senses 为准覆盖，避免与义项不一致。
 }
 
 Sense {
@@ -48,7 +50,7 @@ Sense {
   pos: string | null
   definition_zh: string
   phonetic_override?: string     # 仅异读等极少数情况
-  example_en, example_cn, example_form  # AI 生成时与义项一一对应；落盘可展开为 example1…N
+  example_en, example_cn, example_form  # AI 生成时与义项一一对应；扁平行 example1…N 由读取时展开
 }
 ```
 

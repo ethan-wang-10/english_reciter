@@ -1,5 +1,6 @@
 """
 新词库 words_v2.json：多义项、词组；与 words.csv 双轨并存。
+持久化以 senses 为权威；chinese_summary 与 example1..N 在读取时由 materialize_v2_entry_for_read 派生。
 见 docs/refine_work_bank.md。
 """
 
@@ -126,15 +127,14 @@ def finalize_v2_entry_from_deepseek(raw: dict) -> Optional[dict]:
     ek = str(raw.get("entry_kind", "")).strip().lower()
     if ek not in ("word", "phrase"):
         ek = "phrase" if " " in en else "word"
+    # 持久化以 senses 为唯一数据源；chinese_summary / example1..N 由 materialize_v2_entry_for_read 派生
     entry: Dict[str, Any] = {
         "english": en,
-        "chinese_summary": build_chinese_summary(senses),
         "entry_kind": ek,
         "level": str(raw.get("level", "")).strip(),
         "phonetic": str(raw.get("phonetic", "")).strip(),
         "senses": senses,
     }
-    _flatten_sense_examples_into_entry(entry, senses)
     return entry
 
 
@@ -183,19 +183,51 @@ def _flatten_sense_examples_into_entry(entry: Dict[str, Any], senses: List[dict]
         entry.pop(f"example{j}_cn", None)
 
 
+def strip_redundant_v2_fields_for_storage(entry: dict) -> dict:
+    """
+    写入 words_v2.json 前去掉可由 senses 派生的键，避免与 senses 重复落盘。
+    无 senses 时不改动（兼容异常手工条目）。
+    """
+    out = dict(entry)
+    senses = out.get("senses")
+    if not (isinstance(senses, list) and len(senses) > 0):
+        return out
+    out.pop("chinese_summary", None)
+    for k in range(1, 9):
+        out.pop(f"example{k}", None)
+        out.pop(f"example{k}_form", None)
+        out.pop(f"example{k}_cn", None)
+    return out
+
+
+def materialize_v2_entry_for_read(entry: dict) -> dict:
+    """
+    从权威字段 senses 派生 chinese_summary 与 example1..N，供查询与 CSV 扁平行兼容。
+    新写入的 v2 条目可只含 senses（不落冗余）；旧文件若仍含摘要/扁平行，此处以 senses 为准覆盖。
+    无 senses 时保留条目内已有扁平字段（极少见）。
+    """
+    out = dict(entry)
+    senses = out.get("senses")
+    if isinstance(senses, list) and len(senses) > 0:
+        out["chinese_summary"] = build_chinese_summary(senses)
+        _flatten_sense_examples_into_entry(out, senses)
+    return out
+
+
 def v2_entry_to_flat_csv_row(entry: dict) -> dict:
     """供 pick_example_for_word / csv_word_to_review_item 使用的扁平行（含 chinese 键）。"""
-    ch = str(entry.get("chinese_summary") or entry.get("chinese") or "").strip()
+    mat = materialize_v2_entry_for_read(entry)
+    ch = str(mat.get("chinese_summary") or mat.get("chinese") or "").strip()
     out: Dict[str, Any] = {
-        "english": str(entry.get("english", "")).strip(),
+        "english": str(mat.get("english", "")).strip(),
         "chinese": ch,
-        "level": str(entry.get("level", "")).strip(),
-        "phonetic": str(entry.get("phonetic", "")).strip(),
+        "level": str(mat.get("level", "")).strip(),
+        "phonetic": str(mat.get("phonetic", "")).strip(),
     }
     for k in range(1, 9):
-        out[f"example{k}"] = str(entry.get(f"example{k}", "") or "").strip()
-        out[f"example{k}_form"] = str(entry.get(f"example{k}_form", "") or "").strip()
-        out[f"example{k}_cn"] = str(entry.get(f"example{k}_cn", "") or "").strip()
+        out[f"example{k}"] = str(mat.get(f"example{k}", "") or "").strip()
+        out[f"example{k}_form"] = str(mat.get(f"example{k}_form", "") or "").strip()
+        out[f"example{k}_cn"] = str(mat.get(f"example{k}_cn", "") or "").strip()
     return out
 
 
@@ -354,7 +386,7 @@ def append_words_v2_entries(entries: List[dict]) -> Tuple[int, List[str]]:
                 if k in existing_keys:
                     skipped.append(k)
                     continue
-                new_ones.append(ent)
+                new_ones.append(strip_redundant_v2_fields_for_storage(ent))
                 existing_keys.add(k)
             if not new_ones:
                 return 0, skipped

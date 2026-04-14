@@ -33,8 +33,10 @@ class TestWordbankV2(unittest.TestCase):
         assert fin is not None
         self.assertEqual(fin["english"], "run")
         self.assertEqual(fin["senses"][0]["id"], "run#s0")
+        self.assertNotIn("example1", fin)
         row = wordbank_v2.v2_entry_to_flat_csv_row(fin)
-        self.assertEqual(row["chinese"], fin["chinese_summary"])
+        self.assertEqual(row["chinese"], wordbank_v2.build_chinese_summary(fin["senses"]))
+        self.assertEqual(row["example1"], "I run.")
 
     def test_finalize_three_senses_three_examples(self):
         raw = {
@@ -68,11 +70,40 @@ class TestWordbankV2(unittest.TestCase):
         fin = wordbank_v2.finalize_v2_entry_from_deepseek(raw)
         self.assertIsNotNone(fin)
         assert fin is not None
-        self.assertEqual(fin["example1"], "A bat sleeps.")
-        self.assertEqual(fin["example2"], "Swing the bat.")
-        self.assertEqual(fin["example3"], "He bats well.")
+        self.assertNotIn("example1", fin)
+        self.assertNotIn("chinese_summary", fin)
         row = wordbank_v2.v2_entry_to_flat_csv_row(fin)
+        self.assertEqual(row["example1"], "A bat sleeps.")
+        self.assertEqual(row["example2"], "Swing the bat.")
+        self.assertEqual(row["example3"], "He bats well.")
         self.assertEqual(row["example3_cn"], "他击球好。")
+
+    def test_slim_v2_roundtrip_and_stale_flat_ignored(self):
+        """落盘仅 senses；读取时从 senses 派生扁平行；若文件曾含陈旧 example*，以 senses 为准。"""
+        raw = {
+            "english": "bat",
+            "senses": [
+                {
+                    "pos": "noun",
+                    "definition_zh": "蝙蝠",
+                    "example_en": "A bat sleeps.",
+                    "example_cn": "蝙蝠睡觉。",
+                    "example_form": "",
+                },
+            ],
+            "phonetic": "/bæt/",
+            "level": "初中",
+        }
+        fin = wordbank_v2.finalize_v2_entry_from_deepseek(raw)
+        assert fin is not None
+        slim = wordbank_v2.strip_redundant_v2_fields_for_storage(fin)
+        self.assertNotIn("example1", slim)
+        stale = dict(slim)
+        stale["example1"] = "WRONG SENTENCE"
+        stale["chinese_summary"] = "wrong"
+        row = wordbank_v2.v2_entry_to_flat_csv_row(stale)
+        self.assertEqual(row["example1"], "A bat sleeps.")
+        self.assertIn("蝙蝠", row["chinese"])
 
 
 if __name__ == "__main__":
