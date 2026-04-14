@@ -63,7 +63,9 @@ def main() -> None:
         print("dry-run，前 20 个:", to_do[:20])
         return
 
-    wordbank_so_far = set(swa.get_wordbank_english_set())
+    # 只与「已写入 words_v2.json 的键」去重；勿用 get_wordbank_english_set()（含 CSV），
+    # 否则老词库里每个词都会被视为「已存在」而全部被跳过，无法生成 v2。
+    wordbank_so_far = wordbank_v2.get_v2_english_key_set()
     total_written = 0
     failed_batches = 0
     batch_size = swa.DEEPSEEK_VOCAB_BATCH_WORDS
@@ -88,7 +90,7 @@ def main() -> None:
         if rows_out:
             n, skipped = wordbank_v2.append_words_v2_entries(rows_out)
             wordbank_v2.invalidate_words_v2_cache()
-            wordbank_so_far = set(swa.get_wordbank_english_set())
+            wordbank_so_far = wordbank_v2.get_v2_english_key_set()
             total_written += n
             print(
                 f"本批已落盘：写入 {n} 条（本批有效 {len(rows_out)}，跳过重复键 {len(skipped)}）",
