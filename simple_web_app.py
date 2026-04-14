@@ -1346,6 +1346,11 @@ def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Opti
     if not words:
         return None
     words_str = "、".join(words)
+    level_rule = "，与上文难度一致" if level_hint else "；未给难度时按词自选"
+    # JSON 示例勿放在 f-string 内：花括号会与 f-string 插值冲突
+    _v2_json_shape_example = """[
+  {"english":"bat","senses":[{"pos":"noun","definition_zh":"蝙蝠","example_en":"Bats fly at night.","example_cn":"蝙蝠在夜间飞行。","example_form":""},{"pos":"noun","definition_zh":"球棒","example_en":"He held a wooden bat.","example_cn":"他握着一根木球棒。","example_form":""},{"pos":"verb","definition_zh":"击打","example_en":"He bats the ball.","example_cn":"他击球。","example_form":"bats"}],"level":"初中","phonetic":"/bæt/"}
+]"""
     prompt = f"""为下列每项各生成 1 个对象，输出**仅**合法 JSON 数组（从 [ 到 ]），无 Markdown、无说明。
 
 列表：{words_str}{level_hint}
@@ -1354,12 +1359,10 @@ def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Opti
 - senses：每条含 pos、definition_zh（2～12 字）；senses[0] 为最常见义；pos 用 noun|verb|adjective|adverb|phrase。
 - **例句与义项一一对应**：每条 sense 必须同时含 example_en、example_cn、example_form（句中词形与 lemma 相同则填 ""）。**有几条 sense 就要有几条例句**，禁止 3 个义项只写 2 条例句。
 - 多义词覆盖主要高频义（如 key：钥匙/关键/键/键入）；勿合并义项。
-- english 与列表一致；phonetic 一条；level 为 小学/初中/高中/GRE 之一{("，与上文难度一致" if level_hint else "；未给难度时按词自选")}。
+- english 与列表一致；phonetic 一条；level 为 小学/初中/高中/GRE 之一{level_rule}。
 
 结构示例（3 义则 senses 内 3 组例句）：
-[
-  {{"english":"bat","senses":[{"pos":"noun","definition_zh":"蝙蝠","example_en":"Bats fly at night.","example_cn":"蝙蝠在夜间飞行。","example_form":""},{"pos":"noun","definition_zh":"球棒","example_en":"He held a wooden bat.","example_cn":"他握着一根木球棒。","example_form":""},{"pos":"verb","definition_zh":"击打","example_en":"He bats the ball.","example_cn":"他击球。","example_form":"bats"}],"level":"初中","phonetic":"/bæt/"}}
-]
+{_v2_json_shape_example}
 """
     wc = max(1, len(words))
     # 每义项嵌套例句，JSON 更长
