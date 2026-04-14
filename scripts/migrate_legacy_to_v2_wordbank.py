@@ -6,6 +6,9 @@
   python scripts/migrate_legacy_to_v2_wordbank.py [--dry-run] [--limit N]
 
 需配置环境变量 DEEPSEEK_API_KEY；与 simple_web_app 共用 DeepSeek 配置。
+
+落盘：每成功一批 DeepSeek 后立即 ``append_words_v2_entries`` 写回磁盘；
+中途 API 失败或进程退出时，先前批次已保存，不会整次丢失。
 """
 
 from __future__ import annotations
@@ -84,8 +87,11 @@ def main() -> None:
         if rows_out:
             n, skipped = wordbank_v2.append_words_v2_entries(rows_out)
             wordbank_v2.invalidate_words_v2_cache()
+            wordbank_so_far = set(swa.get_wordbank_english_set())
             total_written += n
-            print(f"写入 {n} 条（本批生成 {len(rows_out)}，跳过重复键 {len(skipped)}）")
+            print(
+                f"本批已落盘：写入 {n} 条（本批有效 {len(rows_out)}，跳过重复键 {len(skipped)}）",
+            )
 
     print(f"完成。累计写入约 {total_written} 条；失败批次数 {failed_batches}")
 

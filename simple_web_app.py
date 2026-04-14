@@ -4269,7 +4269,21 @@ def import_vocab_to_csv(username):
                     v2_so_far=wordbank_so_far,
                     batch_lower=batch_lower,
                 )
-                generated_entries.extend(rows)
+                if rows:
+                    try:
+                        _, skipped_dup = wordbank_v2.append_words_v2_entries(rows)
+                        wordbank_v2.invalidate_words_v2_cache()
+                        if skipped_dup:
+                            logger.info("words_v2 批次落盘，跳过已存在键: %s", skipped_dup[:20])
+                    except Exception as e:
+                        logger.error("写入 words_v2.json 失败（本批落盘）: %s", e)
+                        return jsonify(
+                            {
+                                'error': f'写入新词库失败（此前批次若已成功则已保存）: {e}',
+                            }
+                        ), 500
+                    generated_entries.extend(rows)
+                    wordbank_so_far = wordbank_v2.get_v2_english_key_set()
                 miss_lemmas = [b for b in batch if b.lower() not in success]
             else:
                 miss_lemmas = list(batch)
@@ -4280,16 +4294,6 @@ def import_vocab_to_csv(username):
         failed_surfaces = _dedupe_preserve_order(failed_surfaces)
         if failed_surfaces:
             record_surfaces_to_difficult(failed_surfaces)
-
-        if generated_entries:
-            try:
-                _, skipped_dup = wordbank_v2.append_words_v2_entries(generated_entries)
-                wordbank_v2.invalidate_words_v2_cache()
-                if skipped_dup:
-                    logger.info("words_v2 跳过已存在键: %s", skipped_dup[:20])
-            except Exception as e:
-                logger.error("写入 words_v2.json 失败: %s", e)
-                return jsonify({'error': f'写入新词库失败: {e}'}), 500
 
     # 加入待复习
     queue_result = None
