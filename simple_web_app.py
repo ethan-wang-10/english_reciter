@@ -44,6 +44,7 @@ import gamification as gamification_mod
 import challenges as challenges_mod
 import leaderboard_periods as leaderboard_periods_mod
 import chat_room
+import wordbank_v2
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -561,9 +562,52 @@ def delete_wordbank_difficult(surface: str) -> bool:
     return True
 
 
+def get_wordbank_english_set() -> set:
+    """主词库（新 ``words_v2.json`` + 旧 ``words.csv``）英文键集合（规范化小写）。"""
+    return get_csv_english_set() | wordbank_v2.get_v2_english_key_set()
+
+
 def load_system_wordbank_english_lower() -> set:
-    """主词库 ``static/wordbanks/words.csv`` 中的英文（小写），用于「共享词库」与家长导入去重。"""
-    return get_csv_english_set()
+    """主词库中的英文键，用于「共享词库」与家长导入去重（含 v2 + legacy）。"""
+    return get_wordbank_english_set()
+
+
+def merge_wordbank_rows_for_search(level_filter: str = "") -> Tuple[List[dict], Set[str]]:
+    """
+    合并新词库与旧 CSV 行（同键时新库覆盖），用于搜索 API。
+    返回 (扁平行列表, 所有 english 规范化键集合)。
+    """
+    csv_rows = load_words_csv()
+    if level_filter:
+        csv_rows = [r for r in csv_rows if (r.get("level", "") or "").strip() == level_filter]
+    v2_list = wordbank_v2.load_words_v2_list()
+    if level_filter:
+        v2_list = [e for e in v2_list if (e.get("level", "") or "").strip() == level_filter]
+    v2_by: Dict[str, dict] = {}
+    for e in v2_list:
+        k = wordbank_v2.normalize_english_key(e.get("english", ""))
+        if k:
+            v2_by[k] = e
+    out: List[dict] = []
+    seen_csv: Set[str] = set()
+    for row in csv_rows:
+        k = wordbank_v2.normalize_english_key(row.get("english", ""))
+        if not k:
+            continue
+        if k in v2_by:
+            out.append(wordbank_v2.v2_entry_to_flat_csv_row(v2_by[k]))
+        else:
+            out.append(row)
+        seen_csv.add(k)
+    for k, ent in v2_by.items():
+        if k not in seen_csv:
+            out.append(wordbank_v2.v2_entry_to_flat_csv_row(ent))
+    keys = {
+        wordbank_v2.normalize_english_key(str(r.get("english", "") or ""))
+        for r in out
+        if (r.get("english") or "").strip()
+    }
+    return out, keys
 
 
 def parse_simple_parent_import_text(text: str) -> Tuple[List[dict], Optional[str]]:
@@ -909,10 +953,15 @@ def pick_example_for_word(row: dict, english: str = "") -> dict:
 
 
 def lookup_csv_word(english: str) -> Optional[dict]:
-    """在 CSV 中按英文精确匹配（不区分大小写），返回原始行或 None。"""
-    key = english.strip().lower()
+    """词库查询：优先 ``words_v2.json``，否则 ``words.csv``；返回与 CSV 兼容的扁平行。"""
+    key = wordbank_v2.normalize_english_key(english)
+    if not key:
+        return None
+    v2 = wordbank_v2.load_words_v2_by_key().get(key)
+    if v2:
+        return wordbank_v2.v2_entry_to_flat_csv_row(v2)
     for row in load_words_csv():
-        if row.get("english", "").strip().lower() == key:
+        if wordbank_v2.normalize_english_key(row.get("english", "")) == key:
             return row
     return None
 
@@ -1236,6 +1285,127 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
     finally:
         if DEEPSEEK_BATCH_PAUSE_SEC > 0:
             sleep(DEEPSEEK_BATCH_PAUSE_SEC)
+
+
+def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Optional[List[dict]]:
+    """
+    为新词库 ``words_v2.json`` 生成条目（senses 多义项 + 例句）。
+    单次调用词数不应超过 DEEPSEEK_VOCAB_BATCH_WORDS。
+    """
+    level_hint = f"，这批词汇难度级别为：{level}" if level else ""
+    words = list(words)[:DEEPSEEK_VOCAB_BATCH_WORDS]
+    if not words:
+        return None
+    words_str = "、".join(words)
+    prompt = f"""请为以下英语单词或短语生成词汇表条目{level_hint}。
+
+单词/短语列表：{words_str}
+
+请严格按照以下JSON数组格式返回，不要任何额外说明：
+[
+  {{
+    "english": "单词原形或与列表一致的短语（含空格）",
+    "entry_kind": "word 或 phrase（可省略）",
+    "senses": [
+      {{"pos": "noun", "definition_zh": "该义项中文释义"}},
+      {{"pos": "verb", "definition_zh": "另一义项中文释义"}}
+    ],
+    "level": "小学/初中/高中/GRE",
+    "phonetic": "音标（如/æpl/）",
+    "example1": "第一个英文例句（难度与level匹配）",
+    "example1_form": "该词在例句1中的实际形式（与原形相同则为空字符串）",
+    "example1_cn": "例句1的中文翻译",
+    "example2": "第二个英文例句（不同语境）",
+    "example2_form": "该词在例句2中的实际形式（相同则为空字符串）",
+    "example2_cn": "例句2的中文翻译"
+  }}
+]
+
+注意：
+- 每个词条至少 1 条 senses；多义词、兼类词用多条 sense。
+- level 必须是「小学」「初中」「高中」「GRE」之一{level_hint}
+- 若某项为多个英文单词组成的短语，english 必须与列表原文完全一致（含空格）
+- 例句难度要与 level 相符；example*_form 仅写句中实际形式
+"""
+    wc = max(1, len(words))
+    max_out = min(8192, max(2500, 700 + wc * 320))
+    logger.info(
+        "DeepSeek v2 词汇生成批次: word_count=%s level=%r max_tokens=%s",
+        len(words),
+        level or "",
+        max_out,
+    )
+    try:
+        reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=max_out)
+        if not reply:
+            logger.warning("DeepSeek v2 词汇生成: 无有效回复")
+            return None
+        json_match = re.search(r'\[[\s\S]*\]', reply)
+        if not json_match:
+            logger.error(
+                "DeepSeek v2 返回格式不含JSON数组，reply 前 800 字: %s",
+                reply[:800],
+            )
+            return None
+        try:
+            data = json.loads(json_match.group(0))
+        except json.JSONDecodeError as e:
+            logger.error(
+                "DeepSeek v2 返回JSON解析失败: %s 片段预览: %s",
+                e,
+                json_match.group(0)[:800],
+            )
+            return None
+        if isinstance(data, list):
+            logger.info("DeepSeek v2 词汇生成解析成功: entries=%s", len(data))
+            return data
+        logger.warning("DeepSeek v2 词汇生成: JSON 根类型非数组")
+        return None
+    finally:
+        if DEEPSEEK_BATCH_PAUSE_SEC > 0:
+            sleep(DEEPSEEK_BATCH_PAUSE_SEC)
+
+
+def accumulate_valid_deepseek_v2_entries(
+    entries: Optional[List],
+    *,
+    level_hint: str,
+    v2_so_far: set,
+    batch_lower: set,
+) -> Tuple[List[dict], set]:
+    """
+    从 DeepSeek v2 返回的 JSON 数组中采纳合法词条，与 v2_so_far 去重。
+    返回 (新条目列表, 本批请求词中已成功写入的 english 小写集合)。
+    """
+    new_entries: List[dict] = []
+    success_for_batch: set = set()
+    if not entries:
+        return new_entries, success_for_batch
+    extra_words: List[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        fin = wordbank_v2.finalize_v2_entry_from_deepseek(entry)
+        if not fin:
+            continue
+        en = fin["english"]
+        if en in v2_so_far:
+            continue
+        if level_hint:
+            fin["level"] = level_hint
+        new_entries.append(fin)
+        v2_so_far.add(en)
+        if en in batch_lower:
+            success_for_batch.add(en)
+        else:
+            extra_words.append(en)
+    if extra_words:
+        logger.info(
+            "DeepSeek v2 本批除请求列表外另写入词库 %s 条: %s",
+            len(extra_words),
+            extra_words[:40],
+        )
+    return new_entries, success_for_batch
 
 
 # ==================== Token存储（内存中，重启后失效）====================
@@ -2351,9 +2521,12 @@ def get_status(username):
                 if examples_list:
                     fe = examples_list[0]
                     ex_text = merged_example_from_pair(fe.get('en', ''), fe.get('cn', ''))
+                display_zh = w.chinese
+                if csv_row and (csv_row.get("chinese") or "").strip():
+                    display_zh = (csv_row.get("chinese") or "").strip()
                 all_words.append({
                     'english': w.english,
-                    'chinese': w.chinese,
+                    'chinese': display_zh,
                     'phonetic': csv_row.get('phonetic', '') if csv_row else '',
                     'level': (csv_row.get('level') or '').strip() if csv_row else '',
                     'example': ex_text,
@@ -2406,9 +2579,11 @@ def get_review_list(username):
                     'carryover_days': (today_d - nd).days if is_carryover else 0,
                     'examples': [],
                 }
-                # 尝试从 CSV 中获取更丰富的例句信息
+                # 优先词库（v2 或 CSV）释义与例句
                 csv_row = lookup_csv_word(w.english)
                 if csv_row:
+                    if (csv_row.get("chinese") or "").strip():
+                        item["chinese"] = (csv_row.get("chinese") or "").strip()
                     picked = pick_example_for_word(csv_row, w.english)
                     if picked.get('example'):
                         item['example'] = picked['example']
@@ -3404,8 +3579,9 @@ def _first_lemma_in_csv_with_kind(
     for c, kind in _iter_csv_lemma_candidates(
         surface, mappings, use_spacy, spacy_lemma_map, use_heuristics,
     ):
-        if c in csv_keys:
-            return c, kind
+        ck = wordbank_v2.normalize_english_key(c)
+        if ck in csv_keys:
+            return ck, kind
     return None, None
 
 
@@ -3551,10 +3727,7 @@ def search_wordbank_csv(username):
         for t in re.split(r'[,，]', q) if t.strip()
     ]
     mappings = get_wordbank_lemma_mappings()
-    rows = load_words_csv()
-    if level:
-        rows = [r for r in rows if r.get('level', '') == level]
-    csv_row_keys = {str(r.get('english', '') or '').lower() for r in rows}
+    rows, csv_row_keys = merge_wordbank_rows_for_search(level)
     lemma_resolution: Dict[str, str] = {}
     implicit_lemma_nlp_resolution: Dict[str, str] = {}
     implicit_plural_resolution: Dict[str, str] = {}
@@ -3620,25 +3793,26 @@ def search_wordbank_csv(username):
                         implicit_suffix_resolution[term] = hit
     result = []
     seen = set()
+    _nk = wordbank_v2.normalize_english_key
     for row in rows:
-        en = row.get('english', '').lower()
-        zh = row.get('chinese', '')
+        en = _nk(row.get("english", ""))
+        zh = row.get("chinese", "")
         matched = False
         for term in terms:
             if re.match(r'[a-z]', term):
                 if surface_first:
                     th = term_hits.get(term)
-                    matched = th is not None and en == th
+                    matched = th is not None and en == _nk(th)
                 else:
-                    if en == term:
+                    if en == _nk(term):
                         matched = True
-                    elif term in mappings and mappings[term] == en:
+                    elif term in mappings and _nk(mappings[term]) == en:
                         matched = True
                     else:
                         for cand, _ in _iter_csv_lemma_candidates(
                             term, mappings, use_spacy, spacy_lemma_map, use_heuristics,
                         ):
-                            if en == cand:
+                            if en == _nk(cand):
                                 matched = True
                                 break
             else:
@@ -3729,7 +3903,7 @@ def import_from_article(username):
         lemmas = list({w.lower().strip("'") for w in raw_words if len(w) >= 2})
         method = 'simple'
 
-    csv_set = get_csv_english_set()
+    csv_set = get_wordbank_english_set()
     mappings = get_wordbank_lemma_mappings()
     unique_lemmas = list(dict.fromkeys(lemmas))
     # VIP「spaCy 分词」已在全文 nlp 中得到 lemma，匹配阶段无需再逐词 spaCy（否则双倍耗时）
@@ -3899,7 +4073,7 @@ def import_vocab_to_csv(username):
     - 管理员映射（表面形 -> 原形）优先；未映射时先用 spaCy 校验词形是否可识别，不通过则跳过
     - 未映射时：名词「简单复数」表面形（如 apples）规范为原形（apple）再写入词库与待复习；不规则复数（feet 等）保持表面形；动词/形容词不因 lemma 误收成原形（避免 are→be）
     - 疑难词（AI 曾失败）不再重复调用 DeepSeek，直至管理员配置映射或删除记录
-    - 查找 CSV 中没有的词，用 DeepSeek 生成完整词条并 append 到 CSV
+    - 查找 **新词库 words_v2.json + 旧 words.csv** 均未收录的词，用 DeepSeek 生成多义项词条并 **仅写入 words_v2.json**（已存在键则跳过）
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
     if not is_paid_user(username):
@@ -3920,7 +4094,7 @@ def import_vocab_to_csv(username):
     if len(input_surfaces) > 500:
         return jsonify({'error': '单次最多处理 500 个单词'}), 400
 
-    existing = get_csv_english_set()
+    existing = get_wordbank_english_set()
 
     with _TROUBLES_LOCK:
         tdoc = _read_troubles_unlocked()
@@ -3988,7 +4162,7 @@ def import_vocab_to_csv(username):
     failed_surfaces: List[str] = []
 
     if to_generate:
-        csv_so_far = set(existing)
+        wordbank_so_far = set(existing)
         # surface -> 本次写入词库使用的英文键（用户原词或映射目标）
         gen_key_to_surface: Dict[str, str] = {}  # 同一 batch 内 key 应对应唯一 surface（去重后）
         for s in to_generate:
@@ -3997,13 +4171,13 @@ def import_vocab_to_csv(username):
         for i in range(0, len(to_generate), DEEPSEEK_VOCAB_BATCH_WORDS):
             batch_surfaces = to_generate[i : i + DEEPSEEK_VOCAB_BATCH_WORDS]
             batch = [surface_to_target[s] for s in batch_surfaces]
-            entries = deepseek_generate_word_entries(batch, level=level_hint)
+            entries = deepseek_generate_word_entries_v2(batch, level=level_hint)
             batch_lower = {b.lower() for b in batch}
             if entries is not None:
-                rows, success = accumulate_valid_deepseek_word_rows(
+                rows, success = accumulate_valid_deepseek_v2_entries(
                     entries,
                     level_hint=level_hint,
-                    csv_so_far=csv_so_far,
+                    v2_so_far=wordbank_so_far,
                     batch_lower=batch_lower,
                 )
                 generated_entries.extend(rows)
@@ -4020,11 +4194,13 @@ def import_vocab_to_csv(username):
 
         if generated_entries:
             try:
-                append_words_to_csv(generated_entries)
-                invalidate_words_csv_cache()
+                _, skipped_dup = wordbank_v2.append_words_v2_entries(generated_entries)
+                wordbank_v2.invalidate_words_v2_cache()
+                if skipped_dup:
+                    logger.info("words_v2 跳过已存在键: %s", skipped_dup[:20])
             except Exception as e:
-                logger.error("写入CSV失败: %s", e)
-                return jsonify({'error': f'写入词库失败: {e}'}), 500
+                logger.error("写入 words_v2.json 失败: %s", e)
+                return jsonify({'error': f'写入新词库失败: {e}'}), 500
 
     # 加入待复习
     queue_result = None
@@ -4041,7 +4217,8 @@ def import_vocab_to_csv(username):
                     'example': picked['example'],
                 })
         for entry in generated_entries:
-            picked = pick_example_for_word(entry, entry.get("english") or "")
+            flat = wordbank_v2.v2_entry_to_flat_csv_row(entry)
+            picked = pick_example_for_word(flat, flat.get("english") or "")
             items_to_queue.append({
                 'english': picked['english'],
                 'chinese': picked['chinese'],
@@ -4054,7 +4231,7 @@ def import_vocab_to_csv(username):
             except Exception as e:
                 logger.error("加入待复习失败: %s", e)
 
-    msg = f"处理 {len(input_surfaces)} 个单词：{len(generated_entries)} 个新词已写入词库"
+    msg = f"处理 {len(input_surfaces)} 个单词：{len(generated_entries)} 个新词已写入新词库（words_v2.json）"
     if already_in_csv:
         msg += f"，{len(already_in_csv)} 个已在词库中"
     if invalid_surfaces:
@@ -4101,7 +4278,7 @@ def wordbank_trouble_status(username):
         tdoc = _read_troubles_unlocked()
         mappings = dict(tdoc.get('mappings') or {})
         difficult = dict(tdoc.get('difficult') or {})
-    csv_set = get_csv_english_set()
+    csv_set = get_wordbank_english_set()
     hit = _first_lemma_in_csv(q, mappings, csv_set, use_spacy=True, use_heuristics=False)
     if hit is not None:
         in_csv = True

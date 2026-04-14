@@ -7,6 +7,10 @@ words.csv
 words.csv.example
   列表示例与表头，新环境可复制为 words.csv 后再扩充。
 
+words_v2.json
+  新词库（JSON 数组）：多义项 senses、词组；VIP 导入与管理员迁移写入。
+  查询时优先于 words.csv；详见项目 docs/refine_work_bank.md。
+
 textbooks/
   课文学习总索引，便于以后增加多套教材而不绑定固定子目录结构。
 
