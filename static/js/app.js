@@ -3998,6 +3998,9 @@ async function submitAnswer() {
                 updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
             }
         }
+        if (result.correct && result.other_senses_zh) {
+            msgText += ` · 其余义项：${result.other_senses_zh}`;
+        }
         messageDiv.textContent = msgText;
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
         messageDiv.style.display = 'block';

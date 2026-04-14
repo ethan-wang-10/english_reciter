@@ -1645,6 +1645,9 @@ body {
     font-weight: 800;
     display: none;
     border: 2px solid transparent;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .word-message.success {
