@@ -1584,7 +1584,11 @@ body {
     min-height: 60px;
 }
 
-/* 与 .underline-input 的 border + padding、字号一致，否则 iOS 会按 input 自己的 metrics 画光标，与下划线错位 */
+/*
+ * 透明 input 仅负责焦点与软键盘；字母由 JS 画在 .underline-input 的占位上。
+ * 输入层必须在下：.underline-input 叠在上面（z-index）且 pointer-events:none，否则 iOS 会给 input 默认底遮挡灰色占位。
+ * 整层 opacity:0 隐藏 input 内文字，caret-color:transparent 尽量隐藏光标（与 Android 一致：看占位上的字）。
+ */
 .mobile-word-capture {
     position: absolute;
     left: 0;
@@ -1593,21 +1597,20 @@ body {
     height: 100%;
     margin: 0;
     box-sizing: border-box;
-    /* 与 .underline-input 一致：2px 边框 + 内边距，光标起点与首字符对齐 */
     padding: calc(2px + 14px) calc(2px + 16px);
     border: none;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
     cursor: text;
-    z-index: 2;
+    z-index: 1;
     font-size: 1.35rem;
     font-weight: 800;
     font-family: inherit;
     line-height: 1.25;
     letter-spacing: normal;
-    /* 不用 opacity:0：Safari 上易导致光标与点击区域偏移；透明字色 + caret-color 更稳 */
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    caret-color: var(--secondary-color);
-    opacity: 1;
+    opacity: 0;
+    caret-color: transparent;
 }
 
 .mobile-word-capture:focus {
@@ -2760,6 +2763,8 @@ button.import-article-chip--selected:hover {
 }
 
 .underline-input {
+    position: relative;
+    z-index: 2;
     flex: 1;
     display: flex;
     align-items: center;
