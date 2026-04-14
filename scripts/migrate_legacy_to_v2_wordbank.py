@@ -9,6 +9,7 @@
 
 落盘：每成功一批 DeepSeek 后立即 ``append_words_v2_entries`` 写回磁盘；
 中途 API 失败或进程退出时，先前批次已保存，不会整次丢失。
+若 ``words_v2.json`` 无法解析或根节点不是数组，追加会报错并中止（避免误覆盖）。
 """
 
 from __future__ import annotations

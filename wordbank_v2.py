@@ -274,10 +274,12 @@ def _interprocess_lock() -> Any:
 
 
 def _read_words_v2_raw_unlocked() -> List[dict]:
+    """供缓存加载：解析失败时返回 []（仅影响内存展示，不写入）。"""
     if not WORDS_V2_FILE.is_file():
         return []
     try:
-        raw = WORDS_V2_FILE.read_text(encoding="utf-8")
+        # utf-8-sig：避免 Windows 下带 BOM 的 JSON 解析失败
+        raw = WORDS_V2_FILE.read_text(encoding="utf-8-sig")
         data = json.loads(raw)
         if not isinstance(data, list):
             return []
@@ -285,6 +287,34 @@ def _read_words_v2_raw_unlocked() -> List[dict]:
     except (OSError, json.JSONDecodeError) as e:
         logger.error("读取 words_v2.json 失败: %s", e)
         return []
+
+
+def _read_words_v2_for_append() -> List[dict]:
+    """
+    供 append 使用：文件不存在或仅空白时返回 []。
+    若文件存在且非空白却不能解析为 JSON 数组，**抛错**，禁止退化为 [] 后整文件覆写（否则易删掉原有条目）。
+    """
+    if not WORDS_V2_FILE.is_file():
+        return []
+    try:
+        raw = WORDS_V2_FILE.read_text(encoding="utf-8-sig")
+    except OSError as e:
+        logger.error("读取 words_v2.json 失败: %s", e)
+        raise
+    if not raw.strip():
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        logger.error("words_v2.json JSON 无法解析（追加前拒绝写入以免覆盖）: %s", e)
+        raise ValueError(
+            "words_v2.json 存在但无法解析为 JSON，已中止追加。请修复文件或从备份恢复后再试。"
+        ) from e
+    if not isinstance(data, list):
+        raise ValueError(
+            "words_v2.json 根节点必须是 JSON 数组，已中止追加以免覆盖原有数据。"
+        )
+    return [x for x in data if isinstance(x, dict)]
 
 
 def invalidate_words_v2_cache() -> None:
@@ -375,7 +405,7 @@ def append_words_v2_entries(entries: List[dict]) -> Tuple[int, List[str]]:
         return 0, []
     with _interprocess_lock():
         with _words_v2_lock:
-            data = _read_words_v2_raw_unlocked()
+            data = _read_words_v2_for_append()
             existing_keys = {normalize_english_key(e.get("english", "")) for e in data if e.get("english")}
             skipped: List[str] = []
             new_ones: List[dict] = []
