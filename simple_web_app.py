@@ -1315,17 +1315,33 @@ def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Opti
     wc = max(1, len(words))
     # 多义项 JSON 更长，略放大 token 上限
     max_out = min(8192, max(2800, 800 + wc * 420))
+    # 调试：设置 ENGLISH_RECITER_DEEPSEEK_V2_DEBUG=1 时输出完整 prompt / 原始回复（日志量大）
+    _v2_dbg = os.getenv("ENGLISH_RECITER_DEEPSEEK_V2_DEBUG", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    preview_words = words_str if len(words_str) <= 240 else words_str[:240] + "…"
     logger.info(
-        "DeepSeek v2 词汇生成批次: word_count=%s level=%r max_tokens=%s",
+        "DeepSeek v2 请求: words_preview=%r count=%s level=%r max_tokens=%s prompt_chars=%s debug_full=%s",
+        preview_words,
         len(words),
         level or "",
         max_out,
+        len(prompt),
+        _v2_dbg,
     )
+    if _v2_dbg:
+        logger.info("DeepSeek v2 prompt 全文:\n%s", prompt)
     try:
         reply = _deepseek_chat([{"role": "user", "content": prompt}], max_tokens=max_out)
         if not reply:
             logger.warning("DeepSeek v2 词汇生成: 无有效回复")
             return None
+        _rp_prev = reply if len(reply) <= 600 else reply[:600] + "…[截断]"
+        logger.info("DeepSeek v2 原始回复: chars=%s preview=%s", len(reply), _rp_prev)
+        if _v2_dbg:
+            logger.info("DeepSeek v2 原始回复全文:\n%s", reply)
         json_match = re.search(r'\[[\s\S]*\]', reply)
         if not json_match:
             logger.error(
@@ -1333,19 +1349,30 @@ def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Opti
                 reply[:800],
             )
             return None
+        _json_slice = json_match.group(0)
+        logger.info("DeepSeek v2 提取JSON片段: chars=%s", len(_json_slice))
         try:
-            data = json.loads(json_match.group(0))
+            data = json.loads(_json_slice)
         except json.JSONDecodeError as e:
             logger.error(
                 "DeepSeek v2 返回JSON解析失败: %s 片段预览: %s",
                 e,
-                json_match.group(0)[:800],
+                _json_slice[:800],
             )
             return None
         if isinstance(data, list):
-            logger.info("DeepSeek v2 词汇生成解析成功: entries=%s", len(data))
+            _ens = [
+                str(e.get("english", "")).strip()
+                for e in data
+                if isinstance(e, dict) and str(e.get("english", "")).strip()
+            ]
+            logger.info(
+                "DeepSeek v2 解析成功: entries=%s english=%s",
+                len(data),
+                _ens[:40],
+            )
             return data
-        logger.warning("DeepSeek v2 词汇生成: JSON 根类型非数组")
+        logger.warning("DeepSeek v2 词汇生成: JSON 根类型非数组 type=%s", type(data).__name__)
         return None
     finally:
         if DEEPSEEK_BATCH_PAUSE_SEC > 0:
