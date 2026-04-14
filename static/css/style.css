@@ -2325,34 +2325,6 @@ button.import-article-chip--selected:hover {
         transform: translateY(100%);
     }
 
-    /* 键盘态：让题干区域尽量留在可视区内 */
-    html.keyboard-open #review-section.active .stats-grid {
-        display: none;
-    }
-
-    html.keyboard-open #review-section.active .review-box {
-        padding: 14px 12px 16px;
-    }
-
-    html.keyboard-open #review-section.active .review-header {
-        margin-bottom: 12px;
-        padding-bottom: 10px;
-    }
-
-    html.keyboard-open #review-section.active .word-chinese {
-        font-size: 1.12rem;
-        margin-bottom: 10px;
-    }
-
-    html.keyboard-open #review-section.active .word-example-container {
-        padding: 10px 12px;
-        margin-bottom: 12px;
-    }
-
-    html.keyboard-open #review-section.active .word-input {
-        margin-bottom: 10px;
-    }
-
     .container {
         padding: 12px;
         padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
@@ -2522,6 +2494,141 @@ button.import-article-chip--selected:hover {
 
     .word-input .btn-primary {
         width: 100%;
+    }
+
+    /* 今日复习（窄屏）：精简顶栏、缩小字号、隐藏顶栏聊天/头像/今日小结（设置与聊天可从「更多」进入） */
+    html.is-review-section .navbar .nav-user-gear-cluster {
+        display: none !important;
+    }
+
+    html.is-review-section .navbar .nav-user-avatar-wrap {
+        display: none !important;
+    }
+
+    html.is-review-section .navbar .nav-user-summary-wrap {
+        display: none !important;
+    }
+
+    html.is-review-section .navbar {
+        padding: 2px 6px;
+        padding-top: max(2px, env(safe-area-inset-top, 0px));
+        gap: 4px;
+    }
+
+    html.is-review-section .navbar .nav-brand .logo {
+        font-size: 1.2rem;
+    }
+
+    html.is-review-section .nav-user {
+        gap: 4px;
+    }
+
+    html.is-review-section .nav-user .btn-secondary {
+        padding: 3px 8px;
+        font-size: 0.65rem;
+        min-height: 0;
+        line-height: 1.2;
+    }
+
+    html.is-review-section .mobile-tab {
+        padding: 7px 4px;
+        font-size: 0.65rem;
+    }
+
+    html.is-review-section #review-section.active .stats-grid {
+        display: none !important;
+    }
+
+    html.is-review-section #review-section.active .container {
+        padding-top: 8px;
+    }
+
+    html.is-review-section #review-section.active .review-box {
+        padding: 14px 12px 16px;
+    }
+
+    html.is-review-section #review-section.active .review-header {
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        gap: 6px 10px;
+    }
+
+    html.is-review-section #review-section.active .word-english {
+        font-size: clamp(1.2rem, 4.2vw, 1.55rem);
+    }
+
+    html.is-review-section #review-section.active .word-chinese {
+        font-size: 1.02rem;
+        margin-bottom: 10px;
+    }
+
+    html.is-review-section #review-section.active .word-example-container {
+        padding: 10px 10px;
+        margin-bottom: 12px;
+        gap: 8px;
+    }
+
+    html.is-review-section #review-section.active #current-word-example {
+        font-size: 0.86rem;
+        line-height: 1.42;
+    }
+
+    html.is-review-section #review-section.active .btn-speak {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+
+    html.is-review-section #review-section.active .review-phonetic-toggle {
+        font-size: 0.68rem;
+    }
+
+    html.is-review-section #review-section.active .word-progress {
+        font-size: 0.78rem;
+        padding: 4px 8px;
+    }
+
+    html.is-review-section #review-section.active .review-due-hint {
+        font-size: 0.72rem;
+        padding: 4px 8px;
+        margin-bottom: 8px;
+    }
+
+    html.is-review-section #review-section.active .underline-input-wrapper {
+        min-height: 48px;
+    }
+
+    html.is-review-section #review-section.active .word-input .btn-primary {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+    }
+
+    html.is-review-section #review-section.active .word-message {
+        padding: 8px 10px;
+        font-size: 0.88rem;
+    }
+
+    /* 软键盘弹出时再压一档（与 keyboard-open 同现） */
+    html.keyboard-open.is-review-section #review-section.active .review-box {
+        padding: 12px 10px 12px;
+    }
+
+    html.keyboard-open.is-review-section #review-section.active .word-chinese {
+        font-size: 0.95rem;
+        margin-bottom: 8px;
+    }
+
+    html.keyboard-open.is-review-section #review-section.active .word-example-container {
+        padding: 8px 8px;
+        margin-bottom: 10px;
+    }
+
+    html.keyboard-open.is-review-section #review-section.active #current-word-example {
+        font-size: 0.82rem;
+    }
+
+    html.keyboard-open.is-review-section #review-section.active .word-input {
+        margin-bottom: 8px;
     }
 }
 

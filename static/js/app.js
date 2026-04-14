@@ -447,7 +447,7 @@ function scrollReviewContentIntoVisualViewport() {
         reviewContent.scrollIntoView({ block: 'start', behavior: 'auto' });
     };
 
-    run();
+    /* 一帧后再对齐，等 keyboard-open 等 class 触发布局；勿同步连跑两次 scrollBy，易与惯性滚动打架 */
     requestAnimationFrame(run);
 }
 
@@ -472,19 +472,28 @@ function setupVisualViewportKeyboardAvoid() {
     if (!vv) return;
 
     let raf = null;
-    const schedule = () => {
-        if (raf != null) return;
-        raf = requestAnimationFrame(() => {
-            raf = null;
-            updateVisualViewportKeyboardInset();
+    /** 本帧结束后是否执行 scrollFocusedInputIntoView（仅键盘/窗口变化时为 true；visualViewport scroll 为 false，避免与用户惯性滚动抢 scrollBy） */
+    let pendingScrollIntoView = false;
+
+    const flush = () => {
+        raf = null;
+        updateVisualViewportKeyboardInset();
+        if (pendingScrollIntoView) {
+            pendingScrollIntoView = false;
             scrollFocusedInputIntoViewIfNeeded();
-        });
+        }
     };
 
-    vv.addEventListener('resize', schedule);
-    vv.addEventListener('scroll', schedule);
-    window.addEventListener('resize', schedule);
-    schedule();
+    const schedule = (withScrollIntoView) => {
+        if (withScrollIntoView) pendingScrollIntoView = true;
+        if (raf != null) return;
+        raf = requestAnimationFrame(flush);
+    };
+
+    vv.addEventListener('resize', () => schedule(true));
+    vv.addEventListener('scroll', () => schedule(false));
+    window.addEventListener('resize', () => schedule(true));
+    schedule(true);
 
     document.getElementById('main-page')?.addEventListener('focusin', (e) => {
         const t = e.target;
@@ -3066,6 +3075,13 @@ function updatePlanUI() {
     }
 }
 
+/** 窄屏复习页专用样式（见 style.css html.is-review-section） */
+function syncReviewSectionChromeClass() {
+    const rs = document.getElementById('review-section');
+    const on = !!(rs && rs.classList.contains('active'));
+    document.documentElement.classList.toggle('is-review-section', on);
+}
+
 function showSection(sectionId) {
     closeDailySummaryPopover();
 
@@ -3092,6 +3108,7 @@ function showSection(sectionId) {
 
     closeMobileMoreSheet();
     _currentSectionId = sectionId;
+    syncReviewSectionChromeClass();
 
     if (sectionId === 'review') {
         loadReviewList();
@@ -5749,6 +5766,7 @@ async function importVocabToCSV() {
 
 document.addEventListener('DOMContentLoaded', function() {
     mountDeferredAppShell();
+    syncReviewSectionChromeClass();
     setupVisualViewportKeyboardAvoid();
     setupWrongWordsAsideToggle();
     setupDailySummaryPopover();
