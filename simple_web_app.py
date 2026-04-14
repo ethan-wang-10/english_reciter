@@ -1297,38 +1297,24 @@ def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Opti
     if not words:
         return None
     words_str = "、".join(words)
-    prompt = f"""请为以下英语单词或短语生成词汇表条目{level_hint}。
+    prompt = f"""为下列每项各生成 1 个对象，输出**仅**合法 JSON 数组（从 [ 到 ]），无 Markdown、无说明。
 
-单词/短语列表：{words_str}
+列表：{words_str}{level_hint}
 
-请严格按照以下JSON数组格式返回，不要任何额外说明：
+规则（短句执行）：
+- senses：多义词拆多条，一条一义；definition_zh 2～12 字词典体；senses[0] 为最常见义；pos 用 noun|verb|adjective|adverb|phrase 小写。
+- 多义词须覆盖主要高频义，勿合并、勿只写一义（例：key 须含钥匙/关键/（键盘）键/键入等常见项，不必穷举生僻义）。
+- english 与列表该项一致（短语含空格则逐字一致）；phonetic 一条主音标；level 须为 小学/初中/高中/GRE 之一{("，与上文难度一致" if level_hint else "；未给难度时按词自选")}。
+- example1/example2：自然、合 level；多义时尽量各显一义；*_form 为句中词形，与 lemma 同则 ""。
+
+结构示例：
 [
-  {{
-    "english": "单词原形或与列表一致的短语（含空格）",
-    "entry_kind": "word 或 phrase（可省略）",
-    "senses": [
-      {{"pos": "noun", "definition_zh": "该义项中文释义"}},
-      {{"pos": "verb", "definition_zh": "另一义项中文释义"}}
-    ],
-    "level": "小学/初中/高中/GRE",
-    "phonetic": "音标（如/æpl/）",
-    "example1": "第一个英文例句（难度与level匹配）",
-    "example1_form": "该词在例句1中的实际形式（与原形相同则为空字符串）",
-    "example1_cn": "例句1的中文翻译",
-    "example2": "第二个英文例句（不同语境）",
-    "example2_form": "该词在例句2中的实际形式（相同则为空字符串）",
-    "example2_cn": "例句2的中文翻译"
-  }}
+  {{"english":"…","senses":[{{"pos":"noun","definition_zh":"…"}}],"level":"初中","phonetic":"/…/","example1":"…","example1_form":"","example1_cn":"…","example2":"…","example2_form":"","example2_cn":"…"}}
 ]
-
-注意：
-- 每个词条至少 1 条 senses；多义词、兼类词用多条 sense。
-- level 必须是「小学」「初中」「高中」「GRE」之一{level_hint}
-- 若某项为多个英文单词组成的短语，english 必须与列表原文完全一致（含空格）
-- 例句难度要与 level 相符；example*_form 仅写句中实际形式
 """
     wc = max(1, len(words))
-    max_out = min(8192, max(2500, 700 + wc * 320))
+    # 多义项 JSON 更长，略放大 token 上限
+    max_out = min(8192, max(2800, 800 + wc * 420))
     logger.info(
         "DeepSeek v2 词汇生成批次: word_count=%s level=%r max_tokens=%s",
         len(words),
