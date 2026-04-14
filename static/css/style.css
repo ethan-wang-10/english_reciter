@@ -2316,6 +2316,43 @@ button.import-article-chip--selected:hover {
         padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px));
     }
 
+    /* 软键盘弹出时：底栏移出可视区，避免与键盘叠罗汉；底部留白不再重复计入 Tab 高度 */
+    html.keyboard-open #main-page {
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px));
+    }
+
+    html.keyboard-open .mobile-tabbar {
+        transform: translateY(100%);
+    }
+
+    /* 键盘态：让题干区域尽量留在可视区内 */
+    html.keyboard-open #review-section.active .stats-grid {
+        display: none;
+    }
+
+    html.keyboard-open #review-section.active .review-box {
+        padding: 14px 12px 16px;
+    }
+
+    html.keyboard-open #review-section.active .review-header {
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+    }
+
+    html.keyboard-open #review-section.active .word-chinese {
+        font-size: 1.12rem;
+        margin-bottom: 10px;
+    }
+
+    html.keyboard-open #review-section.active .word-example-container {
+        padding: 10px 12px;
+        margin-bottom: 12px;
+    }
+
+    html.keyboard-open #review-section.active .word-input {
+        margin-bottom: 10px;
+    }
+
     .container {
         padding: 12px;
         padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
@@ -2341,6 +2378,7 @@ button.import-article-chip--selected:hover {
         border-top: 2px solid var(--border);
         padding-bottom: env(safe-area-inset-bottom, 0px);
         box-shadow: 0 calc(-1 * var(--tactile-depth)) 0 rgba(0, 0, 0, 0.05);
+        transition: transform 0.22s ease;
     }
 
     .mobile-more-sheet.is-open {

@@ -396,15 +396,24 @@ function closeMobileMoreSheet() {
     if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
+/** 键盘占高阈值（px）：超过则认为软键盘已弹出，用于隐藏底栏、压缩复习页 */
+const KEYBOARD_OPEN_INSET_THRESHOLD = 72;
+
 /** 根据 visualViewport 估算键盘占用高度，供 #main-page 底部 padding 抬高可滚动区域 */
 function updateVisualViewportKeyboardInset() {
     const vv = window.visualViewport;
     if (!vv) {
         document.documentElement.style.setProperty('--keyboard-inset', '0px');
+        document.documentElement.classList.remove('keyboard-open');
         return;
     }
     const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
     document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
+    if (inset >= KEYBOARD_OPEN_INSET_THRESHOLD) {
+        document.documentElement.classList.add('keyboard-open');
+    } else {
+        document.documentElement.classList.remove('keyboard-open');
+    }
 }
 
 function isTextLikeField(el) {
@@ -415,6 +424,33 @@ function isTextLikeField(el) {
     return ['text', 'password', 'search', 'email', 'tel', 'url', 'number'].includes(type) || type === '';
 }
 
+/**
+ * 将复习题干对齐到当前视觉视口上部（相对 layout 视口 + visualViewport.offsetTop），
+ * 避免仅用 scrollIntoView(nearest) 把题干顶出屏幕。
+ */
+function scrollReviewContentIntoVisualViewport() {
+    const reviewContent = document.querySelector('#review-box .review-content');
+    if (!reviewContent) return;
+
+    const run = () => {
+        const vv = window.visualViewport;
+        const margin = 10;
+        if (vv) {
+            const rect = reviewContent.getBoundingClientRect();
+            const targetTop = vv.offsetTop + margin;
+            const dy = rect.top - targetTop;
+            if (Math.abs(dy) > 2) {
+                window.scrollBy({ top: dy, left: 0, behavior: 'auto' });
+            }
+            return;
+        }
+        reviewContent.scrollIntoView({ block: 'start', behavior: 'auto' });
+    };
+
+    run();
+    requestAnimationFrame(run);
+}
+
 /** 复习透明输入层或导入区输入框聚焦时，将输入区滚入可视范围 */
 function scrollFocusedInputIntoViewIfNeeded() {
     const el = document.activeElement;
@@ -422,14 +458,7 @@ function scrollFocusedInputIntoViewIfNeeded() {
     if (el.id === 'mobile-word-capture') {
         const rb = document.getElementById('review-box');
         if (rb && rb.style.display !== 'none') {
-            const reviewContent = rb.querySelector('.review-content');
-            if (reviewContent) {
-                reviewContent.scrollIntoView({ block: 'start', behavior: 'auto' });
-            }
-            const wrap = el.closest('.underline-input-wrapper');
-            if (wrap) {
-                wrap.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
-            }
+            scrollReviewContentIntoVisualViewport();
         }
         return;
     }
