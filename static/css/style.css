@@ -2312,6 +2312,11 @@ button.import-article-chip--selected:hover {
 }
 
 @media (max-width: 1199px) {
+    /* 减轻 iOS 与底部固定栏/键盘组合时的橡皮筋回弹传导 */
+    html {
+        overscroll-behavior-y: contain;
+    }
+
     #main-page {
         padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px));
     }

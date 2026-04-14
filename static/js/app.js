@@ -398,21 +398,36 @@ function closeMobileMoreSheet() {
 
 /** 键盘占高阈值（px）：超过则认为软键盘已弹出，用于隐藏底栏、压缩复习页 */
 const KEYBOARD_OPEN_INSET_THRESHOLD = 72;
+/** 低于此值才移除 keyboard-open（滞回，避免惯性滚动时 inset 在阈值附近抖动导致底栏反复显隐） */
+const KEYBOARD_OPEN_INSET_THRESHOLD_CLOSE = 40;
+
+/** 上次写入的键盘占位（px），减少无意义的 style 写入 */
+let lastKeyboardInsetRounded = -9999;
 
 /** 根据 visualViewport 估算键盘占用高度，供 #main-page 底部 padding 抬高可滚动区域 */
 function updateVisualViewportKeyboardInset() {
     const vv = window.visualViewport;
+    const html = document.documentElement;
     if (!vv) {
-        document.documentElement.style.setProperty('--keyboard-inset', '0px');
-        document.documentElement.classList.remove('keyboard-open');
+        if (lastKeyboardInsetRounded !== 0) {
+            html.style.setProperty('--keyboard-inset', '0px');
+            lastKeyboardInsetRounded = 0;
+        }
+        html.classList.remove('keyboard-open');
         return;
     }
     const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
-    if (inset >= KEYBOARD_OPEN_INSET_THRESHOLD) {
-        document.documentElement.classList.add('keyboard-open');
-    } else {
-        document.documentElement.classList.remove('keyboard-open');
+    const rounded = Math.round(inset);
+    if (Math.abs(rounded - lastKeyboardInsetRounded) >= 2) {
+        html.style.setProperty('--keyboard-inset', `${rounded}px`);
+        lastKeyboardInsetRounded = rounded;
+    }
+
+    /* 滞回：中间带不切换，避免 iOS 滑动时 offsetTop/height 微变导致 keyboard-open 闪烁 */
+    if (rounded >= KEYBOARD_OPEN_INSET_THRESHOLD) {
+        html.classList.add('keyboard-open');
+    } else if (rounded <= KEYBOARD_OPEN_INSET_THRESHOLD_CLOSE) {
+        html.classList.remove('keyboard-open');
     }
 }
 
@@ -471,29 +486,19 @@ function setupVisualViewportKeyboardAvoid() {
     const vv = window.visualViewport;
     if (!vv) return;
 
-    let raf = null;
-    /** 本帧结束后是否执行 scrollFocusedInputIntoView（仅键盘/窗口变化时为 true；visualViewport scroll 为 false，避免与用户惯性滚动抢 scrollBy） */
-    let pendingScrollIntoView = false;
-
-    const flush = () => {
-        raf = null;
-        updateVisualViewportKeyboardInset();
-        if (pendingScrollIntoView) {
-            pendingScrollIntoView = false;
-            scrollFocusedInputIntoViewIfNeeded();
-        }
+    let rafInset = null;
+    /** 仅更新键盘占位与 keyboard-open，不在此路径调用 scrollBy（软键盘开着时 resize 会连发，与 scrollReviewContentIntoVisualViewport 叠加会导致整页上下抖） */
+    const scheduleInsetOnly = () => {
+        if (rafInset != null) return;
+        rafInset = requestAnimationFrame(() => {
+            rafInset = null;
+            updateVisualViewportKeyboardInset();
+        });
     };
 
-    const schedule = (withScrollIntoView) => {
-        if (withScrollIntoView) pendingScrollIntoView = true;
-        if (raf != null) return;
-        raf = requestAnimationFrame(flush);
-    };
-
-    vv.addEventListener('resize', () => schedule(true));
-    vv.addEventListener('scroll', () => schedule(false));
-    window.addEventListener('resize', () => schedule(true));
-    schedule(true);
+    vv.addEventListener('resize', scheduleInsetOnly);
+    window.addEventListener('resize', scheduleInsetOnly);
+    scheduleInsetOnly();
 
     document.getElementById('main-page')?.addEventListener('focusin', (e) => {
         const t = e.target;
