@@ -420,9 +420,16 @@ function scrollFocusedInputIntoViewIfNeeded() {
     const el = document.activeElement;
     if (!el || !isTextLikeField(el)) return;
     if (el.id === 'mobile-word-capture') {
-        const wrap = el.closest('.underline-input-wrapper');
-        if (wrap) {
-            wrap.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+        const rb = document.getElementById('review-box');
+        if (rb && rb.style.display !== 'none') {
+            const reviewContent = rb.querySelector('.review-content');
+            if (reviewContent) {
+                reviewContent.scrollIntoView({ block: 'start', behavior: 'auto' });
+            }
+            const wrap = el.closest('.underline-input-wrapper');
+            if (wrap) {
+                wrap.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
+            }
         }
         return;
     }
@@ -461,6 +468,42 @@ function setupVisualViewportKeyboardAvoid() {
             });
         });
     }, true);
+}
+
+const WRONG_ASIDE_EXPANDED_KEY = 'wrongWordsAsideExpanded';
+
+function syncWrongWordsAsideExpandedState() {
+    const aside = document.getElementById('wrong-words-aside');
+    const btn = document.getElementById('wrong-words-toggle');
+    if (!aside || !btn) return;
+    const narrow = window.matchMedia('(max-width: 900px)').matches;
+    if (!narrow) {
+        aside.classList.remove('is-expanded');
+        btn.setAttribute('aria-expanded', 'true');
+        return;
+    }
+    const expanded = sessionStorage.getItem(WRONG_ASIDE_EXPANDED_KEY) === '1';
+    aside.classList.toggle('is-expanded', expanded);
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+}
+
+function setupWrongWordsAsideToggle() {
+    const aside = document.getElementById('wrong-words-aside');
+    const btn = document.getElementById('wrong-words-toggle');
+    if (!aside || !btn) return;
+
+    btn.addEventListener('click', () => {
+        if (!window.matchMedia('(max-width: 900px)').matches) return;
+        const next = !aside.classList.contains('is-expanded');
+        aside.classList.toggle('is-expanded', next);
+        btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+        sessionStorage.setItem(WRONG_ASIDE_EXPANDED_KEY, next ? '1' : '0');
+    });
+
+    window.addEventListener('resize', () => {
+        syncWrongWordsAsideExpandedState();
+    });
+    syncWrongWordsAsideExpandedState();
 }
 
 async function refreshGamification() {
@@ -3303,6 +3346,10 @@ function renderWrongPanel() {
         ul.appendChild(li);
     }
     empty.style.display = wrongWordsOrder.length === 0 ? 'block' : 'none';
+    const badge = document.getElementById('wrong-words-count-badge');
+    if (badge) {
+        badge.textContent = String(wrongWordsOrder.length);
+    }
 }
 
 function updateWrongRoundLabel() {
@@ -5674,6 +5721,7 @@ async function importVocabToCSV() {
 document.addEventListener('DOMContentLoaded', function() {
     mountDeferredAppShell();
     setupVisualViewportKeyboardAvoid();
+    setupWrongWordsAsideToggle();
     setupDailySummaryPopover();
 
     document.querySelectorAll('.btn-toggle-pw').forEach((btn) => {

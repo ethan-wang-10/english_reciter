@@ -259,21 +259,28 @@
                     </div>
                     <aside class="wrong-words-aside" id="wrong-words-aside" aria-label="本轮错题">
                         <div class="wrong-words-card">
-                            <h3 class="wrong-words-title">本轮错题</h3>
-                            <p class="wrong-words-sub" id="wrong-round-label">同一单词 3 次尝试均错后会出现在这里</p>
-                            <ul class="wrong-words-list" id="wrong-words-list"></ul>
-                            <p class="wrong-words-empty" id="wrong-words-empty">暂无错题，继续加油！</p>
-                            <div class="wrong-order-control" id="wrong-order-control">
-                                <span class="wrong-order-label">错题顺序</span>
-                                <div class="wrong-order-btns">
-                                    <label class="wrong-order-btn">
-                                        <input type="radio" name="wrong-order" value="random" checked />
-                                        <span>乱序</span>
-                                    </label>
-                                    <label class="wrong-order-btn">
-                                        <input type="radio" name="wrong-order" value="field" />
-                                        <span>字典序</span>
-                                    </label>
+                            <button type="button" id="wrong-words-toggle" class="wrong-words-toggle" aria-expanded="false" aria-controls="wrong-words-collapsible">
+                                <span class="wrong-words-toggle-label">本轮错题</span>
+                                <span id="wrong-words-count-badge" class="wrong-words-count-badge">0</span>
+                                <span class="wrong-words-toggle-chevron" aria-hidden="true"></span>
+                            </button>
+                            <h3 class="wrong-words-title wrong-words-title-desktop">本轮错题</h3>
+                            <div id="wrong-words-collapsible" class="wrong-words-collapsible">
+                                <p class="wrong-words-sub" id="wrong-round-label">同一单词 3 次尝试均错后会出现在这里</p>
+                                <ul class="wrong-words-list" id="wrong-words-list"></ul>
+                                <p class="wrong-words-empty" id="wrong-words-empty">暂无错题，继续加油！</p>
+                                <div class="wrong-order-control" id="wrong-order-control">
+                                    <span class="wrong-order-label">错题顺序</span>
+                                    <div class="wrong-order-btns">
+                                        <label class="wrong-order-btn">
+                                            <input type="radio" name="wrong-order" value="random" checked />
+                                            <span>乱序</span>
+                                        </label>
+                                        <label class="wrong-order-btn">
+                                            <input type="radio" name="wrong-order" value="field" />
+                                            <span>字典序</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
