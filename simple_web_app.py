@@ -4086,7 +4086,7 @@ def import_vocab_to_csv(username):
     - 管理员映射（表面形 -> 原形）优先；未映射时先用 spaCy 校验词形是否可识别，不通过则跳过
     - 未映射时：名词「简单复数」表面形（如 apples）规范为原形（apple）再写入词库与待复习；不规则复数（feet 等）保持表面形；动词/形容词不因 lemma 误收成原形（避免 are→be）
     - 疑难词（AI 曾失败）不再重复调用 DeepSeek，直至管理员配置映射或删除记录
-    - 查找 **新词库 words_v2.json + 旧 words.csv** 均未收录的词，用 DeepSeek 生成多义项词条并 **仅写入 words_v2.json**（已存在键则跳过）
+    - 仅当 **words_v2.json** 中尚无该英文键时调用 DeepSeek 生成并写入 v2；仅在旧 ``words.csv`` 中有仍会生成并写入 v2。已存在于 v2 则跳过生成。
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
     if not is_paid_user(username):
@@ -4107,7 +4107,8 @@ def import_vocab_to_csv(username):
     if len(input_surfaces) > 500:
         return jsonify({'error': '单次最多处理 500 个单词'}), 400
 
-    existing = get_wordbank_english_set()
+    # 是否调用 AI：仅看新词库 v2；老 CSV 仅有仍会生成并写入 v2
+    v2_keys = wordbank_v2.get_v2_english_key_set()
 
     with _TROUBLES_LOCK:
         tdoc = _read_troubles_unlocked()
@@ -4134,9 +4135,9 @@ def import_vocab_to_csv(username):
             mappings[s] if s in mappings else _normalize_import_english_surface(s)
         )
 
-    already_in_csv = [
+    already_in_v2 = [
         s for s in input_surfaces
-        if s in surface_to_target and surface_to_target[s] in existing
+        if s in surface_to_target and surface_to_target[s] in v2_keys
     ]
 
     # 待生成：按用户输入顺序去重表面形；英文键 = 管理员映射目标或原词
@@ -4146,7 +4147,7 @@ def import_vocab_to_csv(username):
         if s not in surface_to_target:
             continue
         t = surface_to_target[s]
-        if t in existing:
+        if t in v2_keys:
             continue
         if s in difficult:
             continue
@@ -4160,7 +4161,7 @@ def import_vocab_to_csv(username):
         if s not in surface_to_target:
             continue
         t = surface_to_target[s]
-        if t in existing:
+        if t in v2_keys:
             continue
         if s in difficult:
             blocked_surfaces.append(s)
@@ -4175,7 +4176,7 @@ def import_vocab_to_csv(username):
     failed_surfaces: List[str] = []
 
     if to_generate:
-        wordbank_so_far = set(existing)
+        wordbank_so_far = set(v2_keys)
         # surface -> 本次写入词库使用的英文键（用户原词或映射目标）
         gen_key_to_surface: Dict[str, str] = {}  # 同一 batch 内 key 应对应唯一 surface（去重后）
         for s in to_generate:
@@ -4219,7 +4220,7 @@ def import_vocab_to_csv(username):
     queue_result = None
     if also_queue:
         items_to_queue = []
-        for s in already_in_csv:
+        for s in already_in_v2:
             t = surface_to_target[s]
             row = lookup_csv_word(t)
             if row:
@@ -4245,8 +4246,8 @@ def import_vocab_to_csv(username):
                 logger.error("加入待复习失败: %s", e)
 
     msg = f"处理 {len(input_surfaces)} 个单词：{len(generated_entries)} 个新词已写入新词库（words_v2.json）"
-    if already_in_csv:
-        msg += f"，{len(already_in_csv)} 个已在词库中"
+    if already_in_v2:
+        msg += f"，{len(already_in_v2)} 个已在新词库（words_v2.json）中，未再生成"
     if invalid_surfaces:
         inv = _dedupe_preserve_order(invalid_surfaces)
         msg += f"，{len(inv)} 个未通过词形校验（已跳过）"
@@ -4262,8 +4263,11 @@ def import_vocab_to_csv(username):
     return jsonify({
         'message': msg,
         'new_in_csv': len(generated_entries),
-        'already_in_csv': len(already_in_csv),
-        'already_in_csv_words': already_in_csv,
+        'already_in_v2': len(already_in_v2),
+        'already_in_v2_words': already_in_v2,
+        # 兼容旧前端字段名（语义：已在新词库 v2，非「仅 CSV」）
+        'already_in_csv': len(already_in_v2),
+        'already_in_csv_words': already_in_v2,
         'failed': failed_surfaces,
         'blocked_surfaces': blocked_surfaces,
         'invalid_surfaces': _dedupe_preserve_order(invalid_surfaces),

@@ -2035,10 +2035,10 @@ function buildVocabImportFeedback(data) {
             msg += ` 无效 ${q.skipped_invalid} 条已忽略。`;
         }
     }
-    const aw = data.already_in_csv_words;
+    const aw = data.already_in_v2_words || data.already_in_csv_words;
     if (Array.isArray(aw) && aw.length) {
         const show = aw.slice(0, 18);
-        msg += ` 系统词库已有：${show.join('、')}${aw.length > 18 ? '…' : ''}`;
+        msg += ` 新词库（words_v2）已有：${show.join('、')}${aw.length > 18 ? '…' : ''}`;
     }
     if (Array.isArray(data.failed) && data.failed.length) {
         const show = data.failed.slice(0, 10);
