@@ -990,6 +990,44 @@ def examples_from_csv_row(row: Optional[dict]) -> List[dict]:
     return out
 
 
+def apply_review_display_from_wordbank(
+    item: dict,
+    csv_row: dict,
+    w_english: str,
+) -> None:
+    """
+    复习/加练卡片：例句槽位仍用 pick 与练习判分一致；多义项 v2 只展示当前槽对应的一条释义与一条例句；
+    legacy 多例句时只展示当前槽对应的一行例句（释义保持合并行）。
+    """
+    key = wordbank_v2.normalize_english_key(w_english)
+    v2 = wordbank_v2.load_words_v2_by_key().get(key)
+    picked = pick_example_for_word(csv_row, w_english)
+    slot = _pick_example_slot_key(csv_row, w_english)
+    if picked.get("example"):
+        item["example"] = picked["example"]
+    item["example_form"] = picked.get("example_form", "")
+    item["phonetic"] = csv_row.get("phonetic", "")
+    item["level"] = csv_row.get("level", "")
+
+    ex_en = (csv_row.get(f"example{slot}") or "").strip()
+    ex_cn = (csv_row.get(f"example{slot}_cn") or "").strip()
+    one_ex = [{"en": ex_en, "cn": ex_cn}] if (ex_en or ex_cn) else []
+
+    senses = v2.get("senses") if v2 and isinstance(v2.get("senses"), list) else []
+    if len(senses) > 1:
+        si = int(slot) - 1
+        if 0 <= si < len(senses):
+            item["chinese"] = wordbank_v2.format_single_sense_chinese(senses[si])
+        item["examples"] = one_ex
+        return
+
+    exs = examples_from_csv_row(csv_row)
+    if len(exs) > 1:
+        item["examples"] = one_ex
+    else:
+        item["examples"] = exs
+
+
 def merged_example_from_pair(en: str, cn: str) -> str:
     """与 csv_word_to_review_item 一致的合并串，供兼容旧字段 example。"""
     if en and cn:
@@ -2603,18 +2641,12 @@ def get_review_list(username):
                     'carryover_days': (today_d - nd).days if is_carryover else 0,
                     'examples': [],
                 }
-                # 优先词库（v2 或 CSV）释义与例句
+                # 优先词库（v2 或 CSV）释义与例句；多义项只展示当前槽对应的一条
                 csv_row = lookup_csv_word(w.english)
                 if csv_row:
                     if (csv_row.get("chinese") or "").strip():
                         item["chinese"] = (csv_row.get("chinese") or "").strip()
-                    picked = pick_example_for_word(csv_row, w.english)
-                    if picked.get('example'):
-                        item['example'] = picked['example']
-                    item['example_form'] = picked.get('example_form', '')
-                    item['phonetic'] = csv_row.get('phonetic', '')
-                    item['level'] = csv_row.get('level', '')
-                    item['examples'] = examples_from_csv_row(csv_row)
+                    apply_review_display_from_wordbank(item, csv_row, w.english)
                 if not item['examples'] and (getattr(w, 'example', None) or '').strip():
                     raw = (w.example or '').strip()
                     if '_' in raw:
@@ -2654,13 +2686,9 @@ def get_extra_review_list(username):
                 }
                 csv_row = lookup_csv_word(w.english)
                 if csv_row:
-                    picked_ex = pick_example_for_word(csv_row, w.english)
-                    if picked_ex.get('example'):
-                        item['example'] = picked_ex['example']
-                    item['example_form'] = picked_ex.get('example_form', '')
-                    item['phonetic'] = csv_row.get('phonetic', '')
-                    item['level'] = csv_row.get('level', '')
-                    item['examples'] = examples_from_csv_row(csv_row)
+                    if (csv_row.get("chinese") or "").strip():
+                        item["chinese"] = (csv_row.get("chinese") or "").strip()
+                    apply_review_display_from_wordbank(item, csv_row, w.english)
                 words.append(item)
             return jsonify({'words': words, 'count': len(words)}), 200
     except Exception as e:

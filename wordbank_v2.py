@@ -40,16 +40,22 @@ def build_chinese_summary(senses: List[dict]) -> str:
         return ""
     parts: List[str] = []
     for s in senses:
-        zh = str(s.get("definition_zh", "")).strip()
-        if not zh:
-            continue
-        pos = str(s.get("pos") or "").strip().lower()
-        abbr = _pos_display(pos)
-        if abbr:
-            parts.append(f"{abbr} {zh}")
-        else:
-            parts.append(zh)
+        line = format_single_sense_chinese(s)
+        if line:
+            parts.append(line)
     return "；".join(parts)
+
+
+def format_single_sense_chinese(sense: dict) -> str:
+    """单义项一行中文（与 build_chinese_summary 中单条格式一致）。"""
+    zh = str(sense.get("definition_zh", "")).strip()
+    if not zh:
+        return ""
+    pos = str(sense.get("pos") or "").strip().lower()
+    abbr = _pos_display(pos)
+    if abbr:
+        return f"{abbr} {zh}"
+    return zh
 
 
 def _pos_display(pos: str) -> str:
