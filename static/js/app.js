@@ -404,8 +404,26 @@ const KEYBOARD_OPEN_INSET_THRESHOLD_CLOSE = 40;
 /** 上次写入的键盘占位（px），减少无意义的 style 写入 */
 let lastKeyboardInsetRounded = -9999;
 
+/**
+ * 键盘开着时，用户手指/惯性滚动会触发 visualViewport.resize 与 inset 微变；
+ * 反复改 --keyboard-inset 会改变 #main-page 的 padding-bottom 与可滚高度，导致整页上下跳。
+ * 在「用户正在滚动」期间暂停写入，仅在停顿后或 focus 时强制同步。
+ * 仅用于「今日复习」页（html.is-review-section），避免影响导入等其它页面。
+ */
+let keyboardInsetUpdateMuted = false;
+let keyboardInsetMuteSettleTimer = null;
+/** 脚本 scrollBy 对齐题干后短时间内忽略 scroll 监听，避免误进 mute */
+let ignoreKeyboardInsetScrollMuteUntil = 0;
+
 /** 根据 visualViewport 估算键盘占用高度，供 #main-page 底部 padding 抬高可滚动区域 */
-function updateVisualViewportKeyboardInset() {
+function updateVisualViewportKeyboardInset(force = false) {
+    if (
+        keyboardInsetUpdateMuted &&
+        !force &&
+        document.documentElement.classList.contains('is-review-section')
+    ) {
+        return;
+    }
     const vv = window.visualViewport;
     const html = document.documentElement;
     if (!vv) {
@@ -455,10 +473,12 @@ function scrollReviewContentIntoVisualViewport() {
             const targetTop = vv.offsetTop + margin;
             const dy = rect.top - targetTop;
             if (Math.abs(dy) > 2) {
+                ignoreKeyboardInsetScrollMuteUntil = Date.now() + 450;
                 window.scrollBy({ top: dy, left: 0, behavior: 'auto' });
             }
             return;
         }
+        ignoreKeyboardInsetScrollMuteUntil = Date.now() + 450;
         reviewContent.scrollIntoView({ block: 'start', behavior: 'auto' });
     };
 
@@ -492,21 +512,39 @@ function setupVisualViewportKeyboardAvoid() {
         if (rafInset != null) return;
         rafInset = requestAnimationFrame(() => {
             rafInset = null;
-            updateVisualViewportKeyboardInset();
+            updateVisualViewportKeyboardInset(false);
         });
+    };
+
+    /** 仅在今日复习页：键盘已弹出时用户滚动期间暂停改 padding，避免与惯性滚动打架 */
+    const bumpKeyboardInsetScrollMute = () => {
+        if (!document.documentElement.classList.contains('is-review-section')) return;
+        if (!document.documentElement.classList.contains('keyboard-open')) return;
+        if (Date.now() < ignoreKeyboardInsetScrollMuteUntil) return;
+        keyboardInsetUpdateMuted = true;
+        clearTimeout(keyboardInsetMuteSettleTimer);
+        keyboardInsetMuteSettleTimer = setTimeout(() => {
+            keyboardInsetUpdateMuted = false;
+            updateVisualViewportKeyboardInset(true);
+        }, 380);
     };
 
     vv.addEventListener('resize', scheduleInsetOnly);
     window.addEventListener('resize', scheduleInsetOnly);
     scheduleInsetOnly();
 
+    window.addEventListener('touchmove', bumpKeyboardInsetScrollMute, { passive: true });
+    window.addEventListener('scroll', bumpKeyboardInsetScrollMute, { passive: true, capture: true });
+
     document.getElementById('main-page')?.addEventListener('focusin', (e) => {
         const t = e.target;
         if (!isTextLikeField(t)) return;
         if (t.id !== 'mobile-word-capture' && !t.closest('#import-section')) return;
+        keyboardInsetUpdateMuted = false;
+        clearTimeout(keyboardInsetMuteSettleTimer);
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-                updateVisualViewportKeyboardInset();
+                updateVisualViewportKeyboardInset(true);
                 scrollFocusedInputIntoViewIfNeeded();
             });
         });
