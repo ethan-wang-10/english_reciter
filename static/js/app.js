@@ -206,6 +206,60 @@ function englishFromExampleField(exampleText) {
     return String(exampleText).split(' → ')[0].split('_')[0].trim();
 }
 
+/** 复习例句英文是否与当前「本题」例句一致（用于多义多条展示时标出挖空那条） */
+function reviewExampleEnglishMatchesQuiz(exEn, quizEn) {
+    const a = (exEn || '').trim();
+    const b = (quizEn || '').trim();
+    if (!a || !b) return false;
+    return a === b || a.replace(/\s+/g, ' ') === b.replace(/\s+/g, ' ');
+}
+
+/** 与原先复习区单条展示一致：挖空待填词 */
+function formatReviewQuizExampleDisplay(word) {
+    let exampleText = word.example || '暂无例句';
+    if (exampleText === '暂无例句') return exampleText;
+    const parts = exampleText.split('_');
+    if (parts.length >= 2) {
+        let englishPart = parts[0];
+        const maskTarget = (word.example_form || '').trim() || word.english;
+        const regex = new RegExp(`\\b${escapeRegExp(maskTarget)}\\b`, 'gi');
+        englishPart = englishPart.replace(regex, '_'.repeat(maskTarget.length));
+        if (maskTarget !== word.english) {
+            const regex2 = new RegExp(`\\b${escapeRegExp(word.english)}\\b`, 'gi');
+            englishPart = englishPart.replace(regex2, '_'.repeat(word.english.length));
+        }
+        return englishPart + ' → ' + parts.slice(1).join('_');
+    }
+    const maskTarget = (word.example_form || '').trim() || word.english;
+    const regex = new RegExp(`\\b${escapeRegExp(maskTarget)}\\b`, 'gi');
+    return exampleText.replace(regex, '_'.repeat(maskTarget.length));
+}
+
+/** 词库返回多条例句时，渲染多行（本题那条保持挖空，其余完整展示） */
+function buildReviewExamplesDisplayHtml(word) {
+    const exs = word.examples;
+    if (!Array.isArray(exs) || exs.length < 2) return null;
+    const quizEn = englishFromExampleField(word.example || '');
+    let quizIdx = exs.findIndex((ex) =>
+        reviewExampleEnglishMatchesQuiz((ex.en || '').trim(), quizEn),
+    );
+    if (quizIdx < 0) quizIdx = 0;
+    const chunks = exs.map((ex, idx) => {
+        const en = (ex.en || '').trim();
+        const cn = (ex.cn || '').trim();
+        let lineText;
+        if (idx === quizIdx) {
+            lineText = formatReviewQuizExampleDisplay(word);
+        } else {
+            lineText = cn ? `${en} → ${cn}` : en;
+        }
+        const cls =
+            idx === quizIdx ? 'review-example-line review-example-line--quiz' : 'review-example-line';
+        return `<div class="${cls}">${escapeHtml(lineText)}</div>`;
+    });
+    return `<div class="review-example-lines">${chunks.join('')}</div>`;
+}
+
 function updateGamificationNav(g) {
     if (!g) return;
     const lv = document.getElementById('ng-level');
@@ -3841,30 +3895,13 @@ async function showCurrentWord() {
     const maxSucc = word.max_success_count != null ? word.max_success_count : 8;
     document.getElementById('current-word-progress').textContent = `${word.success_count}/${maxSucc}`;
     
-    // 处理例句：隐藏目标词（可能是变形）
-    let exampleText = word.example || '暂无例句';
-    if (exampleText !== '暂无例句') {
-        const parts = exampleText.split('_');
-        if (parts.length >= 2) {
-            let englishPart = parts[0];
-            // 隐藏变形或原形
-            const maskTarget = (word.example_form || '').trim() || word.english;
-            const regex = new RegExp(`\\b${escapeRegExp(maskTarget)}\\b`, 'gi');
-            englishPart = englishPart.replace(regex, '_'.repeat(maskTarget.length));
-            // 如果没有替换到，也尝试原形
-            if (maskTarget !== word.english) {
-                const regex2 = new RegExp(`\\b${escapeRegExp(word.english)}\\b`, 'gi');
-                englishPart = englishPart.replace(regex2, '_'.repeat(word.english.length));
-            }
-            exampleText = englishPart + ' → ' + parts.slice(1).join('_');
-        } else {
-            const maskTarget = (word.example_form || '').trim() || word.english;
-            const regex = new RegExp(`\\b${escapeRegExp(maskTarget)}\\b`, 'gi');
-            exampleText = exampleText.replace(regex, '_'.repeat(maskTarget.length));
-        }
+    const exEl = document.getElementById('current-word-example');
+    const multiHtml = buildReviewExamplesDisplayHtml(word);
+    if (multiHtml) {
+        exEl.innerHTML = multiHtml;
+    } else {
+        exEl.textContent = formatReviewQuizExampleDisplay(word);
     }
-    
-    document.getElementById('current-word-example').textContent = exampleText;
     
     // 提示字符串基于本题目标词长度（原形或句中形式）
     const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);

@@ -932,23 +932,34 @@ def csv_word_to_review_item(row: dict, example_key: str = "1") -> dict:
     }
 
 
+def _example_slots_present(row: dict) -> List[str]:
+    """返回有条目内容的例句槽位编号列表，如 ['1','2','3']（支持 v2 多例句）。"""
+    slots: List[str] = []
+    for k in range(1, 9):
+        if (row.get(f"example{k}") or "").strip() or (row.get(f"example{k}_cn") or "").strip():
+            slots.append(str(k))
+    return slots
+
+
 def _pick_example_slot_key(row: dict, english: str) -> str:
-    """两条例句都存在时，按词条 + 当日日期确定性选例句（与复习列表、练习判分一致）。"""
+    """在已有例句槽位中按词条 + 当日日期确定性选一槽（与复习列表、练习判分一致）。"""
+    slots = _example_slots_present(row)
+    if not slots:
+        return "1"
+    if len(slots) == 1:
+        return slots[0]
     key = (english or row.get("english") or "").strip().lower()
     h = hashlib.sha256(f"{key}:{date.today().isoformat()}".encode("utf-8")).hexdigest()
-    return "2" if int(h[:8], 16) % 2 else "1"
+    idx = int(h[:8], 16) % len(slots)
+    return slots[idx]
 
 
 def pick_example_for_word(row: dict, english: str = "") -> dict:
-    """从词条的 2 个例句中选 1 个返回复习条目（双例句时按词条与日期确定性选择）。"""
-    has1 = bool(row.get("example1", "").strip())
-    has2 = bool(row.get("example2", "").strip())
-    if has1 and has2:
-        k = _pick_example_slot_key(row, english)
-    elif has2:
-        k = "2"
-    else:
-        k = "1"
+    """从词条的例句槽位中选 1 个返回复习条目（多例句时按词条与日期确定性选择）。"""
+    slots = _example_slots_present(row)
+    if not slots:
+        return csv_word_to_review_item(row, "1")
+    k = _pick_example_slot_key(row, english)
     return csv_word_to_review_item(row, k)
 
 
@@ -967,11 +978,11 @@ def lookup_csv_word(english: str) -> Optional[dict]:
 
 
 def examples_from_csv_row(row: Optional[dict]) -> List[dict]:
-    """从 CSV 行提取全部例句（英/中分行），供单词学习等展示。"""
+    """从 CSV 行或 v2 扁平行提取全部例句（英/中分行），供单词学习等展示。"""
     if not row:
         return []
     out: List[dict] = []
-    for key in ("1", "2"):
+    for key in ("1", "2", "3", "4", "5", "6", "7", "8"):
         ex_en = (row.get(f"example{key}") or "").strip()
         ex_cn = (row.get(f"example{key}_cn") or "").strip()
         if ex_en or ex_cn:
@@ -1301,20 +1312,20 @@ def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Opti
 
 列表：{words_str}{level_hint}
 
-规则（短句执行）：
-- senses：多义词拆多条，一条一义；definition_zh 2～12 字词典体；senses[0] 为最常见义；pos 用 noun|verb|adjective|adverb|phrase 小写。
-- 多义词须覆盖主要高频义，勿合并、勿只写一义（例：key 须含钥匙/关键/（键盘）键/键入等常见项，不必穷举生僻义）。
-- english 与列表该项一致（短语含空格则逐字一致）；phonetic 一条主音标；level 须为 小学/初中/高中/GRE 之一{("，与上文难度一致" if level_hint else "；未给难度时按词自选")}。
-- example1/example2：自然、合 level；多义时尽量各显一义；*_form 为句中词形，与 lemma 同则 ""。
+规则：
+- senses：每条含 pos、definition_zh（2～12 字）；senses[0] 为最常见义；pos 用 noun|verb|adjective|adverb|phrase。
+- **例句与义项一一对应**：每条 sense 必须同时含 example_en、example_cn、example_form（句中词形与 lemma 相同则填 ""）。**有几条 sense 就要有几条例句**，禁止 3 个义项只写 2 条例句。
+- 多义词覆盖主要高频义（如 key：钥匙/关键/键/键入）；勿合并义项。
+- english 与列表一致；phonetic 一条；level 为 小学/初中/高中/GRE 之一{("，与上文难度一致" if level_hint else "；未给难度时按词自选")}。
 
-结构示例：
+结构示例（3 义则 senses 内 3 组例句）：
 [
-  {{"english":"…","senses":[{{"pos":"noun","definition_zh":"…"}}],"level":"初中","phonetic":"/…/","example1":"…","example1_form":"","example1_cn":"…","example2":"…","example2_form":"","example2_cn":"…"}}
+  {{"english":"bat","senses":[{"pos":"noun","definition_zh":"蝙蝠","example_en":"Bats fly at night.","example_cn":"蝙蝠在夜间飞行。","example_form":""},{"pos":"noun","definition_zh":"球棒","example_en":"He held a wooden bat.","example_cn":"他握着一根木球棒。","example_form":""},{"pos":"verb","definition_zh":"击打","example_en":"He bats the ball.","example_cn":"他击球。","example_form":"bats"}],"level":"初中","phonetic":"/bæt/"}}
 ]
 """
     wc = max(1, len(words))
-    # 多义项 JSON 更长，略放大 token 上限
-    max_out = min(8192, max(2800, 800 + wc * 420))
+    # 每义项嵌套例句，JSON 更长
+    max_out = min(8192, max(3200, 900 + wc * 550))
     # 调试：设置 ENGLISH_RECITER_DEEPSEEK_V2_DEBUG=1 时输出完整 prompt / 原始回复（日志量大）
     _v2_dbg = os.getenv("ENGLISH_RECITER_DEEPSEEK_V2_DEBUG", "").strip().lower() in (
         "1",
@@ -2639,6 +2650,7 @@ def get_extra_review_list(username):
                     'scheduled_due_date': nd.isoformat(),
                     'is_carryover': False,
                     'carryover_days': 0,
+                    'examples': [],
                 }
                 csv_row = lookup_csv_word(w.english)
                 if csv_row:
@@ -2648,6 +2660,7 @@ def get_extra_review_list(username):
                     item['example_form'] = picked_ex.get('example_form', '')
                     item['phonetic'] = csv_row.get('phonetic', '')
                     item['level'] = csv_row.get('level', '')
+                    item['examples'] = examples_from_csv_row(csv_row)
                 words.append(item)
             return jsonify({'words': words, 'count': len(words)}), 200
     except Exception as e:

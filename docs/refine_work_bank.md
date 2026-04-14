@@ -40,8 +40,7 @@ LexicalEntryV2 {
   phonetic: string | null       # 行级音标
   senses: Sense[]               # 必填，至少 1 条
 
-  # 例句：第一期可仍用行级 example1…example2_cn（与 simple_web_app 复习拼装对齐）
-  example1, example1_form, example1_cn, example2, ...
+  # 行级 example1…exampleN：由 senses 内例句展开（N 与义项数一致，至多 8 组）
 }
 
 Sense {
@@ -49,6 +48,7 @@ Sense {
   pos: string | null
   definition_zh: string
   phonetic_override?: string     # 仅异读等极少数情况
+  example_en, example_cn, example_form  # AI 生成时与义项一一对应；落盘可展开为 example1…N
 }
 ```
 

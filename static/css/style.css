@@ -2694,6 +2694,25 @@ button.import-article-chip--selected:hover {
     font-weight: 600;
 }
 
+.review-example-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.review-example-line {
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.55;
+}
+
+.review-example-line--quiz {
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.55);
+}
+
 .btn-speak {
     background: var(--secondary-color);
     color: #fff;

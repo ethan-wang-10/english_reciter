@@ -100,15 +100,23 @@ def finalize_v2_entry_from_deepseek(raw: dict) -> Optional[dict]:
         if not dz:
             return None
         po = str(s.get("phonetic_override", "")).strip()
+        ex_en = str(s.get("example_en", "")).strip()
+        ex_cn = str(s.get("example_cn", "")).strip()
+        ex_form = str(s.get("example_form", "")).strip()
         senses.append(
             {
                 "id": "",
                 "pos": str(s.get("pos", "")).strip() or None,
                 "definition_zh": dz,
                 "phonetic_override": po or None,
+                "example_en": ex_en,
+                "example_cn": ex_cn,
+                "example_form": ex_form,
             }
         )
     assign_sense_ids(en, senses)
+    # 兼容旧 prompt：仅顶层 example1/example2 时按义项顺序填入
+    _hydrate_sense_examples_from_legacy_top_level(senses, raw)
     ek = str(raw.get("entry_kind", "")).strip().lower()
     if ek not in ("word", "phrase"):
         ek = "phrase" if " " in en else "word"
@@ -119,31 +127,70 @@ def finalize_v2_entry_from_deepseek(raw: dict) -> Optional[dict]:
         "level": str(raw.get("level", "")).strip(),
         "phonetic": str(raw.get("phonetic", "")).strip(),
         "senses": senses,
-        "example1": str(raw.get("example1", "")).strip(),
-        "example1_form": str(raw.get("example1_form", "")).strip(),
-        "example1_cn": str(raw.get("example1_cn", "")).strip(),
-        "example2": str(raw.get("example2", "")).strip(),
-        "example2_form": str(raw.get("example2_form", "")).strip(),
-        "example2_cn": str(raw.get("example2_cn", "")).strip(),
     }
+    _flatten_sense_examples_into_entry(entry, senses)
     return entry
+
+
+def _hydrate_sense_examples_from_legacy_top_level(senses: List[dict], raw: dict) -> None:
+    """若义项内无例句，用顶层 example1/example2… 按顺序补到前几条义项。"""
+    legacy_slots = [
+        (
+            str(raw.get("example1", "")).strip(),
+            str(raw.get("example1_form", "")).strip(),
+            str(raw.get("example1_cn", "")).strip(),
+        ),
+        (
+            str(raw.get("example2", "")).strip(),
+            str(raw.get("example2_form", "")).strip(),
+            str(raw.get("example2_cn", "")).strip(),
+        ),
+    ]
+    for i, s in enumerate(senses):
+        has = bool(s.get("example_en") or s.get("example_cn"))
+        if has:
+            continue
+        if i < len(legacy_slots):
+            le, lf, lc = legacy_slots[i]
+            if le or lc:
+                s["example_en"] = le
+                s["example_form"] = lf
+                s["example_cn"] = lc
+
+
+def _flatten_sense_examples_into_entry(entry: Dict[str, Any], senses: List[dict]) -> None:
+    """将 senses[].example_* 写入 example1..exampleN（N=len(senses)，上限 8）。"""
+    max_n = min(len(senses), 8)
+    for i in range(max_n):
+        s = senses[i]
+        en = str(s.get("example_en", "")).strip()
+        cn = str(s.get("example_cn", "")).strip()
+        form = str(s.get("example_form", "")).strip()
+        idx = i + 1
+        entry[f"example{idx}"] = en
+        entry[f"example{idx}_form"] = form
+        entry[f"example{idx}_cn"] = cn
+    # 清空多余槽位（条目从多变少时）
+    for j in range(max_n + 1, 9):
+        entry.pop(f"example{j}", None)
+        entry.pop(f"example{j}_form", None)
+        entry.pop(f"example{j}_cn", None)
 
 
 def v2_entry_to_flat_csv_row(entry: dict) -> dict:
     """供 pick_example_for_word / csv_word_to_review_item 使用的扁平行（含 chinese 键）。"""
     ch = str(entry.get("chinese_summary") or entry.get("chinese") or "").strip()
-    return {
+    out: Dict[str, Any] = {
         "english": str(entry.get("english", "")).strip(),
         "chinese": ch,
         "level": str(entry.get("level", "")).strip(),
         "phonetic": str(entry.get("phonetic", "")).strip(),
-        "example1": str(entry.get("example1", "")).strip(),
-        "example1_form": str(entry.get("example1_form", "")).strip(),
-        "example1_cn": str(entry.get("example1_cn", "")).strip(),
-        "example2": str(entry.get("example2", "")).strip(),
-        "example2_form": str(entry.get("example2_form", "")).strip(),
-        "example2_cn": str(entry.get("example2_cn", "")).strip(),
     }
+    for k in range(1, 9):
+        out[f"example{k}"] = str(entry.get(f"example{k}", "") or "").strip()
+        out[f"example{k}_form"] = str(entry.get(f"example{k}_form", "") or "").strip()
+        out[f"example{k}_cn"] = str(entry.get(f"example{k}_cn", "") or "").strip()
+    return out
 
 
 @contextmanager
