@@ -12,6 +12,7 @@ import json
 import re
 import tempfile
 import base64
+import gzip
 import hashlib
 import secrets
 import shutil
@@ -129,6 +130,37 @@ app.secret_key = _secret or secrets.token_urlsafe(32)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB上传限制
 CORS(app, supports_credentials=True)
 
+
+@app.after_request
+def _gzip_large_wordbank_csv(response: Response) -> Response:
+    """GET /api/wordbank/csv 返回的 JSON 较大，gzip 可明显缩短下载时间（浏览器 fetch 自动解压）。"""
+    if response.status_code != 200:
+        return response
+    if request.path != "/api/wordbank/csv":
+        return response
+    if response.headers.get("Content-Encoding"):
+        return response
+    ct = (response.headers.get("Content-Type") or "").lower()
+    if "application/json" not in ct:
+        return response
+    ae = request.headers.get("Accept-Encoding") or ""
+    if "gzip" not in ae:
+        return response
+    try:
+        data = response.get_data()
+    except Exception:
+        return response
+    if len(data) < 2048:
+        return response
+    gz = gzip.compress(data, compresslevel=6)
+    if len(gz) >= len(data):
+        return response
+    response.set_data(gz)
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = str(len(gz))
+    response.headers.add("Vary", "Accept-Encoding")
+    return response
+
 # 用户名：防止路径穿越与非法目录名，仅允许字母数字下划线
 USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
 
@@ -156,6 +188,11 @@ _words_csv_cache_mtime: float = 0.0
 
 # 跨进程互斥：threading.Lock 仅同进程内有效；多进程/多脚本写 words.csv 需文件锁
 _WORDS_CSV_LOCKFILE = STATIC_WB_DIR / ".words.csv.lock"
+
+# merge_wordbank_rows_for_search 结果：按词库文件 mtime 失效，按难度键缓存多档
+_merge_wordbank_rows_lock = threading.Lock()
+_merge_wordbank_rows_cache: Dict[str, Tuple[List[dict], Set[str]]] = {}
+_merge_wordbank_rows_cache_rev: Tuple[float, float] = (-1.0, -1.0)
 
 
 @contextmanager
@@ -347,10 +384,14 @@ _CSV_FIELDS = ["english", "chinese", "level", "phonetic",
                "example1", "example1_form", "example1_cn",
                "example2", "example2_form", "example2_cn"]
 
-# 「单词学习」等场景仅需释义与例句，可省略 example*_form 以减小 JSON
+# 「单词学习」等场景仅需释义与例句，可省略 example*_form 以减小 JSON。
+# 多义项 v2 最多 8 条；须包含 example3..8，否则多义卡片第 3 条及以后会缺例句。
 _WORDBANK_CSV_MINIMAL_FIELDS = (
     "english", "chinese", "level", "phonetic",
     "example1", "example1_cn", "example2", "example2_cn",
+    "example3", "example3_cn", "example4", "example4_cn",
+    "example5", "example5_cn", "example6", "example6_cn",
+    "example7", "example7_cn", "example8", "example8_cn",
 )
 
 
@@ -576,43 +617,80 @@ def load_system_wordbank_english_lower() -> set:
     return get_wordbank_english_set()
 
 
+def _wordbank_source_mtimes() -> Tuple[float, float]:
+    try:
+        csv_mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
+    except OSError:
+        csv_mtime = 0.0
+    try:
+        v2_mtime = wordbank_v2.WORDS_V2_FILE.stat().st_mtime if wordbank_v2.WORDS_V2_FILE.exists() else 0.0
+    except OSError:
+        v2_mtime = 0.0
+    return (csv_mtime, v2_mtime)
+
+
+def invalidate_merge_wordbank_rows_cache() -> None:
+    """words.csv / words_v2 变更后清空合并缓存（与 _wordbank_source_mtimes 失效一致）。"""
+    global _merge_wordbank_rows_cache
+    global _merge_wordbank_rows_cache_rev
+    with _merge_wordbank_rows_lock:
+        _merge_wordbank_rows_cache.clear()
+        _merge_wordbank_rows_cache_rev = (-1.0, -1.0)
+
+
 def merge_wordbank_rows_for_search(level_filter: str = "") -> Tuple[List[dict], Set[str]]:
     """
     合并词库：``words_v2.json`` 为默认数据源，同键覆盖 ``words.csv``；仅 v2 或仅 CSV 的键都会保留。
     用于搜索 API、GET /wordbank/csv 等对外统一词库。
     返回 (扁平行列表, 所有 english 规范化键集合)。
+
+    同进程内按 (words.csv mtime, words_v2.json mtime) + 难度键缓存；文件未变则复用，避免重复合并与 materialize。
     """
-    csv_rows = load_words_csv()
-    if level_filter:
-        csv_rows = [r for r in csv_rows if (r.get("level", "") or "").strip() == level_filter]
-    v2_list = wordbank_v2.load_words_v2_list()
-    if level_filter:
-        v2_list = [e for e in v2_list if (e.get("level", "") or "").strip() == level_filter]
-    v2_by: Dict[str, dict] = {}
-    for e in v2_list:
-        k = wordbank_v2.normalize_english_key(e.get("english", ""))
-        if k:
-            v2_by[k] = e
-    out: List[dict] = []
-    seen_csv: Set[str] = set()
-    for row in csv_rows:
-        k = wordbank_v2.normalize_english_key(row.get("english", ""))
-        if not k:
-            continue
-        if k in v2_by:
-            out.append(wordbank_v2.v2_entry_to_flat_csv_row(v2_by[k]))
-        else:
-            out.append(row)
-        seen_csv.add(k)
-    for k, ent in v2_by.items():
-        if k not in seen_csv:
-            out.append(wordbank_v2.v2_entry_to_flat_csv_row(ent))
-    keys = {
-        wordbank_v2.normalize_english_key(str(r.get("english", "") or ""))
-        for r in out
-        if (r.get("english") or "").strip()
-    }
-    return out, keys
+    global _merge_wordbank_rows_cache
+    global _merge_wordbank_rows_cache_rev
+    lv_key = level_filter.strip()
+
+    with _merge_wordbank_rows_lock:
+        rev = _wordbank_source_mtimes()
+        if rev != _merge_wordbank_rows_cache_rev:
+            _merge_wordbank_rows_cache.clear()
+            _merge_wordbank_rows_cache_rev = rev
+        hit = _merge_wordbank_rows_cache.get(lv_key)
+        if hit is not None:
+            return hit[0], hit[1]
+
+        csv_rows = load_words_csv()
+        if level_filter:
+            csv_rows = [r for r in csv_rows if (r.get("level", "") or "").strip() == level_filter]
+        v2_list = wordbank_v2.load_words_v2_list()
+        if level_filter:
+            v2_list = [e for e in v2_list if (e.get("level", "") or "").strip() == level_filter]
+        v2_by: Dict[str, dict] = {}
+        for e in v2_list:
+            k = wordbank_v2.normalize_english_key(e.get("english", ""))
+            if k:
+                v2_by[k] = e
+        out: List[dict] = []
+        seen_csv: Set[str] = set()
+        for row in csv_rows:
+            k = wordbank_v2.normalize_english_key(row.get("english", ""))
+            if not k:
+                continue
+            if k in v2_by:
+                out.append(wordbank_v2.v2_entry_to_flat_csv_row(v2_by[k]))
+            else:
+                out.append(row)
+            seen_csv.add(k)
+        for k, ent in v2_by.items():
+            if k not in seen_csv:
+                out.append(wordbank_v2.v2_entry_to_flat_csv_row(ent))
+        keys = {
+            wordbank_v2.normalize_english_key(str(r.get("english", "") or ""))
+            for r in out
+            if (r.get("english") or "").strip()
+        }
+        _merge_wordbank_rows_cache[lv_key] = (out, keys)
+        return out, keys
 
 
 def parse_simple_parent_import_text(text: str) -> Tuple[List[dict], Optional[str]]:
@@ -879,6 +957,7 @@ def invalidate_words_csv_cache() -> None:
     global _words_csv_cache
     with _words_csv_lock:
         _words_csv_cache = None
+    invalidate_merge_wordbank_rows_cache()
 
 
 def get_csv_english_set() -> set:
@@ -4294,6 +4373,7 @@ def import_vocab_to_csv(username):
                     try:
                         _, skipped_dup = wordbank_v2.append_words_v2_entries(rows)
                         wordbank_v2.invalidate_words_v2_cache()
+                        invalidate_merge_wordbank_rows_cache()
                         if skipped_dup:
                             logger.info("words_v2 批次落盘，跳过已存在键: %s", skipped_dup[:20])
                     except Exception as e:
