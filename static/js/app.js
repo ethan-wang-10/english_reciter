@@ -3890,7 +3890,11 @@ async function showCurrentWord() {
         }
     }
 
-    // 显示中文意思
+    // 显示中文意思；多义词条：释义单独一行，例句在下方（见 .review-content--polyseme）
+    const rcInner = document.getElementById('review-content-inner');
+    if (rcInner) {
+        rcInner.classList.toggle('review-content--polyseme', !!word.review_polyseme);
+    }
     document.getElementById('current-word-chinese').textContent = word.chinese;
     const maxSucc = word.max_success_count != null ? word.max_success_count : 8;
     document.getElementById('current-word-progress').textContent = `${word.success_count}/${maxSucc}`;
@@ -4008,16 +4012,17 @@ async function submitAnswer() {
         
         const targetAnswer = word._targetAnswer || word.english;
         if (result.correct) {
-            // 答案正确，显示完整答案，然后进入下一个单词
+            // 答案正确，显示完整答案，然后进入下一个单词（多义：多留 1 秒便于读完释义+例句）
             document.getElementById('current-word-english').textContent = targetAnswer;
             isAdvancing = true;
+            const advanceMs = word.review_polyseme ? 2500 : 1500;
             setTimeout(() => {
                 isSubmitting = false;
                 isAdvancing = false;
                 currentReviewIndex++;
                 showCurrentWord();
                 loadStats();
-            }, 1500);
+            }, advanceMs);
         } else {
             // 答案错误
             currentErrorCount++;
@@ -4472,7 +4477,7 @@ const DISCOVERY_BANK_LEVELS = new Set(['小学', '初中', '高中', 'GRE']);
 
 function discoveryExamplesFromCsvRow(row) {
     const out = [];
-    for (const k of ['1', '2']) {
+    for (const k of ['1', '2', '3', '4', '5', '6', '7', '8']) {
         const en = String(row[`example${k}`] || '').trim();
         const cn = String(row[`example${k}_cn`] || '').trim();
         if (en || cn) out.push({ en, cn });
@@ -4718,6 +4723,7 @@ async function loadDiscoverySearchFromQuery(q) {
                 phonetic: String(row.phonetic || '').trim(),
                 examples: discoveryExamplesFromCsvRow(row),
                 source: 'wordbank',
+                chinese_sense_lines: Array.isArray(row.chinese_sense_lines) ? row.chinese_sense_lines : undefined,
             });
         }
         discoveryIndex = 0;
@@ -4784,6 +4790,7 @@ async function loadDiscovery() {
                 examples: buildPendingDiscoveryExamples(w),
                 source: 'today',
                 next_review_date: w.scheduled_due_date,
+                chinese_sense_lines: Array.isArray(w.chinese_sense_lines) ? w.chinese_sense_lines : undefined,
             }));
             if (discoveryIndex >= discoveryDeck.length) discoveryIndex = 0;
 
@@ -4826,6 +4833,7 @@ async function loadDiscovery() {
                 examples: buildPendingDiscoveryExamples(w),
                 source: 'pending',
                 next_review_date: w.next_review_date,
+                chinese_sense_lines: Array.isArray(w.chinese_sense_lines) ? w.chinese_sense_lines : undefined,
             });
         }
         if (DISCOVERY_BANK_LEVELS.has(level)) {
@@ -4846,6 +4854,7 @@ async function loadDiscovery() {
                 phonetic: String(row.phonetic || '').trim(),
                 examples: discoveryExamplesFromCsvRow(row),
                 source: 'wordbank',
+                chinese_sense_lines: Array.isArray(row.chinese_sense_lines) ? row.chinese_sense_lines : undefined,
             });
         }
         wordbankPart.sort((a, b) => a.english.localeCompare(b.english, 'en'));
@@ -4894,8 +4903,9 @@ function renderDiscoveryCard() {
         phon.length > 0
             ? `<p class="discovery-card-phonetic word-item-phonetic">${escapeHtml(phon)}</p>`
             : '<p class="discovery-card-phonetic discovery-card-phonetic--empty">音标暂无</p>';
+    const senseBlock = discoveryChineseSenseHtml(w);
     const examples = getDiscoveryExamplesForCard(w);
-    const exampleBlock = discoveryTwoExampleSlotsHtml(examples);
+    const exampleBlock = discoveryExampleSlotsHtml(examples);
     const importState = getDiscoveryImportButtonState(w);
     const importBtnClass =
         importState.variant === 'add'
@@ -4920,6 +4930,7 @@ function renderDiscoveryCard() {
             </div>
           </div>
           ${phonBlock}
+          ${senseBlock}
           ${exampleBlock}
         </div>
       </article>
@@ -4959,11 +4970,36 @@ function renderDiscoveryCard() {
     });
 }
 
-/** 固定 2 条例句槽位，减少切换单词时卡片高度跳动 */
-function discoveryTwoExampleSlotsHtml(examples) {
+/** 多义词：列出各义项；与 v2 chinese_sense_lines 或合并摘要一致 */
+function discoveryChineseSenseHtml(w) {
+    const lines = w.chinese_sense_lines;
+    if (Array.isArray(lines) && lines.length > 1) {
+        const items = lines
+            .map((t) => `<li>${escapeHtml(String(t).trim())}</li>`)
+            .join('');
+        return `<div class="discovery-senses-wrap"><div class="discovery-senses-label">释义</div><ol class="discovery-sense-list">${items}</ol></div>`;
+    }
+    const ch = String(w.chinese || '').trim();
+    if (!ch) return '';
+    return `<p class="discovery-card-chinese">${escapeHtml(ch)}</p>`;
+}
+
+/**
+ * 例句槽位：至少 2 格避免高度跳动；多义 v2 可有最多 8 条例句。
+ */
+function discoveryExampleSlotsHtml(examples) {
+    const filled = Array.isArray(examples)
+        ? examples
+              .map((e) => ({
+                  en: String(e.en || '').trim(),
+                  cn: String(e.cn || '').trim(),
+              }))
+              .filter((e) => e.en || e.cn)
+        : [];
+    const slotCount = Math.min(8, Math.max(filled.length, 2));
     const slots = [];
-    for (let idx = 0; idx < 2; idx++) {
-        const ex = examples[idx];
+    for (let idx = 0; idx < slotCount; idx++) {
+        const ex = filled[idx];
         if (ex && (ex.en || ex.cn)) {
             const speakable = Boolean(ex.en);
             const enLine = ex.en

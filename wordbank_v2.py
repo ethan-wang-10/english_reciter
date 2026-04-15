@@ -59,6 +59,18 @@ def format_single_sense_chinese(sense: dict) -> str:
     return zh
 
 
+def chinese_sense_lines_from_senses(senses: List[dict]) -> List[str]:
+    """多义项时各义项一行（与 format_single_sense_chinese 一致）；单义项或非列表时返回空。"""
+    if not isinstance(senses, list) or len(senses) <= 1:
+        return []
+    out: List[str] = []
+    for s in senses:
+        line = format_single_sense_chinese(s)
+        if line:
+            out.append(line)
+    return out if len(out) > 1 else []
+
+
 def _pos_display(pos: str) -> str:
     if not pos:
         return ""
@@ -228,6 +240,10 @@ def v2_entry_to_flat_csv_row(entry: dict) -> dict:
         out[f"example{k}"] = str(mat.get(f"example{k}", "") or "").strip()
         out[f"example{k}_form"] = str(mat.get(f"example{k}_form", "") or "").strip()
         out[f"example{k}_cn"] = str(mat.get(f"example{k}_cn", "") or "").strip()
+    senses_in = mat.get("senses")
+    sl = chinese_sense_lines_from_senses(senses_in if isinstance(senses_in, list) else [])
+    if sl:
+        out["chinese_sense_lines"] = sl
     return out
 
 

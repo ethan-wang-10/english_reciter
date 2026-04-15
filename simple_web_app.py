@@ -355,7 +355,11 @@ _WORDBANK_CSV_MINIMAL_FIELDS = (
 
 
 def _wordbank_csv_row_minimal(row: dict) -> dict:
-    return {k: str(row.get(k, "") or "") for k in _WORDBANK_CSV_MINIMAL_FIELDS}
+    out = {k: str(row.get(k, "") or "") for k in _WORDBANK_CSV_MINIMAL_FIELDS}
+    csl = row.get("chinese_sense_lines")
+    if isinstance(csl, list) and csl:
+        out["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
+    return out
 
 
 def _empty_community_doc() -> dict:
@@ -1000,6 +1004,7 @@ def apply_review_display_from_wordbank(
     复习/加练卡片：例句槽位仍用 pick 与练习判分一致；多义项 v2 只展示当前槽对应的一条释义与一条例句；
     legacy 多例句时只展示当前槽对应的一行例句（释义保持合并行）。
     """
+    item["review_polyseme"] = False
     key = wordbank_v2.normalize_english_key(w_english)
     v2 = wordbank_v2.load_words_v2_by_key().get(key)
     picked = pick_example_for_word(csv_row, w_english)
@@ -1020,11 +1025,13 @@ def apply_review_display_from_wordbank(
         if 0 <= si < len(senses):
             item["chinese"] = wordbank_v2.format_single_sense_chinese(senses[si])
         item["examples"] = one_ex
+        item["review_polyseme"] = True
         return
 
     exs = examples_from_csv_row(csv_row)
     if len(exs) > 1:
         item["examples"] = one_ex
+        item["review_polyseme"] = True
     else:
         item["examples"] = exs
 
@@ -2617,7 +2624,7 @@ def get_status(username):
                 display_zh = w.chinese
                 if csv_row and (csv_row.get("chinese") or "").strip():
                     display_zh = (csv_row.get("chinese") or "").strip()
-                all_words.append({
+                row_payload = {
                     'english': w.english,
                     'chinese': display_zh,
                     'phonetic': csv_row.get('phonetic', '') if csv_row else '',
@@ -2632,7 +2639,12 @@ def get_status(username):
                     'remaining_days': (nd - today_d).days,
                     'is_carryover': is_co,
                     'carryover_days': (today_d - nd).days if is_co else 0,
-                })
+                }
+                if csv_row:
+                    csl = csv_row.get("chinese_sense_lines")
+                    if isinstance(csl, list) and csl:
+                        row_payload["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
+                all_words.append(row_payload)
 
             stats = {
                 'total_words': len(all_words),
@@ -2678,6 +2690,9 @@ def get_review_list(username):
                     if (csv_row.get("chinese") or "").strip():
                         item["chinese"] = (csv_row.get("chinese") or "").strip()
                     apply_review_display_from_wordbank(item, csv_row, w.english)
+                    csl = csv_row.get("chinese_sense_lines")
+                    if isinstance(csl, list) and csl:
+                        item["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
                 if not item['examples'] and (getattr(w, 'example', None) or '').strip():
                     raw = (w.example or '').strip()
                     if '_' in raw:
@@ -2720,6 +2735,9 @@ def get_extra_review_list(username):
                     if (csv_row.get("chinese") or "").strip():
                         item["chinese"] = (csv_row.get("chinese") or "").strip()
                     apply_review_display_from_wordbank(item, csv_row, w.english)
+                    csl = csv_row.get("chinese_sense_lines")
+                    if isinstance(csl, list) and csl:
+                        item["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
                 words.append(item)
             return jsonify({'words': words, 'count': len(words)}), 200
     except Exception as e:

@@ -77,6 +77,11 @@ class TestWordbankV2(unittest.TestCase):
         self.assertEqual(row["example2"], "Swing the bat.")
         self.assertEqual(row["example3"], "He bats well.")
         self.assertEqual(row["example3_cn"], "他击球好。")
+        csl = row.get("chinese_sense_lines")
+        self.assertIsInstance(csl, list)
+        self.assertEqual(len(csl), 3)
+        self.assertIn("蝙蝠", csl[0])
+        self.assertIn("球棒", csl[1])
 
     def test_slim_v2_roundtrip_and_stale_flat_ignored(self):
         """落盘仅 senses；读取时从 senses 派生扁平行；若文件曾含陈旧 example*，以 senses 为准。"""

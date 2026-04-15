@@ -1561,6 +1561,25 @@ body {
     color: var(--text-primary);
 }
 
+.review-def-example-wrap {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+/* 多义：释义独占一行，例句附在下方同一卡片流内 */
+.review-content--polyseme .word-chinese {
+    margin-bottom: 0;
+    padding-bottom: 0.35rem;
+    line-height: 1.45;
+}
+
+.review-content--polyseme .word-example-container {
+    margin-top: 0;
+    border-top: 1px solid rgba(28, 176, 246, 0.35);
+    padding-top: 14px;
+}
+
 .word-example {
     font-size: 1.05rem;
     color: var(--text-secondary);
@@ -2584,6 +2603,10 @@ button.import-article-chip--selected:hover {
         margin-bottom: 10px;
     }
 
+    html.is-review-section #review-section.active .review-content--polyseme .word-chinese {
+        margin-bottom: 0;
+    }
+
     html.is-review-section #review-section.active .word-example-container {
         padding: 10px 10px;
         margin-bottom: 12px;
@@ -2638,6 +2661,10 @@ button.import-article-chip--selected:hover {
     html.keyboard-open.is-review-section #review-section.active .word-chinese {
         font-size: 0.95rem;
         margin-bottom: 8px;
+    }
+
+    html.keyboard-open.is-review-section #review-section.active .review-content--polyseme .word-chinese {
+        margin-bottom: 0;
     }
 
     html.keyboard-open.is-review-section #review-section.active .word-example-container {
@@ -5208,6 +5235,45 @@ button.import-article-chip--selected:hover {
     font-weight: 600;
     font-style: italic;
     opacity: 0.85;
+}
+
+.discovery-senses-wrap {
+    margin: 0 0 16px;
+    text-align: left;
+}
+
+.discovery-senses-label {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    letter-spacing: 0.02em;
+}
+
+.discovery-sense-list {
+    margin: 0;
+    padding-left: 1.35rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.discovery-sense-list li {
+    margin-bottom: 6px;
+}
+
+.discovery-sense-list li:last-child {
+    margin-bottom: 0;
+}
+
+.discovery-card-chinese {
+    margin: 0 0 16px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.45;
+    text-align: left;
 }
 
 .discovery-examples {
