@@ -1,5 +1,5 @@
 """
-新词库 words_v2.json：多义项、词组；与 words.csv 双轨并存。
+新词库 words_v2.json：多义项、词组；与 words.csv 双轨并存（对外统一接口以 v2 为准，同键覆盖 CSV）。
 持久化以 senses 为权威；chinese_summary 与 example1..N 在读取时由 materialize_v2_entry_for_read 派生。
 见 docs/refine_work_bank.md。
 """

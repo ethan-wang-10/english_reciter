@@ -574,7 +574,8 @@ def load_system_wordbank_english_lower() -> set:
 
 def merge_wordbank_rows_for_search(level_filter: str = "") -> Tuple[List[dict], Set[str]]:
     """
-    合并新词库与旧 CSV 行（同键时新库覆盖），用于搜索 API。
+    合并词库：``words_v2.json`` 为默认数据源，同键覆盖 ``words.csv``；仅 v2 或仅 CSV 的键都会保留。
+    用于搜索 API、GET /wordbank/csv 等对外统一词库。
     返回 (扁平行列表, 所有 english 规范化键集合)。
     """
     csv_rows = load_words_csv()
@@ -3127,28 +3128,30 @@ def textbooks_lesson(username):
 @app.route('/api/wordbank/csv', methods=['GET'])
 @token_required
 def get_wordbank_csv(username):
-    """返回 CSV 词汇表（所有词或按 level 过滤）。
+    """返回系统词库扁平行（与 ``merge_wordbank_rows_for_search`` 一致：v2 优先，同键覆盖 CSV）。
 
     Query:
     - level: 可选，按难度过滤
     - fields: ``full``（默认）或 ``minimal``（省略 example*_form 等，供单词学习等场景）
-    支持 If-None-Match / ETag，内容未变时返回 304。
+    支持 If-None-Match / ETag，内容未变时返回 304（ETag 含 words.csv 与 words_v2.json 的 mtime）。
     """
     level = request.args.get('level', '').strip()
     fields_mode = request.args.get('fields', 'full').strip().lower()
     if fields_mode not in ('full', 'minimal'):
         fields_mode = 'full'
 
-    rows = load_words_csv()
-    if level:
-        rows = [r for r in rows if r.get('level', '') == level]
+    rows, _ = merge_wordbank_rows_for_search(level)
     count = len(rows)
     try:
-        mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
+        csv_mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
     except OSError:
-        mtime = 0.0
+        csv_mtime = 0.0
+    try:
+        v2_mtime = wordbank_v2.WORDS_V2_FILE.stat().st_mtime if wordbank_v2.WORDS_V2_FILE.exists() else 0.0
+    except OSError:
+        v2_mtime = 0.0
     # ETag 必须为 ASCII；level 可能含中文（小学、初中等），不可直接拼进响应头
-    _etag_seed = f"{mtime:.9f}\0{level}\0{fields_mode}\0{count}".encode("utf-8")
+    _etag_seed = f"{csv_mtime:.9f}\0{v2_mtime:.9f}\0{level}\0{fields_mode}\0{count}".encode("utf-8")
     etag_digest = hashlib.sha256(_etag_seed).hexdigest()[:32]
     etag = f'W/"wbcsv-{etag_digest}"'
     inm = (request.headers.get('If-None-Match') or '').strip()

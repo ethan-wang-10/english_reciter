@@ -2883,7 +2883,7 @@ async function fetchWordbankCsvForDiscoveryNetwork(level, pathKey) {
 }
 
 /**
- * 拉取系统词库（仅 discovery 使用）：minimal 字段、按 level 缓存、304 复用内存。
+ * 拉取系统词库（仅 discovery 使用）：与后端 v2+CSV 合并结果一致，minimal 字段、按 level 缓存、304 复用内存。
  * 全量词库在内存命中时同步返回，避免每次搜索再发 HTTP（304 仍有 RTT）。
  * @param {string} level 难度或空字符串表示全部
  */
