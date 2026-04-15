@@ -5267,6 +5267,40 @@ button.import-article-chip--selected:hover {
     margin-bottom: 0;
 }
 
+.discovery-polyseme-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0 0 4px;
+    text-align: left;
+}
+
+.discovery-sense-example-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.discovery-sense-example-def {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.45;
+}
+
+.discovery-sense-example-block .discovery-example-block {
+    min-height: unset;
+}
+
+.discovery-sense-example-missing {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 600;
+    font-style: italic;
+    color: var(--text-secondary);
+}
+
 .discovery-card-chinese {
     margin: 0 0 16px;
     font-size: 1.1rem;

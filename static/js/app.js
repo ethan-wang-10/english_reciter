@@ -4903,9 +4903,12 @@ function renderDiscoveryCard() {
         phon.length > 0
             ? `<p class="discovery-card-phonetic word-item-phonetic">${escapeHtml(phon)}</p>`
             : '<p class="discovery-card-phonetic discovery-card-phonetic--empty">音标暂无</p>';
-    const senseBlock = discoveryChineseSenseHtml(w);
+    const lines = w.chinese_sense_lines;
+    const polysemeStack =
+        Array.isArray(lines) && lines.length > 1 ? discoveryPolysemeSenseExampleHtml(w) : '';
+    const senseBlock = polysemeStack ? '' : discoveryChineseSenseHtml(w);
     const examples = getDiscoveryExamplesForCard(w);
-    const exampleBlock = discoveryExampleSlotsHtml(examples);
+    const exampleBlock = polysemeStack ? '' : discoveryExampleSlotsHtml(examples);
     const importState = getDiscoveryImportButtonState(w);
     const importBtnClass =
         importState.variant === 'add'
@@ -4930,8 +4933,7 @@ function renderDiscoveryCard() {
             </div>
           </div>
           ${phonBlock}
-          ${senseBlock}
-          ${exampleBlock}
+          ${polysemeStack || `${senseBlock}${exampleBlock}`}
         </div>
       </article>
     `;
@@ -4970,15 +4972,8 @@ function renderDiscoveryCard() {
     });
 }
 
-/** 多义词：列出各义项；与 v2 chinese_sense_lines 或合并摘要一致 */
+/** 单义或合并释义一行；多义（多条 chinese_sense_lines）由 discoveryPolysemeSenseExampleHtml 展示 */
 function discoveryChineseSenseHtml(w) {
-    const lines = w.chinese_sense_lines;
-    if (Array.isArray(lines) && lines.length > 1) {
-        const items = lines
-            .map((t) => `<li>${escapeHtml(String(t).trim())}</li>`)
-            .join('');
-        return `<div class="discovery-senses-wrap"><div class="discovery-senses-label">释义</div><ol class="discovery-sense-list">${items}</ol></div>`;
-    }
     const ch = String(w.chinese || '').trim();
     if (!ch) return '';
     return `<p class="discovery-card-chinese">${escapeHtml(ch)}</p>`;
@@ -5024,6 +5019,44 @@ function discoveryExampleSlotsHtml(examples) {
         }
     }
     return `<div class="discovery-examples">${slots.join('')}</div>`;
+}
+
+/** 多义词条：每个义项与对应例句、朗读同一竖向块内展示（与 example 槽位下标一致） */
+function discoveryPolysemeSenseExampleHtml(w) {
+    const lines = w.chinese_sense_lines;
+    if (!Array.isArray(lines) || lines.length <= 1) return '';
+    const examples = getDiscoveryExamplesForCard(w);
+    const chunks = lines.map((raw, idx) => {
+        const defLine = `${idx + 1}. ${String(raw).trim()}`;
+        const ex = examples[idx] || { en: '', cn: '' };
+        const en = String(ex.en || '').trim();
+        const cn = String(ex.cn || '').trim();
+        const enLine = en
+            ? `<p class="discovery-example-line discovery-example-line--en">${escapeHtml(en)}</p>`
+            : '';
+        const cnLine = cn
+            ? `<p class="discovery-example-line discovery-example-line--cn">${escapeHtml(cn)}</p>`
+            : '';
+        const speakable = Boolean(en);
+        const emptyHint =
+            !en && !cn
+                ? '<p class="discovery-sense-example-missing">暂无该义项例句</p>'
+                : '';
+        return `<div class="discovery-sense-example-block">
+      <p class="discovery-sense-example-def">${escapeHtml(defLine)}</p>
+      <div class="discovery-example-block">
+        <div class="discovery-example-block-body">
+          ${enLine}
+          ${cnLine}
+          ${emptyHint}
+        </div>
+        <button type="button" class="btn-speak discovery-speak-example" data-example-slot="${idx}" title="朗读例句" aria-label="朗读义项 ${idx + 1} 例句" ${
+            speakable ? '' : 'disabled'
+        }>🔊</button>
+      </div>
+    </div>`;
+    });
+    return `<div class="discovery-polyseme-stack">${chunks.join('')}</div>`;
 }
 
 function discoveryGo(delta) {
