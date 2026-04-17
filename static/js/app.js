@@ -273,10 +273,15 @@ function updateGamificationNav(g) {
     const ckTitle = checkInDone
         ? `今日已有效打卡（已答对 ${todayC} 词）`
         : `今日答对 ${todayC} 词，有效打卡需 ${minC} 词`;
+    const streakTitle =
+        Number(g.streak_max_record) > 0
+            ? `当前连续 ${g.streak} 天（有效打卡：每日至少答对 ${minC} 词）；中断后归零；历史最高 ${formatNumber(g.streak_max_record)} 天`
+            : `当前连续（有效打卡：每日至少答对 ${minC} 词）；中断后归零`;
     if (lv && xp && st) {
         lv.textContent = `Lv.${g.level}`;
         xp.textContent = `${formatNumber(g.total_xp)} XP`;
         st.textContent = `🔥 ${g.streak}`;
+        st.title = streakTitle;
     }
     if (ck) {
         ck.textContent = ckText;
@@ -291,6 +296,7 @@ function updateGamificationNav(g) {
         mlv.textContent = `Lv.${g.level}`;
         mxp.textContent = `${formatNumber(g.total_xp)} XP`;
         mst.textContent = `🔥 ${g.streak}`;
+        mst.title = streakTitle;
     }
     if (mck) {
         mck.textContent = ckText;
@@ -323,6 +329,7 @@ function renderDailySummaryBody(g, statusData) {
     const done = !!g.check_in_done_today;
     const xpToday = Number(g.daily_xp_today) || 0;
     const streak = Number(g.streak) || 0;
+    const streakMax = Number(g.streak_max_record) || 0;
     const words = statusData.words || [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -357,7 +364,10 @@ function renderDailySummaryBody(g, statusData) {
         `<li>今日答对 <strong>${formatNumber(todayC)}</strong> 词</li>` +
         `<li>今日获得 <strong>${formatNumber(xpToday)}</strong> XP</li>` +
         checkLine +
-        `<li>连续有效打卡 <strong>${formatNumber(streak)}</strong> 天</li>` +
+        `<li>当前连续有效打卡 <strong>${formatNumber(streak)}</strong> 天</li>` +
+        (streakMax > 0
+            ? `<li>历史最高连续打卡 <strong>${formatNumber(streakMax)}</strong> 天</li>`
+            : '') +
         monthLine +
         `<li>当前复习轮次 <strong>第 ${escapeHtml(String(round))} 轮</strong></li>` +
         `<li>今日仍待复习（含逾期）<strong>${formatNumber(dueToday)}</strong> 词</li>` +

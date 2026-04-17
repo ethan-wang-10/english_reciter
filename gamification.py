@@ -30,6 +30,11 @@ CHECKIN_MIN_CORRECT = 5
 # 完成本月打卡目标时的一次性奖励：目标天数 × 此值（XP）
 CHECKIN_GOAL_XP_PER_DAY = 30
 
+# 连续火苗「当前连续 + 最高连续」规则生效日（含当日）起：对外 streak 为当前连续（断档未再打卡前即显示 0），
+# 并持久化 streak_max；此前仍沿用旧逻辑（直接读 gamification.json 中的 streak 字段）。
+# 部署时请改为「上线次日」。
+STREAK_V2_EFFECTIVE_DATE = date(2026, 4, 18)
+
 # 成就 id -> 展示信息
 ACHIEVEMENT_DEFS: Dict[str, Dict[str, str]] = {
     "first_step": {"title": "第一步", "desc": "首次答对单词", "icon": "👣"},
@@ -76,6 +81,8 @@ def default_state() -> Dict[str, Any]:
         "total_correct": 0,
         "streak": 0,
         "last_streak_date": None,
+        # 历史最高连续有效打卡天数（仅 STREAK_V2 起维护）；None 表示尚未惰性初始化
+        "streak_max": None,
         "streak_correct_by_day": {},
         "daily_xp": {},
         "achievements": {},
@@ -126,6 +133,11 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
         base["mcheckin_goal_bonus_awarded_month"] = str(base["mcheckin_goal_bonus_awarded_month"])
     if base.get("mcheckin_goal_edits_ym") is not None:
         base["mcheckin_goal_edits_ym"] = str(base["mcheckin_goal_edits_ym"])
+    if base.get("streak_max") is not None:
+        try:
+            base["streak_max"] = int(base["streak_max"])
+        except (TypeError, ValueError):
+            base["streak_max"] = None
     # 旧数据：本月已有目标但未记录「已编辑」时，视为已用掉当月一次修改机会
     _ym = date.today().strftime("%Y-%m")
     _gm = base.get("mcheckin_goal_month")
@@ -181,6 +193,95 @@ def _apply_daily_cap(daily_so_far: int, raw_xp: int) -> int:
     return room + int(over * OVER_CAP_MULTIPLIER)
 
 
+def streak_v2_active(today: date) -> bool:
+    return today >= STREAK_V2_EFFECTIVE_DATE
+
+
+def longest_valid_streak_from_history(state: Dict[str, Any]) -> int:
+    """根据 streak_correct_by_day 中有效日，计算历史上最长连续有效打卡天数。"""
+    sbd = state.get("streak_correct_by_day") or {}
+    days: List[date] = []
+    for dk, cnt in sbd.items():
+        if int(cnt or 0) < CHECKIN_MIN_CORRECT:
+            continue
+        try:
+            days.append(date.fromisoformat(str(dk)[:10]))
+        except ValueError:
+            continue
+    if not days:
+        return 0
+    days.sort()
+    best = 1
+    run = 1
+    for i in range(1, len(days)):
+        if days[i] == days[i - 1]:
+            continue
+        if days[i] == days[i - 1] + timedelta(days=1):
+            run += 1
+            best = max(best, run)
+        else:
+            run = 1
+    return best
+
+
+def effective_current_streak(state: Dict[str, Any], today: date) -> int:
+    """
+    当前连续有效打卡天数：末次有效日在「今天或昨天」则沿用已存 streak；否则视为已断档（0）。
+    未再打卡前，gamification.json 内 streak 可能仍为旧值，展示须用本函数。
+    """
+    last = state.get("last_streak_date")
+    streak = int(state.get("streak") or 0)
+    if not last:
+        return 0
+    try:
+        last_d = date.fromisoformat(str(last))
+    except ValueError:
+        return 0
+    if last_d > today:
+        return 0
+    if last_d == today:
+        return streak
+    if last_d == today - timedelta(days=1):
+        return streak
+    return 0
+
+
+def display_streak(state: Dict[str, Any], today: date) -> int:
+    """对 API / 排行榜展示的连续火苗数字。"""
+    if not streak_v2_active(today):
+        return int(state.get("streak") or 0)
+    return effective_current_streak(state, today)
+
+
+def streak_max_record_display(state: Dict[str, Any], today: date) -> int:
+    """历史最高连续（展示用，不在 GET 时写盘）。streak_max 未写入前按历史推算。"""
+    raw = state.get("streak_max")
+    if raw is not None:
+        return max(0, int(raw))
+    if not streak_v2_active(today):
+        return 0
+    return max(
+        longest_valid_streak_from_history(state),
+        int(state.get("streak") or 0),
+    )
+
+
+def _ensure_streak_max_initialized(state: Dict[str, Any], today: date) -> None:
+    if not streak_v2_active(today):
+        return
+    if state.get("streak_max") is not None:
+        return
+    hist = longest_valid_streak_from_history(state)
+    cur = int(state.get("streak") or 0)
+    state["streak_max"] = max(hist, cur)
+
+
+def _bump_streak_max(state: Dict[str, Any], streak_value: int) -> None:
+    prev = int(state.get("streak_max") or 0)
+    if streak_value > prev:
+        state["streak_max"] = streak_value
+
+
 def _update_streak(state: Dict[str, Any], today: date) -> None:
     key = today.isoformat()
     last = state.get("last_streak_date")
@@ -192,9 +293,15 @@ def _update_streak(state: Dict[str, Any], today: date) -> None:
     if not valid_checkin_today:
         return
 
+    v2 = streak_v2_active(today)
+    if v2:
+        _ensure_streak_max_initialized(state, today)
+
     if not last:
         state["streak"] = 1
         state["last_streak_date"] = key
+        if v2:
+            _bump_streak_max(state, 1)
         return
 
     try:
@@ -202,6 +309,8 @@ def _update_streak(state: Dict[str, Any], today: date) -> None:
     except ValueError:
         state["streak"] = 1
         state["last_streak_date"] = key
+        if v2:
+            _bump_streak_max(state, 1)
         return
 
     if last_d == today:
@@ -210,9 +319,15 @@ def _update_streak(state: Dict[str, Any], today: date) -> None:
         streak += 1
         state["streak"] = streak
         state["last_streak_date"] = key
+        if v2:
+            _bump_streak_max(state, streak)
     else:
+        if v2:
+            _bump_streak_max(state, streak)
         state["streak"] = 1
         state["last_streak_date"] = key
+        if v2:
+            _bump_streak_max(state, 1)
 
 
 def compute_raw_xp(
@@ -245,7 +360,7 @@ def _unlock_achievements(
     new_list: List[Dict[str, Any]] = []
     total_xp = int(state.get("total_xp") or 0)
     total_correct = int(state.get("total_correct") or 0)
-    streak = int(state.get("streak") or 0)
+    streak = display_streak(state, date.today())
     ach = state.setdefault("achievements", {})
     assert isinstance(ach, dict)
 
@@ -531,7 +646,7 @@ def award_correct_answer(
         "total_xp": int(state["total_xp"]),
         "level": lv,
         "xp_to_next_level": need_next,
-        "streak": int(state.get("streak") or 0),
+        "streak": display_streak(state, today),
         "new_achievements": new_achievements,
         "daily_xp_today": int(state["daily_xp"].get(day_key, 0)),
         "today_correct_count": today_correct,
@@ -620,7 +735,8 @@ def public_profile(
         "total_xp": total_xp,
         "level": lv,
         "xp_to_next_level": need,
-        "streak": int(state.get("streak") or 0),
+        "streak": display_streak(state, today),
+        "streak_max_record": streak_max_record_display(state, today),
         "last_streak_date": state.get("last_streak_date"),
         "total_correct": int(state.get("total_correct") or 0),
         "leaderboard_opt_in": bool(state.get("leaderboard_opt_in", True)),
@@ -731,7 +847,7 @@ def build_leaderboard_from_states(
                 "username": un,
                 "total_xp": xp,
                 "level": level_from_xp(xp),
-                "streak": int(st.get("streak") or 0),
+                "streak": display_streak(st, date.today()),
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
             }

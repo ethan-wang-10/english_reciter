@@ -126,7 +126,7 @@ def build_period_leaderboard_from_states(
                 "total_xp": xp,
                 "period_xp": px,
                 "level": gamification_mod.level_from_xp(xp),
-                "streak": int(st.get("streak") or 0),
+                "streak": gamification_mod.display_streak(st, date.today()),
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
             }

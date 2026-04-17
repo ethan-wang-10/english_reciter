@@ -1,8 +1,9 @@
 """游戏化：月度打卡目标每月仅可改一次。"""
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import gamification as gm
 
@@ -61,6 +62,43 @@ class TestMonthlyGoalEditLock(unittest.TestCase):
     def test_days_inclusive_mid_month(self):
         n = gm.days_inclusive_today_through_month_end(date(2026, 3, 28))
         self.assertEqual(n, 4)
+
+
+class TestStreakDisplayV2(unittest.TestCase):
+    @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
+    def test_effective_zero_when_gap_before_today(self):
+        today = date(2024, 6, 15)
+        st = gm.default_state()
+        st["streak"] = 26
+        st["last_streak_date"] = "2024-06-12"
+        self.assertEqual(gm.display_streak(st, today), 0)
+
+    @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
+    def test_effective_keeps_yesterday_without_today_checkin(self):
+        today = date(2024, 6, 15)
+        st = gm.default_state()
+        st["streak"] = 5
+        st["last_streak_date"] = "2024-06-14"
+        self.assertEqual(gm.display_streak(st, today), 5)
+
+    @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2030, 1, 1))
+    def test_legacy_uses_raw_streak_before_effective_date(self):
+        today = date(2024, 6, 15)
+        st = gm.default_state()
+        st["streak"] = 26
+        st["last_streak_date"] = "2024-06-12"
+        self.assertEqual(gm.display_streak(st, today), 26)
+
+    @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
+    def test_longest_valid_streak_from_history(self):
+        st = gm.default_state()
+        m = 5
+        base = date(2024, 1, 10)
+        for i in range(3):
+            d = base + timedelta(days=i)
+            st["streak_correct_by_day"][d.isoformat()] = m
+        st["streak_correct_by_day"][(base + timedelta(days=5)).isoformat()] = m
+        self.assertEqual(gm.longest_valid_streak_from_history(st), 3)
 
 
 if __name__ == "__main__":
