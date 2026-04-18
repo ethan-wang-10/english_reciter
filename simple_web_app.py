@@ -1142,6 +1142,43 @@ def other_v2_sense_chinese_lines_for_review_slot(english: str) -> List[str]:
     return out
 
 
+def other_v2_sense_extra_for_review_slot(english: str) -> List[dict]:
+    """
+    多义项 v2：与复习卡片同一槽位，返回**其余**义项的中文行及对应例句槽（example{i+1}）。
+    非多义项或无法解析时返回空列表。
+    """
+    key = wordbank_v2.normalize_english_key(english)
+    v2 = wordbank_v2.load_words_v2_by_key().get(key)
+    if not v2 or not isinstance(v2.get("senses"), list) or len(v2["senses"]) <= 1:
+        return []
+    csv_row = lookup_csv_word(english)
+    if not csv_row:
+        return []
+    slot = _pick_example_slot_key(csv_row, english)
+    try:
+        si = int(slot) - 1
+    except ValueError:
+        si = 0
+    out: List[dict] = []
+    for i, s in enumerate(v2["senses"]):
+        if i == si:
+            continue
+        line = wordbank_v2.format_single_sense_chinese(s)
+        if not line:
+            continue
+        k = str(i + 1)
+        ex_en = (csv_row.get(f"example{k}") or "").strip()
+        ex_cn = (csv_row.get(f"example{k}_cn") or "").strip()
+        out.append(
+            {
+                "zh": line,
+                "example_en": ex_en,
+                "example_cn": ex_cn,
+            }
+        )
+    return out
+
+
 def merged_example_from_pair(en: str, cn: str) -> str:
     """与 csv_word_to_review_item 一致的合并串，供兼容旧字段 example。"""
     if en and cn:
@@ -2919,9 +2956,9 @@ def practice_word(username):
             if gam_payload is not None:
                 body['gamification'] = gam_payload
             if is_correct:
-                extra_zh = other_v2_sense_chinese_lines_for_review_slot(word.english)
-                if extra_zh:
-                    body['other_senses_zh'] = '；'.join(extra_zh)
+                extra_rows = other_v2_sense_extra_for_review_slot(word.english)
+                if extra_rows:
+                    body['other_senses_extra'] = extra_rows
             return jsonify(body), 200
     except Exception as e:
         logger.error(f"练习单词失败: {e}")

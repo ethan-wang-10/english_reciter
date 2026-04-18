@@ -1683,6 +1683,61 @@ body {
     display: block;
 }
 
+/* 其余义项 + 例句：仅宽屏（与底部 Tab 断点一致）显示，浅于主成功气泡 */
+.word-message-extra {
+    display: none;
+    margin-top: 10px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    text-align: left;
+    font-size: 0.98rem;
+    font-weight: 600;
+    border: 1px solid #c5e8b8;
+    background: #f5fff0;
+    color: var(--primary-dark);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+@media (min-width: 1200px) {
+    .word-message-extra.word-message-extra--show {
+        display: block;
+    }
+}
+
+.word-message-extra-title {
+    font-weight: 800;
+    font-size: 0.92rem;
+    margin-bottom: 8px;
+    color: var(--primary-dark);
+}
+
+.word-message-extra-item + .word-message-extra-item {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(70, 163, 2, 0.25);
+}
+
+.word-message-extra-zh {
+    margin-bottom: 4px;
+}
+
+.word-message-extra-ex {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.word-message-extra-en {
+    color: var(--text-primary);
+}
+
+.word-message-extra-cn {
+    color: var(--text-secondary);
+}
+
 .review-complete {
     text-align: center;
     padding: 48px 24px;

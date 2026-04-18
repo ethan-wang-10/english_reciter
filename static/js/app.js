@@ -3934,6 +3934,7 @@ async function showCurrentWord() {
 
     // 清空消息
     document.getElementById('word-message').style.display = 'none';
+    clearReviewWordMessageExtra();
 }
 
 /** 根据 target（变形或原形）生成提示字符串 */
@@ -3941,6 +3942,53 @@ function getHintStringForTarget(target, revealedCount) {
     if (!target) return '';
     if (revealedCount >= target.length) return target;
     return target.substring(0, revealedCount) + '_'.repeat(target.length - revealedCount);
+}
+
+/** 清空「其余义项」桌面端气泡（复习提交区） */
+function clearReviewWordMessageExtra() {
+    const el = document.getElementById('word-message-extra');
+    if (!el) return;
+    el.innerHTML = '';
+    el.classList.remove('word-message-extra--show');
+}
+
+/**
+ * 答对后展示其余义项 + 例句（仅 CSS 宽屏断点可见，移动端不占位）
+ * @param {Array<{ zh: string, example_en?: string, example_cn?: string }>} items
+ */
+function renderReviewOtherSensesExtra(items) {
+    const el = document.getElementById('word-message-extra');
+    if (!el) return;
+    if (!items || !items.length) {
+        clearReviewWordMessageExtra();
+        return;
+    }
+    let html = '<div class="word-message-extra-title">其余义项</div>';
+    let n = 0;
+    for (let i = 0; i < items.length; i += 1) {
+        const it = items[i];
+        const zh = String(it.zh || '').trim();
+        if (!zh) continue;
+        n += 1;
+        html += '<div class="word-message-extra-item">';
+        html += `<div class="word-message-extra-zh">${escapeHtml(zh)}</div>`;
+        const en = String(it.example_en || '').trim();
+        const cn = String(it.example_cn || '').trim();
+        if (en || cn) {
+            html += '<div class="word-message-extra-ex">';
+            if (en) html += `<span class="word-message-extra-en">${escapeHtml(en)}</span>`;
+            if (en && cn) html += ' ';
+            if (cn) html += `<span class="word-message-extra-cn">${escapeHtml(cn)}</span>`;
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+    if (n === 0) {
+        clearReviewWordMessageExtra();
+        return;
+    }
+    el.innerHTML = html;
+    el.classList.add('word-message-extra--show');
 }
 
 async function submitAnswer() {
@@ -3989,6 +4037,7 @@ async function submitAnswer() {
 
         const messageDiv = document.getElementById('word-message');
         let msgText = result.message;
+        clearReviewWordMessageExtra();
         if (result.correct && result.gamification) {
             const gm = result.gamification;
             if (gm.xp_gained > 0) {
@@ -4012,12 +4061,12 @@ async function submitAnswer() {
                 updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
             }
         }
-        if (result.correct && result.other_senses_zh) {
-            msgText += ` · 其余义项：${result.other_senses_zh}`;
-        }
         messageDiv.textContent = msgText;
         messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
         messageDiv.style.display = 'block';
+        if (result.correct && result.other_senses_extra && result.other_senses_extra.length) {
+            renderReviewOtherSensesExtra(result.other_senses_extra);
+        }
         if (submitBtn) submitBtn.classList.remove('btn-submit-loading');
         
         const targetAnswer = word._targetAnswer || word.english;
@@ -4080,6 +4129,7 @@ async function submitAnswer() {
         const reviewSection = document.getElementById('review-section');
         const messageDiv = document.getElementById('word-message');
         if (reviewSection && reviewSection.classList.contains('active') && messageDiv) {
+            clearReviewWordMessageExtra();
             messageDiv.textContent = msg;
             messageDiv.className = 'word-message error';
             messageDiv.style.display = 'block';
