@@ -4153,7 +4153,7 @@ button.import-article-chip--selected:hover {
 }
 
 .monthly-pk-board {
-    padding: 16px 18px 18px;
+    padding: 12px 14px 14px;
     border-radius: var(--radius-lg);
     border: 2px dashed rgba(255, 87, 34, 0.4);
     background: linear-gradient(145deg, rgba(255, 193, 7, 0.09) 0%, rgba(33, 150, 243, 0.07) 50%, rgba(156, 39, 176, 0.06) 100%);
@@ -4161,7 +4161,7 @@ button.import-article-chip--selected:hover {
 }
 
 .monthly-pk-head {
-    margin-bottom: 14px;
+    margin-bottom: 10px;
 }
 
 .monthly-pk-title {
@@ -4184,11 +4184,37 @@ button.import-article-chip--selected:hover {
     margin-top: 14px;
 }
 
+.monthly-pk-section--ongoing {
+    margin-top: 0;
+    padding: 12px 12px 14px;
+    border-radius: var(--radius-md);
+    border: 2px solid rgba(88, 204, 2, 0.45);
+    background: linear-gradient(165deg, rgba(88, 204, 2, 0.12) 0%, rgba(255, 255, 255, 0.65) 55%);
+    box-shadow: 0 4px 0 rgba(70, 163, 2, 0.12);
+}
+
+.monthly-pk-section--prev {
+    margin-top: 12px;
+    padding-top: 2px;
+}
+
 .monthly-pk-section-title {
     margin: 0 0 10px;
     font-size: 0.95rem;
     font-weight: 800;
     color: var(--text-primary);
+}
+
+.monthly-pk-section--ongoing .monthly-pk-section-title {
+    font-size: 1rem;
+    color: var(--primary-dark);
+}
+
+.monthly-pk-section-title--sub {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
 }
 
 .monthly-pk-list {
@@ -4197,11 +4223,75 @@ button.import-article-chip--selected:hover {
     gap: 10px;
 }
 
+.monthly-pk-list--settled {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+}
+
+.monthly-pk-list--settled > .monthly-pk-empty {
+    grid-column: 1 / -1;
+}
+
 .monthly-pk-card {
     padding: 10px 12px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.55);
+}
+
+.monthly-pk-card--ongoing {
+    padding: 10px 12px 12px;
+    border-width: 2px;
+    border-color: rgba(88, 204, 2, 0.35);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04);
+}
+
+.monthly-pk-card--settled {
+    padding: 7px 8px 8px;
+    border-radius: 10px;
+    border-color: rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.45);
+}
+
+.monthly-pk-card--settled .monthly-pk-faceoff {
+    gap: 6px 8px;
+}
+
+.monthly-pk-card--settled .monthly-pk-player {
+    flex: 0 1 56px;
+    gap: 4px;
+}
+
+.monthly-pk-card--settled .monthly-pk-player .monthly-pk-name {
+    font-size: 0.68rem;
+}
+
+.monthly-pk-card--settled .monthly-pk-av-wrap {
+    width: 32px;
+    height: 32px;
+    border-width: 1px;
+}
+
+.monthly-pk-card--settled .monthly-pk-av-wrap .monthly-pk-av-ph {
+    font-size: 1rem;
+}
+
+.monthly-pk-card--settled .monthly-pk-vs-mid {
+    gap: 2px;
+}
+
+.monthly-pk-card--settled .monthly-pk-score {
+    font-size: 0.95rem;
+}
+
+.monthly-pk-card--settled .monthly-pk-wager {
+    font-size: 0.65rem;
+}
+
+.monthly-pk-card--settled .monthly-pk-status {
+    font-size: 0.72rem;
 }
 
 .monthly-pk-faceoff {
@@ -4325,13 +4415,18 @@ button.import-article-chip--selected:hover {
 }
 
 .monthly-pk-blurb {
-    margin: 10px 0 0;
-    padding-top: 8px;
+    margin: 8px 0 0;
+    padding-top: 6px;
     border-top: 1px dashed rgba(0, 0, 0, 0.08);
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     font-weight: 600;
     line-height: 1.35;
     color: var(--text-secondary);
+}
+
+.monthly-pk-card--ongoing .monthly-pk-blurb {
+    font-size: 0.82rem;
+    color: #4a6b3a;
 }
 
 .monthly-pk-empty {

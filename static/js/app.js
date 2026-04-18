@@ -1657,37 +1657,31 @@ const PK_EMPTY_ONGOING_ROASTS = [
     '暂无对线：适合补刀（划掉）补打卡。',
 ];
 
-/** 月度 PK 卡片短评（精简版，与胜负状态分行展示） */
+/** 进行中 PK：押韵、诙谐短句（仅在有底栏时展示） */
 const PK_ONGOING_BLURBS = [
-    '比有效打卡天数，月末见分晓。',
-    '进行中；平局则赌注退回。',
-    '实时计分，谁多一天谁占优。',
-];
-const PK_TIE_BLURBS = [
-    '打卡天数相同，赌注退回。',
-    '平局收场。',
-];
-const PK_WINNER_BLURBS = [
-    (w, wcls) => `胜方有效打卡多一天。`,
-    (w, wcls) => `恭喜<strong class="monthly-pk-winner${wcls}">${escapeHtml(w)}</strong>。`,
-    (w, wcls) => `<strong class="monthly-pk-winner${wcls}">${escapeHtml(w)}</strong> 打卡更稳。`,
-];
-const PK_FALLBACK_BLURBS = [
-    '已按月结算。',
-    '对局已归档。',
+    '月底见分晓，谁卷谁知道。',
+    '押注已锁死，打卡别摆烂。',
+    '天数对对碰，谁怂谁认怂。',
+    '战线拉很长，摸鱼会上墙。',
+    '有效打卡算，谁多谁好办。',
+    '平局若出现，赌注各自还。',
+    '你追我赶跑，闹钟要调好。',
+    '嘴硬不算数，系统只认天。',
 ];
 
-function monthlyPkAvatarHtml(uname) {
+function monthlyPkAvatarHtml(uname, compact) {
     const u = String(uname || '').trim();
+    const sz = compact ? 32 : 40;
+    const wParam = compact ? 40 : 48;
     const wrapOpen = '<span class="monthly-pk-av-wrap">';
     if (!u) {
         return wrapOpen + '<span class="monthly-pk-av-ph" aria-hidden="true">👤</span></span>';
     }
     const path = '/api/user/avatar/' + encodeURIComponent(u);
-    const src = typeof avatarDisplayUrl === 'function' ? avatarDisplayUrl(path, 48) : path + '?w=48';
+    const src = typeof avatarDisplayUrl === 'function' ? avatarDisplayUrl(path, wParam) : path + '?w=' + wParam;
     return (
         wrapOpen +
-        `<img class="monthly-pk-av" src="${escapeHtml(src)}" alt="" width="40" height="40" loading="lazy" decoding="async" ` +
+        `<img class="monthly-pk-av" src="${escapeHtml(src)}" alt="" width="${sz}" height="${sz}" loading="lazy" decoding="async" ` +
         `onerror="this.onerror=null;this.closest('.monthly-pk-av-wrap').classList.add('monthly-pk-av--fallback');this.removeAttribute('src');" />` +
         '<span class="monthly-pk-av-ph" aria-hidden="true">👤</span></span>'
     );
@@ -1717,37 +1711,37 @@ function renderMonthlyPkBoard(board) {
         const db = Number(days[b] ?? days[String(b)]) || 0;
         const winner = d.winner;
         const tie = d.tie;
+        const compact = !isOngoing;
 
         let statusClass = 'monthly-pk-status--ongoing';
         let statusIcon = '⚡';
         let statusText = '进行中';
-        let blurbHtml = '';
 
         if (isOngoing) {
-            blurbHtml = pickRandom(PK_ONGOING_BLURBS);
+            /* blurb 仅进行中展示 */
         } else if (tie) {
             statusClass = 'monthly-pk-status--tie';
             statusIcon = '🤝';
             statusText = '平局';
-            blurbHtml = pickRandom(PK_TIE_BLURBS);
         } else if (winner) {
-            const wcls = meClass(winner);
             statusClass = 'monthly-pk-status--win';
             statusIcon = '🏆';
             statusText = `${winner} 胜`;
-            blurbHtml = pickRandom(PK_WINNER_BLURBS)(winner, wcls);
         } else {
             statusClass = 'monthly-pk-status--done';
             statusIcon = '✓';
             statusText = '已结算';
-            blurbHtml = pickRandom(PK_FALLBACK_BLURBS);
         }
 
+        const cardClass = isOngoing ? 'monthly-pk-card monthly-pk-card--ongoing' : 'monthly-pk-card monthly-pk-card--settled';
+        const blurbHtml = isOngoing ? pickRandom(PK_ONGOING_BLURBS) : '';
+        const blurbBlock = blurbHtml ? `<p class="monthly-pk-blurb">${blurbHtml}</p>` : '';
+
         return (
-            `<article class="monthly-pk-card">` +
+            `<article class="${cardClass}">` +
             `<div class="monthly-pk-faceoff" aria-label="${escapeHtml(a)} 对 ${escapeHtml(b)}">` +
             `<div class="monthly-pk-player">` +
-            monthlyPkAvatarHtml(a) +
+            monthlyPkAvatarHtml(a, compact) +
             `<span class="monthly-pk-name${meClass(a)}">${escapeHtml(a)}</span>` +
             `</div>` +
             `<div class="monthly-pk-vs-mid">` +
@@ -1760,11 +1754,11 @@ function renderMonthlyPkBoard(board) {
             )}</span>` +
             `</div>` +
             `<div class="monthly-pk-player">` +
-            monthlyPkAvatarHtml(b) +
+            monthlyPkAvatarHtml(b, compact) +
             `<span class="monthly-pk-name${meClass(b)}">${escapeHtml(b)}</span>` +
             `</div>` +
             `</div>` +
-            `<p class="monthly-pk-blurb">${blurbHtml}</p>` +
+            blurbBlock +
             `</article>`
         );
     };
@@ -1788,13 +1782,15 @@ function renderMonthlyPkBoard(board) {
         `<h3 class="monthly-pk-title">${boardTitle}</h3>` +
         `<p class="monthly-pk-tagline">${tagline}</p>` +
         `</div>` +
-        `<section class="monthly-pk-section" aria-labelledby="monthly-pk-cur-title">` +
+        `<section class="monthly-pk-section monthly-pk-section--ongoing" aria-labelledby="monthly-pk-cur-title">` +
         `<h4 id="monthly-pk-cur-title" class="monthly-pk-section-title">🔥 ${escapeHtml(curM)} ${curSuffix}</h4>` +
-        `<div class="monthly-pk-list">${ongoingHtml}</div>` +
+        `<div class="monthly-pk-list monthly-pk-list--ongoing">${ongoingHtml}</div>` +
         `</section>` +
-        `<section class="monthly-pk-section" aria-labelledby="monthly-pk-prev-title">` +
-        `<h4 id="monthly-pk-prev-title" class="monthly-pk-section-title">📜 ${escapeHtml(prevM)} ${prevSuffix}</h4>` +
-        `<div class="monthly-pk-list">${settledHtml}</div>` +
+        `<section class="monthly-pk-section monthly-pk-section--prev" aria-labelledby="monthly-pk-prev-title">` +
+        `<h4 id="monthly-pk-prev-title" class="monthly-pk-section-title monthly-pk-section-title--sub">📜 ${escapeHtml(
+            prevM,
+        )} ${prevSuffix}</h4>` +
+        `<div class="monthly-pk-list monthly-pk-list--settled">${settledHtml}</div>` +
         `</section>` +
         `</div>`;
 }
