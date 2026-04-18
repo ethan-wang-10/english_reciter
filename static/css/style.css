@@ -4204,39 +4204,134 @@ button.import-article-chip--selected:hover {
     background: rgba(255, 255, 255, 0.55);
 }
 
-.monthly-pk-vs {
-    margin: 0 0 6px;
+.monthly-pk-faceoff {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px 12px;
+}
+
+.monthly-pk-player {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 0 1 72px;
+    text-align: center;
+}
+
+.monthly-pk-player .monthly-pk-name {
+    font-size: 0.78rem;
     font-weight: 700;
-    font-size: 0.95rem;
-    line-height: 1.35;
+    line-height: 1.2;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.monthly-pk-x {
-    opacity: 0.85;
-    font-size: 0.9em;
+.monthly-pk-av-wrap {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: #f3f6f8;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.monthly-pk-meta {
-    margin: 0 0 6px;
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-    font-weight: 600;
+.monthly-pk-av-wrap .monthly-pk-av {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
-.monthly-pk-outcome {
-    margin: 0;
-    font-size: 0.86rem;
-    font-weight: 600;
-    line-height: 1.4;
+.monthly-pk-av-wrap .monthly-pk-av-ph {
+    display: none;
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.monthly-pk-av-wrap.monthly-pk-av--fallback .monthly-pk-av {
+    display: none;
+}
+
+.monthly-pk-av-wrap.monthly-pk-av--fallback .monthly-pk-av-ph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.monthly-pk-vs-mid {
+    flex: 1 1 120px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+}
+
+.monthly-pk-score {
+    font-size: 1.15rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
     color: var(--text-primary);
 }
 
-.monthly-pk-outcome.monthly-pk-tie {
+.monthly-pk-wager {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.monthly-pk-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.monthly-pk-status-ic {
+    flex-shrink: 0;
+}
+
+.monthly-pk-status--ongoing {
+    color: #1565c0;
+}
+
+.monthly-pk-status--tie {
     color: #6d4c41;
 }
 
-.monthly-pk-outcome.monthly-pk-ongoing {
-    color: #1565c0;
+.monthly-pk-status--win {
+    color: var(--primary-dark);
+}
+
+.monthly-pk-status--done {
+    color: var(--text-secondary);
+}
+
+.monthly-pk-blurb {
+    margin: 10px 0 0;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(0, 0, 0, 0.08);
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--text-secondary);
 }
 
 .monthly-pk-empty {

@@ -1600,7 +1600,7 @@ let leaderboardTabsBound = false;
 let lastLeaderboardTablePayload = null;
 
 const LEADERBOARD_INTRO_ROASTS = [
-    '先选总榜 / 周榜 / 月榜，领奖台和主榜紧跟在 Tab 下面；主榜下面是月度群体赛跑，再往下是每月 PK 风云榜——上月谁赢了嘴仗往下翻就能看到。',
+    '先选总榜 / 周榜 / 月榜，领奖台和主榜紧跟在 Tab 下面；主榜下面是月度群体赛跑，再往下是每月 PK 风云榜——先看本月对线，再翻上月旧账。',
     'XP 榜是面子工程，PK 榜是里子工程：主榜比总分，再往下 PK 区比打卡天数谁能把对面气笑。',
     '温馨提示：排行榜解决不了人生，但能解决「我到底有没有在学」的焦虑——主榜、群体赛、PK 从上到下一条龙围观。',
     '上面 Tab 定范围，主榜看完往下：赛跑图一乐，再往下 PK 区有人赢积分有人赢对面少打一天卡。',
@@ -1618,7 +1618,7 @@ const PK_BOARD_TITLE_ROASTS = [
 
 const PK_BOARD_TAGLINE_ROASTS = [
     '专治「我学了但我不说」：上月谁把谁按在打卡天数上摩擦，本月谁还在互相瞪眼，都在这里公示。输了不丢人，不点发起才亏。',
-    '这里没有「差不多学了」，只有「打卡天数比你多」。上月旧账、本月新仇，一键围观。',
+    '这里没有「差不多学了」，只有「打卡天数比你多」。本月战况在上，上月旧账在下，一键围观。',
     '约战之前请三思：输的是赌注，赢的是可以在心里默念三遍「我打卡了」的权利。',
     '本榜不提供心理辅导，只提供冷冰冰的有效打卡对比。觉得扎心说明来对地方了。',
     '别人晒步数你晒打卡天数——PK 区欢迎一切良性（或恶性）竞争。',
@@ -1657,13 +1657,41 @@ const PK_EMPTY_ONGOING_ROASTS = [
     '暂无对线：适合补刀（划掉）补打卡。',
 ];
 
-const PK_META_SUFFIX_ROASTS = [
-    '数字不会骗人，除非你没打卡',
-    '谁天数少谁尴尬，系统不包售后',
-    '建议输家截图留念，赢家低调做人',
-    '统计口径：冷酷无情',
-    '平局别找客服，客服也在背单词',
+/** 月度 PK 卡片短评（精简版，与胜负状态分行展示） */
+const PK_ONGOING_BLURBS = [
+    '比有效打卡天数，月末见分晓。',
+    '进行中；平局则赌注退回。',
+    '实时计分，谁多一天谁占优。',
 ];
+const PK_TIE_BLURBS = [
+    '打卡天数相同，赌注退回。',
+    '平局收场。',
+];
+const PK_WINNER_BLURBS = [
+    (w, wcls) => `胜方有效打卡多一天。`,
+    (w, wcls) => `恭喜<strong class="monthly-pk-winner${wcls}">${escapeHtml(w)}</strong>。`,
+    (w, wcls) => `<strong class="monthly-pk-winner${wcls}">${escapeHtml(w)}</strong> 打卡更稳。`,
+];
+const PK_FALLBACK_BLURBS = [
+    '已按月结算。',
+    '对局已归档。',
+];
+
+function monthlyPkAvatarHtml(uname) {
+    const u = String(uname || '').trim();
+    const wrapOpen = '<span class="monthly-pk-av-wrap">';
+    if (!u) {
+        return wrapOpen + '<span class="monthly-pk-av-ph" aria-hidden="true">👤</span></span>';
+    }
+    const path = '/api/user/avatar/' + encodeURIComponent(u);
+    const src = typeof avatarDisplayUrl === 'function' ? avatarDisplayUrl(path, 48) : path + '?w=48';
+    return (
+        wrapOpen +
+        `<img class="monthly-pk-av" src="${escapeHtml(src)}" alt="" width="40" height="40" loading="lazy" decoding="async" ` +
+        `onerror="this.onerror=null;this.closest('.monthly-pk-av-wrap').classList.add('monthly-pk-av--fallback');this.removeAttribute('src');" />` +
+        '<span class="monthly-pk-av-ph" aria-hidden="true">👤</span></span>'
+    );
+}
 
 function renderMonthlyPkBoard(board) {
     const wrap = document.getElementById('monthly-pk-board-wrap');
@@ -1680,94 +1708,63 @@ function renderMonthlyPkBoard(board) {
 
     const meClass = (u) => (u && viewer && u === viewer ? ' monthly-pk-user-me' : '');
 
-    const ongoingHtmlBlocks = [
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-ongoing">⚡ 还在对线：比的是有效打卡天数，不是谁起得早（虽然早起也可能赢）。平局？赌注各回各家，友谊的小船暂时没翻。</p>',
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-ongoing">🔥 战况胶着：系统只认打卡不认嘴硬。谁多一天，谁就多一分理直气壮。</p>',
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-ongoing">⏳ 未分胜负：建议双方减少「明天一定」，增加「今天已打卡」。</p>',
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-ongoing">📶 信号满格：对线仍在继续。平局时赌注退回——毕竟钱是无辜的。</p>',
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-ongoing">🎬 现场直播：有效打卡天数实时计分，比追剧刺激一点点。</p>',
-    ];
-
-    const tieHtmlBlocks = [
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-tie">🤝 平局！谁也别说谁菜——赌注退回，下次记得用打卡天数说话，别用表情包。</p>',
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-tie">🤝 平分秋色：系统宣布你们一样努力（或一样摸鱼）。赌注原路返回。</p>',
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-tie">🤝 默契平局？不，是打卡天数恰好一样——这比赢还少见。</p>',
-        () =>
-            '<p class="monthly-pk-outcome monthly-pk-tie">🤝 和棋！谁也没赢谁，但你们都赢回了 XP——四舍五入算双赢。</p>',
-    ];
-
-    const fallbackHtmlBlocks = [
-        (da, db) =>
-            `<p class="monthly-pk-outcome">已结算 · ${da} 天 vs ${db} 天——系统懒得站队，只负责记账。</p>`,
-        (da, db) =>
-            `<p class="monthly-pk-outcome">已结算 · ${da} 天 vs ${db} 天。别问谁更亏，问就是都打卡了就不亏。</p>`,
-        (da, db) =>
-            `<p class="monthly-pk-outcome">已落地 · ${da} : ${db}。结果已写入历史，翻篇请自费。</p>`,
-    ];
-
-    const winnerHtmlBlocks = [
-        (w, da, db, wcls) =>
-            `<p class="monthly-pk-outcome">🏆 本局 MVP：<strong class="monthly-pk-winner${wcls}">${escapeHtml(
-                w,
-            )}</strong>（${da} 天 vs ${db} 天）· 输的一方：截图可以删，记忆建议留着当动力。</p>`,
-        (w, da, db, wcls) =>
-            `<p class="monthly-pk-outcome">🏆 <strong class="monthly-pk-winner${wcls}">${escapeHtml(
-                w,
-            )}</strong> 拿下！${da} 天对 ${db} 天——对面同学，承让，下次记得把闹钟往前拨五分钟。</p>`,
-        (w, da, db, wcls) =>
-            `<p class="monthly-pk-outcome">🥇 胜方 <strong class="monthly-pk-winner${wcls}">${escapeHtml(
-                w,
-            )}</strong>：有效打卡多一天，心里爽一年（${da} vs ${db}）。</p>`,
-        (w, da, db, wcls) =>
-            `<p class="monthly-pk-outcome">✨ 恭喜 <strong class="monthly-pk-winner${wcls}">${escapeHtml(
-                w,
-            )}</strong> 在打卡天数上完成一次「微小但扎心」的超越（${da} 天 vs ${db} 天）。</p>`,
-        (w, da, db, wcls) =>
-            `<p class="monthly-pk-outcome">📣 胜者为王：<strong class="monthly-pk-winner${wcls}">${escapeHtml(
-                w,
-            )}</strong>（${da} : ${db}）· 败者不必气馁，气馁完请打开设置再约一局。</p>`,
-    ];
-
     const fmtDuel = (d, isOngoing) => {
         const a = d.from_user || '';
         const b = d.target_user || '';
-        const w = Number(d.wager_xp) || 0;
+        const wager = Number(d.wager_xp) || 0;
         const days = d.pk_checkin_days || {};
         const da = Number(days[a] ?? days[String(a)]) || 0;
         const db = Number(days[b] ?? days[String(b)]) || 0;
         const winner = d.winner;
         const tie = d.tie;
-        let outcome = '';
+
+        let statusClass = 'monthly-pk-status--ongoing';
+        let statusIcon = '⚡';
+        let statusText = '进行中';
+        let blurbHtml = '';
+
         if (isOngoing) {
-            outcome = pickRandom(ongoingHtmlBlocks)();
+            blurbHtml = pickRandom(PK_ONGOING_BLURBS);
         } else if (tie) {
-            outcome = pickRandom(tieHtmlBlocks)();
+            statusClass = 'monthly-pk-status--tie';
+            statusIcon = '🤝';
+            statusText = '平局';
+            blurbHtml = pickRandom(PK_TIE_BLURBS);
         } else if (winner) {
             const wcls = meClass(winner);
-            outcome = pickRandom(winnerHtmlBlocks)(winner, da, db, wcls);
+            statusClass = 'monthly-pk-status--win';
+            statusIcon = '🏆';
+            statusText = `${winner} 胜`;
+            blurbHtml = pickRandom(PK_WINNER_BLURBS)(winner, wcls);
         } else {
-            outcome = pickRandom(fallbackHtmlBlocks)(da, db);
+            statusClass = 'monthly-pk-status--done';
+            statusIcon = '✓';
+            statusText = '已结算';
+            blurbHtml = pickRandom(PK_FALLBACK_BLURBS);
         }
-        const metaSuffix = pickRandom(PK_META_SUFFIX_ROASTS);
+
         return (
             `<article class="monthly-pk-card">` +
-            `<p class="monthly-pk-vs">` +
+            `<div class="monthly-pk-faceoff" aria-label="${escapeHtml(a)} 对 ${escapeHtml(b)}">` +
+            `<div class="monthly-pk-player">` +
+            monthlyPkAvatarHtml(a) +
             `<span class="monthly-pk-name${meClass(a)}">${escapeHtml(a)}</span>` +
-            ` <span class="monthly-pk-x" aria-hidden="true">⚔️</span> ` +
+            `</div>` +
+            `<div class="monthly-pk-vs-mid">` +
+            `<span class="monthly-pk-score" title="有效打卡天数">${escapeHtml(String(da))} : ${escapeHtml(
+                String(db),
+            )}</span>` +
+            `<span class="monthly-pk-wager" title="赌注">押 ${escapeHtml(String(wager))} XP</span>` +
+            `<span class="monthly-pk-status ${statusClass}"><span class="monthly-pk-status-ic" aria-hidden="true">${statusIcon}</span>${escapeHtml(
+                statusText,
+            )}</span>` +
+            `</div>` +
+            `<div class="monthly-pk-player">` +
+            monthlyPkAvatarHtml(b) +
             `<span class="monthly-pk-name${meClass(b)}">${escapeHtml(b)}</span>` +
-            `</p>` +
-            `<p class="monthly-pk-meta">押注 ${escapeHtml(String(w))} XP · 计分区间打卡 ${escapeHtml(
-                String(da),
-            )} : ${escapeHtml(String(db))}（${escapeHtml(metaSuffix)}）</p>` +
-            outcome +
+            `</div>` +
+            `</div>` +
+            `<p class="monthly-pk-blurb">${blurbHtml}</p>` +
             `</article>`
         );
     };
@@ -1791,13 +1788,13 @@ function renderMonthlyPkBoard(board) {
         `<h3 class="monthly-pk-title">${boardTitle}</h3>` +
         `<p class="monthly-pk-tagline">${tagline}</p>` +
         `</div>` +
-        `<section class="monthly-pk-section" aria-labelledby="monthly-pk-prev-title">` +
-        `<h4 id="monthly-pk-prev-title" class="monthly-pk-section-title">📜 ${escapeHtml(prevM)} ${prevSuffix}</h4>` +
-        `<div class="monthly-pk-list">${settledHtml}</div>` +
-        `</section>` +
         `<section class="monthly-pk-section" aria-labelledby="monthly-pk-cur-title">` +
         `<h4 id="monthly-pk-cur-title" class="monthly-pk-section-title">🔥 ${escapeHtml(curM)} ${curSuffix}</h4>` +
         `<div class="monthly-pk-list">${ongoingHtml}</div>` +
+        `</section>` +
+        `<section class="monthly-pk-section" aria-labelledby="monthly-pk-prev-title">` +
+        `<h4 id="monthly-pk-prev-title" class="monthly-pk-section-title">📜 ${escapeHtml(prevM)} ${prevSuffix}</h4>` +
+        `<div class="monthly-pk-list">${settledHtml}</div>` +
         `</section>` +
         `</div>`;
 }
