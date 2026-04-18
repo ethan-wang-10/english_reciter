@@ -175,6 +175,10 @@ DATA_DIR.mkdir(exist_ok=True)
 # 全站共享词库（家长贡献，持久化在 user_data_simple/_shared/）
 SHARED_DATA_DIR = DATA_DIR / "_shared"
 COMMUNITY_WB_FILE = SHARED_DATA_DIR / "community_wordbank.json"
+SYSTEM_BROADCAST_FILE = SHARED_DATA_DIR / "system_broadcast.json"
+_SYSTEM_BROADCAST_SCHEMA = "english_reciter.system_broadcast/v1"
+_SYSTEM_BROADCAST_LOCK = threading.Lock()
+SYSTEM_BROADCAST_MAX_LEN = 8000
 _community_wb_lock = threading.Lock()
 STATIC_WB_DIR = Path("static/wordbanks")
 _COMMUNITY_SCHEMA = "english_reciter.wordbank.community/v1"
@@ -530,6 +534,120 @@ def _write_troubles_file_atomic(data: dict) -> None:
         except OSError:
             pass
         raise
+
+
+def _sanitize_broadcast_message(text: str) -> str:
+    max_len = SYSTEM_BROADCAST_MAX_LEN
+    s = (text or "")[:max_len]
+    return "".join(ch for ch in s if ch.isprintable() or ch in "\n\r\t").strip()[:max_len]
+
+
+def _empty_system_broadcast_doc() -> dict:
+    return {"schema": _SYSTEM_BROADCAST_SCHEMA, "id": "", "message": "", "created_at": None}
+
+
+def _read_system_broadcast_unlocked() -> dict:
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not SYSTEM_BROADCAST_FILE.exists():
+        return _empty_system_broadcast_doc()
+    try:
+        with open(SYSTEM_BROADCAST_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("系统广播文件损坏，将重置: %s", e)
+        return _empty_system_broadcast_doc()
+    if not isinstance(raw, dict):
+        return _empty_system_broadcast_doc()
+    mid = str(raw.get("id") or "").strip()
+    msg = str(raw.get("message") or "")
+    if msg:
+        msg = _sanitize_broadcast_message(msg)
+    cre = raw.get("created_at")
+    return {
+        "schema": _SYSTEM_BROADCAST_SCHEMA,
+        "id": mid,
+        "message": msg,
+        "created_at": cre if isinstance(cre, str) else None,
+    }
+
+
+def _write_system_broadcast_atomic(data: dict) -> None:
+    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path = SYSTEM_BROADCAST_FILE
+    data = dict(data)
+    data.setdefault("schema", _SYSTEM_BROADCAST_SCHEMA)
+    mid = str(data.get("id") or "").strip()
+    msg = _sanitize_broadcast_message(str(data.get("message") or ""))
+    data["id"] = mid
+    data["message"] = msg
+    cre = data.get("created_at")
+    data["created_at"] = cre if isinstance(cre, str) else None
+    fd, tmp_name = tempfile.mkstemp(suffix=".json", dir=str(SHARED_DATA_DIR), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def get_system_broadcast() -> dict:
+    with _SYSTEM_BROADCAST_LOCK:
+        return dict(_read_system_broadcast_unlocked())
+
+
+def _user_broadcast_ack_path(login_username: str) -> Path:
+    return DATA_DIR / login_username / "system_broadcast_ack.json"
+
+
+def _read_user_broadcast_dismissed_id(login_username: str) -> str:
+    path = _user_broadcast_ack_path(login_username)
+    if not path.exists():
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return ""
+    if not isinstance(raw, dict):
+        return ""
+    return str(raw.get("dismissed_id") or "").strip()
+
+
+def _write_user_broadcast_ack(login_username: str, broadcast_id: str) -> None:
+    user_dir = DATA_DIR / login_username
+    user_dir.mkdir(parents=True, exist_ok=True)
+    path = _user_broadcast_ack_path(login_username)
+    data = {"dismissed_id": broadcast_id}
+    fd, tmp_name = tempfile.mkstemp(suffix=".json", dir=str(user_dir), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def pending_system_broadcast_for_login(login_username: str) -> Optional[dict]:
+    """若当前用户尚未确认最新广播，返回 {id, message}，否则 None。"""
+    with _SYSTEM_BROADCAST_LOCK:
+        doc = _read_system_broadcast_unlocked()
+    bid = (doc.get("id") or "").strip()
+    msg = (doc.get("message") or "").strip()
+    if not bid or not msg:
+        return None
+    dismissed = _read_user_broadcast_dismissed_id(login_username)
+    if dismissed == bid:
+        return None
+    return {"id": bid, "message": msg}
 
 
 def get_wordbank_lemma_mappings() -> dict:
@@ -2276,6 +2394,7 @@ def _auth_session_payload(login_username: str) -> dict:
         'login_username': login_username,
         'is_parent': False,
         'child_username': None,
+        'system_broadcast': pending_system_broadcast_for_login(login_username),
     }
     if isinstance(u, dict) and is_parent_user_record(u):
         out['is_parent'] = True
@@ -2345,6 +2464,26 @@ def auth_session(username):
     """刷新页后恢复 is_parent / child_username。"""
     login = getattr(g, 'login_username', username)
     return jsonify(_auth_session_payload(login)), 200
+
+
+@app.route('/api/auth/broadcast/ack', methods=['POST'])
+@token_required
+def ack_system_broadcast(username):
+    """用户确认已读当前系统广播，之后不再展示同一条。"""
+    login = getattr(g, 'login_username', username)
+    data = request.get_json(silent=True) or {}
+    bid = (data.get('id') or '').strip()
+    if not bid:
+        return jsonify({'error': '缺少广播 id'}), 400
+    with _SYSTEM_BROADCAST_LOCK:
+        doc = _read_system_broadcast_unlocked()
+    cur = (doc.get('id') or '').strip()
+    if bid != cur:
+        return jsonify({'error': '无效或过期的广播'}), 400
+    lock = _user_mutex(login)
+    with lock:
+        _write_user_broadcast_ack(login, bid)
+    return jsonify({'ok': True}), 200
 
 
 @app.route('/api/auth/parent-password', methods=['PATCH'])
@@ -5106,6 +5245,43 @@ def admin_update_config():
         return jsonify({"error": "保存失败"}), 500
     logger.info("管理员更新了 config.json")
     return jsonify({"message": "配置已保存"}), 200
+
+
+@app.route('/api/admin/system-broadcast', methods=['GET'])
+@admin_required
+def admin_get_system_broadcast():
+    """读取当前系统广播正文（管理员编辑用）。"""
+    doc = get_system_broadcast()
+    return jsonify({
+        'id': doc.get('id') or '',
+        'message': doc.get('message') or '',
+        'created_at': doc.get('created_at'),
+    }), 200
+
+
+@app.route('/api/admin/system-broadcast', methods=['PUT'])
+@admin_required
+def admin_put_system_broadcast():
+    """发布或清空系统广播；发布时生成新 id，所有未确认用户将在下次登录后看到。"""
+    data = request.get_json(silent=True) or {}
+    msg = _sanitize_broadcast_message(str(data.get('message') or ''))
+    with _SYSTEM_BROADCAST_LOCK:
+        if not msg:
+            doc = _empty_system_broadcast_doc()
+        else:
+            doc = {
+                'schema': _SYSTEM_BROADCAST_SCHEMA,
+                'id': uuid.uuid4().hex,
+                'message': msg,
+                'created_at': datetime.now().isoformat(),
+            }
+        _write_system_broadcast_atomic(doc)
+    logger.info("管理员更新系统广播: empty=%s", not bool(msg))
+    return jsonify({
+        'id': doc.get('id') or '',
+        'message': doc.get('message') or '',
+        'created_at': doc.get('created_at'),
+    }), 200
 
 
 @app.route('/api/admin/users/<username>/plan', methods=['PATCH'])

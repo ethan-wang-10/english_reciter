@@ -588,8 +588,41 @@ function bindAdminDeleteUserOnce() {
     });
 }
 
+let adminSystemBroadcastBound = false;
+
+function bindAdminSystemBroadcastOnce() {
+    if (adminSystemBroadcastBound) return;
+    adminSystemBroadcastBound = true;
+    document.getElementById('admin-system-broadcast-save')?.addEventListener('click', async () => {
+        const ta = document.getElementById('admin-system-broadcast-text');
+        const msg = (ta && ta.value) || '';
+        showAdminNotice('');
+        try {
+            await apiAdminRequest('/admin/system-broadcast', {
+                method: 'PUT',
+                body: JSON.stringify({ message: msg }),
+            });
+            showAdminNotice('系统广播已保存');
+            await loadAdminSystemBroadcast();
+        } catch (e) {
+            showAdminNotice(e.message || '保存失败');
+        }
+    });
+}
+
+async function loadAdminSystemBroadcast() {
+    try {
+        const data = await apiAdminRequest('/admin/system-broadcast');
+        const ta = document.getElementById('admin-system-broadcast-text');
+        if (ta) ta.value = data.message || '';
+    } catch (_) {
+        /* ignore */
+    }
+}
+
 async function loadAdminDashboard() {
     bindAdminDeleteUserOnce();
+    bindAdminSystemBroadcastOnce();
     const [usersRes, invRes, cfgRes] = await Promise.all([
         apiAdminRequest('/admin/users'),
         apiAdminRequest('/admin/invites'),
@@ -601,6 +634,7 @@ async function loadAdminDashboard() {
     populateAdminWordsUserSelect(usersRes.users);
     await loadAdminUserWords();
     await loadAdminTroubles();
+    await loadAdminSystemBroadcast();
     showAdminDashboardPanel();
 }
 

@@ -1,5 +1,7 @@
 // 全局状态
 let token = localStorage.getItem('token');
+/** 当前弹窗中的系统广播 id，用于确认已读 */
+let systemBroadcastPendingId = null;
 let username = localStorage.getItem('username');
 /** 家长登录：服务端以孩子身份操作数据；界面显示 childUsername */
 let isParentSession = localStorage.getItem('session_is_parent') === '1';
@@ -3051,6 +3053,32 @@ function applyParentNavMode() {
     if (lab) lab.style.display = hide ? 'none' : '';
 }
 
+function hideSystemBroadcastModal() {
+    const m = document.getElementById('system-broadcast-modal');
+    if (m) {
+        m.style.display = 'none';
+        m.setAttribute('aria-hidden', 'true');
+    }
+    systemBroadcastPendingId = null;
+}
+
+function showSystemBroadcastModal(payload) {
+    if (!payload || !payload.id || !payload.message) return;
+    systemBroadcastPendingId = payload.id;
+    const body = document.getElementById('system-broadcast-body');
+    if (body) body.textContent = payload.message;
+    const m = document.getElementById('system-broadcast-modal');
+    if (m) {
+        m.style.display = 'flex';
+        m.setAttribute('aria-hidden', 'false');
+    }
+}
+
+function maybeShowSystemBroadcast(raw) {
+    if (!raw || !raw.id || !raw.message) return;
+    showSystemBroadcastModal(raw);
+}
+
 async function showMainPage() {
     document.getElementById('login-page').classList.remove('active');
     document.getElementById('main-page').classList.add('active');
@@ -3060,6 +3088,7 @@ async function showMainPage() {
         try {
             const d = await apiRequest('/auth/session');
             setSessionParentFlags(!!d.is_parent, d.child_username || '');
+            maybeShowSystemBroadcast(d.system_broadcast);
         } catch (_) {
             /* 保留本地 session 标记 */
         }
@@ -6472,6 +6501,25 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target.classList.contains('remedial-offer-backdrop')) {
             onRemedialOfferDecline();
         }
+    });
+
+    document.getElementById('system-broadcast-ok')?.addEventListener('click', async () => {
+        const id = systemBroadcastPendingId;
+        if (!id) {
+            hideSystemBroadcastModal();
+            return;
+        }
+        try {
+            if (token) {
+                await apiRequest('/auth/broadcast/ack', {
+                    method: 'POST',
+                    body: JSON.stringify({ id }),
+                });
+            }
+        } catch (_) {
+            /* 仍关闭，避免界面卡住 */
+        }
+        hideSystemBroadcastModal();
     });
 
     initWordbankPanel();

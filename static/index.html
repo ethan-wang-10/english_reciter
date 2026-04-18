@@ -714,6 +714,18 @@
             </div>
         </div>
 
+        <!-- 系统广播（登录后主界面） -->
+        <div id="system-broadcast-modal" class="system-broadcast-modal" style="display: none;" aria-hidden="true">
+            <div class="system-broadcast-backdrop"></div>
+            <div class="system-broadcast-card" role="dialog" aria-modal="true" aria-labelledby="system-broadcast-title">
+                <h3 id="system-broadcast-title">系统广播</h3>
+                <div id="system-broadcast-body" class="system-broadcast-body"></div>
+                <div class="system-broadcast-actions">
+                    <button type="button" class="btn btn-primary" id="system-broadcast-ok">确定</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 管理员面板（覆盖层） -->
         <div id="admin-overlay" class="admin-overlay" style="display: none;" aria-hidden="true">
             <div class="admin-panel">
@@ -742,6 +754,17 @@
                         <button type="button" id="admin-logout" class="btn btn-secondary">退出管理</button>
                     </div>
                     <div id="admin-invite-once" class="admin-invite-once" style="display: none;"></div>
+
+                    <h3 class="admin-subtitle">系统广播</h3>
+                    <div class="admin-config-section">
+                        <p class="admin-hint">发布后，用户下次登录进入主界面时会居中弹窗显示；点击「确定」后不再显示该条。再次发布会生成新广播，未读用户将再次看到。留空并保存可清空当前广播。</p>
+                        <div class="form-group admin-config-group">
+                            <label for="admin-system-broadcast-text">广播正文</label>
+                            <textarea id="admin-system-broadcast-text" rows="6" maxlength="8000" autocomplete="off"
+                                placeholder="向全体登录用户展示的公告…"></textarea>
+                        </div>
+                        <button type="button" id="admin-system-broadcast-save" class="btn btn-primary">保存并发布</button>
+                    </div>
 
                     <h3 class="admin-subtitle">DeepSeek API 配置</h3>
                     <div class="admin-config-section">
