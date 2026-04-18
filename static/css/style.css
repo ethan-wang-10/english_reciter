@@ -1122,6 +1122,11 @@ body {
     justify-content: center;
     padding: max(16px, env(safe-area-inset-top, 16px)) max(16px, env(safe-area-inset-right, 16px))
         max(16px, env(safe-area-inset-bottom, 16px)) max(16px, env(safe-area-inset-left, 16px));
+    /* 小屏 / iOS：整层可滚动，避免居中裁切导致底部按钮不可达 */
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .system-broadcast-backdrop {
@@ -1135,9 +1140,14 @@ body {
     z-index: 1;
     max-width: min(440px, 100%);
     width: 100%;
+    /* 用 svh/dvh 避免移动端 vh 与动态工具栏导致弹层超出可视区、底部按钮被裁切 */
     max-height: min(72vh, 560px);
+    max-height: min(560px, calc(100svh - 48px));
+    max-height: min(560px, calc(100dvh - 48px));
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    margin: auto;
     background: linear-gradient(180deg, #fff9e8 0%, var(--surface) 42%);
     border-radius: var(--radius-lg);
     border: 2px solid var(--primary-dark);
@@ -1161,6 +1171,7 @@ body {
     white-space: pre-wrap;
     word-break: break-word;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     flex: 1;
     min-height: 0;
 }
@@ -1171,6 +1182,10 @@ body {
     gap: 10px;
     justify-content: center;
     flex-shrink: 0;
+}
+
+.system-broadcast-actions .btn {
+    touch-action: manipulation;
 }
 
 /* 从文章导入 → 确认导入结果 */
