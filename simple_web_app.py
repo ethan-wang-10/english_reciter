@@ -250,6 +250,8 @@ DEEPSEEK_HTTP_RETRIES = max(1, int(os.getenv("DEEPSEEK_HTTP_RETRIES", "3")))
 DEEPSEEK_RETRY_BACKOFF_SEC = float(os.getenv("DEEPSEEK_RETRY_BACKOFF_SEC", "2"))
 # 词汇批量生成时，每批结束后暂停（秒），减轻限流；默认 0
 DEEPSEEK_BATCH_PAUSE_SEC = float(os.getenv("DEEPSEEK_BATCH_PAUSE_SEC", "0") or 0)
+# deepseek-chat 将于 2026/07/24 弃用；默认 deepseek-v4-flash + 关闭思考（与旧 chat 行为一致）。可用 DEEPSEEK_CHAT_MODEL 覆盖。
+DEEPSEEK_CHAT_MODEL = (os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-v4-flash") or "deepseek-v4-flash").strip()
 _APP_CONFIG_FILE = Path("config.json")
 
 
@@ -1385,13 +1387,14 @@ def _deepseek_http_error_body_for_log(e: urllib.error.HTTPError) -> str:
     return body
 
 
-def _deepseek_chat(messages: List[dict], model: str = "deepseek-chat",
+def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                    max_tokens: int = 4096, temperature: float = 0.7) -> Optional[str]:
     """调用 DeepSeek Chat API，返回助手回复文本；失败返回 None。"""
     api_key = get_deepseek_api_key()
     if not api_key:
         logger.warning("DEEPSEEK_API_KEY 未配置，无法调用 DeepSeek API")
         return None
+    model = (model or DEEPSEEK_CHAT_MODEL).strip() or DEEPSEEK_CHAT_MODEL
     user_text = ""
     if messages and isinstance(messages[-1], dict) and messages[-1].get("role") == "user":
         user_text = str(messages[-1].get("content") or "")
@@ -1406,11 +1409,13 @@ def _deepseek_chat(messages: List[dict], model: str = "deepseek-chat",
         prompt_chars,
         preview_in,
     )
+    # v4 系列默认开启思考；本应用仅需最终回复，显式关闭以匹配旧 deepseek-chat 并降低延迟/费用。
     payload = json.dumps({
         "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
+        "thinking": {"type": "disabled"},
     }).encode("utf-8")
     headers = {
         "Content-Type": "application/json",

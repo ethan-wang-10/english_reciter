@@ -262,6 +262,37 @@ function buildReviewExamplesDisplayHtml(word) {
     return `<div class="review-example-lines">${chunks.join('')}</div>`;
 }
 
+/** 导航连续火苗：0 天时灰色「熄灭」样式（见 .ng-streak-flame--out） */
+function ngStreakPillInnerHtml(streak) {
+    const n = Math.max(0, Number(streak) || 0);
+    const out = n === 0;
+    const flameClass = out ? 'ng-streak-flame ng-streak-flame--out' : 'ng-streak-flame';
+    return `<span class="${flameClass}" aria-hidden="true">🔥</span><span class="ng-streak-num">${formatNumber(n)}</span>`;
+}
+
+/** 排行榜「连续」列：与导航一致的灰火苗 */
+function lbStreakCellInnerHtml(streak) {
+    const n = Math.max(0, Number(streak) || 0);
+    const out = n === 0;
+    const flameClass = out ? 'lb-streak-flame lb-streak-flame--out' : 'lb-streak-flame';
+    return `<span class="${flameClass}" aria-hidden="true">🔥</span> <span class="lb-streak-val">${escapeHtml(formatNumber(n))}</span>`;
+}
+
+/** 今日小结「当前连续」一行：0 天时灰色火苗 */
+function dailySummaryStreakLineHtml(streak) {
+    const n = Math.max(0, Number(streak) || 0);
+    const out = n === 0;
+    const flameClass = out ? 'ds-streak-flame ds-streak-flame--out' : 'ds-streak-flame';
+    return (
+        `<li class="daily-summary-streak${out ? ' daily-summary-streak--out' : ''}">` +
+        `当前连续有效打卡 ` +
+        `<span class="ds-streak-inline">` +
+        `<span class="${flameClass}" aria-hidden="true">🔥</span>` +
+        `<strong class="ds-streak-num">${escapeHtml(formatNumber(n))}</strong> 天` +
+        `</span></li>`
+    );
+}
+
 function updateGamificationNav(g) {
     if (!g) return;
     const lv = document.getElementById('ng-level');
@@ -275,14 +306,16 @@ function updateGamificationNav(g) {
     const ckTitle = checkInDone
         ? `今日已有效打卡（已答对 ${todayC} 词）`
         : `今日答对 ${todayC} 词，有效打卡需 ${minC} 词`;
+    const streakN = Math.max(0, Number(g.streak) || 0);
     const streakTitle =
         Number(g.streak_max_record) > 0
-            ? `当前连续 ${g.streak} 天（有效打卡：每日至少答对 ${minC} 词）；中断后归零；历史最高 ${formatNumber(g.streak_max_record)} 天`
+            ? `当前连续 ${streakN} 天（有效打卡：每日至少答对 ${minC} 词）；中断后归零；历史最高 ${formatNumber(g.streak_max_record)} 天`
             : `当前连续（有效打卡：每日至少答对 ${minC} 词）；中断后归零`;
     if (lv && xp && st) {
         lv.textContent = `Lv.${g.level}`;
         xp.textContent = `${formatNumber(g.total_xp)} XP`;
-        st.textContent = `🔥 ${g.streak}`;
+        st.innerHTML = ngStreakPillInnerHtml(g.streak);
+        st.classList.toggle('ng-streak--out', streakN === 0);
         st.title = streakTitle;
     }
     if (ck) {
@@ -297,7 +330,8 @@ function updateGamificationNav(g) {
     if (mlv && mxp && mst) {
         mlv.textContent = `Lv.${g.level}`;
         mxp.textContent = `${formatNumber(g.total_xp)} XP`;
-        mst.textContent = `🔥 ${g.streak}`;
+        mst.innerHTML = ngStreakPillInnerHtml(g.streak);
+        mst.classList.toggle('ng-streak--out', streakN === 0);
         mst.title = streakTitle;
     }
     if (mck) {
@@ -366,7 +400,7 @@ function renderDailySummaryBody(g, statusData) {
         `<li>今日答对 <strong>${formatNumber(todayC)}</strong> 词</li>` +
         `<li>今日获得 <strong>${formatNumber(xpToday)}</strong> XP</li>` +
         checkLine +
-        `<li>当前连续有效打卡 <strong>${formatNumber(streak)}</strong> 天</li>` +
+        dailySummaryStreakLineHtml(streak) +
         (streakMax > 0
             ? `<li>历史最高连续打卡 <strong>${formatNumber(streakMax)}</strong> 天</li>`
             : '') +
@@ -1806,7 +1840,7 @@ function leaderboardTableRowHtml(r, sc) {
                 <td class="lb-user-cell">${av}<span class="lb-username">${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</span></td>
                 <td>Lv.${escapeHtml(r.level)}</td>
                 <td>${escapeHtml(formatNumber(xpVal))}</td>
-                <td>🔥 ${escapeHtml(r.streak)}</td>
+                <td class="lb-streak-cell">${lbStreakCellInnerHtml(r.streak)}</td>
                 <td>${escapeHtml(r.achievements_count)}</td>
             </tr>`;
 }

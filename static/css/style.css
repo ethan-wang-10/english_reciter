@@ -568,6 +568,28 @@ body {
     margin-bottom: 0;
 }
 
+.daily-summary-streak .ds-streak-inline {
+    display: inline;
+    white-space: nowrap;
+}
+
+.daily-summary-streak .ds-streak-flame {
+    display: inline-block;
+    vertical-align: -0.06em;
+    line-height: 1;
+    margin-right: 0.12em;
+}
+
+.daily-summary-streak .ds-streak-flame--out {
+    filter: grayscale(1) brightness(0.88);
+    opacity: 0.78;
+}
+
+.daily-summary-streak--out .ds-streak-num {
+    color: #5c616a;
+    font-weight: 800;
+}
+
 .daily-summary-loading,
 .daily-summary-empty,
 .daily-summary-error {
@@ -3476,6 +3498,30 @@ button.import-article-chip--selected:hover {
     color: #b35c00;
 }
 
+/* 连续为 0：冷灰药丸 + 灰色火苗（熄灭） */
+.nav-gamification .ng-streak.ng-streak--out,
+.mobile-more-gamification .ng-streak.ng-streak--out {
+    background: linear-gradient(180deg, #f3f4f6, #e8eaee);
+    border-color: #aeb4bf;
+    box-shadow: 0 2px 0 #8f96a3;
+    color: #5c616a;
+}
+
+.ng-streak-flame {
+    display: inline-block;
+    vertical-align: -0.06em;
+    line-height: 1;
+}
+
+.ng-streak-flame--out {
+    filter: grayscale(1) brightness(0.88);
+    opacity: 0.78;
+}
+
+.ng-streak-num {
+    margin-left: 0.2em;
+}
+
 .nav-gamification .ng-checkin {
     padding: 6px 10px;
     background: #f3f6f8;
@@ -4126,6 +4172,21 @@ button.import-article-chip--selected:hover {
 
 .leaderboard-table .lb-username {
     font-weight: 700;
+}
+
+.leaderboard-table .lb-streak-cell {
+    white-space: nowrap;
+}
+
+.lb-streak-flame {
+    display: inline-block;
+    vertical-align: -0.06em;
+    line-height: 1;
+}
+
+.lb-streak-flame--out {
+    filter: grayscale(1) brightness(0.88);
+    opacity: 0.78;
 }
 
 /* 排行榜页 */
