@@ -13,7 +13,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -113,24 +113,8 @@ def _open_conn_and_migrate_unlocked() -> None:
     _auto_migrate_from_json_unlocked(_conn)
 
 
-def _row_to_user_dict(row: tuple) -> Dict[str, Any]:
-    _, password_hash, email, created_at, enabled, role, child_username, plan = row
-    d: Dict[str, Any] = {
-        "password_hash": password_hash,
-        "created_at": created_at,
-        "enabled": bool(enabled),
-    }
-    if email is not None and str(email).strip() != "":
-        d["email"] = email
-    if plan and str(plan) != "free":
-        d["plan"] = str(plan)
-    if role:
-        d["role"] = str(role)
-        d["child_username"] = (child_username or "") if child_username is not None else ""
-    return d
-
-
-def _insert_user_unlocked(conn: sqlite3.Connection, username: str, u: Dict[str, Any]) -> None:
+def _user_row_tuple(username: str, u: Dict[str, Any]) -> Tuple[str, str, Optional[str], str, int, Optional[str], Optional[str], str]:
+    """INSERT / UPSERT 用的 8 元组，与表列顺序一致。"""
     ph = str(u.get("password_hash") or "")
     email = u.get("email")
     if email is not None:
@@ -148,11 +132,58 @@ def _insert_user_unlocked(conn: sqlite3.Connection, username: str, u: Dict[str, 
     plan = str(u.get("plan") or "free").strip() or "free"
     if plan not in ("free", "paid"):
         plan = "free"
+    return (username, ph, email, created_at, enabled, role, child_username, plan)
+
+
+def _upsert_user_unlocked(conn: sqlite3.Connection, username: str, u: Dict[str, Any]) -> None:
+    row = _user_row_tuple(username, u)
     conn.execute(
         "INSERT INTO users (username, password_hash, email, created_at, enabled, role, child_username, plan) "
-        "VALUES (?,?,?,?,?,?,?,?)",
-        (username, ph, email, created_at, enabled, role, child_username, plan),
+        "VALUES (?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(username) DO UPDATE SET "
+        "password_hash=excluded.password_hash, "
+        "email=excluded.email, "
+        "created_at=excluded.created_at, "
+        "enabled=excluded.enabled, "
+        "role=excluded.role, "
+        "child_username=excluded.child_username, "
+        "plan=excluded.plan",
+        row,
     )
+
+
+def _sync_users_table_unlocked(conn: sqlite3.Connection, users: Dict[str, Any]) -> None:
+    """使表内容与 ``users`` 字典一致：删除不在字典中的行，对其余键 UPSERT。"""
+    pairs: List[Tuple[str, Dict[str, Any]]] = []
+    for uname, u in users.items():
+        if not isinstance(u, dict):
+            continue
+        pairs.append((str(uname), u))
+    wanted = [p[0] for p in pairs]
+    if not wanted:
+        conn.execute("DELETE FROM users")
+        return
+    placeholders = ",".join("?" * len(wanted))
+    conn.execute(f"DELETE FROM users WHERE username NOT IN ({placeholders})", tuple(wanted))
+    for uname, u in pairs:
+        _upsert_user_unlocked(conn, uname, u)
+
+
+def _row_to_user_dict(row: tuple) -> Dict[str, Any]:
+    _, password_hash, email, created_at, enabled, role, child_username, plan = row
+    d: Dict[str, Any] = {
+        "password_hash": password_hash,
+        "created_at": created_at,
+        "enabled": bool(enabled),
+    }
+    if email is not None and str(email).strip() != "":
+        d["email"] = email
+    if plan and str(plan) != "free":
+        d["plan"] = str(plan)
+    if role:
+        d["role"] = str(role)
+        d["child_username"] = (child_username or "") if child_username is not None else ""
+    return d
 
 
 def _auto_migrate_from_json_unlocked(conn: sqlite3.Connection) -> None:
@@ -174,14 +205,16 @@ def _auto_migrate_from_json_unlocked(conn: sqlite3.Connection) -> None:
     inserted = 0
     try:
         conn.execute("BEGIN IMMEDIATE")
+        to_sync: Dict[str, Any] = {}
         for uname, u in data.items():
             if not isinstance(u, dict):
                 continue
             u2 = dict(u)
             if "enabled" not in u2:
                 u2["enabled"] = True
-            _insert_user_unlocked(conn, str(uname), u2)
+            to_sync[str(uname)] = u2
             inserted += 1
+        _sync_users_table_unlocked(conn, to_sync)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -216,15 +249,12 @@ def load_users() -> Dict[str, Any]:
 
 
 def save_users(users: Dict[str, Any]) -> None:
-    """以全量替换方式保存（与原先 json.dump 整文件写入语义一致）。"""
+    """保存用户表：与传入字典语义一致（多出的库中用户删除，其余按用户名 UPSERT）。"""
     with _lock:
         conn = _ensure_conn_unlocked()
         try:
-            conn.execute("DELETE FROM users")
-            for uname, u in users.items():
-                if not isinstance(u, dict):
-                    continue
-                _insert_user_unlocked(conn, str(uname), u)
+            conn.execute("BEGIN IMMEDIATE")
+            _sync_users_table_unlocked(conn, users)
             conn.commit()
         except Exception as e:
             conn.rollback()
@@ -261,7 +291,7 @@ def import_users_from_json(
                 f"users.sqlite3 中已有 {existing} 条用户；若需覆盖请先备份数据库并传入 replace_existing=True"
             )
         conn.execute("BEGIN IMMEDIATE")
-        conn.execute("DELETE FROM users")
+        to_sync: Dict[str, Any] = {}
         inserted = 0
         for uname, u in data.items():
             if not isinstance(u, dict):
@@ -269,8 +299,9 @@ def import_users_from_json(
             u2 = dict(u)
             if "enabled" not in u2:
                 u2["enabled"] = True
-            _insert_user_unlocked(conn, str(uname), u2)
+            to_sync[str(uname)] = u2
             inserted += 1
+        _sync_users_table_unlocked(conn, to_sync)
         conn.commit()
 
     if backup_json and json_path.is_file():

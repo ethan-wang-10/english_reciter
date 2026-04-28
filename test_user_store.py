@@ -63,6 +63,26 @@ def test_auto_migrate_from_json(ud: Path) -> None:
     assert not jf.is_file()
 
 
+def test_save_users_upsert_drops_removed(ud: Path) -> None:
+    """save_users 仅 UPSERT 传入键，并删除库中已不在 dict 中的用户。"""
+    init_user_store(ud)
+    save_users(
+        {
+            "a": {"password_hash": "1", "created_at": "2026-01-01", "enabled": True},
+            "b": {"password_hash": "2", "created_at": "2026-01-02", "enabled": True},
+        }
+    )
+    assert user_table_count() == 2
+    users = load_users()
+    users["a"]["password_hash"] = "1b"
+    del users["b"]
+    save_users(users)
+    assert user_table_count() == 1
+    u = load_users()
+    assert set(u.keys()) == {"a"}
+    assert u["a"]["password_hash"] == "1b"
+
+
 def test_import_replace(ud: Path) -> None:
     init_user_store(ud)
     jf = ud / "users.json"
