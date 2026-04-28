@@ -17,12 +17,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import logging
 
+from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
+
 logger = logging.getLogger(__name__)
 
-STATIC_WB_DIR = Path(__file__).resolve().parent / "static" / "wordbanks"
 WORDS_V2_FILE = STATIC_WB_DIR / "words_v2.json"
 # 与 simple_web_app 中 words.csv 锁同路径，保证多进程下与 CSV 写互斥
-_WORDS_INTERPROCESS_LOCKFILE = STATIC_WB_DIR / ".words.csv.lock"
 
 _words_v2_lock = threading.Lock()
 _words_v2_cache: Optional[List[dict]] = None
@@ -250,8 +250,8 @@ def v2_entry_to_flat_csv_row(entry: dict) -> dict:
 @contextmanager
 def _interprocess_lock() -> Any:
     """与 simple_web_app._words_csv_interprocess_lock 同文件，避免并发写 CSV 与 JSON 冲突。"""
-    _WORDS_INTERPROCESS_LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
-    f = open(_WORDS_INTERPROCESS_LOCKFILE, "a+b", buffering=0)
+    WORDS_INTERPROCESS_LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
+    f = open(WORDS_INTERPROCESS_LOCKFILE, "a+b", buffering=0)
     try:
         if sys.platform == "win32":
             import msvcrt

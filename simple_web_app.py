@@ -46,6 +46,17 @@ import challenges as challenges_mod
 import leaderboard_periods as leaderboard_periods_mod
 import chat_room
 import wordbank_v2
+from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
+from auth_session_store import (
+    SESSION_KIND_ADMIN,
+    SESSION_KIND_USER,
+    create_session as _db_create_auth_session,
+    init_auth_session_store,
+    revoke_principal,
+    revoke_token,
+    verify_session,
+)
+from user_store import init_user_store, load_users, save_users
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -171,6 +182,8 @@ DEFAULT_PARENT_PASSWORD = "123123"
 # 数据目录
 DATA_DIR = Path("user_data_simple")
 DATA_DIR.mkdir(exist_ok=True)
+init_auth_session_store(DATA_DIR)
+init_user_store(DATA_DIR)
 
 # 全站共享词库（家长贡献，持久化在 user_data_simple/_shared/）
 SHARED_DATA_DIR = DATA_DIR / "_shared"
@@ -180,18 +193,16 @@ _SYSTEM_BROADCAST_SCHEMA = "english_reciter.system_broadcast/v1"
 _SYSTEM_BROADCAST_LOCK = threading.Lock()
 SYSTEM_BROADCAST_MAX_LEN = 8000
 _community_wb_lock = threading.Lock()
-STATIC_WB_DIR = Path("static/wordbanks")
 _COMMUNITY_SCHEMA = "english_reciter.wordbank.community/v1"
 
-# 新 CSV 词汇表路径
+# 新 CSV 词汇表路径（STATIC_WB_DIR 见 project_paths，与 wordbank_v2 一致）
 WORDS_CSV_FILE = STATIC_WB_DIR / "words.csv"
 TEXTBOOKS_INDEX_PATH = STATIC_WB_DIR / "textbooks" / "index.json"
 _words_csv_lock = threading.Lock()
 _words_csv_cache: Optional[List[dict]] = None
 _words_csv_cache_mtime: float = 0.0
 
-# 跨进程互斥：threading.Lock 仅同进程内有效；多进程/多脚本写 words.csv 需文件锁
-_WORDS_CSV_LOCKFILE = STATIC_WB_DIR / ".words.csv.lock"
+# 跨进程互斥：threading.Lock 仅同进程内有效；多进程/多脚本写 words.csv 需文件锁（路径见 project_paths）
 
 # merge_wordbank_rows_for_search 结果：按词库文件 mtime 失效，按难度键缓存多档
 _merge_wordbank_rows_lock = threading.Lock()
@@ -204,8 +215,8 @@ def _words_csv_interprocess_lock() -> Generator[None, None, None]:
     """独占锁，保护 words.csv 的读与写（多进程安全）。
 
     与 _words_csv_lock 嵌套时必须先本锁、再线程锁，避免与 load_words_csv 缓存未命中路径死锁。"""
-    _WORDS_CSV_LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
-    f = open(_WORDS_CSV_LOCKFILE, "a+b", buffering=0)
+    WORDS_INTERPROCESS_LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
+    f = open(WORDS_INTERPROCESS_LOCKFILE, "a+b", buffering=0)
     try:
         if sys.platform == "win32":
             import msvcrt
@@ -253,6 +264,11 @@ DEEPSEEK_BATCH_PAUSE_SEC = float(os.getenv("DEEPSEEK_BATCH_PAUSE_SEC", "0") or 0
 # deepseek-chat 将于 2026/07/24 弃用；默认 deepseek-v4-flash + 关闭思考（与旧 chat 行为一致）。可用 DEEPSEEK_CHAT_MODEL 覆盖。
 DEEPSEEK_CHAT_MODEL = (os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-v4-flash") or "deepseek-v4-flash").strip()
 _APP_CONFIG_FILE = Path("config.json")
+
+# 从 config 解密的 DeepSeek Key 短期缓存（秒），避免每次 API 调用读盘 + 解密
+_DEEPSEEK_KEY_CACHE_TTL_SEC = 60.0
+_deepseek_key_cache_ts: float = 0.0
+_deepseek_key_cache_val: str = ""
 
 
 def _load_app_config() -> dict:
@@ -360,12 +376,18 @@ def _encrypt_deepseek_for_config(plaintext: str) -> str:
 
 
 def get_deepseek_api_key() -> str:
-    """读取 DeepSeek API Key：环境变量 DEEPSEEK_API_KEY 优先（进程内明文）；其次 config.json（可密文）。"""
+    """读取 DeepSeek API Key：环境变量 DEEPSEEK_API_KEY 优先；其次 config.json（可密文），带短期内存缓存。"""
     env_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if env_key:
         return env_key
+    global _deepseek_key_cache_ts, _deepseek_key_cache_val
+    now = time()
+    if _deepseek_key_cache_val and (now - _deepseek_key_cache_ts) < _DEEPSEEK_KEY_CACHE_TTL_SEC:
+        return _deepseek_key_cache_val
     raw = str(_load_app_config().get("deepseek_api_key", "") or "").strip()
-    return _decrypt_deepseek_from_config(raw)
+    _deepseek_key_cache_val = _decrypt_deepseek_from_config(raw)
+    _deepseek_key_cache_ts = now
+    return _deepseek_key_cache_val
 
 
 def _article_ai_extract_enabled() -> bool:
@@ -1747,16 +1769,6 @@ def accumulate_valid_deepseek_v2_entries(
     return new_entries, success_for_batch
 
 
-# ==================== Token存储（内存中，重启后失效）====================
-# Token存储（内存中，重启后失效）
-# 实际应用中应使用数据库或Redis
-user_tokens: Dict[str, str] = {}  # token -> username
-token_expiry: Dict[str, datetime] = {}  # token -> expiry time
-
-# 管理员会话（与学生 token 隔离）
-admin_tokens: Dict[str, str] = {}  # token -> admin 用户名
-admin_token_expiry: Dict[str, datetime] = {}
-
 # 登录/注册简单限流（按 IP，内存存储）
 _rate_buckets: Dict[str, List[float]] = defaultdict(list)
 _RATE_WINDOW_SEC = 60
@@ -1930,38 +1942,6 @@ def _hash_invite_code(plain: str) -> str:
     return hashlib.sha256(plain.strip().encode('utf-8')).hexdigest()
 
 
-def load_users() -> dict:
-    """加载所有用户数据；为旧数据补充 enabled 字段。"""
-    users_file = DATA_DIR / "users.json"
-    if not users_file.exists():
-        return {}
-
-    try:
-        with open(users_file, 'r', encoding='utf-8') as f:
-            users = json.load(f)
-    except Exception as e:
-        logger.error(f"加载用户数据失败: {e}")
-        return {}
-
-    changed = False
-    for _uname, u in users.items():
-        if isinstance(u, dict) and 'enabled' not in u:
-            u['enabled'] = True
-            changed = True
-    if changed:
-        save_users(users)
-    return users
-
-
-def save_users(users: dict) -> None:
-    """保存用户数据"""
-    users_file = DATA_DIR / "users.json"
-    try:
-        with open(users_file, 'w', encoding='utf-8') as f:
-            json.dump(users, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"保存用户数据失败: {e}")
-
 def load_invites() -> dict:
     """加载邀请码列表。"""
     if not INVITES_FILE.exists():
@@ -2043,10 +2023,7 @@ def is_user_enabled(username: str) -> bool:
 
 
 def _revoke_user_tokens(username: str) -> None:
-    to_remove = [t for t, u in user_tokens.items() if u == username]
-    for t in to_remove:
-        user_tokens.pop(t, None)
-        token_expiry.pop(t, None)
+    revoke_principal(SESSION_KIND_USER, username)
 
 
 def _invalidate_user_reciter_cache(username: str) -> None:
@@ -2056,7 +2033,7 @@ def _invalidate_user_reciter_cache(username: str) -> None:
 
 def _purge_student_account_completely(username: str) -> None:
     """
-    删除学生账号：users.json、家长账号条目、用户目录、挑战相关引用、会话。
+    删除学生账号：用户表、家长账号条目、用户目录、挑战相关引用、会话。
     仅用于学生主账号；调用前须已校验非家长记录且用户名有效。
     """
     users = load_users()
@@ -2103,70 +2080,27 @@ def verify_user(username: str, password: str) -> bool:
     return True
 
 def create_token(username: str) -> str:
-    """创建访问令牌"""
-    # 清理过期的token
-    now = datetime.now()
-    expired_tokens = [t for t, exp in token_expiry.items() if exp < now]
-    for token in expired_tokens:
-        user_tokens.pop(token, None)
-        token_expiry.pop(token, None)
-    
-    # 生成新token
-    token = secrets.token_urlsafe(32)
-    user_tokens[token] = username
-    token_expiry[token] = now + timedelta(hours=24)  # 24小时有效期
-    
-    return token
+    """创建访问令牌（SQLite 持久化，多 worker 共享）。"""
+    return _db_create_auth_session(SESSION_KIND_USER, username, timedelta(hours=24))
+
 
 def verify_token(token: str) -> Optional[str]:
-    """验证令牌，返回用户名"""
+    """验证令牌，返回登录用户名（家长或学生）。"""
     if not token:
         return None
-    
-    # 检查token是否存在且未过期
-    if token in user_tokens:
-        expiry = token_expiry.get(token)
-        if expiry and expiry >= datetime.now():
-            return user_tokens[token]
-        else:
-            # Token已过期，清理
-            user_tokens.pop(token, None)
-            token_expiry.pop(token, None)
-    
-    return None
-
-
-def _cleanup_admin_tokens() -> None:
-    now = datetime.now()
-    expired = [t for t, exp in admin_token_expiry.items() if exp < now]
-    for t in expired:
-        admin_tokens.pop(t, None)
-        admin_token_expiry.pop(t, None)
+    return verify_session(token, SESSION_KIND_USER)
 
 
 def create_admin_token() -> str:
     """签发管理员会话 token（与学生 token 隔离）。"""
-    _cleanup_admin_tokens()
-    now = datetime.now()
-    token = secrets.token_urlsafe(32)
-    admin_name = os.getenv('ADMIN_USERNAME', '').strip() or 'admin'
-    admin_tokens[token] = admin_name
-    admin_token_expiry[token] = now + timedelta(hours=8)
-    return token
+    admin_name = os.getenv("ADMIN_USERNAME", "").strip() or "admin"
+    return _db_create_auth_session(SESSION_KIND_ADMIN, admin_name, timedelta(hours=8))
 
 
 def verify_admin_token(token: str) -> bool:
     if not token:
         return False
-    _cleanup_admin_tokens()
-    if token not in admin_tokens:
-        return False
-    exp = admin_token_expiry.get(token)
-    if not exp or exp < datetime.now():
-        admin_tokens.pop(token, None)
-        admin_token_expiry.pop(token, None)
-        return False
-    return True
+    return verify_session(token, SESSION_KIND_ADMIN) is not None
 
 
 def _get_admin_config() -> dict:
@@ -2455,11 +2389,7 @@ def logout(username):
     """用户退出"""
     # 清除所有该登录身份的 token（家长与学生登录名不同）
     login = getattr(g, "login_username", username)
-    tokens_to_remove = [t for t, u in user_tokens.items() if u == login]
-    for token in tokens_to_remove:
-        user_tokens.pop(token, None)
-        token_expiry.pop(token, None)
-    
+    _revoke_user_tokens(login)
     return jsonify({'message': '已退出登录'}), 200
 
 
@@ -4972,8 +4902,7 @@ def admin_logout():
     """注销管理员会话。"""
     auth = request.headers.get('Authorization', '')
     tok = auth[7:].strip() if auth.startswith('Bearer ') else ''
-    admin_tokens.pop(tok, None)
-    admin_token_expiry.pop(tok, None)
+    revoke_token(SESSION_KIND_ADMIN, tok)
     return jsonify({'message': '已退出'}), 200
 
 
