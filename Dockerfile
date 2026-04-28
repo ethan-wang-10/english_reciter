@@ -25,6 +25,7 @@ COPY tts_piper.py .
 COPY project_paths.py .
 COPY auth_session_store.py .
 COPY user_store.py .
+COPY gunicorn_config.py .
 COPY simple_web_app.py .
 COPY config.example.json .
 RUN cp config.example.json config.json
@@ -43,4 +44,4 @@ ENV FLASK_ENV=production
 EXPOSE 8000
 
 # 使用 Gunicorn，避免 Flask 开发服务器与 debug 风险
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "simple_web_app:app"]
+CMD ["gunicorn", "-c", "gunicorn_config.py", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "simple_web_app:app"]

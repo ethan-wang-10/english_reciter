@@ -52,6 +52,18 @@ def init_user_store(data_dir: Path) -> None:
             _open_conn_and_migrate_unlocked()
 
 
+def close_connection() -> None:
+    """关闭进程内 SQLite 连接（Gunicorn worker 退出或 atexit 时调用）。"""
+    global _conn
+    with _lock:
+        if _conn is not None:
+            try:
+                _conn.close()
+            except Exception:
+                pass
+            _conn = None
+
+
 def users_json_path(data_dir: Optional[Path] = None) -> Path:
     root = data_dir if data_dir is not None else _data_dir
     if root is None:

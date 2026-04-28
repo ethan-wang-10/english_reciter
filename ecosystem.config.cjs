@@ -56,7 +56,7 @@ module.exports = {
       cwd: root,
       script: venvGunicorn,
       args:
-        '--bind 0.0.0.0:8000 --workers 1 --threads 4 simple_web_app:app',
+        '-c gunicorn_config.py --bind 0.0.0.0:8000 --workers 1 --threads 4 simple_web_app:app',
       instances: 1,
       autorestart: true,
       max_restarts: 15,

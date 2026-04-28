@@ -52,6 +52,18 @@ def init_auth_session_store(data_dir: Path) -> None:
         _db_path = target
 
 
+def close_connection() -> None:
+    """关闭进程内 SQLite 连接（Gunicorn worker 退出或 atexit 时调用，减轻解释器关闭阶段竞态）。"""
+    global _conn
+    with _lock:
+        if _conn is not None:
+            try:
+                _conn.close()
+            except Exception:
+                pass
+            _conn = None
+
+
 def _ensure_conn() -> sqlite3.Connection:
     global _conn
     if _db_path is None:

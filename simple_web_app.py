@@ -7,6 +7,7 @@
 
 import os
 import sys
+import atexit
 import csv
 import json
 import re
@@ -50,13 +51,14 @@ from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
 from auth_session_store import (
     SESSION_KIND_ADMIN,
     SESSION_KIND_USER,
+    close_connection as close_auth_session_sqlite,
     create_session as _db_create_auth_session,
     init_auth_session_store,
     revoke_principal,
     revoke_token,
     verify_session,
 )
-from user_store import init_user_store, load_users, save_users
+from user_store import close_connection as close_user_store_sqlite, init_user_store, load_users, save_users
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -184,6 +186,21 @@ DATA_DIR = Path("user_data_simple")
 DATA_DIR.mkdir(exist_ok=True)
 init_auth_session_store(DATA_DIR)
 init_user_store(DATA_DIR)
+
+
+def _atexit_close_app_sqlite() -> None:
+    """进程退出时关闭 SQLite，减轻 Gunicorn gthread 与解释器 shutdown 竞态下的噪音日志。"""
+    try:
+        close_auth_session_sqlite()
+    except Exception:
+        pass
+    try:
+        close_user_store_sqlite()
+    except Exception:
+        pass
+
+
+atexit.register(_atexit_close_app_sqlite)
 
 # 全站共享词库（家长贡献，持久化在 user_data_simple/_shared/）
 SHARED_DATA_DIR = DATA_DIR / "_shared"
