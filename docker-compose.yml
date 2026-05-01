@@ -13,7 +13,7 @@ services:
       # - ./reciter.py:/app/reciter.py
       # - ./simple_web_app.py:/app/simple_web_app.py
     environment:
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY to a strong random value, e.g. openssl rand -hex 32}
       - FLASK_ENV=production
       - TZ=Asia/Shanghai
     restart: unless-stopped

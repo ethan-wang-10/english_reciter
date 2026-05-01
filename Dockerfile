@@ -25,6 +25,11 @@ COPY tts_piper.py .
 COPY project_paths.py .
 COPY auth_session_store.py .
 COPY user_store.py .
+COPY gamification.py .
+COPY leaderboard_periods.py .
+COPY challenges.py .
+COPY chat_room.py .
+COPY wordbank_v2.py .
 COPY gunicorn_config.py .
 COPY simple_web_app.py .
 COPY config.example.json .

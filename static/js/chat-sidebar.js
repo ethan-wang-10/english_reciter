@@ -7,6 +7,7 @@
     let chatEventSource = null;
     let chatReconnectTimer = null;
     let chatBackoffMs = 1000;
+    let chatSseConnecting = false;
     /** 侧栏折叠时用轮询代替 SSE，降低长连接与解析开销（毫秒） */
     let chatPollTimer = null;
     const CHAT_COLLAPSED_POLL_MS = 20000;
@@ -705,13 +706,37 @@
         chatBackoffMs = Math.min(chatBackoffMs * 2, 30000);
     }
 
-    function connectChatSSE() {
+    async function fetchChatStreamToken() {
+        const r = await fetch(`${base}/chat/stream-token`, {
+            method: "POST",
+            headers: { Authorization: "Bearer " + token },
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.stream_token) {
+            throw new Error(data.error || "无法建立聊天连接");
+        }
+        return data.stream_token;
+    }
+
+    async function connectChatSSE() {
         if (!token) return;
         if (chatEventSource) return;
+        if (chatSseConnecting) return;
+        chatSseConnecting = true;
+        let streamToken = "";
+        try {
+            streamToken = await fetchChatStreamToken();
+        } catch (_) {
+            chatSseConnecting = false;
+            scheduleChatReconnect();
+            return;
+        }
+        chatSseConnecting = false;
+        if (!token || chatEventSource || !isChatSidebarOpen()) return;
         const url =
             base.replace(/\/$/, "") +
-            "/chat/stream?access_token=" +
-            encodeURIComponent(token);
+            "/chat/stream?stream_token=" +
+            encodeURIComponent(streamToken);
         chatEventSource = new EventSource(url);
         chatBackoffMs = 1000;
         chatEventSource.addEventListener("message", (e) => {
@@ -743,7 +768,7 @@
         }
         if (isChatSidebarOpen()) {
             stopChatPoll();
-            connectChatSSE();
+            void connectChatSSE();
         } else {
             disconnectChatSSE();
             startChatPoll();
@@ -772,7 +797,7 @@
         document.body.classList.add("chat-sidebar-open");
         if (trig) trig.setAttribute("aria-expanded", "true");
         await loadInitial();
-        connectChatSSE();
+        await connectChatSSE();
         const ta = document.getElementById("chat-input");
         if (ta) setTimeout(() => ta.focus(), 200);
     }

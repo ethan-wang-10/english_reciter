@@ -13,7 +13,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +186,18 @@ def _row_to_user_dict(row: tuple) -> Dict[str, Any]:
     return d
 
 
+def _load_users_unlocked(conn: sqlite3.Connection) -> Dict[str, Any]:
+    cur = conn.execute(
+        "SELECT username, password_hash, email, created_at, enabled, role, child_username, plan "
+        "FROM users ORDER BY username"
+    )
+    out: Dict[str, Any] = {}
+    for row in cur.fetchall():
+        uname = str(row[0])
+        out[uname] = _row_to_user_dict(row)
+    return out
+
+
 def _auto_migrate_from_json_unlocked(conn: sqlite3.Connection) -> None:
     cur = conn.execute("SELECT COUNT(*) FROM users")
     if int(cur.fetchone()[0]) > 0:
@@ -237,15 +249,7 @@ def load_users() -> Dict[str, Any]:
     """加载全部用户，结构与旧版 users.json 一致（username 为外层键）。"""
     with _lock:
         conn = _ensure_conn_unlocked()
-        cur = conn.execute(
-            "SELECT username, password_hash, email, created_at, enabled, role, child_username, plan "
-            "FROM users ORDER BY username"
-        )
-        out: Dict[str, Any] = {}
-        for row in cur.fetchall():
-            uname = str(row[0])
-            out[uname] = _row_to_user_dict(row)
-        return out
+        return _load_users_unlocked(conn)
 
 
 def save_users(users: Dict[str, Any]) -> None:
@@ -259,6 +263,33 @@ def save_users(users: Dict[str, Any]) -> None:
         except Exception as e:
             conn.rollback()
             logger.error("保存用户表失败: %s", e)
+
+
+def mutate_users(
+    mutator: Callable[[Dict[str, Any]], Any],
+    *,
+    rollback_on_error: bool = True,
+) -> Any:
+    """
+    在同一 SQLite 写事务内读取、修改并保存用户表。
+
+    供 Web 请求替代 ``load_users() -> 修改 -> save_users()`` 的旧模式，避免并发请求基于
+    过期快照执行全量同步而删除或覆盖彼此的更新。
+    """
+    with _lock:
+        conn = _ensure_conn_unlocked()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            users = _load_users_unlocked(conn)
+            result = mutator(users)
+            _sync_users_table_unlocked(conn, users)
+            conn.commit()
+            return result
+        except Exception:
+            if rollback_on_error:
+                conn.rollback()
+            logger.exception("事务化修改用户表失败")
+            raise
 
 
 def import_users_from_json(

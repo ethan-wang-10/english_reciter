@@ -58,7 +58,7 @@ from auth_session_store import (
     revoke_token,
     verify_session,
 )
-from user_store import close_connection as close_user_store_sqlite, init_user_store, load_users, save_users
+from user_store import close_connection as close_user_store_sqlite, init_user_store, load_users, mutate_users
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -180,6 +180,7 @@ USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
 USER_ROLE_PARENT = "parent"
 PARENT_LOGIN_SUFFIX = "_parent"
 DEFAULT_PARENT_PASSWORD = "123123"
+SESSION_KIND_CHAT_STREAM = "chat_stream"
 
 # 数据目录
 DATA_DIR = Path("user_data_simple")
@@ -1360,12 +1361,14 @@ def set_user_plan(username: str, plan: str) -> bool:
     """设置用户套餐。plan 必须为 'free' 或 'paid'（paid 即 VIP）。"""
     if plan not in ("free", "paid"):
         return False
-    users = load_users()
-    if username not in users:
-        return False
-    users[username]["plan"] = plan
-    save_users(users)
-    return True
+
+    def _set_plan(users: Dict[str, Any]) -> bool:
+        if username not in users:
+            return False
+        users[username]["plan"] = plan
+        return True
+
+    return bool(mutate_users(_set_plan))
 
 
 def is_paid_user(username: str) -> bool:
@@ -1995,13 +1998,6 @@ def register_user_with_invite(
 
     code_hash = _hash_invite_code(invite_code)
     with _invites_lock:
-        users = load_users()
-        if username in users:
-            return False, '用户名已存在'
-
-        if is_reserved_parent_username(username):
-            return False, '该用户名保留给家长账户使用，请更换'
-
         data = load_invites()
         invites = data.get('invites', [])
         matched = None
@@ -2012,20 +2008,27 @@ def register_user_with_invite(
         if not matched:
             return False, '邀请码无效或已使用'
 
-        password_hash = hash_password(password)
-        users[username] = {
-            'password_hash': password_hash,
-            'email': email,
-            'created_at': datetime.now().isoformat(),
-            'enabled': True,
-        }
+        def _add_user(users: Dict[str, Any]) -> Tuple[bool, str]:
+            if username in users:
+                return False, '用户名已存在'
+            if is_reserved_parent_username(username):
+                return False, '该用户名保留给家长账户使用，请更换'
+            users[username] = {
+                'password_hash': hash_password(password),
+                'email': email,
+                'created_at': datetime.now().isoformat(),
+                'enabled': True,
+            }
+            return True, ''
+
+        ok, err = mutate_users(_add_user)
+        if not ok:
+            return False, err
+
         matched['used_at'] = datetime.now().isoformat()
         matched['used_by'] = username
-
         user_dir = DATA_DIR / username
         user_dir.mkdir(exist_ok=True)
-
-        save_users(users)
         save_invites(data)
         logger.info("新用户注册: %s (invite_id=%s)", username, matched.get('id'))
         return True, ''
@@ -2053,20 +2056,23 @@ def _purge_student_account_completely(username: str) -> None:
     删除学生账号：用户表、家长账号条目、用户目录、挑战相关引用、会话。
     仅用于学生主账号；调用前须已校验非家长记录且用户名有效。
     """
-    users = load_users()
-    u = users.get(username)
-    if not isinstance(u, dict) or is_parent_user_record(u):
+    pname = parent_login_username_for_child(username)
+
+    def _delete_users(users: Dict[str, Any]) -> bool:
+        u = users.get(username)
+        if not isinstance(u, dict) or is_parent_user_record(u):
+            return False
+        if pname and pname in users and is_parent_user_record(users.get(pname)):
+            del users[pname]
+        if username in users:
+            del users[username]
+        return True
+
+    if not mutate_users(_delete_users):
         return
 
-    pname = parent_login_username_for_child(username)
-    if pname and pname in users and is_parent_user_record(users.get(pname)):
-        del users[pname]
+    if pname:
         _revoke_user_tokens(pname)
-
-    if username in users:
-        del users[username]
-
-    save_users(users)
     _revoke_user_tokens(username)
     with _reciter_registry_lock:
         _user_reciter_cache.pop(username, None)
@@ -2080,21 +2086,18 @@ def _purge_student_account_completely(username: str) -> None:
 
 def verify_user(username: str, password: str) -> bool:
     """验证用户；若仍为旧版哈希则自动升级为 Werkzeug 哈希。"""
-    users = load_users()
+    def _verify_and_upgrade(users: Dict[str, Any]) -> bool:
+        if username not in users:
+            return False
+        stored = users[username]["password_hash"]
+        if not verify_password(password, stored):
+            return False
+        if _is_legacy_sha256_hex(stored):
+            users[username]["password_hash"] = hash_password(password)
+            logger.info("用户 %s 的密码哈希已升级为安全格式", username)
+        return True
 
-    if username not in users:
-        return False
-
-    stored = users[username]["password_hash"]
-    if not verify_password(password, stored):
-        return False
-
-    if _is_legacy_sha256_hex(stored):
-        users[username]["password_hash"] = hash_password(password)
-        save_users(users)
-        logger.info("用户 %s 的密码哈希已升级为安全格式", username)
-
-    return True
+    return bool(mutate_users(_verify_and_upgrade))
 
 def create_token(username: str) -> str:
     """创建访问令牌（SQLite 持久化，多 worker 共享）。"""
@@ -2112,6 +2115,11 @@ def create_admin_token() -> str:
     """签发管理员会话 token（与学生 token 隔离）。"""
     admin_name = os.getenv("ADMIN_USERNAME", "").strip() or "admin"
     return _db_create_auth_session(SESSION_KIND_ADMIN, admin_name, timedelta(hours=8))
+
+
+def create_chat_stream_token(login_username: str) -> str:
+    """签发只用于聊天室 SSE 的短期 token，避免把登录 token 放进 URL。"""
+    return _db_create_auth_session(SESSION_KIND_CHAT_STREAM, login_username, timedelta(minutes=2))
 
 
 def verify_admin_token(token: str) -> bool:
@@ -2452,11 +2460,14 @@ def patch_parent_password(username):
     if p1 != p2:
         return jsonify({'error': '两次输入的密码不一致'}), 400
     login = getattr(g, 'login_username', username)
-    users = load_users()
-    if login not in users:
+    def _set_password(users: Dict[str, Any]) -> bool:
+        if login not in users:
+            return False
+        users[login]['password_hash'] = hash_password(p1)
+        return True
+
+    if not mutate_users(_set_password):
         return jsonify({'error': '用户不存在'}), 404
-    users[login]['password_hash'] = hash_password(p1)
-    save_users(users)
     logger.info("家长账户修改密码: login=%s", login)
     return jsonify({'message': '密码已更新'}), 200
 
@@ -2768,6 +2779,13 @@ def api_challenges_create(username):
     users = load_users()
     if target not in users:
         return jsonify({'error': '用户不存在'}), 400
+    target_row = users.get(target)
+    if (
+        not isinstance(target_row, dict)
+        or is_parent_user_record(target_row)
+        or not is_user_enabled(target)
+    ):
+        return jsonify({'error': '只能挑战已启用的学生账号'}), 400
     if target == username:
         return jsonify({'error': '不能挑战自己'}), 400
     try:
@@ -4964,19 +4982,29 @@ def admin_set_user_enabled(username):
         return jsonify({'error': '缺少 enabled 字段'}), 400
     enabled = bool(data['enabled'])
 
-    users = load_users()
-    if username not in users:
-        return jsonify({'error': '用户不存在'}), 404
-    if is_parent_user_record(users[username]):
-        return jsonify({'error': '请使用「家长账户」开关管理家长账号'}), 400
+    removed_parent = None
 
-    users[username]['enabled'] = enabled
-    if not enabled:
-        pname = parent_login_username_for_child(username)
-        if pname and pname in users and is_parent_user_record(users.get(pname)):
-            del users[pname]
-            _revoke_user_tokens(pname)
-    save_users(users)
+    def _set_enabled(users: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
+        if username not in users:
+            return False, '用户不存在', None
+        if is_parent_user_record(users[username]):
+            return False, '请使用「家长账户」开关管理家长账号', None
+        users[username]['enabled'] = enabled
+        removed = None
+        if not enabled:
+            pname = parent_login_username_for_child(username)
+            if pname and pname in users and is_parent_user_record(users.get(pname)):
+                del users[pname]
+                removed = pname
+        return True, '', removed
+
+    ok, err, removed_parent = mutate_users(_set_enabled)
+    if not ok:
+        if err == '用户不存在':
+            return jsonify({'error': err}), 404
+        return jsonify({'error': err}), 400
+    if removed_parent:
+        _revoke_user_tokens(removed_parent)
     if not enabled:
         _revoke_user_tokens(username)
         _invalidate_user_reciter_cache(username)
@@ -4998,54 +5026,57 @@ def admin_set_user_parent(username):
         return jsonify({'error': '缺少 enabled 字段'}), 400
     want = bool(data['enabled'])
 
-    users = load_users()
-    u = users.get(username)
-    if not isinstance(u, dict):
-        return jsonify({'error': '用户不存在'}), 404
-    if is_parent_user_record(u):
-        return jsonify({'error': '只能为学生账号设置家长账户'}), 400
-
     pname = parent_login_username_for_child(username)
     if not pname:
         return jsonify({'error': '该用户名过长，无法创建家长账号（须为 学生名_parent 且不超过 32 字符）'}), 400
 
-    if want:
-        created_new = False
+    def _set_parent(users: Dict[str, Any]) -> Tuple[bool, int, Dict[str, Any]]:
+        u = users.get(username)
+        if not isinstance(u, dict):
+            return False, 404, {'error': '用户不存在'}
+        if is_parent_user_record(u):
+            return False, 400, {'error': '只能为学生账号设置家长账户'}
+        if want:
+            created_new = False
+            if pname in users:
+                pr = users[pname]
+                if not is_parent_user_record(pr) or pr.get('child_username') != username:
+                    return False, 400, {'error': '家长登录名已被占用'}
+            else:
+                created_new = True
+                users[pname] = {
+                    'role': USER_ROLE_PARENT,
+                    'child_username': username,
+                    'password_hash': hash_password(DEFAULT_PARENT_PASSWORD),
+                    'enabled': True,
+                    'created_at': datetime.now().isoformat(),
+                }
+            body = {
+                'username': username,
+                'parent_enabled': True,
+                'parent_login': pname,
+            }
+            if created_new:
+                body['default_password_hint'] = DEFAULT_PARENT_PASSWORD
+            return True, 200, body
+
         if pname in users:
             pr = users[pname]
-            if not is_parent_user_record(pr):
-                return jsonify({'error': '家长登录名已被占用'}), 400
-            if pr.get('child_username') != username:
-                return jsonify({'error': '家长登录名已被占用'}), 400
-        else:
-            created_new = True
-            users[pname] = {
-                'role': USER_ROLE_PARENT,
-                'child_username': username,
-                'password_hash': hash_password(DEFAULT_PARENT_PASSWORD),
-                'enabled': True,
-                'created_at': datetime.now().isoformat(),
-            }
-        save_users(users)
-        logger.info("管理员开启家长账户: student=%s parent=%s", username, pname)
-        body = {
-            'username': username,
-            'parent_enabled': True,
-            'parent_login': pname,
-        }
-        if created_new:
-            body['default_password_hint'] = DEFAULT_PARENT_PASSWORD
-        return jsonify(body), 200
+            if not is_parent_user_record(pr) or pr.get('child_username') != username:
+                return False, 400, {'error': '家长账号数据不一致'}
+            del users[pname]
+        return True, 200, {'username': username, 'parent_enabled': False}
 
-    if pname in users:
-        pr = users[pname]
-        if not is_parent_user_record(pr) or pr.get('child_username') != username:
-            return jsonify({'error': '家长账号数据不一致'}), 400
-        del users[pname]
-        save_users(users)
+    ok, status_code, body = mutate_users(_set_parent)
+    if not ok:
+        return jsonify(body), status_code
+    if want:
+        logger.info("管理员开启家长账户: student=%s parent=%s", username, pname)
+        return jsonify(body), 200
+    if pname:
         _revoke_user_tokens(pname)
-        logger.info("管理员关闭家长账户: student=%s", username)
-    return jsonify({'username': username, 'parent_enabled': False}), 200
+    logger.info("管理员关闭家长账户: student=%s", username)
+    return jsonify(body), 200
 
 
 @app.route('/api/admin/users/<username>/parent-password', methods=['PATCH'])
@@ -5059,21 +5090,23 @@ def admin_set_parent_password(username):
     if len(new_password) < 6:
         return jsonify({'error': '密码至少6个字符'}), 400
 
-    users = load_users()
-    u = users.get(username)
-    if not isinstance(u, dict):
-        return jsonify({'error': '用户不存在'}), 404
-    if is_parent_user_record(u):
-        return jsonify({'error': '请在学生所在行使用「家长密码」'}), 400
-
     pname = parent_login_username_for_child(username)
-    if not pname or pname not in users or not is_parent_user_record(users[pname]):
-        return jsonify({'error': '未开启家长账户'}), 404
-    if users[pname].get('child_username') != username:
-        return jsonify({'error': '家长账号数据不一致'}), 400
+    def _set_parent_password(users: Dict[str, Any]) -> Tuple[bool, int, str]:
+        u = users.get(username)
+        if not isinstance(u, dict):
+            return False, 404, '用户不存在'
+        if is_parent_user_record(u):
+            return False, 400, '请在学生所在行使用「家长密码」'
+        if not pname or pname not in users or not is_parent_user_record(users[pname]):
+            return False, 404, '未开启家长账户'
+        if users[pname].get('child_username') != username:
+            return False, 400, '家长账号数据不一致'
+        users[pname]['password_hash'] = hash_password(new_password)
+        return True, 200, ''
 
-    users[pname]['password_hash'] = hash_password(new_password)
-    save_users(users)
+    ok, status_code, err = mutate_users(_set_parent_password)
+    if not ok:
+        return jsonify({'error': err}), status_code
     _revoke_user_tokens(pname)
     logger.info("管理员重置家长密码: student=%s parent=%s", username, pname)
     return jsonify({
@@ -5094,14 +5127,17 @@ def admin_set_user_password(username):
     if len(new_password) < 6:
         return jsonify({'error': '密码至少6个字符'}), 400
 
-    users = load_users()
-    if username not in users:
-        return jsonify({'error': '用户不存在'}), 404
-    if is_parent_user_record(users[username]):
-        return jsonify({'error': '家长账户请使用「家长密码」按钮重置，或由家长在客户端修改'}), 400
+    def _set_user_password(users: Dict[str, Any]) -> Tuple[bool, int, str]:
+        if username not in users:
+            return False, 404, '用户不存在'
+        if is_parent_user_record(users[username]):
+            return False, 400, '家长账户请使用「家长密码」按钮重置，或由家长在客户端修改'
+        users[username]['password_hash'] = hash_password(new_password)
+        return True, 200, ''
 
-    users[username]['password_hash'] = hash_password(new_password)
-    save_users(users)
+    ok, status_code, err = mutate_users(_set_user_password)
+    if not ok:
+        return jsonify({'error': err}), status_code
     _revoke_user_tokens(username)
     _invalidate_user_reciter_cache(username)
     logger.info("管理员重置用户密码: %s", username)
@@ -5539,14 +5575,26 @@ def _chat_extract_mentions(body: str, valid: Set[str]) -> List[str]:
     return out
 
 
+@app.route("/api/chat/stream-token", methods=["POST"])
+@token_required
+def api_chat_stream_token(username):
+    """用登录 token 换取短期 SSE token；SSE URL 不再携带长期 bearer token。"""
+    login = getattr(g, "login_username", username)
+    return jsonify({
+        "stream_token": create_chat_stream_token(login),
+        "expires_in": 120,
+    }), 200
+
+
 def _verify_chat_stream_auth() -> Optional[str]:
-    """校验 SSE 查询参数 access_token；成功返回 login_username。"""
-    token = (request.args.get("access_token") or "").strip()
+    """校验 SSE 查询参数 stream_token；成功返回 login_username。"""
+    token = (request.args.get("stream_token") or "").strip()
     if not token:
         return None
-    login_username = verify_token(token)
+    login_username = verify_session(token, SESSION_KIND_CHAT_STREAM)
     if not login_username:
         return None
+    revoke_token(SESSION_KIND_CHAT_STREAM, token)
     if not is_user_enabled(login_username):
         _revoke_user_tokens(login_username)
         return None
