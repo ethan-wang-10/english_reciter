@@ -339,6 +339,8 @@ class WordRepository:
             backup_file = backup_dir / f"learning_data_backup_{timestamp}.json"
             
             shutil.copy2(self.config.DATA_FILE, backup_file)
+            # copy2 保留源学习数据的 mtime；备份轮换应以创建备份的时间为准。
+            os.utime(backup_file, None)
             
             self._cleanup_old_backups(backup_dir)
             

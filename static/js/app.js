@@ -38,6 +38,8 @@ let articleAiExtractAvailable = false;
 let articleAiExtractEnabled = false;
 /** 服务端是否配置 Piper（神经语音 WAV）；来自 /api/tts/capabilities */
 let serverPiperAvailable = false;
+/** 首屏 bootstrap 预取的复习列表，供 showSection('review') 消费，避免重复请求。 */
+let preloadedReviewData = null;
 /** 连续点击朗读：取消上一轮 Piper 请求、音频与浏览器合成 */
 let ttsPlaybackGeneration = 0;
 let ttsFetchAbort = null;
@@ -115,6 +117,14 @@ function _invalidateSectionCache(id) {
 
 const _sectionScrollPos = {};
 let _currentSectionId = 'review';
+
+function runWhenIdle(fn, timeout = 1500) {
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => fn(), { timeout });
+    } else {
+        setTimeout(fn, Math.min(timeout, 1200));
+    }
+}
 
 function _saveScrollPos(sectionId) {
     const el = document.getElementById(sectionId + '-section');
@@ -366,14 +376,16 @@ function renderDailySummaryBody(g, statusData) {
     const xpToday = Number(g.daily_xp_today) || 0;
     const streak = Number(g.streak) || 0;
     const streakMax = Number(g.streak_max_record) || 0;
-    const words = statusData.words || [];
+    const words = Array.isArray(statusData.words) ? statusData.words : null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const dueToday = words.filter((w) => {
-        const nd = new Date(w.next_review_date);
-        nd.setHours(0, 0, 0, 0);
-        return nd <= today;
-    }).length;
+    const dueToday = words
+        ? words.filter((w) => {
+              const nd = new Date(w.next_review_date);
+              nd.setHours(0, 0, 0, 0);
+              return nd <= today;
+          }).length
+        : Number(statusData.due_count ?? statusData.stats?.due_count ?? 0);
     const round =
         statusData.stats && statusData.stats.current_round != null
             ? statusData.stats.current_round + 1
@@ -430,7 +442,7 @@ async function openDailySummaryPopover() {
     document.getElementById('daily-summary-mobile-btn')?.setAttribute('aria-expanded', 'true');
     body.innerHTML = '<p class="daily-summary-loading">加载中…</p>';
     try {
-        const [g, ws] = await Promise.all([apiRequest('/gamification'), apiRequest('/words/status')]);
+        const [g, ws] = await Promise.all([apiRequest('/gamification'), apiRequest('/words/summary')]);
         lastGamificationProfile = g;
         updateGamificationNav(g);
         if (isSettingsOverlayOpen() && lastGamificationProfile) {
@@ -1169,7 +1181,7 @@ async function refreshNavUserAvatar() {
         return;
     }
     try {
-        const s = await apiRequest('/user/settings');
+        const s = await apiRequest('/user/avatar-meta');
         updateNavUserAvatar(s && s.avatar_url);
     } catch (_) {
         updateNavUserAvatar(null);
@@ -3038,6 +3050,7 @@ async function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     clearWordbankCsvDiscoveryCache();
+    preloadedReviewData = null;
     resetArticleImportPickUI();
 
     closeSettings();
@@ -3048,6 +3061,7 @@ async function logout() {
 // ==================== 页面切换 ====================
 
 function showLoginPage() {
+    preloadedReviewData = null;
     document.getElementById('login-page').classList.add('active');
     document.getElementById('main-page').classList.remove('active');
     const gl = document.getElementById('admin-gear-login');
@@ -3106,18 +3120,76 @@ function maybeShowSystemBroadcast(raw) {
     showSystemBroadcastModal(raw);
 }
 
+function applySummaryStats(summary) {
+    const stats = summary && summary.stats ? summary.stats : {};
+    const due =
+        typeof summary?.due_count === 'number'
+            ? summary.due_count
+            : typeof stats.due_count === 'number'
+              ? stats.due_count
+              : 0;
+    const reviewEl = document.getElementById('review-count');
+    const masteredEl = document.getElementById('mastered-count');
+    const roundEl = document.getElementById('round-count');
+    if (reviewEl) reviewEl.textContent = String(due);
+    if (masteredEl) masteredEl.textContent = String(stats.mastered_words || 0);
+    if (roundEl) roundEl.textContent = String((Number(stats.current_round) || 0) + 1);
+    if (document.getElementById('progress-section')?.classList.contains('active')) {
+        renderLearningMap(stats.mastered_words || 0);
+    }
+}
+
+function applyBootstrapPayload(boot) {
+    if (!boot || typeof boot !== 'object') return;
+    if (boot.session) {
+        setSessionParentFlags(!!boot.session.is_parent, boot.session.child_username || '');
+        maybeShowSystemBroadcast(boot.session.system_broadcast);
+    }
+    if (boot.summary) {
+        applySummaryStats(boot.summary);
+    }
+    if (boot.review && Array.isArray(boot.review.words)) {
+        preloadedReviewData = boot.review;
+    }
+    if (boot.gamification) {
+        lastGamificationProfile = boot.gamification;
+        updateGamificationNav(boot.gamification);
+        const opt = document.getElementById('leaderboard-opt-in');
+        if (opt && typeof boot.gamification.leaderboard_opt_in === 'boolean') {
+            opt.checked = boot.gamification.leaderboard_opt_in;
+        }
+    }
+    updateNavUserAvatar(boot.avatar_url || null);
+    if (boot.plan) {
+        userPlan = boot.plan || 'free';
+        articleAiExtractAvailable = boot.article_ai_extract_available === true;
+        articleAiExtractEnabled = boot.article_ai_extract_enabled === true;
+        updatePlanUI();
+    }
+    if (boot.tts_capabilities && typeof boot.tts_capabilities.piper === 'boolean') {
+        serverPiperAvailable = boot.tts_capabilities.piper;
+    }
+}
+
 async function showMainPage() {
     document.getElementById('login-page').classList.remove('active');
     document.getElementById('main-page').classList.add('active');
     const gl = document.getElementById('admin-gear-login');
     if (gl) gl.style.display = 'none';
+    preloadedReviewData = null;
+    let boot = null;
     if (token) {
         try {
-            const d = await apiRequest('/auth/session');
-            setSessionParentFlags(!!d.is_parent, d.child_username || '');
-            maybeShowSystemBroadcast(d.system_broadcast);
-        } catch (_) {
-            /* 保留本地 session 标记 */
+            boot = await apiRequest('/bootstrap');
+            applyBootstrapPayload(boot);
+        } catch (bootErr) {
+            try {
+                const d = await apiRequest('/auth/session');
+                setSessionParentFlags(!!d.is_parent, d.child_username || '');
+                maybeShowSystemBroadcast(d.system_broadcast);
+            } catch (_) {
+                /* 保留本地 session 标记 */
+            }
         }
     }
     const udisp = document.getElementById('username-display');
@@ -3136,17 +3208,25 @@ async function showMainPage() {
 
     applyParentNavMode();
 
-    loadStats();
-    refreshNavUserAvatar();
-    void refreshPkInviteIndicator();
+    if (!boot || !boot.summary) {
+        loadStats();
+    }
+    if (!boot || !('avatar_url' in boot)) {
+        refreshNavUserAvatar();
+    }
     startPkInvitePolling();
-    loadUserPlan();
+    if (!boot || !boot.plan) {
+        loadUserPlan();
+    }
     if (isParentSession) {
         showSection('progress');
     } else {
         showSection('review');
     }
-    if (typeof window.chatRoomEnsureSse === 'function') window.chatRoomEnsureSse();
+    runWhenIdle(() => {
+        void refreshPkInviteIndicator();
+        if (typeof window.chatRoomEnsureSse === 'function') window.chatRoomEnsureSse();
+    }, 5000);
 }
 
 async function loadUserPlan() {
@@ -3302,24 +3382,8 @@ async function loadStats() {
     _invalidateSectionCache('mastered');
     _invalidateSectionCache('leaderboard');
     try {
-        const data = await apiRequest('/words/status');
-
-        // 勿用 new Date('YYYY-MM-DD') 与当前时间比较：ISO 日期按 UTC 午夜解析，东八区在当日 0:00–8:00 会误判为「尚未到期」。
-        // 与 /api/words/status 中 remaining_days 语义一致（服务端 date.today()）。
-        document.getElementById('review-count').textContent = data.words.filter((w) => {
-            if (typeof w.remaining_days === 'number') return w.remaining_days <= 0;
-            const d = String(w.next_review_date || '').slice(0, 10);
-            const t = new Date();
-            const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
-            return d <= todayStr;
-        }).length;
-
-        document.getElementById('mastered-count').textContent = data.stats.mastered_words;
-        document.getElementById('round-count').textContent = data.stats.current_round + 1;
-
-        if (document.getElementById('progress-section')?.classList.contains('active')) {
-            renderLearningMap(data.stats.mastered_words);
-        }
+        const data = await apiRequest('/words/summary');
+        applySummaryStats(data);
     } catch (error) {
         showMainBanner('加载统计失败，请稍后重试');
     }
@@ -3863,7 +3927,8 @@ async function loadReviewList() {
         hideReviewSessionSummary();
         reviewSessionMode = 'daily';
 
-        const data = await apiRequest('/words/review');
+        const data = preloadedReviewData || await apiRequest('/words/review');
+        preloadedReviewData = null;
         currentReviewList = data.words;
         currentReviewIndex = 0;
         currentReviewList.forEach((w) => wordMap.set(w.english, w));

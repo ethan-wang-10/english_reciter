@@ -145,21 +145,31 @@ CORS(app, supports_credentials=True)
 
 
 @app.after_request
-def _gzip_large_wordbank_csv(response: Response) -> Response:
-    """GET /api/wordbank/csv 返回的 JSON 较大，gzip 可明显缩短下载时间（浏览器 fetch 自动解压）。"""
-    if response.status_code != 200:
+def _gzip_large_text_responses(response: Response) -> Response:
+    """压缩首屏文本资源和较大的 JSON，缩短慢网络首次打开时间。"""
+    if response.status_code != 200 or request.method != "GET":
         return response
-    if request.path != "/api/wordbank/csv":
-        return response
-    if response.headers.get("Content-Encoding"):
-        return response
-    ct = (response.headers.get("Content-Type") or "").lower()
-    if "application/json" not in ct:
+    if response.headers.get("Content-Encoding") or request.headers.get("Range"):
         return response
     ae = request.headers.get("Accept-Encoding") or ""
-    if "gzip" not in ae:
+    if "gzip" not in ae.lower():
         return response
+
+    ct = (response.headers.get("Content-Type") or "").lower()
+    path = request.path or ""
+    text_like = (
+        "text/html" in ct
+        or "text/css" in ct
+        or "javascript" in ct
+        or path.endswith((".js", ".css", ".html"))
+    )
+    json_like = "application/json" in ct
+    if not (text_like or json_like):
+        return response
+
     try:
+        if response.direct_passthrough:
+            response.direct_passthrough = False
         data = response.get_data()
     except Exception:
         return response
@@ -219,6 +229,8 @@ TEXTBOOKS_INDEX_PATH = STATIC_WB_DIR / "textbooks" / "index.json"
 _words_csv_lock = threading.Lock()
 _words_csv_cache: Optional[List[dict]] = None
 _words_csv_cache_mtime: float = 0.0
+_words_csv_by_key_cache: Optional[Dict[str, dict]] = None
+_words_csv_by_key_cache_mtime: float = -1.0
 
 # 跨进程互斥：threading.Lock 仅同进程内有效；多进程/多脚本写 words.csv 需文件锁（路径见 project_paths）
 
@@ -1024,6 +1036,27 @@ def load_words_csv() -> List[dict]:
             return rows
 
 
+def load_words_csv_by_key() -> Dict[str, dict]:
+    """返回规范化 english -> CSV 行的索引，避免每次查词线性扫描全表。"""
+    global _words_csv_by_key_cache, _words_csv_by_key_cache_mtime
+    rows = load_words_csv()
+    with _words_csv_lock:
+        mtime = _words_csv_cache_mtime
+        if (
+            _words_csv_by_key_cache is not None
+            and _words_csv_by_key_cache_mtime == mtime
+        ):
+            return _words_csv_by_key_cache
+        by_key: Dict[str, dict] = {}
+        for row in rows:
+            k = wordbank_v2.normalize_english_key(row.get("english", ""))
+            if k:
+                by_key[k] = row
+        _words_csv_by_key_cache = by_key
+        _words_csv_by_key_cache_mtime = mtime
+        return by_key
+
+
 def _merge_incremental_words_csv(
     server_rows: List[dict], upload_rows: List[dict]
 ) -> Tuple[List[dict], Dict[str, int]]:
@@ -1091,6 +1124,7 @@ def _merge_incremental_words_csv(
 def _write_words_csv_rows_atomic_under_lock(rows: List[dict]) -> None:
     """在已持有 _words_csv_interprocess_lock 与 _words_csv_lock 时原子写入全表并失效缓存（勿调用会再次加锁的函数）。"""
     global _words_csv_cache, _words_csv_cache_mtime
+    global _words_csv_by_key_cache, _words_csv_by_key_cache_mtime
     WORDS_CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(suffix=".csv", dir=str(WORDS_CSV_FILE.parent), text=True)
     try:
@@ -1107,6 +1141,8 @@ def _write_words_csv_rows_atomic_under_lock(rows: List[dict]) -> None:
             pass
         raise
     _words_csv_cache = None
+    _words_csv_by_key_cache = None
+    _words_csv_by_key_cache_mtime = -1.0
     try:
         _words_csv_cache_mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
     except OSError:
@@ -1114,9 +1150,11 @@ def _write_words_csv_rows_atomic_under_lock(rows: List[dict]) -> None:
 
 
 def invalidate_words_csv_cache() -> None:
-    global _words_csv_cache
+    global _words_csv_cache, _words_csv_by_key_cache, _words_csv_by_key_cache_mtime
     with _words_csv_lock:
         _words_csv_cache = None
+        _words_csv_by_key_cache = None
+        _words_csv_by_key_cache_mtime = -1.0
     invalidate_merge_wordbank_rows_cache()
 
 
@@ -1153,7 +1191,11 @@ def append_words_to_csv(new_rows: List[dict]) -> int:
                     pass
                 raise
             global _words_csv_cache
+            global _words_csv_by_key_cache, _words_csv_by_key_cache_mtime
             _words_csv_cache = None
+            _words_csv_by_key_cache = None
+            _words_csv_by_key_cache_mtime = -1.0
+    invalidate_merge_wordbank_rows_cache()
     return len(new_rows)
 
 
@@ -1215,10 +1257,7 @@ def lookup_csv_word(english: str) -> Optional[dict]:
     v2 = wordbank_v2.load_words_v2_by_key().get(key)
     if v2:
         return wordbank_v2.v2_entry_to_flat_csv_row(v2)
-    for row in load_words_csv():
-        if wordbank_v2.normalize_english_key(row.get("english", "")) == key:
-            return row
-    return None
+    return load_words_csv_by_key().get(key)
 
 
 def examples_from_csv_row(row: Optional[dict]) -> List[dict]:
@@ -2281,6 +2320,66 @@ def user_reciter_session(username: str) -> Generator[WordReciter, None, None]:
         yield reciter
 
 
+def _summary_payload_from_reciter(reciter: WordReciter) -> dict:
+    """首屏/导航所需轻量统计，不补查词库例句。"""
+    today_d = date.today()
+    total_pending = len(reciter.all_words)
+    due_count = sum(1 for w in reciter.all_words if w.next_review_date <= today_d)
+    avg_review_count = (
+        sum(w.review_count for w in reciter.all_words) / total_pending
+        if total_pending
+        else 0
+    )
+    stats = {
+        "total_words": total_pending,
+        "mastered_words": len(reciter.mastered_words),
+        "current_round": reciter.current_review_round,
+        "avg_review_count": avg_review_count,
+        "due_count": due_count,
+    }
+    return {"due_count": due_count, "stats": stats}
+
+
+def _review_words_payload(reciter: WordReciter, review_list: List[Any]) -> dict:
+    """复习列表序列化；供 /words/review 与 /bootstrap 复用。"""
+    words = []
+    today_d = date.today()
+    for w in review_list:
+        nd = w.next_review_date
+        is_carryover = nd < today_d
+        item = {
+            'english': w.english,
+            'chinese': w.chinese,
+            'success_count': w.success_count,
+            'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
+            'review_count': w.review_count,
+            'example': w.example,
+            'example_form': '',
+            'scheduled_due_date': nd.isoformat(),
+            'is_carryover': is_carryover,
+            'carryover_days': (today_d - nd).days if is_carryover else 0,
+            'examples': [],
+        }
+        # 优先词库（v2 或 CSV）释义与例句；多义项只展示当前槽对应的一条
+        csv_row = lookup_csv_word(w.english)
+        if csv_row:
+            if (csv_row.get("chinese") or "").strip():
+                item["chinese"] = (csv_row.get("chinese") or "").strip()
+            apply_review_display_from_wordbank(item, csv_row, w.english)
+            csl = csv_row.get("chinese_sense_lines")
+            if isinstance(csl, list) and csl:
+                item["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
+        if not item['examples'] and (getattr(w, 'example', None) or '').strip():
+            raw = (w.example or '').strip()
+            if '_' in raw:
+                a, b = raw.split('_', 1)
+                item['examples'] = [{'en': a.strip(), 'cn': b.strip()}]
+            else:
+                item['examples'] = [{'en': raw, 'cn': ''}]
+        words.append(item)
+    return {'words': words, 'count': len(words)}
+
+
 def sanitize_tts_text(text: str, max_len: int = 500) -> str:
     """去除控制字符并限制长度，避免异常输入与命令注入面。"""
     text = (text or "").strip()[:max_len]
@@ -2424,6 +2523,50 @@ def auth_session(username):
     """刷新页后恢复 is_parent / child_username。"""
     login = getattr(g, 'login_username', username)
     return jsonify(_auth_session_payload(login)), 200
+
+
+@app.route('/api/bootstrap', methods=['GET'])
+@token_required
+def bootstrap(username):
+    """首屏聚合数据：用一条请求替代多条关键请求，降低首次打开失败概率。"""
+    try:
+        login = getattr(g, 'login_username', username)
+        session_payload = _auth_session_payload(login)
+        with user_reciter_session(username) as reciter:
+            mastered_n = len(reciter.mastered_words)
+            summary = _summary_payload_from_reciter(reciter)
+            review = (
+                {'words': [], 'count': 0}
+                if getattr(g, "is_parent", False)
+                else _review_words_payload(reciter, reciter.get_today_review_list())
+            )
+
+        pkw, pkm = _pk_stats_for_gamification(username)
+        gam_payload = gamification_mod.public_profile(
+            DATA_DIR,
+            username,
+            mastered_words=mastered_n,
+            pk_wins=pkw,
+            pk_matches=pkm,
+        )
+
+        av = user_avatar_disk_path(username)
+        return jsonify({
+            "session": session_payload,
+            "summary": summary,
+            "review": review,
+            "gamification": gam_payload,
+            "avatar_url": f"/api/user/avatar/{username}" if av else None,
+            "plan": get_user_plan(username),
+            "article_ai_extract_available": bool(get_deepseek_api_key()),
+            "article_ai_extract_enabled": _article_ai_extract_enabled(),
+            "tts_capabilities": {
+                "piper": bool(piper_runtime_ready()) if piper_runtime_ready is not None else False,
+            },
+        }), 200
+    except Exception as e:
+        logger.error("首屏 bootstrap 失败: %s", e)
+        return jsonify({'error': '服务器内部错误'}), 500
 
 
 @app.route('/api/auth/broadcast/ack', methods=['POST'])
@@ -2632,6 +2775,16 @@ def get_user_settings(username):
     except Exception as e:
         logger.error(f"获取用户设置失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/user/avatar-meta', methods=['GET'])
+@token_required
+def get_user_avatar_meta(username):
+    """轻量头像元信息；避免顶栏头像刷新调用完整 settings。"""
+    av = user_avatar_disk_path(username)
+    return jsonify({
+        'avatar_url': f"/api/user/avatar/{username}" if av else None,
+    }), 200
 
 
 @app.route('/api/user/avatar/<uname>', methods=['GET'])
@@ -2883,6 +3036,18 @@ def get_status(username):
         logger.error(f"获取状态失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
 
+
+@app.route('/api/words/summary', methods=['GET'])
+@token_required
+def get_words_summary(username):
+    """获取导航与首屏所需轻量统计，避免为统计拉取完整单词列表。"""
+    try:
+        with user_reciter_session(username) as reciter:
+            return jsonify(_summary_payload_from_reciter(reciter)), 200
+    except Exception as e:
+        logger.error(f"获取轻量统计失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
 @app.route('/api/words/review', methods=['GET'])
 @token_required
 def get_review_list(username):
@@ -2890,44 +3055,7 @@ def get_review_list(username):
     try:
         with user_reciter_session(username) as reciter:
             review_list = reciter.get_today_review_list()
-
-            words = []
-            today_d = date.today()
-            for w in review_list:
-                nd = w.next_review_date
-                is_carryover = nd < today_d
-                item = {
-                    'english': w.english,
-                    'chinese': w.chinese,
-                    'success_count': w.success_count,
-                    'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
-                    'review_count': w.review_count,
-                    'example': w.example,
-                    'example_form': '',
-                    'scheduled_due_date': nd.isoformat(),
-                    'is_carryover': is_carryover,
-                    'carryover_days': (today_d - nd).days if is_carryover else 0,
-                    'examples': [],
-                }
-                # 优先词库（v2 或 CSV）释义与例句；多义项只展示当前槽对应的一条
-                csv_row = lookup_csv_word(w.english)
-                if csv_row:
-                    if (csv_row.get("chinese") or "").strip():
-                        item["chinese"] = (csv_row.get("chinese") or "").strip()
-                    apply_review_display_from_wordbank(item, csv_row, w.english)
-                    csl = csv_row.get("chinese_sense_lines")
-                    if isinstance(csl, list) and csl:
-                        item["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
-                if not item['examples'] and (getattr(w, 'example', None) or '').strip():
-                    raw = (w.example or '').strip()
-                    if '_' in raw:
-                        a, b = raw.split('_', 1)
-                        item['examples'] = [{'en': a.strip(), 'cn': b.strip()}]
-                    else:
-                        item['examples'] = [{'en': raw, 'cn': ''}]
-                words.append(item)
-
-            return jsonify({'words': words, 'count': len(words)}), 200
+            return jsonify(_review_words_payload(reciter, review_list)), 200
     except Exception as e:
         logger.error(f"获取复习列表失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
