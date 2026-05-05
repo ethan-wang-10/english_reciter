@@ -15,6 +15,8 @@ DRY_RUN=0
 RUN_TESTS=0
 NO_RESTART=0
 STRICT_DIRTY=0
+UPGRADE_PIP="${DEPLOY_UPGRADE_PIP:-0}"
+INSTALL_SPACY_MODEL="${DEPLOY_INSTALL_SPACY_MODEL:-0}"
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
@@ -46,13 +48,15 @@ Options:
   --no-restart                   Prepare/check only; do not restart the service
   --test                         Run pytest if it is available
   --strict-dirty                 Refuse any tracked local changes before pull
+  --upgrade-pip                  Upgrade pip before installing requirements
+  --install-spacy-model          Best-effort install en_core_web_sm after deps
   --dry-run                      Print actions without changing files/services
   -h, --help                     Show this help
 
 Environment overrides:
   DEPLOY_MODE, DEPLOY_BRANCH, PYTHON_BIN, VENV_DIR, HOST, PORT,
   WEB_CONCURRENCY, GUNICORN_THREADS, HEALTH_TIMEOUT, NATIVE_PID_FILE, TZ,
-  DEPLOY_LOCAL_RUNTIME_PATHS
+  DEPLOY_LOCAL_RUNTIME_PATHS, DEPLOY_UPGRADE_PIP, DEPLOY_INSTALL_SPACY_MODEL
 
 Examples:
   scripts/deploy.sh --mode pm2
@@ -149,6 +153,14 @@ while [ "$#" -gt 0 ]; do
       ;;
     --strict-dirty)
       STRICT_DIRTY=1
+      shift
+      ;;
+    --upgrade-pip)
+      UPGRADE_PIP=1
+      shift
+      ;;
+    --install-spacy-model)
+      INSTALL_SPACY_MODEL=1
       shift
       ;;
     --dry-run)
@@ -365,8 +377,18 @@ ensure_venv_and_deps() {
     run "$PYTHON_BIN" -m venv "$VENV_DIR"
   fi
   app_py="$(venv_python_path)"
-  run "$app_py" -m pip install --upgrade pip
+  if [ "$UPGRADE_PIP" = "1" ]; then
+    run "$app_py" -m pip install --upgrade pip
+  fi
   run "$app_py" -m pip install -r "$REQUIREMENTS"
+  if [ "$INSTALL_SPACY_MODEL" = "1" ]; then
+    # GitHub may be unreachable on China/offline servers; keep deploy usable.
+    if [ "$DRY_RUN" = "1" ]; then
+      log "+ $app_py -m spacy download en_core_web_sm"
+    elif ! "$app_py" -m spacy download en_core_web_sm; then
+      warn "Failed to install en_core_web_sm; app will fall back to heuristic lemmatization."
+    fi
+  fi
 }
 
 has_compose() {

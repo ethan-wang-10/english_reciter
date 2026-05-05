@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 # 复制依赖文件
 COPY requirements-simple.txt .
 
-# 安装 Python 依赖（requirements 中含 en_core_web_sm wheel，无需单独 download）
+# 安装 Python 依赖；en_core_web_sm 模型不强制安装，国内/离线环境可降级运行
 RUN pip install --no-cache-dir -r requirements-simple.txt
 
 # 复制应用代码

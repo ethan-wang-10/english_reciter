@@ -25,9 +25,9 @@ nltk==3.8.1
 # scripts/validate_words_csv.py --spellcheck：英语拼写检查（词频词典）
 pyspellchecker>=0.8.0
 
-# 词库：英文词形还原（spacy 3.8.x 与 en_core_web_sm 3.8.0 对齐，避免 W095 版本不匹配）
+# 词库：英文词形还原。模型 en_core_web_sm 走 GitHub 下载，在国内/离线服务器上容易失败；
+# 部署时不强制安装模型，应用会降级为启发式词形处理。需要 VIP 课文 spaCy 分词时再手动安装模型。
 spacy==3.8.13
-en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # 头像：压缩与按需缩放（WebP）；词汇导入「从图片识别」需系统安装 Tesseract（如 brew install tesseract）
 Pillow==12.0.0

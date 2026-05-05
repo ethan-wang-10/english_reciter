@@ -93,6 +93,7 @@ scripts/deploy.sh --dry-run --skip-pull --skip-install --no-restart
 - PM2 / 原生 Gunicorn：需要 Python 3.9+，推荐 3.11；依赖安装到 `.venv/`，不会污染系统 Python。
 - Docker：自动兼容 `docker compose`（v2）和 `docker-compose`（v1）；宿主机没有 Python 时会跳过宿主 Python 语法检查，由镜像构建验证依赖。
 - 本地词库：`static/wordbanks/words_v2.json` 是线上运行时文件。脚本默认会在拉代码前对它执行 `git update-index --skip-worktree`，从而保留服务器本地词库；其它代码文件如有未提交改动仍会中断部署。若希望严格检查所有 tracked 文件，使用 `--strict-dirty`。
+- 依赖安装：脚本默认不升级 pip，减少无外网服务器的部署失败概率；`en_core_web_sm` 不再作为必装依赖，模型缺失时词形处理会降级。若服务器可访问外网且需要 VIP 课文 spaCy 分词，可执行 `scripts/deploy.sh --install-spacy-model` 或手动运行 `.venv/bin/python -m spacy download en_core_web_sm`。
 - 安全：`.env` 已被 `.gitignore` 忽略；生产环境建议提前写入固定强随机 `SECRET_KEY`，避免重启后密钥变化影响已加密配置。
 
 ## 腾讯云部署
