@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from datetime import date, timedelta
 
+from app_time import china_today
 from reciter import (
     Config, Word, ExampleGenerator, WordRepository, WordReciter
 )
@@ -305,7 +306,7 @@ class TestWordReciter(unittest.TestCase):
     def test_process_overdue_words(self):
         """逾期单词不再被改成今天，以保留「遗留」可区分性"""
         reciter = WordReciter(self.config)
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = china_today() - timedelta(days=1)
         word = Word("test", "测试", next_review_date=yesterday)
         reciter.all_words.append(word)
         
@@ -315,7 +316,7 @@ class TestWordReciter(unittest.TestCase):
     def test_today_scheduled_first_then_carryover_oldest(self):
         """今日列表：今日排期优先，遗留在后（越早到期越靠前）"""
         reciter = WordReciter(self.config)
-        t0 = date.today()
+        t0 = china_today()
         reciter.all_words = [
             Word("now", "今", next_review_date=t0),
             Word("mid", "中", next_review_date=t0 - timedelta(days=1)),
@@ -328,10 +329,10 @@ class TestWordReciter(unittest.TestCase):
         """测试获取今日复习列表"""
         reciter = WordReciter(self.config)
         today_words = [
-            Word("apple", "苹果", next_review_date=date.today()),
-            Word("banana", "香蕉", next_review_date=date.today())
+            Word("apple", "苹果", next_review_date=china_today()),
+            Word("banana", "香蕉", next_review_date=china_today())
         ]
-        future_word = Word("cat", "猫", next_review_date=date.today() + timedelta(days=7))
+        future_word = Word("cat", "猫", next_review_date=china_today() + timedelta(days=7))
         
         reciter.all_words.extend(today_words + [future_word])
         review_list = reciter._get_today_review_list()
@@ -359,7 +360,7 @@ class TestWordReciter(unittest.TestCase):
     def test_record_answer_correct_main_pass(self):
         """主轮答对：增加 success_count 与 review_count，并排期"""
         reciter = WordReciter(self.config)
-        w = Word("a", "甲", success_count=0, next_review_date=date.today())
+        w = Word("a", "甲", success_count=0, next_review_date=china_today())
         reciter.all_words.append(w)
         reciter.record_answer_correct(w, remedial=False)
         self.assertEqual(w.success_count, 1)
@@ -369,7 +370,7 @@ class TestWordReciter(unittest.TestCase):
     def test_record_answer_correct_remedial(self):
         """错题巩固答对：不增加 success_count，但排期到今日之后（与 Web 一致）"""
         reciter = WordReciter(self.config)
-        w = Word("b", "乙", success_count=2, next_review_date=date.today())
+        w = Word("b", "乙", success_count=2, next_review_date=china_today())
         reciter.all_words.append(w)
         reciter.record_answer_correct(w, remedial=True)
         self.assertEqual(w.success_count, 2)
@@ -387,7 +388,7 @@ class TestWordReciter(unittest.TestCase):
     def test_record_bonus_answer_correct(self):
         """加练答对：只增加复习次数，不改变掌握进度与排期"""
         reciter = WordReciter(self.config)
-        w = Word("d", "丁", success_count=0, next_review_date=date.today(), review_count=0)
+        w = Word("d", "丁", success_count=0, next_review_date=china_today(), review_count=0)
         nd = w.next_review_date
         reciter.all_words.append(w)
         reciter.record_bonus_answer_correct(w)

@@ -13,9 +13,11 @@ import sys
 import tempfile
 import threading
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
+
+from app_time import china_now_iso, china_today
 
 # ---------- 数值与上限 ----------
 XP_PLAN_CORRECT = 10
@@ -203,7 +205,7 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
         except (TypeError, ValueError):
             base["streak_max"] = None
     # 旧数据：本月已有目标但未记录「已编辑」时，视为已用掉当月一次修改机会
-    _ym = date.today().strftime("%Y-%m")
+    _ym = china_today().strftime("%Y-%m")
     _gm = base.get("mcheckin_goal_month")
     if (
         base.get("mcheckin_goal_edits_ym") is None
@@ -438,7 +440,7 @@ def _unlock_achievements(
     new_list: List[Dict[str, Any]] = []
     total_xp = int(state.get("total_xp") or 0)
     total_correct = int(state.get("total_correct") or 0)
-    streak = display_streak(state, date.today())
+    streak = display_streak(state, china_today())
     ach = state.setdefault("achievements", {})
     assert isinstance(ach, dict)
 
@@ -447,7 +449,7 @@ def _unlock_achievements(
             return
         if aid not in ACHIEVEMENT_DEFS:
             return
-        now = datetime.now().isoformat(timespec="seconds")
+        now = china_now_iso(timespec="seconds")
         ach[aid] = now
         meta = dict(ACHIEVEMENT_DEFS[aid])
         meta["id"] = aid
@@ -515,7 +517,7 @@ def _unlock_achievements(
             except (TypeError, ValueError):
                 continue
 
-    today = date.today()
+    today = china_today()
     ym = today.strftime("%Y-%m")
     if state.get("mcheckin_goal_month") == ym and state.get("mcheckin_goal") is not None:
         try:
@@ -617,7 +619,7 @@ def try_grant_monthly_checkin_goal_bonus(data_dir: Path, username: str) -> int:
     """
     with _locked_user_state(data_dir, username):
         state = load_state(data_dir, username)
-        today = date.today()
+        today = china_today()
         ym = today.strftime("%Y-%m")
         if state.get("mcheckin_goal_month") != ym or state.get("mcheckin_goal") is None:
             return 0
@@ -670,7 +672,7 @@ def award_correct_answer(
     """
     with _locked_user_state(data_dir, username):
         state = load_state(data_dir, username)
-        today = date.today()
+        today = china_today()
         day_key = today.isoformat()
         ym = today.strftime("%Y-%m")
 
@@ -796,7 +798,7 @@ def public_profile(
         row["unlocked_at"] = ach.get(aid)
         all_defs.append(row)
 
-    today = date.today()
+    today = china_today()
     day_key = today.isoformat()
     ym = today.strftime("%Y-%m")
     sbd = state.get("streak_correct_by_day") or {}
@@ -849,7 +851,7 @@ def patch_settings(
     *,
     clear_monthly_goal: bool = False,
 ) -> Dict[str, Any]:
-    today = date.today()
+    today = china_today()
     ym = today.strftime("%Y-%m")
     dim = calendar.monthrange(today.year, today.month)[1]
 
@@ -931,7 +933,7 @@ def build_leaderboard_from_states(
                 "username": un,
                 "total_xp": xp,
                 "level": level_from_xp(xp),
-                "streak": display_streak(st, date.today()),
+                "streak": display_streak(st, china_today()),
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
             }

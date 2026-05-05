@@ -5,7 +5,7 @@ services:
     build: .
     container_name: english-reciter
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     volumes:
       # 持久化用户数据
       - ./user_data_simple:/app/user_data_simple
@@ -15,7 +15,7 @@ services:
     environment:
       - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY to a strong random value, e.g. openssl rand -hex 32}
       - FLASK_ENV=production
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).read()"]

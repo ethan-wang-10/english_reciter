@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from app_time import china_today
 import gamification as gm
 
 
@@ -16,7 +17,7 @@ class TestAchievementUnlock(unittest.TestCase):
         self.assertTrue(any(x.get("id") == "daily_xp_cap" for x in new))
 
     def test_monthly_goal_met_achievement(self):
-        today = date.today()
+        today = china_today()
         ym = today.strftime("%Y-%m")
         st = gm.default_state()
         st["mcheckin_goal_month"] = ym

@@ -21,7 +21,24 @@ docker-compose logs -f
 docker-compose down
 ```
 
-### 选项 2：本地运行
+### 选项 2：部署脚本（生产推荐）
+
+```bash
+# 自动选择 PM2 / Docker Compose / 原生 Gunicorn
+scripts/deploy.sh --mode auto
+
+# 或显式指定
+scripts/deploy.sh --mode pm2
+scripts/deploy.sh --mode docker
+```
+
+脚本支持 macOS/Linux，会自动准备 `.env`、`.venv`（PM2/native）并执行健康检查。试运行可用：
+
+```bash
+scripts/deploy.sh --dry-run --skip-pull --skip-install --no-restart
+```
+
+### 选项 3：本地运行
 
 ```bash
 # 安装依赖
@@ -31,7 +48,7 @@ pip3 install -r requirements-simple.txt
 python3 simple_web_app.py
 ```
 
-### 选项 3：使用安装脚本
+### 选项 4：使用安装脚本
 
 ```bash
 # 运行启动脚本

@@ -8,11 +8,13 @@ import subprocess
 import tempfile
 from collections import defaultdict
 from typing import Dict, List, Optional
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 from pathlib import Path
 from prettytable import PrettyTable
 import readchar
 import logging
+
+from app_time import china_date_from_timestamp, china_now, china_today
 
 # 常量定义
 MAX_ATTEMPTS = 3  # 最大尝试次数
@@ -207,7 +209,7 @@ class Word:
         self.english = english
         self.chinese = chinese
         self.success_count = success_count
-        self.next_review_date = next_review_date or date.today()
+        self.next_review_date = next_review_date or china_today()
         self.example = example
         self.review_round = review_round
         self.review_count = review_count
@@ -232,7 +234,7 @@ class Word:
         if nr:
             d['next_review_date'] = date.fromisoformat(str(nr)[:10])
         else:
-            d['next_review_date'] = date.today()
+            d['next_review_date'] = china_today()
         d.setdefault('success_count', 0)
         d.setdefault('review_round', 0)
         d.setdefault('review_count', 0)
@@ -330,7 +332,7 @@ class WordRepository:
             return None
         
         try:
-            now = datetime.now()
+            now = china_now()
             backup_dir = Path("backups")
             backup_dir.mkdir(exist_ok=True)
             
@@ -379,7 +381,7 @@ class WordReciter:
         
         self.all_words: List[Word] = []
         self.mastered_words: List[Word] = []
-        self.today = date.today()
+        self.today = china_today()
         self.current_review_round = 0
         
         self._load_data()
@@ -397,7 +399,7 @@ class WordReciter:
             backups = list(backup_dir.glob("learning_data_backup_*.json"))
             if backups:
                 latest_backup = max(backups, key=lambda x: x.stat().st_mtime)
-                last_backup_date = date.fromtimestamp(latest_backup.stat().st_mtime)
+                last_backup_date = china_date_from_timestamp(latest_backup.stat().st_mtime)
                 days_since_backup = (self.today - last_backup_date).days
                 if days_since_backup < self.config.BACKUP_INTERVAL_DAYS:
                     logger.debug(f"距离上次备份仅 {days_since_backup} 天，跳过备份")
@@ -475,7 +477,7 @@ class WordReciter:
     
     def refresh_for_new_day(self) -> None:
         """服务器常驻时若跨日，更新日期并重新处理过期词与轮次。"""
-        today = date.today()
+        today = china_today()
         if today != self.today:
             self.today = today
             self._process_overdue_words()

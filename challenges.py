@@ -13,6 +13,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app_time import china_now, china_now_iso, china_today
 import gamification as gamification_mod
 
 MONTHLY_POOL_FEE_XP = 150
@@ -69,19 +70,19 @@ def duel_invite_expires_at_from_created(created: datetime) -> datetime:
 
 
 def pool_join_window_open(today: Optional[date] = None) -> bool:
-    t = today or date.today()
+    t = today or china_today()
     return 1 <= t.day <= JOIN_WINDOW_LAST_DAY
 
 
 def pool_preparation_phase(today: Optional[date] = None) -> bool:
     """每月 1～5 日为准备期（尚未开赛）。"""
-    t = today or date.today()
+    t = today or china_today()
     return 1 <= t.day <= PREPARATION_LAST_DAY
 
 
 def pool_competition_phase(today: Optional[date] = None) -> bool:
     """第 6 日起为比赛期（本月内）。"""
-    t = today or date.today()
+    t = today or china_today()
     return t.day >= COMPETITION_START_DAY
 
 
@@ -178,7 +179,7 @@ def _parse_iso_datetime(s: str) -> Optional[datetime]:
 
 def expire_pending_duels_if_needed(data_dir: Path) -> None:
     """pending 在邀约截止时间（第 N 个自然日 23:59）之后仍未处理则标记为 expired。"""
-    now = datetime.now()
+    now = china_now()
     with _challenges_lock:
         data = _load_duels(data_dir)
         duels = data.get("duels") or []
@@ -211,7 +212,7 @@ def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
     months = raw.get("months") or {}
     if not isinstance(months, dict):
         months = {}
-    today = date.today()
+    today = china_today()
     cur_ym = month_key(today)
     changed = False
 
@@ -226,7 +227,7 @@ def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
         pool = int(block.get("pool_xp") or 0)
         if not participants or pool <= 0:
             block["settled"] = True
-            block["settled_at"] = datetime.now().isoformat(timespec="seconds")
+            block["settled_at"] = china_now_iso(timespec="seconds")
             block["settlement_note"] = "无人或空池"
             months[ym] = block
             changed = True
@@ -248,7 +249,7 @@ def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
             if not ok:
                 pass
         block["settled"] = True
-        block["settled_at"] = datetime.now().isoformat(timespec="seconds")
+        block["settled_at"] = china_now_iso(timespec="seconds")
         block["winners"] = winners
         block["winner_days"] = best
         block["per_winner_xp"] = share
@@ -264,7 +265,7 @@ def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
 
 def get_monthly_pool_state(data_dir: Path, username: str) -> Dict[str, Any]:
     _settle_monthly_pool_if_needed(data_dir)
-    today = date.today()
+    today = china_today()
     ym = month_key(today)
     path = monthly_pool_path(data_dir)
     raw = _load_json(path, {"months": {}})
@@ -323,7 +324,7 @@ def join_monthly_pool(data_dir: Path, username: str) -> Tuple[bool, str, Dict[st
         return False, f"仅在每月 1～{JOIN_WINDOW_LAST_DAY} 日准备期内可加入群体挑战", {}
 
     _settle_monthly_pool_if_needed(data_dir)
-    today = date.today()
+    today = china_today()
     ym = month_key(today)
     path = monthly_pool_path(data_dir)
     with _challenges_lock:
@@ -367,7 +368,7 @@ def create_duel(
     if from_user == target_user:
         return False, "不能挑战自己", None
     expire_pending_duels_if_needed(data_dir)
-    now = datetime.now()
+    now = china_now()
     created_iso = now.isoformat(timespec="seconds")
     expires_iso = duel_invite_expires_at_from_created(now).isoformat(timespec="seconds")
     duel_id = str(uuid.uuid4())
@@ -430,7 +431,7 @@ def respond_duel(
             if not ok2:
                 gamification_mod.apply_xp_delta(data_dir, str(a), w)
                 return False, f"应战方{msg2}", None
-        accept_now = datetime.now()
+        accept_now = china_now()
         found["month"] = month_key(accept_now.date())
         found["status"] = "active"
         found["accepted_at"] = accept_now.isoformat(timespec="seconds")
@@ -441,7 +442,7 @@ def respond_duel(
 
 def settle_due_duels(data_dir: Path) -> None:
     """结算上月及更早未处理的 active 挑战。"""
-    today = date.today()
+    today = china_today()
     cur_ym = month_key(today)
     with _challenges_lock:
         data = _load_duels(data_dir)
@@ -471,7 +472,7 @@ def settle_due_duels(data_dir: Path) -> None:
                 gamification_mod.apply_xp_delta(data_dir, a, w)
                 gamification_mod.apply_xp_delta(data_dir, b, w)
             d["settled"] = True
-            d["settled_at"] = datetime.now().isoformat(timespec="seconds")
+            d["settled_at"] = china_now_iso(timespec="seconds")
             d["days_a"] = da
             d["days_b"] = db
             rng = duel_pk_counting_range(d)
@@ -533,7 +534,7 @@ def monthly_pk_board(data_dir: Path) -> Dict[str, Any]:
     """
     expire_pending_duels_if_needed(data_dir)
     settle_due_duels(data_dir)
-    today = date.today()
+    today = china_today()
     cur_ym = month_key(today)
     first = today.replace(day=1)
     prev_last = first - timedelta(days=1)

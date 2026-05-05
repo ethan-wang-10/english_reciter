@@ -48,6 +48,10 @@ const root = __dirname;
 })();
 
 const venvGunicorn = path.join(root, '.venv', 'bin', 'gunicorn');
+const host = process.env.HOST || '0.0.0.0';
+const port = process.env.PORT || '8000';
+const workers = process.env.WEB_CONCURRENCY || '1';
+const threads = process.env.GUNICORN_THREADS || '4';
 
 module.exports = {
   apps: [
@@ -56,7 +60,7 @@ module.exports = {
       cwd: root,
       script: venvGunicorn,
       args:
-        '-c gunicorn_config.py --bind 0.0.0.0:8000 --workers 1 --threads 4 simple_web_app:app',
+        `-c gunicorn_config.py --bind ${host}:${port} --workers ${workers} --threads ${threads} simple_web_app:app`,
       instances: 1,
       autorestart: true,
       max_restarts: 15,
@@ -65,6 +69,10 @@ module.exports = {
         PYTHONUNBUFFERED: '1',
         FLASK_ENV: 'production',
         TZ: 'Asia/Shanghai',
+        HOST: host,
+        PORT: port,
+        WEB_CONCURRENCY: workers,
+        GUNICORN_THREADS: threads,
         // 启动前在 shell 中 export SECRET_KEY=...，PM2 会继承 process.env.SECRET_KEY
         SECRET_KEY: process.env.SECRET_KEY || '',
         // Piper：与 shell 中 export 二选一；若均不设置则走浏览器 Web Speech

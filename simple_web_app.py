@@ -24,7 +24,7 @@ import urllib.error
 import urllib.request
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import datetime, timedelta, date
+from datetime import timedelta
 from io import BytesIO, StringIO
 from pathlib import Path
 from functools import wraps
@@ -59,6 +59,7 @@ from auth_session_store import (
     verify_session,
 )
 from user_store import close_connection as close_user_store_sqlite, init_user_store, load_users, mutate_users
+from app_time import china_now_iso, china_today
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -715,7 +716,7 @@ def record_surfaces_to_difficult(surfaces: List[str]) -> None:
     """将 AI 未能写入词库的表面形记入疑难词（已有映射的跳过）。"""
     if not surfaces:
         return
-    now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = china_now_iso(timespec="seconds")
     with _TROUBLES_LOCK:
         data = _read_troubles_unlocked()
         diff = data.setdefault("difficult", {})
@@ -1235,7 +1236,7 @@ def _pick_example_slot_key(row: dict, english: str) -> str:
     if len(slots) == 1:
         return slots[0]
     key = (english or row.get("english") or "").strip().lower()
-    h = hashlib.sha256(f"{key}:{date.today().isoformat()}".encode("utf-8")).hexdigest()
+    h = hashlib.sha256(f"{key}:{china_today().isoformat()}".encode("utf-8")).hexdigest()
     idx = int(h[:8], 16) % len(slots)
     return slots[idx]
 
@@ -2055,7 +2056,7 @@ def register_user_with_invite(
             users[username] = {
                 'password_hash': hash_password(password),
                 'email': email,
-                'created_at': datetime.now().isoformat(),
+                'created_at': china_now_iso(timespec="seconds"),
                 'enabled': True,
             }
             return True, ''
@@ -2064,7 +2065,7 @@ def register_user_with_invite(
         if not ok:
             return False, err
 
-        matched['used_at'] = datetime.now().isoformat()
+        matched['used_at'] = china_now_iso(timespec="seconds")
         matched['used_by'] = username
         user_dir = DATA_DIR / username
         user_dir.mkdir(exist_ok=True)
@@ -2322,7 +2323,7 @@ def user_reciter_session(username: str) -> Generator[WordReciter, None, None]:
 
 def _summary_payload_from_reciter(reciter: WordReciter) -> dict:
     """首屏/导航所需轻量统计，不补查词库例句。"""
-    today_d = date.today()
+    today_d = china_today()
     total_pending = len(reciter.all_words)
     due_count = sum(1 for w in reciter.all_words if w.next_review_date <= today_d)
     avg_review_count = (
@@ -2343,7 +2344,7 @@ def _summary_payload_from_reciter(reciter: WordReciter) -> dict:
 def _review_words_payload(reciter: WordReciter, review_list: List[Any]) -> dict:
     """复习列表序列化；供 /words/review 与 /bootstrap 复用。"""
     words = []
-    today_d = date.today()
+    today_d = china_today()
     for w in review_list:
         nd = w.next_review_date
         is_carryover = nd < today_d
@@ -2439,7 +2440,7 @@ def register():
             return jsonify({
                 'username': username,
                 'email': email,
-                'created_at': datetime.now().isoformat(),
+                'created_at': china_now_iso(timespec="seconds"),
                 'access_token': token,
                 'token_type': 'bearer',
                 **_auth_session_payload(username),
@@ -2979,7 +2980,7 @@ def get_status(username):
     try:
         with user_reciter_session(username) as reciter:
             all_words = []
-            today_d = date.today()
+            today_d = china_today()
             for w in reciter.all_words:
                 csv_row = lookup_csv_word(w.english)
                 nd = w.next_review_date
@@ -4795,7 +4796,7 @@ def list_pending_words_for_settings(username):
     can_remove = bool(is_parent or not has_parent)
     try:
         with user_reciter_session(username) as reciter:
-            today_d = date.today()
+            today_d = china_today()
             out: List[dict] = []
             for w in reciter.all_words:
                 csv_row = lookup_csv_word(w.english)
@@ -4928,7 +4929,7 @@ def community_import_simple(username):
                 "chinese": zh,
                 "example": ex or None,
                 "added_by": username,
-                "added_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "added_at": china_now_iso(timespec="seconds"),
             }
             words.append(entry)
             comm_keys.add(key)
@@ -5177,7 +5178,7 @@ def admin_set_user_parent(username):
                     'child_username': username,
                     'password_hash': hash_password(DEFAULT_PARENT_PASSWORD),
                     'enabled': True,
-                    'created_at': datetime.now().isoformat(),
+                    'created_at': china_now_iso(timespec="seconds"),
                 }
             body = {
                 'username': username,
@@ -5388,7 +5389,7 @@ def admin_put_system_broadcast():
                 'schema': _SYSTEM_BROADCAST_SCHEMA,
                 'id': uuid.uuid4().hex,
                 'message': msg,
-                'created_at': datetime.now().isoformat(),
+                'created_at': china_now_iso(timespec="seconds"),
             }
         _write_system_broadcast_atomic(doc)
     logger.info("管理员更新系统广播: empty=%s", not bool(msg))
@@ -5514,7 +5515,7 @@ def admin_create_invite():
     entry = {
         'id': inv_id,
         'code_hash': _hash_invite_code(plain),
-        'created_at': datetime.now().isoformat(),
+        'created_at': china_now_iso(timespec="seconds"),
         'created_by': os.getenv('ADMIN_USERNAME', 'admin'),
         'used_at': None,
         'used_by': None,
@@ -5824,7 +5825,7 @@ def api_chat_stream():
 @app.route('/api/health', methods=['GET'])
 def health():
     """健康检查"""
-    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
+    return jsonify({'status': 'healthy', 'timestamp': china_now_iso(timespec="seconds")}), 200
 
 # ==================== 启动配置 ====================
 

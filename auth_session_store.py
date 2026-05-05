@@ -10,7 +10,7 @@ import secrets
 import sqlite3
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -92,7 +92,7 @@ def _cleanup_expired_unlocked(conn: sqlite3.Connection) -> None:
 def create_session(kind: str, principal: str, ttl: timedelta) -> str:
     """签发新 token 并写入库。"""
     token = secrets.token_urlsafe(32)
-    exp = (datetime.now() + ttl).timestamp()
+    exp = time.time() + ttl.total_seconds()
     with _lock:
         conn = _ensure_conn()
         _cleanup_expired_unlocked(conn)

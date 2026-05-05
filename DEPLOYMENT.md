@@ -64,6 +64,36 @@ docker-compose logs -f
 docker-compose down
 ```
 
+### 一键部署脚本（macOS/Linux）
+
+项目提供 `scripts/deploy.sh`，会按当前环境选择 PM2、Docker Compose 或原生 Gunicorn；也可以显式指定模式。脚本会创建必要运行目录、从 `config.example.json` 初始化本地 `config.json`、确保 `.env` 中存在 `SECRET_KEY` 和 `TZ`，并在重启后访问 `/api/health` 做健康检查。
+
+```bash
+# 首次使用（文件已带执行权限时可跳过）
+chmod +x scripts/deploy.sh
+
+# 自动选择：优先 PM2，其次 Docker Compose，最后原生 Gunicorn
+scripts/deploy.sh
+
+# 显式使用 PM2 / Docker / 原生 Gunicorn
+scripts/deploy.sh --mode pm2
+scripts/deploy.sh --mode docker
+scripts/deploy.sh --mode native
+
+# 兼容非 8000 端口；Docker 模式会映射为 PORT:8000
+scripts/deploy.sh --mode native --port 9000
+PORT=9000 scripts/deploy.sh --mode docker
+
+# 只检查流程，不拉代码、不安装依赖、不重启服务
+scripts/deploy.sh --dry-run --skip-pull --skip-install --no-restart
+```
+
+兼容性说明：
+
+- PM2 / 原生 Gunicorn：需要 Python 3.9+，推荐 3.11；依赖安装到 `.venv/`，不会污染系统 Python。
+- Docker：自动兼容 `docker compose`（v2）和 `docker-compose`（v1）；宿主机没有 Python 时会跳过宿主 Python 语法检查，由镜像构建验证依赖。
+- 安全：`.env` 已被 `.gitignore` 忽略；生产环境建议提前写入固定强随机 `SECRET_KEY`，避免重启后密钥变化影响已加密配置。
+
 ## 腾讯云部署
 
 ### 方案一：使用云服务器（CVM）

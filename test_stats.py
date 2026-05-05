@@ -6,7 +6,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from reciter import WordReciter, Word
-from datetime import datetime, timedelta
+from app_time import china_today
 
 def test_statistics():
     """测试统计功能"""
@@ -29,7 +29,7 @@ def test_statistics():
     test_words[4].success_count = 2  # 已复习2次
     
     # 设置复习日期为今天
-    today = datetime.now().date()
+    today = china_today()
     for word in test_words:
         word.next_review_date = today
     

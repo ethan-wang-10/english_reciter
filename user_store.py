@@ -11,9 +11,10 @@ import logging
 import sqlite3
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from app_time import china_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ def _user_row_tuple(username: str, u: Dict[str, Any]) -> Tuple[str, str, Optiona
         email = str(email).strip() or None
     created_at = str(u.get("created_at") or "").strip()
     if not created_at:
-        created_at = datetime.now().isoformat()
+        created_at = china_now_iso(timespec="seconds")
     enabled = 0 if u.get("enabled") is False else 1
     role = u.get("role")
     if role is not None:

@@ -38,6 +38,18 @@ docker compose up -d
 
 默认映射端口以 `docker-compose.yml` 为准；容器内使用 Gunicorn 启动 `simple_web_app`。
 
+### 部署脚本
+
+生产环境可使用跨 macOS/Linux 的一键脚本，自动兼容 PM2、Docker Compose v1/v2 和原生 Gunicorn：
+
+```bash
+scripts/deploy.sh --mode auto
+scripts/deploy.sh --mode pm2
+scripts/deploy.sh --mode docker
+```
+
+脚本会确保 `.env` 中存在 `SECRET_KEY`，并在重启后访问 `/api/health` 做健康检查；更多参数见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+
 ### 命令行版
 
 ```bash

@@ -8,10 +8,11 @@ from __future__ import annotations
 import json
 import threading
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app_time import china_now_iso, china_today
 import gamification as gamification_mod
 
 # 周榜 / 月榜前三名奖励 XP（第 1～3 名）
@@ -126,7 +127,7 @@ def build_period_leaderboard_from_states(
                 "total_xp": xp,
                 "period_xp": px,
                 "level": gamification_mod.level_from_xp(xp),
-                "streak": gamification_mod.display_streak(st, date.today()),
+                "streak": gamification_mod.display_streak(st, china_today()),
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
             }
@@ -214,7 +215,7 @@ def _settle_one_week(
         )
     weeks = raw.setdefault("weeks", {})
     weeks[week_id] = {
-        "settled_at": datetime.now().isoformat(timespec="seconds"),
+        "settled_at": china_now_iso(timespec="seconds"),
         "period_start": mon.isoformat(),
         "period_end": sun.isoformat(),
         "period_label": period_label_cn(mon, sun),
@@ -257,7 +258,7 @@ def _settle_one_month(
         )
     months = raw.setdefault("months", {})
     months[ym] = {
-        "settled_at": datetime.now().isoformat(timespec="seconds"),
+        "settled_at": china_now_iso(timespec="seconds"),
         "period_start": mon.isoformat(),
         "period_end": last_d.isoformat(),
         "period_label": period_label_cn(mon, last_d),
@@ -276,7 +277,7 @@ def settle_periods_if_needed(
     """
     if states is None:
         states = gamification_mod.load_states_batch(data_dir, usernames)
-    today = date.today()
+    today = china_today()
     path = _rewards_path(data_dir)
     with _period_lock:
         raw = _load_json(path, {"weeks": {}, "months": {}})
@@ -392,7 +393,7 @@ def build_week_leaderboard_payload(
 ) -> Dict[str, Any]:
     if states is None:
         states = gamification_mod.load_states_batch(data_dir, usernames)
-    today = date.today()
+    today = china_today()
     mon, sun = week_monday_sunday(today)
     end = min(today, sun)
     rows = build_period_leaderboard_from_states(
@@ -422,7 +423,7 @@ def build_month_leaderboard_payload(
 ) -> Dict[str, Any]:
     if states is None:
         states = gamification_mod.load_states_batch(data_dir, usernames)
-    today = date.today()
+    today = china_today()
     ym = today.strftime("%Y-%m")
     mon, last_d = month_calendar_bounds(ym)
     end = min(today, last_d)

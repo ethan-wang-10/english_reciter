@@ -10,9 +10,10 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
+
+from app_time import china_now_iso
 
 DATA_DIR = Path("user_data_simple")
 SHARED_DATA_DIR = DATA_DIR / "_shared"
@@ -68,7 +69,7 @@ def _chat_interprocess_lock():
 
 
 def _iso_ts() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return china_now_iso(timespec="seconds")
 
 
 def _parse_line(line: str) -> Optional[dict]:
