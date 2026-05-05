@@ -101,6 +101,20 @@ class TestStreakDisplayV2(unittest.TestCase):
         st["streak_correct_by_day"][(base + timedelta(days=5)).isoformat()] = m
         self.assertEqual(gm.longest_valid_streak_from_history(st), 3)
 
+    @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
+    def test_leaderboard_includes_streak_max_record(self):
+        today = china_today()
+        st = gm.default_state()
+        st["total_xp"] = 100
+        st["streak"] = 3
+        st["streak_max"] = 7
+        st["last_streak_date"] = today.isoformat()
+
+        rows = gm.build_leaderboard_from_states({"alice": st}, ["alice"], viewer="alice")
+
+        self.assertEqual(rows[0]["streak"], 3)
+        self.assertEqual(rows[0]["streak_max_record"], 7)
+
 
 if __name__ == "__main__":
     unittest.main()

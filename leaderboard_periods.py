@@ -112,6 +112,7 @@ def build_period_leaderboard_from_states(
     end: date,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
+    today = china_today()
     for un in usernames:
         st = states.get(un)
         if st is None:
@@ -121,13 +122,18 @@ def build_period_leaderboard_from_states(
         px = sum_daily_xp_in_range(st, start, end)
         xp = int(st.get("total_xp") or 0)
         ach_n = len(st.get("achievements") or {})
+        streak = gamification_mod.display_streak(st, today)
+        streak_max = gamification_mod.streak_max_record_display(st, today)
+        if gamification_mod.streak_v2_active(today):
+            streak_max = max(streak, streak_max)
         rows.append(
             {
                 "username": un,
                 "total_xp": xp,
                 "period_xp": px,
                 "level": gamification_mod.level_from_xp(xp),
-                "streak": gamification_mod.display_streak(st, china_today()),
+                "streak": streak,
+                "streak_max_record": streak_max,
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
             }

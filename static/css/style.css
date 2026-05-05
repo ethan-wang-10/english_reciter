@@ -4189,6 +4189,12 @@ button.import-article-chip--selected:hover {
     opacity: 0.78;
 }
 
+.lb-streak-max {
+    color: var(--text-secondary);
+    font-size: 0.9em;
+    font-weight: 600;
+}
+
 /* 排行榜页 */
 .leaderboard-page h2 {
     margin-bottom: 8px;

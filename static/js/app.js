@@ -280,12 +280,20 @@ function ngStreakPillInnerHtml(streak) {
     return `<span class="${flameClass}" aria-hidden="true">🔥</span><span class="ng-streak-num">${formatNumber(n)}</span>`;
 }
 
-/** 排行榜「连续」列：与导航一致的灰火苗 */
-function lbStreakCellInnerHtml(streak) {
+/** 排行榜「连续」列：显示当前连续，并在括号里补充历史最高连续 */
+function lbStreakCellInnerHtml(streak, streakMax) {
     const n = Math.max(0, Number(streak) || 0);
+    const hasMax = streakMax !== undefined && streakMax !== null;
+    const rawMax = Number(streakMax);
+    const maxN = Number.isFinite(rawMax) ? Math.max(0, rawMax) : 0;
+    const shownMax = hasMax ? Math.max(n, maxN) : 0;
     const out = n === 0;
     const flameClass = out ? 'lb-streak-flame lb-streak-flame--out' : 'lb-streak-flame';
-    return `<span class="${flameClass}" aria-hidden="true">🔥</span> <span class="lb-streak-val">${escapeHtml(formatNumber(n))}</span>`;
+    const maxHtml =
+        shownMax > 0
+            ? ` <span class="lb-streak-max">（最高 ${escapeHtml(formatNumber(shownMax))}）</span>`
+            : '';
+    return `<span class="${flameClass}" aria-hidden="true">🔥</span> <span class="lb-streak-val">${escapeHtml(formatNumber(n))}</span>${maxHtml}`;
 }
 
 /** 今日小结「当前连续」一行：0 天时灰色火苗 */
@@ -1852,7 +1860,7 @@ function leaderboardTableRowHtml(r, sc) {
                 <td class="lb-user-cell">${av}<span class="lb-username">${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</span></td>
                 <td>Lv.${escapeHtml(r.level)}</td>
                 <td>${escapeHtml(formatNumber(xpVal))}</td>
-                <td class="lb-streak-cell">${lbStreakCellInnerHtml(r.streak)}</td>
+                <td class="lb-streak-cell">${lbStreakCellInnerHtml(r.streak, r.streak_max_record)}</td>
                 <td>${escapeHtml(r.achievements_count)}</td>
             </tr>`;
 }

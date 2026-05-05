@@ -920,6 +920,7 @@ def build_leaderboard_from_states(
     viewer: str,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
+    today = china_today()
     for un in usernames:
         st = states.get(un)
         if st is None:
@@ -928,12 +929,17 @@ def build_leaderboard_from_states(
             continue
         xp = int(st.get("total_xp") or 0)
         ach_n = len(st.get("achievements") or {})
+        streak = display_streak(st, today)
+        streak_max = streak_max_record_display(st, today)
+        if streak_v2_active(today):
+            streak_max = max(streak, streak_max)
         rows.append(
             {
                 "username": un,
                 "total_xp": xp,
                 "level": level_from_xp(xp),
-                "streak": display_streak(st, china_today()),
+                "streak": streak,
+                "streak_max_record": streak_max,
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
             }
