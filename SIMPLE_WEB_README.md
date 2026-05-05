@@ -56,11 +56,11 @@ docker run -p 8000:8000 english-reciter-simple
 | `/api/words/review` | GET | 获取今日复习列表 |
 | `/api/words/practice` | POST | 练习单词 |
 | `/api/words/import-json` | POST | 批量导入单词（JSON 数组或 `{ "words": [...] }`） |
-| `/api/wordbank/csv` | GET | 内置词库（来自 `static/wordbanks/words.csv`） |
+| `/api/wordbank/csv` | GET | 内置词库（合并 `static/wordbanks/words_v2.json` 与 `words.csv`） |
 | `/api/wordbank/csv/search` | GET | 在词库中搜索（`q` 参数） |
 | `/api/words/mastered` | GET | 获取已掌握单词 |
 
-内置词库文件：`static/wordbanks/words.csv`（唯一数据源；**已加入 `.gitignore`**，不提交仓库，避免部署时 `git pull` 覆盖线上词库。新环境可复制 `static/wordbanks/words.csv.example` 为 `words.csv` 再扩充；线上更新请用管理后台「内置词库 CSV 增量上传」或直接在服务器编辑该文件。）
+内置词库文件：优先使用 `static/wordbanks/words_v2.json`，并兼容旧 `static/wordbanks/words.csv`。这两个文件都属于线上运行时数据；`words.csv` 不提交仓库，`words_v2.json` 仓库仅保留空占位，部署脚本会保护服务器本地词库，避免 `git pull` 覆盖线上内容。
 
 ## 认证方式
 
@@ -81,7 +81,7 @@ english_reciter/
 │   ├── index.html
 │   ├── css/
 │   ├── js/
-│   └── wordbanks/words.csv  # 内置词库（运行时文件，见 .gitignore；示例见 words.csv.example）
+│   └── wordbanks/           # 内置词库（words_v2.json / words.csv 均为线上运行时数据）
 ├── user_data_simple/      # 用户数据目录（新）
 │   ├── users.json         # 用户信息
 │   └── <username>/        # 每个用户的数据目录

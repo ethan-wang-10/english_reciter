@@ -14,6 +14,7 @@ SKIP_INSTALL=0
 DRY_RUN=0
 RUN_TESTS=0
 NO_RESTART=0
+STRICT_DIRTY=0
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
@@ -26,6 +27,7 @@ PYTHON_BIN="${PYTHON_BIN:-}"
 HEALTH_PATH="${HEALTH_PATH:-/api/health}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-30}"
 NATIVE_PID_FILE="${NATIVE_PID_FILE:-user_data_simple/gunicorn.pid}"
+LOCAL_RUNTIME_PATHS="${DEPLOY_LOCAL_RUNTIME_PATHS:-static/wordbanks/words_v2.json}"
 
 usage() {
   cat <<'EOF_USAGE'
@@ -43,12 +45,14 @@ Options:
   --skip-install                 Do not install/update Python dependencies
   --no-restart                   Prepare/check only; do not restart the service
   --test                         Run pytest if it is available
+  --strict-dirty                 Refuse any tracked local changes before pull
   --dry-run                      Print actions without changing files/services
   -h, --help                     Show this help
 
 Environment overrides:
   DEPLOY_MODE, DEPLOY_BRANCH, PYTHON_BIN, VENV_DIR, HOST, PORT,
-  WEB_CONCURRENCY, GUNICORN_THREADS, HEALTH_TIMEOUT, NATIVE_PID_FILE, TZ
+  WEB_CONCURRENCY, GUNICORN_THREADS, HEALTH_TIMEOUT, NATIVE_PID_FILE, TZ,
+  DEPLOY_LOCAL_RUNTIME_PATHS
 
 Examples:
   scripts/deploy.sh --mode pm2
@@ -141,6 +145,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --test)
       RUN_TESTS=1
+      shift
+      ;;
+    --strict-dirty)
+      STRICT_DIRTY=1
       shift
       ;;
     --dry-run)
@@ -260,14 +268,61 @@ ensure_runtime_files() {
   fi
 }
 
+is_local_runtime_path() {
+  path="$1"
+  for runtime_path in $LOCAL_RUNTIME_PATHS; do
+    [ "$path" = "$runtime_path" ] && return 0
+  done
+  return 1
+}
+
+dirty_non_runtime_files() {
+  {
+    git diff --name-only
+    git diff --cached --name-only
+  } | sort -u | while IFS= read -r path; do
+    [ -z "$path" ] && continue
+    if is_local_runtime_path "$path"; then
+      continue
+    fi
+    printf '%s\n' "$path"
+  done
+}
+
+protect_local_runtime_paths() {
+  [ "$STRICT_DIRTY" = "1" ] && return 0
+  for runtime_path in $LOCAL_RUNTIME_PATHS; do
+    [ -n "$runtime_path" ] || continue
+    if ! git ls-files --error-unmatch -- "$runtime_path" >/dev/null 2>&1; then
+      continue
+    fi
+    if ! git diff --cached --quiet -- "$runtime_path"; then
+      die "Runtime file has staged changes: $runtime_path. Unstage it or use --strict-dirty."
+    fi
+    if ! git diff --quiet -- "$runtime_path"; then
+      warn "Preserving local runtime file during deploy pull: $runtime_path"
+      warn "It will be marked skip-worktree in this checkout; keep backing it up separately."
+    fi
+    if [ "$DRY_RUN" = "1" ]; then
+      log "+ git update-index --skip-worktree -- $runtime_path"
+    else
+      git update-index --skip-worktree -- "$runtime_path"
+    fi
+  done
+}
+
 git_pull_ff_only() {
   [ "$SKIP_PULL" = "1" ] && return 0
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     warn "Not a git worktree; skip pull"
     return 0
   fi
-  if ! git diff --quiet || ! git diff --cached --quiet; then
-    die "Refuse to pull with local modified/staged files. Commit/stash them or use --skip-pull."
+  protect_local_runtime_paths
+  dirty_files="$(dirty_non_runtime_files)"
+  if [ -n "$dirty_files" ]; then
+    warn "Local modified/staged files:"
+    printf '%s\n' "$dirty_files" >&2
+    die "Refuse to pull with local changes. Commit/stash them or use --skip-pull."
   fi
 
   if [ -n "$BRANCH" ]; then
