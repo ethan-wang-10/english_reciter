@@ -192,6 +192,9 @@ USER_ROLE_PARENT = "parent"
 PARENT_LOGIN_SUFFIX = "_parent"
 DEFAULT_PARENT_PASSWORD = "123123"
 SESSION_KIND_CHAT_STREAM = "chat_stream"
+USER_SESSION_TTL = timedelta(days=30)
+ADMIN_SESSION_TTL = timedelta(hours=8)
+CHAT_STREAM_SESSION_TTL = timedelta(minutes=2)
 
 # 数据目录
 DATA_DIR = Path("user_data_simple")
@@ -2141,7 +2144,7 @@ def verify_user(username: str, password: str) -> bool:
 
 def create_token(username: str) -> str:
     """创建访问令牌（SQLite 持久化，多 worker 共享）。"""
-    return _db_create_auth_session(SESSION_KIND_USER, username, timedelta(hours=24))
+    return _db_create_auth_session(SESSION_KIND_USER, username, USER_SESSION_TTL)
 
 
 def verify_token(token: str) -> Optional[str]:
@@ -2154,12 +2157,12 @@ def verify_token(token: str) -> Optional[str]:
 def create_admin_token() -> str:
     """签发管理员会话 token（与学生 token 隔离）。"""
     admin_name = os.getenv("ADMIN_USERNAME", "").strip() or "admin"
-    return _db_create_auth_session(SESSION_KIND_ADMIN, admin_name, timedelta(hours=8))
+    return _db_create_auth_session(SESSION_KIND_ADMIN, admin_name, ADMIN_SESSION_TTL)
 
 
 def create_chat_stream_token(login_username: str) -> str:
     """签发只用于聊天室 SSE 的短期 token，避免把登录 token 放进 URL。"""
-    return _db_create_auth_session(SESSION_KIND_CHAT_STREAM, login_username, timedelta(minutes=2))
+    return _db_create_auth_session(SESSION_KIND_CHAT_STREAM, login_username, CHAT_STREAM_SESSION_TTL)
 
 
 def verify_admin_token(token: str) -> bool:

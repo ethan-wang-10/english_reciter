@@ -67,7 +67,7 @@ docker run -p 8000:8000 english-reciter-simple
 使用Bearer Token认证：
 1. 登录后获取`access_token`
 2. 在请求头中添加：`Authorization: Bearer <token>`
-3. Token有效期为24小时
+3. Token有效期为30天
 
 ## 文件结构
 
