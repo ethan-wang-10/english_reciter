@@ -37,6 +37,16 @@ CHECKIN_MIN_CORRECT = 5
 # 完成本月打卡目标时的一次性奖励：目标天数 × 此值（XP）
 CHECKIN_GOAL_XP_PER_DAY = 30
 
+# 补打卡只用于挽救连续火苗：不发放 XP、不计入月目标/奖池/PK 的真实打卡天数。
+MAKEUP_CHECKIN_BASE_XP = 120
+MAKEUP_CHECKIN_STREAK_XP_PER_DAY = 10
+MAKEUP_CHECKIN_STREAK_COST_CAP_DAYS = 30
+MAKEUP_CHECKIN_AGE_XP_PER_DAY = 90
+MAKEUP_CHECKIN_MONTH_SURCHARGE_XP = 80
+MAKEUP_CHECKIN_MAX_COST_XP = 1200
+MAKEUP_CHECKIN_MONTHLY_LIMIT = 3
+MAKEUP_CHECKINS_KEY = "makeup_checkins"
+
 # 连续火苗「当前连续 + 最高连续」规则生效日（含当日）起：对外 streak 为当前连续（断档未再打卡前即显示 0），
 # 并持久化 streak_max；此前仍沿用旧逻辑（直接读 gamification.json 中的 streak 字段）。
 # 部署时请改为「上线次日」。
@@ -150,6 +160,8 @@ def default_state() -> Dict[str, Any]:
         # 历史最高连续有效打卡天数（仅 STREAK_V2 起维护）；None 表示尚未惰性初始化
         "streak_max": None,
         "streak_correct_by_day": {},
+        # 付费补救的火苗日。只参与连续 streak，不参与真实打卡天数、月目标、奖池或 PK。
+        MAKEUP_CHECKINS_KEY: {},
         "daily_xp": {},
         "achievements": {},
         "leaderboard_opt_in": True,
@@ -190,6 +202,26 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
             except (TypeError, ValueError):
                 continue
         base["streak_correct_by_day"] = sbd
+    if MAKEUP_CHECKINS_KEY in raw and isinstance(raw[MAKEUP_CHECKINS_KEY], dict):
+        makeups: Dict[str, Dict[str, Any]] = {}
+        for dk, meta in raw[MAKEUP_CHECKINS_KEY].items():
+            try:
+                day_key = date.fromisoformat(str(dk)[:10]).isoformat()
+            except ValueError:
+                continue
+            row = dict(meta) if isinstance(meta, dict) else {}
+            try:
+                row["cost_xp"] = max(0, int(row.get("cost_xp") or 0))
+            except (TypeError, ValueError):
+                row["cost_xp"] = 0
+            try:
+                row["streak_before"] = max(0, int(row.get("streak_before") or 0))
+            except (TypeError, ValueError):
+                row["streak_before"] = 0
+            if row.get("created_at") is not None:
+                row["created_at"] = str(row["created_at"])
+            makeups[day_key] = row
+        base[MAKEUP_CHECKINS_KEY] = makeups
     if base.get("mcheckin_goal") is not None:
         try:
             base["mcheckin_goal"] = int(base["mcheckin_goal"])
@@ -277,20 +309,115 @@ def streak_v2_active(today: date) -> bool:
     return today >= STREAK_V2_EFFECTIVE_DATE
 
 
-def longest_valid_streak_from_history(state: Dict[str, Any]) -> int:
-    """根据 streak_correct_by_day 中有效日，计算历史上最长连续有效打卡天数。"""
+def _actual_valid_checkin_day(state: Dict[str, Any], day: date) -> bool:
     sbd = state.get("streak_correct_by_day") or {}
+    try:
+        return int(sbd.get(day.isoformat(), 0) or 0) >= CHECKIN_MIN_CORRECT
+    except (TypeError, ValueError):
+        return False
+
+
+def _makeup_checkin_map(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    raw = state.get(MAKEUP_CHECKINS_KEY) or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _makeup_checkin_days(state: Dict[str, Any]) -> List[date]:
     days: List[date] = []
+    for day_key in _makeup_checkin_map(state):
+        try:
+            days.append(date.fromisoformat(str(day_key)[:10]))
+        except ValueError:
+            continue
+    return days
+
+
+def _streak_valid_checkin_day(state: Dict[str, Any], day: date) -> bool:
+    """连续火苗的有效日：真实打卡或已购买补救的火苗日。"""
+    if _actual_valid_checkin_day(state, day):
+        return True
+    return day.isoformat() in _makeup_checkin_map(state)
+
+
+def _streak_run_ending_on(state: Dict[str, Any], end_day: date) -> int:
+    run = 0
+    cur = end_day
+    while _streak_valid_checkin_day(state, cur):
+        run += 1
+        cur -= timedelta(days=1)
+    return run
+
+
+def _latest_streak_valid_day_before(state: Dict[str, Any], before_day: date) -> Optional[date]:
+    days: List[date] = []
+    sbd = state.get("streak_correct_by_day") or {}
+    for day_key, cnt in sbd.items():
+        try:
+            d = date.fromisoformat(str(day_key)[:10])
+        except ValueError:
+            continue
+        try:
+            if d < before_day and int(cnt or 0) >= CHECKIN_MIN_CORRECT:
+                days.append(d)
+        except (TypeError, ValueError):
+            continue
+    for d in _makeup_checkin_days(state):
+        if d < before_day:
+            days.append(d)
+    return max(days) if days else None
+
+
+def _next_makeup_target_date(state: Dict[str, Any], today: date) -> date:
+    """
+    从离今天最近的断点开始补；已有今天/昨天连续段时，继续向更早的断点推进。
+    """
+    if _streak_valid_checkin_day(state, today):
+        anchor = today
+    elif _streak_valid_checkin_day(state, today - timedelta(days=1)):
+        anchor = today - timedelta(days=1)
+    else:
+        return today - timedelta(days=1)
+
+    start = anchor
+    while _streak_valid_checkin_day(state, start - timedelta(days=1)):
+        start -= timedelta(days=1)
+    return start - timedelta(days=1)
+
+
+def _recompute_current_streak_from_history(state: Dict[str, Any], today: date) -> None:
+    """
+    用真实打卡 + 补救火苗日重算当前连续，解决「今天已打卡后再补昨天」的断档修复。
+    """
+    if not streak_v2_active(today):
+        return
+    if _streak_valid_checkin_day(state, today):
+        anchor = today
+    elif _streak_valid_checkin_day(state, today - timedelta(days=1)):
+        anchor = today - timedelta(days=1)
+    else:
+        return
+    streak_value = _streak_run_ending_on(state, anchor)
+    state["streak"] = streak_value
+    state["last_streak_date"] = anchor.isoformat()
+    _bump_streak_max(state, streak_value)
+
+
+def longest_valid_streak_from_history(state: Dict[str, Any]) -> int:
+    """根据真实打卡与补救火苗日，计算历史上最长连续天数。"""
+    sbd = state.get("streak_correct_by_day") or {}
+    days_set = set()
     for dk, cnt in sbd.items():
         if int(cnt or 0) < CHECKIN_MIN_CORRECT:
             continue
         try:
-            days.append(date.fromisoformat(str(dk)[:10]))
+            days_set.add(date.fromisoformat(str(dk)[:10]))
         except ValueError:
             continue
+    for makeup_day in _makeup_checkin_days(state):
+        days_set.add(makeup_day)
+    days = sorted(days_set)
     if not days:
         return 0
-    days.sort()
     best = 1
     run = 1
     for i in range(1, len(days)):
@@ -376,6 +503,8 @@ def _update_streak(state: Dict[str, Any], today: date) -> None:
     v2 = streak_v2_active(today)
     if v2:
         _ensure_streak_max_initialized(state, today)
+        _recompute_current_streak_from_history(state, today)
+        return
 
     if not last:
         state["streak"] = 1
@@ -653,6 +782,200 @@ def apply_xp_delta(data_dir: Path, username: str, delta: int) -> Tuple[bool, str
         return True, "", new_total
 
 
+def _makeup_checkin_month_count(state: Dict[str, Any], year_month: str) -> int:
+    ym = year_month.strip()
+    if len(ym) != 7:
+        return 0
+    n = 0
+    for day_key in _makeup_checkin_map(state):
+        if isinstance(day_key, str) and day_key.startswith(ym):
+            n += 1
+    return n
+
+
+def _makeup_checkin_cost(streak_before: int, month_makeups: int, days_ago: int) -> int:
+    streak_part = min(
+        max(0, int(streak_before)),
+        MAKEUP_CHECKIN_STREAK_COST_CAP_DAYS,
+    ) * MAKEUP_CHECKIN_STREAK_XP_PER_DAY
+    age_part = max(0, int(days_ago) - 1) * MAKEUP_CHECKIN_AGE_XP_PER_DAY
+    surcharge = max(0, int(month_makeups)) * MAKEUP_CHECKIN_MONTH_SURCHARGE_XP
+    return min(
+        MAKEUP_CHECKIN_MAX_COST_XP,
+        MAKEUP_CHECKIN_BASE_XP + streak_part + age_part + surcharge,
+    )
+
+
+def makeup_checkin_offer(state: Dict[str, Any], today: Optional[date] = None) -> Dict[str, Any]:
+    """
+    返回「按顺序向过去补打卡」的资格与价格。
+    补打卡仅挽救连续 streak，不算真实有效打卡，避免影响月目标、奖池与 PK 公平性。
+    """
+    cur_today = today or china_today()
+    target = _next_makeup_target_date(state, cur_today)
+    target_key = target.isoformat()
+    days_ago = (cur_today - target).days
+    total_xp = int(state.get("total_xp") or 0)
+    month_key = target.strftime("%Y-%m")
+    month_makeups = _makeup_checkin_month_count(state, month_key)
+    prior_anchor = _latest_streak_valid_day_before(state, target)
+    streak_before = _streak_run_ending_on(state, prior_anchor) if prior_anchor is not None else 0
+    cost = (
+        _makeup_checkin_cost(streak_before, month_makeups, days_ago)
+        if days_ago >= 1 and prior_anchor is not None and streak_before > 0
+        else None
+    )
+
+    def out(
+        *,
+        available: bool,
+        eligible: bool,
+        reason: str,
+        reason_code: str,
+        can_afford: bool = False,
+    ) -> Dict[str, Any]:
+        return {
+            "available": available,
+            "eligible": eligible,
+            "can_afford": can_afford,
+            "reason": reason,
+            "reason_code": reason_code,
+            "target_date": target_key,
+            "days_ago": days_ago,
+            "cost_xp": cost,
+            "streak_before": streak_before,
+            "prior_streak_date": prior_anchor.isoformat() if prior_anchor is not None else None,
+            "current_xp": total_xp,
+            "xp_after_purchase": total_xp - int(cost or 0) if cost is not None else None,
+            "month_makeups_used": month_makeups,
+            "monthly_limit": MAKEUP_CHECKIN_MONTHLY_LIMIT,
+            "rules": {
+                "target": "sequential_backward_from_yesterday",
+                "counts_for_streak": True,
+                "counts_for_monthly_goal": False,
+                "counts_for_pool_or_pk": False,
+            },
+        }
+
+    if not streak_v2_active(cur_today):
+        return out(
+            available=False,
+            eligible=False,
+            reason="当前连续火苗规则尚未启用，暂不能补打卡。",
+            reason_code="streak_v2_inactive",
+        )
+    if days_ago < 1:
+        return out(
+            available=False,
+            eligible=False,
+            reason="只能补今天以前的断点。",
+            reason_code="invalid_target",
+        )
+    if _actual_valid_checkin_day(state, target):
+        return out(
+            available=False,
+            eligible=False,
+            reason="当前顺序目标已经完成真实有效打卡，无需补打卡。",
+            reason_code="already_checked",
+        )
+    if target_key in _makeup_checkin_map(state):
+        return out(
+            available=False,
+            eligible=False,
+            reason="当前顺序目标已经补救过，不能重复补打卡。",
+            reason_code="already_rescued",
+        )
+    if prior_anchor is None or streak_before <= 0:
+        return out(
+            available=False,
+            eligible=False,
+            reason="找不到可连接的更早有效打卡，不能凭空买连续。",
+            reason_code="no_prior_streak",
+        )
+    if month_makeups >= MAKEUP_CHECKIN_MONTHLY_LIMIT:
+        return out(
+            available=False,
+            eligible=True,
+            reason=f"本月补打卡已达 {MAKEUP_CHECKIN_MONTHLY_LIMIT} 次上限。",
+            reason_code="monthly_limit",
+        )
+    assert cost is not None
+    if total_xp < cost:
+        return out(
+            available=False,
+            eligible=True,
+            reason=f"XP 不足：补打卡需要 {cost} XP，当前只有 {total_xp} XP。",
+            reason_code="insufficient_xp",
+            can_afford=False,
+        )
+    return out(
+        available=True,
+        eligible=True,
+        reason="可以消耗 XP 按顺序补救连续火苗。",
+        reason_code="available",
+        can_afford=True,
+    )
+
+
+def purchase_makeup_checkin(
+    data_dir: Path,
+    username: str,
+    *,
+    mastered_words: int,
+    pk_wins: int = 0,
+    pk_matches: int = 0,
+) -> Dict[str, Any]:
+    """购买一次补打卡。仅补 streak，且不修改 streak_correct_by_day。"""
+    with _locked_user_state(data_dir, username):
+        state = load_state(data_dir, username)
+        today = china_today()
+        offer = makeup_checkin_offer(state, today)
+        if not offer.get("available"):
+            raise ValueError(str(offer.get("reason") or "当前不可补打卡"))
+
+        target_key = str(offer["target_date"])
+        cost = int(offer["cost_xp"])
+        before_xp = int(state.get("total_xp") or 0)
+        after_xp = before_xp - cost
+        if after_xp < 0:
+            raise ValueError(f"XP 不足：补打卡需要 {cost} XP，当前只有 {before_xp} XP。")
+
+        makeups = state.setdefault(MAKEUP_CHECKINS_KEY, {})
+        if not isinstance(makeups, dict):
+            makeups = {}
+            state[MAKEUP_CHECKINS_KEY] = makeups
+        makeups[target_key] = {
+            "created_at": china_now_iso(timespec="seconds"),
+            "cost_xp": cost,
+            "streak_before": int(offer.get("streak_before") or 0),
+            "policy": "makeup_checkin_v1",
+        }
+        state["total_xp"] = after_xp
+        _ensure_streak_max_initialized(state, today)
+        _recompute_current_streak_from_history(state, today)
+        new_achievements = _unlock_achievements(
+            state,
+            mastered_words=mastered_words,
+            pk_wins=pk_wins,
+            pk_matches=pk_matches,
+        )
+        _save_state_unlocked(data_dir, username, state)
+
+        lv = level_from_xp(after_xp)
+        _, need_next = xp_to_next_level(after_xp)
+        return {
+            "target_date": target_key,
+            "cost_xp": cost,
+            "total_xp": after_xp,
+            "level": lv,
+            "xp_to_next_level": need_next,
+            "streak": display_streak(state, today),
+            "streak_max_record": streak_max_record_display(state, today),
+            "new_achievements": new_achievements,
+            "makeup_checkin": makeup_checkin_offer(state, today),
+        }
+
+
 def award_correct_answer(
     data_dir: Path,
     username: str,
@@ -735,6 +1058,7 @@ def award_correct_answer(
             "today_correct_count": today_correct,
             "check_in_done_today": check_in_done,
             "check_in_min_correct": CHECKIN_MIN_CORRECT,
+            "makeup_checkin": makeup_checkin_offer(state, today),
         }
 
 
@@ -840,6 +1164,8 @@ def public_profile(
         "monthly_goal_completion_bonus_xp": bonus_total,
         "monthly_goal_bonus_awarded_this_month": state.get("mcheckin_goal_bonus_awarded_month") == ym,
         "checkin_goal_xp_per_day": CHECKIN_GOAL_XP_PER_DAY,
+        "makeup_checkin": makeup_checkin_offer(state, today),
+        "makeup_checkin_days_this_month": _makeup_checkin_month_count(state, ym),
     }
 
 

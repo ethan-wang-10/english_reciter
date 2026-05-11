@@ -2696,9 +2696,43 @@ def patch_gamification_settings(username):
             'monthly_goal_completion_bonus_xp',
             'monthly_goal_bonus_awarded_this_month', 'checkin_goal_xp_per_day',
             'total_xp', 'level', 'xp_to_next_level',
+            'makeup_checkin', 'makeup_checkin_days_this_month',
         ) if k in profile}}), 200
     except Exception as e:
         logger.error(f"更新游戏化设置失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/gamification/makeup-checkin', methods=['POST'])
+@token_required
+@parent_forbidden
+def post_makeup_checkin(username):
+    """用 XP 补救昨天的连续打卡火苗；不计入真实打卡天数。"""
+    try:
+        with user_reciter_session(username) as reciter:
+            mastered_n = len(reciter.mastered_words)
+        pkw, pkm = _pk_stats_for_gamification(username)
+        try:
+            purchase = gamification_mod.purchase_makeup_checkin(
+                DATA_DIR,
+                username,
+                mastered_words=mastered_n,
+                pk_wins=pkw,
+                pk_matches=pkm,
+            )
+        except ValueError as ve:
+            return jsonify({'error': str(ve)}), 400
+
+        profile = gamification_mod.public_profile(
+            DATA_DIR,
+            username,
+            mastered_words=mastered_n,
+            pk_wins=pkw,
+            pk_matches=pkm,
+        )
+        return jsonify({**profile, "makeup_checkin_purchase": purchase}), 200
+    except Exception as e:
+        logger.error(f"补打卡失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
 
 

@@ -455,6 +455,7 @@ async function openDailySummaryPopover() {
         updateGamificationNav(g);
         if (isSettingsOverlayOpen() && lastGamificationProfile) {
             updateSettingsCheckinHintFromProfile(lastGamificationProfile);
+            updateSettingsMakeupCheckinFromProfile(lastGamificationProfile);
             updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
         }
         renderDailySummaryBody(g, ws);
@@ -760,6 +761,52 @@ function updateSettingsCheckinHintFromProfile(g) {
     const tc = Number(g.today_correct_count) || 0;
     const done = g.check_in_done_today;
     hint.textContent = `今日已答对 ${tc} 词；有效打卡需至少 ${minC} 词。${done ? '今日已有效打卡。' : '继续加油。'}`;
+}
+
+/** 补打卡只补连续火苗，不补月目标/奖池/PK 天数。 */
+function updateSettingsMakeupCheckinFromProfile(g) {
+    const card = document.getElementById('settings-makeup-card');
+    const hint = document.getElementById('settings-makeup-hint');
+    const btn = document.getElementById('settings-makeup-buy');
+    if (!card || !hint || !btn) return;
+    const m = g && g.makeup_checkin;
+    if (!m) {
+        card.hidden = true;
+        return;
+    }
+    const code = String(m.reason_code || '');
+    const showCodes = new Set(['available', 'insufficient_xp', 'monthly_limit']);
+    if (!showCodes.has(code)) {
+        card.hidden = true;
+        return;
+    }
+    const cost = Number(m.cost_xp) || 0;
+    const target = m.target_date ? String(m.target_date) : '昨天';
+    const currentXp = Number(m.current_xp) || 0;
+    const daysAgo = Math.max(1, Number(m.days_ago) || 1);
+    const targetLabel = daysAgo === 1 ? '昨天' : `${formatNumber(daysAgo)} 天前`;
+    const todayDone = !!g.check_in_done_today;
+    const todayRule = todayDone
+        ? '今天已完成真实打卡。'
+        : `今天仍需正常答对 ${formatNumber(Number(g.check_in_min_correct) || 5)} 词。`;
+    const limitText =
+        Number(m.monthly_limit) > 0
+            ? `本月已用 ${formatNumber(Number(m.month_makeups_used) || 0)} / ${formatNumber(Number(m.monthly_limit))} 次。`
+            : '';
+    card.hidden = false;
+    if (code === 'available') {
+        hint.textContent =
+            `当前顺序目标是 ${target}（${targetLabel}），可消耗 ${formatNumber(cost)} XP 补救连续火苗；` +
+            `越早越贵，必须从昨天开始逐日向前补。补救日不计入本月目标、奖池或 PK。${todayRule} ${limitText}`;
+    } else if (code === 'insufficient_xp') {
+        hint.textContent =
+            `当前顺序目标是 ${target}（${targetLabel}），需要 ${formatNumber(cost)} XP；当前 ${formatNumber(currentXp)} XP。` +
+            `先练习攒分；补救日仍不计入月目标、奖池或 PK。`;
+    } else {
+        hint.textContent = `${m.reason || '当前不可补打卡'} 补救日不计入本月目标、奖池或 PK。`;
+    }
+    btn.disabled = code !== 'available';
+    btn.textContent = cost > 0 ? `用 ${formatNumber(cost)} XP 补 ${target}` : `用 XP 补 ${target}`;
 }
 
 /** 月度打卡「额外奖励」说明（仅影响目标天数×30，不影响日常练习与其它积分） */
@@ -1069,6 +1116,7 @@ function renderUserSettingsPanel(s) {
     }
     updateNavUserAvatar(s.avatar_url);
     updateSettingsCheckinHintFromProfile(s);
+    updateSettingsMakeupCheckinFromProfile(s);
     updateSettingsMonthlyGoalBonusNotice(s);
     const dim = Number(s.month_days_in_month) || 31;
     const suggested = Math.min(
@@ -4186,7 +4234,8 @@ async function submitAnswer() {
             }
             updateGamificationNav(lastGamificationProfile);
             if (isSettingsOverlayOpen()) {
-                updateSettingsCheckinHintFromProfile(gm);
+                updateSettingsCheckinHintFromProfile(lastGamificationProfile);
+                updateSettingsMakeupCheckinFromProfile(lastGamificationProfile);
                 updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
             }
         }
@@ -6431,6 +6480,39 @@ document.addEventListener('DOMContentLoaded', function() {
             await loadUserSettingsPanel();
         } catch (err) {
             setSettingsMessage(err.message || '保存失败', true);
+        }
+    });
+    document.getElementById('settings-makeup-buy')?.addEventListener('click', async () => {
+        const offer = lastGamificationProfile && lastGamificationProfile.makeup_checkin;
+        const cost = Number(offer && offer.cost_xp) || 0;
+        if (!offer || offer.available !== true || cost <= 0) return;
+        const target = offer.target_date ? String(offer.target_date) : '当前顺序目标';
+        const ok = window.confirm(
+            `确认消耗 ${formatNumber(cost)} XP 补救 ${target} 的连续打卡？\n\n补救必须按顺序向过去进行；补救只延续火苗，不计入本月目标、奖池或 PK 天数。`,
+        );
+        if (!ok) return;
+        const btn = document.getElementById('settings-makeup-buy');
+        if (btn) btn.disabled = true;
+        try {
+            const res = await apiRequest('/gamification/makeup-checkin', {
+                method: 'POST',
+                body: '{}',
+            });
+            lastGamificationProfile = { ...(lastGamificationProfile || {}), ...res };
+            updateGamificationNav(lastGamificationProfile);
+            updateSettingsCheckinHintFromProfile(lastGamificationProfile);
+            updateSettingsMakeupCheckinFromProfile(lastGamificationProfile);
+            updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
+            const purchase = res.makeup_checkin_purchase || {};
+            let msg = `已消耗 ${formatNumber(Number(purchase.cost_xp) || cost)} XP 补救连续打卡`;
+            if (purchase.new_achievements && purchase.new_achievements.length) {
+                msg += ` · 新成就：${purchase.new_achievements.map((x) => x.title).join('、')}`;
+            }
+            await loadUserSettingsPanel();
+            setSettingsMessage(msg);
+        } catch (err) {
+            setSettingsMessage(err.message || '补打卡失败', true);
+            updateSettingsMakeupCheckinFromProfile(lastGamificationProfile);
         }
     });
     document.getElementById('settings-pool-join')?.addEventListener('click', async () => {

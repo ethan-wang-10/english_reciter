@@ -116,5 +116,99 @@ class TestStreakDisplayV2(unittest.TestCase):
         self.assertEqual(rows[0]["streak_max_record"], 7)
 
 
+class TestMakeupCheckin(unittest.TestCase):
+    def test_offer_available_for_yesterday_gap(self):
+        today = date(2026, 5, 11)
+        with patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1)):
+            st = gm.default_state()
+            st["total_xp"] = 500
+            st["streak_correct_by_day"] = {
+                (today - timedelta(days=2)).isoformat(): gm.CHECKIN_MIN_CORRECT,
+            }
+
+            offer = gm.makeup_checkin_offer(st, today)
+
+            self.assertTrue(offer["available"])
+            self.assertEqual(offer["target_date"], (today - timedelta(days=1)).isoformat())
+            self.assertEqual(offer["cost_xp"], gm.MAKEUP_CHECKIN_BASE_XP + gm.MAKEUP_CHECKIN_STREAK_XP_PER_DAY)
+
+    def test_purchase_consumes_xp_and_does_not_count_as_real_month_checkin(self):
+        today = date(2026, 5, 11)
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            u = "makeup-user"
+            st = gm.default_state()
+            st["total_xp"] = 500
+            st["streak"] = 1
+            st["last_streak_date"] = (today - timedelta(days=2)).isoformat()
+            st["streak_correct_by_day"] = {
+                (today - timedelta(days=2)).isoformat(): gm.CHECKIN_MIN_CORRECT,
+            }
+            gm.save_state(d, u, st)
+
+            with patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1)), patch.object(
+                gm, "china_today", return_value=today
+            ):
+                out = gm.purchase_makeup_checkin(d, u, mastered_words=0)
+                saved = gm.load_state(d, u)
+
+            self.assertEqual(out["streak"], 2)
+            self.assertEqual(out["total_xp"], 500 - out["cost_xp"])
+            self.assertIn((today - timedelta(days=1)).isoformat(), saved[gm.MAKEUP_CHECKINS_KEY])
+            self.assertEqual(gm.valid_checkin_days_in_month(saved, today.strftime("%Y-%m")), 1)
+            self.assertEqual(gm.display_streak(saved, today), 2)
+
+    def test_purchase_after_today_checkin_rejoins_split_streak(self):
+        today = date(2026, 5, 11)
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            u = "makeup-today-user"
+            st = gm.default_state()
+            st["total_xp"] = 500
+            st["streak"] = 1
+            st["last_streak_date"] = today.isoformat()
+            st["streak_correct_by_day"] = {
+                (today - timedelta(days=2)).isoformat(): gm.CHECKIN_MIN_CORRECT,
+                today.isoformat(): gm.CHECKIN_MIN_CORRECT,
+            }
+            gm.save_state(d, u, st)
+
+            with patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1)), patch.object(
+                gm, "china_today", return_value=today
+            ):
+                out = gm.purchase_makeup_checkin(d, u, mastered_words=0)
+
+            self.assertEqual(out["streak"], 3)
+            self.assertEqual(out["streak_max_record"], 3)
+
+    def test_purchase_steps_backward_and_older_targets_cost_more(self):
+        today = date(2026, 5, 11)
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            u = "makeup-sequence-user"
+            st = gm.default_state()
+            st["total_xp"] = 2000
+            st["streak"] = 1
+            st["last_streak_date"] = (today - timedelta(days=3)).isoformat()
+            st["streak_correct_by_day"] = {
+                (today - timedelta(days=3)).isoformat(): gm.CHECKIN_MIN_CORRECT,
+            }
+            gm.save_state(d, u, st)
+
+            with patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1)), patch.object(
+                gm, "china_today", return_value=today
+            ):
+                first = gm.purchase_makeup_checkin(d, u, mastered_words=0)
+                second_offer = first["makeup_checkin"]
+                second = gm.purchase_makeup_checkin(d, u, mastered_words=0)
+                saved = gm.load_state(d, u)
+
+            self.assertEqual(first["target_date"], (today - timedelta(days=1)).isoformat())
+            self.assertEqual(second_offer["target_date"], (today - timedelta(days=2)).isoformat())
+            self.assertGreater(second_offer["cost_xp"], first["cost_xp"])
+            self.assertEqual(second["streak"], 3)
+            self.assertEqual(gm.valid_checkin_days_in_month(saved, today.strftime("%Y-%m")), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

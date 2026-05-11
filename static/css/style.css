@@ -3869,6 +3869,26 @@ button.import-article-chip--selected:hover {
     line-height: 1.45;
 }
 
+.settings-makeup-card {
+    margin-top: 10px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 2px solid #f5c56b;
+    background: linear-gradient(135deg, #fff8e1, #fffdf6);
+}
+
+.settings-makeup-title {
+    margin: 0 0 6px;
+    font-size: 0.92rem;
+    font-weight: 900;
+    color: #7a4a00;
+}
+
+.settings-makeup-hint {
+    color: #5f4b22;
+    font-weight: 600;
+}
+
 .settings-avatar-upload-hint {
     margin: 0 0 10px;
 }
