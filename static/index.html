@@ -295,6 +295,14 @@
                         <div class="remedial-offer-card" role="dialog" aria-modal="true" aria-labelledby="remedial-offer-title">
                             <h3 id="remedial-offer-title">错题巩固</h3>
                             <p class="remedial-offer-body">本轮有 <strong id="remedial-offer-count">0</strong> 个单词 3 次均未答对，是否现在开始错题巩固？</p>
+                            <div class="remedial-offer-words" id="remedial-offer-words" hidden>
+                                <div class="remedial-offer-words-head">
+                                    <span>本轮错题</span>
+                                    <span><strong id="remedial-offer-list-count">0</strong> 个</span>
+                                </div>
+                                <ul class="remedial-offer-words-list" id="remedial-offer-words-list"></ul>
+                                <p class="remedial-offer-words-empty" id="remedial-offer-words-empty" hidden>暂无错题</p>
+                            </div>
                             <div class="remedial-offer-actions">
                                 <button type="button" class="btn btn-secondary" id="remedial-offer-decline">稍后再说</button>
                                 <button type="button" class="btn btn-primary" id="remedial-offer-accept">开始错题复习</button>

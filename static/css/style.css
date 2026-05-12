@@ -1100,6 +1100,10 @@ body {
     justify-content: center;
     padding: max(16px, env(safe-area-inset-top, 16px)) max(16px, env(safe-area-inset-right, 16px))
         max(16px, env(safe-area-inset-bottom, 16px)) max(16px, env(safe-area-inset-left, 16px));
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .remedial-offer-backdrop {
@@ -1111,8 +1115,15 @@ body {
 .remedial-offer-card {
     position: relative;
     z-index: 1;
-    max-width: 420px;
+    max-width: min(520px, 100%);
     width: 100%;
+    max-height: min(680px, calc(100vh - 40px));
+    max-height: min(680px, calc(100svh - 40px));
+    max-height: min(680px, calc(100dvh - 40px));
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin: auto;
     background: linear-gradient(180deg, #f9fff4 0%, var(--surface) 40%);
     border-radius: var(--radius-lg);
     border: 2px solid var(--border);
@@ -1128,10 +1139,89 @@ body {
 }
 
 .remedial-offer-body {
-    margin: 0 0 20px;
+    margin: 0 0 14px;
     font-size: 1rem;
     line-height: 1.55;
     color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.remedial-offer-words {
+    min-height: 0;
+    margin: 0 0 18px;
+    padding: 12px;
+    border: 2px solid #ffcdd2;
+    border-radius: var(--radius-md);
+    background: #fff8f8;
+    display: flex;
+    flex-direction: column;
+}
+
+.remedial-offer-words[hidden] {
+    display: none !important;
+}
+
+.remedial-offer-words-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+    color: var(--error-dark);
+    font-size: 0.92rem;
+    font-weight: 900;
+    flex-shrink: 0;
+}
+
+.remedial-offer-words-list {
+    list-style: none;
+    max-height: min(320px, 38vh);
+    max-height: min(320px, 38svh);
+    max-height: min(320px, 38dvh);
+    overflow-y: auto;
+    margin: 0;
+    padding: 0 3px 0 0;
+    -webkit-overflow-scrolling: touch;
+}
+
+.remedial-offer-words-list[hidden] {
+    display: none !important;
+}
+
+.remedial-offer-words-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px;
+    margin-bottom: 8px;
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    border: 2px solid rgba(255, 205, 210, 0.9);
+}
+
+.remedial-offer-words-list li:last-child {
+    margin-bottom: 0;
+}
+
+.remedial-offer-words-list .ww-en {
+    font-weight: 900;
+    color: var(--primary-dark);
+}
+
+.remedial-offer-words-list .ww-zh {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.remedial-offer-words-empty {
+    margin: 0;
+    color: var(--text-secondary);
+    font-weight: 700;
+}
+
+.remedial-offer-words-empty[hidden] {
+    display: none !important;
 }
 
 .remedial-offer-actions {
@@ -1139,6 +1229,7 @@ body {
     flex-wrap: wrap;
     gap: 10px;
     justify-content: flex-end;
+    flex-shrink: 0;
 }
 
 /* 系统广播（管理员发布，用户登录后主界面） */
