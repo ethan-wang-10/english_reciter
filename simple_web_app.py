@@ -2693,6 +2693,9 @@ def patch_gamification_settings(username):
             'monthly_checkin_goal', 'monthly_checkin_goal_month',
             'monthly_checkin_goal_suggested_days', 'monthly_checkin_goal_can_edit',
             'today_correct_count', 'check_in_done_today', 'check_in_min_correct',
+            'daily_xp_soft_cap',
+            'checkin_completion_xp', 'checkin_streak_bonus_xp_per_day',
+            'checkin_streak_bonus_cap_days',
             'monthly_goal_completion_bonus_xp',
             'monthly_goal_bonus_awarded_this_month', 'checkin_goal_xp_per_day',
             'total_xp', 'level', 'xp_to_next_level',
@@ -2808,6 +2811,9 @@ def get_user_settings(username):
         prof["monthly_pool"] = pool
         prof["duels"] = duels
         prof["wager_tiers"] = list(challenges_mod.WAGER_TIERS)
+        prof["stake_safety_reserve_xp"] = challenges_mod.STAKE_SAFETY_RESERVE_XP
+        prof["max_active_wagered_duels_per_user"] = challenges_mod.MAX_ACTIVE_WAGERED_DUELS_PER_USER
+        prof["max_active_wager_exposure_xp"] = challenges_mod.MAX_ACTIVE_WAGER_EXPOSURE_XP
         prof["duel_opponents"] = list_challenge_opponent_usernames(username)
         return jsonify(prof), 200
     except Exception as e:

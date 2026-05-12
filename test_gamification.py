@@ -1,6 +1,8 @@
 """游戏化：月度打卡目标每月仅可改一次。"""
-import tempfile
+import shutil
 import unittest
+import uuid
+from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -9,12 +11,30 @@ from app_time import china_today
 import gamification as gm
 
 
+@contextmanager
+def temp_data_dir():
+    root = Path(__file__).with_name(".test_tmp")
+    root.mkdir(exist_ok=True)
+    path = root / uuid.uuid4().hex
+    path.mkdir()
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 class TestAchievementUnlock(unittest.TestCase):
     def test_daily_xp_cap_achievement(self):
         st = gm.default_state()
         st["daily_xp"] = {"2020-01-01": gm.DAILY_XP_SOFT_CAP}
         new = gm._unlock_achievements(st, mastered_words=0)
         self.assertTrue(any(x.get("id") == "daily_xp_cap" for x in new))
+
+    def test_daily_soft_cap_discounts_without_hard_cap(self):
+        self.assertEqual(gm.DAILY_XP_SOFT_CAP, 1000)
+        self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_SOFT_CAP, 55), 11)
+        self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_SOFT_CAP + 5000, 55), 11)
+        self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_SOFT_CAP, 3), 1)
 
     def test_monthly_goal_met_achievement(self):
         today = china_today()
@@ -29,8 +49,7 @@ class TestAchievementUnlock(unittest.TestCase):
 
 class TestMonthlyGoalEditLock(unittest.TestCase):
     def test_second_edit_same_month_raises(self):
-        with tempfile.TemporaryDirectory() as td:
-            d = Path(td)
+        with temp_data_dir() as d:
             u = "tuser"
             gm.patch_settings(
                 d,
@@ -48,8 +67,7 @@ class TestMonthlyGoalEditLock(unittest.TestCase):
             self.assertIn("本月已修改过", str(ctx.exception))
 
     def test_idempotent_same_value_ok(self):
-        with tempfile.TemporaryDirectory() as td:
-            d = Path(td)
+        with temp_data_dir() as d:
             u = "tuser2"
             gm.patch_settings(d, u, monthly_checkin_goal=8, clear_monthly_goal=False)
             gm.patch_settings(d, u, monthly_checkin_goal=8, clear_monthly_goal=False)
@@ -63,6 +81,37 @@ class TestMonthlyGoalEditLock(unittest.TestCase):
     def test_days_inclusive_mid_month(self):
         n = gm.days_inclusive_today_through_month_end(date(2026, 3, 28))
         self.assertEqual(n, 4)
+
+
+class TestCheckinCompletionBonus(unittest.TestCase):
+    def test_bonus_is_awarded_once_when_crossing_checkin_threshold(self):
+        today = date(2026, 5, 11)
+        with temp_data_dir() as d:
+            u = "bonus-user"
+            with patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1)), patch.object(
+                gm, "china_today", return_value=today
+            ):
+                outs = [
+                    gm.award_correct_answer(
+                        d,
+                        u,
+                        bonus_practice=False,
+                        remedial=False,
+                        old_success_count=i,
+                        new_success_count=i + 1,
+                        mastered_now=False,
+                        mastered_words=0,
+                    )
+                    for i in range(gm.CHECKIN_MIN_CORRECT)
+                ]
+
+            self.assertEqual(
+                [x["checkin_bonus_xp"] for x in outs[:-1]],
+                [0] * (gm.CHECKIN_MIN_CORRECT - 1),
+            )
+            expected = gm.checkin_completion_bonus_raw(1)
+            self.assertEqual(outs[-1]["checkin_bonus_xp"], expected)
+            self.assertTrue(outs[-1]["check_in_done_today"])
 
 
 class TestStreakDisplayV2(unittest.TestCase):
@@ -134,8 +183,7 @@ class TestMakeupCheckin(unittest.TestCase):
 
     def test_purchase_consumes_xp_and_does_not_count_as_real_month_checkin(self):
         today = date(2026, 5, 11)
-        with tempfile.TemporaryDirectory() as td:
-            d = Path(td)
+        with temp_data_dir() as d:
             u = "makeup-user"
             st = gm.default_state()
             st["total_xp"] = 500
@@ -160,8 +208,7 @@ class TestMakeupCheckin(unittest.TestCase):
 
     def test_purchase_after_today_checkin_rejoins_split_streak(self):
         today = date(2026, 5, 11)
-        with tempfile.TemporaryDirectory() as td:
-            d = Path(td)
+        with temp_data_dir() as d:
             u = "makeup-today-user"
             st = gm.default_state()
             st["total_xp"] = 500
@@ -183,8 +230,7 @@ class TestMakeupCheckin(unittest.TestCase):
 
     def test_purchase_steps_backward_and_older_targets_cost_more(self):
         today = date(2026, 5, 11)
-        with tempfile.TemporaryDirectory() as td:
-            d = Path(td)
+        with temp_data_dir() as d:
             u = "makeup-sequence-user"
             st = gm.default_state()
             st["total_xp"] = 2000

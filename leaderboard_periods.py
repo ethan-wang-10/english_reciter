@@ -16,8 +16,8 @@ from app_time import china_now_iso, china_today
 import gamification as gamification_mod
 
 # 周榜 / 月榜前三名奖励 XP（第 1～3 名）
-WEEK_REWARD_XP: Tuple[int, int, int] = (200, 120, 80)
-MONTH_REWARD_XP: Tuple[int, int, int] = (600, 360, 240)
+WEEK_REWARD_XP: Tuple[int, int, int] = (180, 110, 70)
+MONTH_REWARD_XP: Tuple[int, int, int] = (540, 330, 220)
 
 _period_lock = threading.RLock()
 

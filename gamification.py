@@ -26,13 +26,19 @@ XP_MASTERED = 40
 XP_REMEDIAL = 4
 XP_BONUS_PRACTICE = 3
 
-DAILY_XP_SOFT_CAP = 300
-OVER_CAP_MULTIPLIER = 0.5
+DAILY_XP_SOFT_CAP = 1000
+# Soft-cap 后仍给少量收益，避免高强度学习完全没有反馈。
+OVER_CAP_MULTIPLIER = 0.2
 
 MAX_LEVEL = 99
 
 # 当日答对次数 ≥ 此值才算「有效打卡」，并参与连续打卡统计
 CHECKIN_MIN_CORRECT = 5
+
+# 今日首次达成有效打卡时发放；连续天数只给小额加成，鼓励不断档但不制造滚雪球。
+CHECKIN_COMPLETION_XP = 20
+CHECKIN_STREAK_BONUS_XP_PER_DAY = 1
+CHECKIN_STREAK_BONUS_CAP_DAYS = 30
 
 # 完成本月打卡目标时的一次性奖励：目标天数 × 此值（XP）
 CHECKIN_GOAL_XP_PER_DAY = 30
@@ -297,12 +303,21 @@ def _apply_daily_cap(daily_so_far: int, raw_xp: int) -> int:
     if raw_xp <= 0:
         return 0
     if daily_so_far >= DAILY_XP_SOFT_CAP:
-        return int(raw_xp * OVER_CAP_MULTIPLIER)
+        return max(1, int(raw_xp * OVER_CAP_MULTIPLIER))
     if daily_so_far + raw_xp <= DAILY_XP_SOFT_CAP:
         return raw_xp
     room = DAILY_XP_SOFT_CAP - daily_so_far
     over = raw_xp - room
-    return room + int(over * OVER_CAP_MULTIPLIER)
+    return room + max(1, int(over * OVER_CAP_MULTIPLIER))
+
+
+def checkin_completion_bonus_raw(streak_after_checkin: int) -> int:
+    """首次完成今日有效打卡时的原始奖励；连续加成封顶，避免长期用户过度滚雪球。"""
+    streak_days = min(
+        max(0, int(streak_after_checkin)),
+        CHECKIN_STREAK_BONUS_CAP_DAYS,
+    )
+    return CHECKIN_COMPLETION_XP + streak_days * CHECKIN_STREAK_BONUS_XP_PER_DAY
 
 
 def streak_v2_active(today: date) -> bool:
@@ -782,6 +797,33 @@ def apply_xp_delta(data_dir: Path, username: str, delta: int) -> Tuple[bool, str
         return True, "", new_total
 
 
+def spend_xp_with_reserve(
+    data_dir: Path,
+    username: str,
+    cost_xp: int,
+    reserve_xp: int = 0,
+) -> Tuple[bool, str, int]:
+    """
+    原子扣除 XP，并要求扣除后仍保留 reserve_xp。
+    用于带风险玩法，避免用户被一次性扣到接近 0。
+    """
+    cost = max(0, int(cost_xp))
+    reserve = max(0, int(reserve_xp))
+    with _locked_user_state(data_dir, username):
+        state = load_state(data_dir, username)
+        cur = int(state.get("total_xp") or 0)
+        if cur < cost + reserve:
+            return (
+                False,
+                f"积分不足：需要 {cost} XP，且至少保留 {reserve} XP 安全余量",
+                cur,
+            )
+        new_total = cur - cost
+        state["total_xp"] = new_total
+        _save_state_unlocked(data_dir, username, state)
+        return True, "", new_total
+
+
 def _makeup_checkin_month_count(state: Dict[str, Any], year_month: str) -> int:
     ym = year_month.strip()
     if len(ym) != 7:
@@ -1008,12 +1050,27 @@ def award_correct_answer(
         )
 
         daily_so_far = int(state["daily_xp"].get(day_key, 0))
-        xp_gain = _apply_daily_cap(daily_so_far, raw)
+        answer_xp_gain = _apply_daily_cap(daily_so_far, raw)
         sbd = state.setdefault("streak_correct_by_day", {})
-        sbd[day_key] = int(sbd.get(day_key, 0)) + 1
+        today_correct_before = int(sbd.get(day_key, 0))
+        sbd[day_key] = today_correct_before + 1
 
         state["total_correct"] = int(state.get("total_correct") or 0) + 1
         _update_streak(state, today)
+
+        checkin_bonus_raw = 0
+        checkin_bonus_xp = 0
+        crossed_checkin_threshold = (
+            today_correct_before < CHECKIN_MIN_CORRECT
+            and int(sbd.get(day_key, 0)) >= CHECKIN_MIN_CORRECT
+        )
+        if crossed_checkin_threshold:
+            checkin_bonus_raw = checkin_completion_bonus_raw(display_streak(state, today))
+            checkin_bonus_xp = _apply_daily_cap(
+                daily_so_far + answer_xp_gain,
+                checkin_bonus_raw,
+            )
+        xp_gain = answer_xp_gain + checkin_bonus_xp
 
         monthly_bonus_xp = 0
         if (
@@ -1047,6 +1104,9 @@ def award_correct_answer(
 
         return {
             "xp_gained": xp_gain,
+            "answer_xp_gained": answer_xp_gain,
+            "checkin_bonus_xp": checkin_bonus_xp,
+            "checkin_bonus_raw_xp": checkin_bonus_raw,
             "raw_xp": raw,
             "monthly_goal_bonus_xp": monthly_bonus_xp,
             "total_xp": int(state["total_xp"]),
@@ -1151,9 +1211,13 @@ def public_profile(
         "achievements_unlocked": unlocked,
         "achievements_all": all_defs,
         "daily_xp_today": int(state.get("daily_xp", {}).get(day_key, 0)),
+        "daily_xp_soft_cap": DAILY_XP_SOFT_CAP,
         "today_correct_count": today_correct,
         "check_in_done_today": today_correct >= CHECKIN_MIN_CORRECT,
         "check_in_min_correct": CHECKIN_MIN_CORRECT,
+        "checkin_completion_xp": CHECKIN_COMPLETION_XP,
+        "checkin_streak_bonus_xp_per_day": CHECKIN_STREAK_BONUS_XP_PER_DAY,
+        "checkin_streak_bonus_cap_days": CHECKIN_STREAK_BONUS_CAP_DAYS,
         "month_key": ym,
         "month_valid_checkin_days": month_days,
         "month_days_in_month": dim,

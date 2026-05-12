@@ -17,11 +17,14 @@ from app_time import china_now, china_now_iso, china_today
 import gamification as gamification_mod
 
 MONTHLY_POOL_FEE_XP = 150
+STAKE_SAFETY_RESERVE_XP = 50
 # 每月 1～5 日为准备期（报名、组队）；第 6 日起比赛正式开始，有效打卡仅计 6 日及以后
 PREPARATION_LAST_DAY = 5
 COMPETITION_START_DAY = 6
 JOIN_WINDOW_LAST_DAY = PREPARATION_LAST_DAY  # 仅准备期内可加入奖池
 WAGER_TIERS = (0, 50, 100, 200)
+MAX_ACTIVE_WAGERED_DUELS_PER_USER = 3
+MAX_ACTIVE_WAGER_EXPOSURE_XP = 300
 # 1v1 邀约：自发起日起第 N 个自然日 23:59:59 前未接受则自动过期
 DUEL_INVITE_EXPIRY_DAYS = 5
 
@@ -177,6 +180,67 @@ def _parse_iso_datetime(s: str) -> Optional[datetime]:
         return None
 
 
+def _duel_between_users(duel: Dict[str, Any], user_a: str, user_b: str) -> bool:
+    pair = {str(user_a), str(user_b)}
+    return {str(duel.get("from_user") or ""), str(duel.get("target_user") or "")} == pair
+
+
+def _has_open_duel_between(duels: List[Dict[str, Any]], user_a: str, user_b: str, ym: str) -> bool:
+    for d in duels:
+        if not _duel_between_users(d, user_a, user_b):
+            continue
+        status = d.get("status")
+        if status == "pending":
+            return True
+        if status == "active" and not d.get("settled") and str(d.get("month") or "") == ym:
+            return True
+    return False
+
+
+def _active_wager_stats_for_user(
+    duels: List[Dict[str, Any]],
+    username: str,
+    ym: str,
+) -> Tuple[int, int]:
+    count = 0
+    exposure = 0
+    for d in duels:
+        if d.get("status") != "active" or d.get("settled"):
+            continue
+        if str(d.get("month") or "") != ym:
+            continue
+        if username not in (str(d.get("from_user") or ""), str(d.get("target_user") or "")):
+            continue
+        wager = int(d.get("wager_xp") or 0)
+        if wager <= 0:
+            continue
+        count += 1
+        exposure += wager
+    return count, exposure
+
+
+def _can_accept_more_wagered_duels(
+    duels: List[Dict[str, Any]],
+    username: str,
+    ym: str,
+    new_wager_xp: int,
+) -> Tuple[bool, str]:
+    if new_wager_xp <= 0:
+        return True, ""
+    count, exposure = _active_wager_stats_for_user(duels, username, ym)
+    if count + 1 > MAX_ACTIVE_WAGERED_DUELS_PER_USER:
+        return (
+            False,
+            f"本月带赌注 PK 已达 {MAX_ACTIVE_WAGERED_DUELS_PER_USER} 局上限",
+        )
+    if exposure + int(new_wager_xp) > MAX_ACTIVE_WAGER_EXPOSURE_XP:
+        return (
+            False,
+            f"本月 PK 风险敞口最多 {MAX_ACTIVE_WAGER_EXPOSURE_XP} XP",
+        )
+    return True, ""
+
+
 def expire_pending_duels_if_needed(data_dir: Path) -> None:
     """pending 在邀约截止时间（第 N 个自然日 23:59）之后仍未处理则标记为 expired。"""
     now = china_now()
@@ -303,6 +367,7 @@ def get_monthly_pool_state(data_dir: Path, username: str) -> Dict[str, Any]:
         "pool_xp": pool,
         "participant_count": len(participants),
         "fee_xp": MONTHLY_POOL_FEE_XP,
+        "stake_safety_reserve_xp": STAKE_SAFETY_RESERVE_XP,
         "join_window_open": pool_join_window_open(today),
         "join_window_last_day": JOIN_WINDOW_LAST_DAY,
         "preparation_last_day": PREPARATION_LAST_DAY,
@@ -335,7 +400,12 @@ def join_monthly_pool(data_dir: Path, username: str) -> Tuple[bool, str, Dict[st
         if username in participants:
             return False, "本月已加入", get_monthly_pool_state(data_dir, username)
 
-        ok, msg, _ = gamification_mod.apply_xp_delta(data_dir, username, -MONTHLY_POOL_FEE_XP)
+        ok, msg, _ = gamification_mod.spend_xp_with_reserve(
+            data_dir,
+            username,
+            MONTHLY_POOL_FEE_XP,
+            STAKE_SAFETY_RESERVE_XP,
+        )
         if not ok:
             return False, msg or "积分不足", {}
 
@@ -388,6 +458,8 @@ def create_duel(
     with _challenges_lock:
         data = _load_duels(data_dir)
         duels = data.setdefault("duels", [])
+        if _has_open_duel_between(duels, from_user, target_user, month_key(now.date())):
+            return False, "你们之间已有待处理或本月进行中的 PK", None
         duels.append(row)
         _save_duels(data_dir, data)
     return True, "", enrich_duel_for_api(row)
@@ -423,16 +495,36 @@ def respond_duel(
 
         w = int(found.get("wager_xp") or 0)
         a, b = found.get("from_user"), found.get("target_user")
+        accept_now = china_now()
+        accept_month = month_key(accept_now.date())
+        for participant in (str(a), str(b)):
+            ok_limit, limit_msg = _can_accept_more_wagered_duels(
+                duels,
+                participant,
+                accept_month,
+                w,
+            )
+            if not ok_limit:
+                return False, f"{participant} {limit_msg}", None
         if w > 0:
-            ok1, msg1, _ = gamification_mod.apply_xp_delta(data_dir, str(a), -w)
+            ok1, msg1, _ = gamification_mod.spend_xp_with_reserve(
+                data_dir,
+                str(a),
+                w,
+                STAKE_SAFETY_RESERVE_XP,
+            )
             if not ok1:
                 return False, f"发起方{msg1}", None
-            ok2, msg2, _ = gamification_mod.apply_xp_delta(data_dir, str(b), -w)
+            ok2, msg2, _ = gamification_mod.spend_xp_with_reserve(
+                data_dir,
+                str(b),
+                w,
+                STAKE_SAFETY_RESERVE_XP,
+            )
             if not ok2:
                 gamification_mod.apply_xp_delta(data_dir, str(a), w)
                 return False, f"应战方{msg2}", None
-        accept_now = china_now()
-        found["month"] = month_key(accept_now.date())
+        found["month"] = accept_month
         found["status"] = "active"
         found["accepted_at"] = accept_now.isoformat(timespec="seconds")
         found["escrow_xp"] = w

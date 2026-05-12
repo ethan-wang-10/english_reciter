@@ -4217,10 +4217,15 @@ async function submitAnswer() {
         clearReviewWordMessageExtra();
         if (result.correct && result.gamification) {
             const gm = result.gamification;
-            if (gm.xp_gained > 0) {
-                msgText += ` +${gm.xp_gained} XP（累计 ${formatNumber(gm.total_xp)} · Lv.${gm.level} · 连续 ${gm.streak} 天）`;
+            const gainedXp = Number(gm.xp_gained) || 0;
+            const checkinBonusXp = Number(gm.checkin_bonus_xp) || 0;
+            if (gainedXp > 0) {
+                msgText += ` +${formatNumber(gainedXp)} XP（累计 ${formatNumber(gm.total_xp)} · Lv.${gm.level} · 连续 ${gm.streak} 天）`;
             } else {
                 msgText += `（累计 ${formatNumber(gm.total_xp)} · Lv.${gm.level} · 连续 ${gm.streak} 天）`;
+            }
+            if (checkinBonusXp > 0) {
+                msgText += ` · 今日打卡奖励 +${formatNumber(checkinBonusXp)} XP`;
             }
             if (gm.monthly_goal_bonus_xp > 0) {
                 msgText += ` · 打卡目标额外奖励 +${formatNumber(gm.monthly_goal_bonus_xp)} XP`;
