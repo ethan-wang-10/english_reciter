@@ -3362,7 +3362,9 @@ function showSection(sectionId) {
     syncReviewSectionChromeClass();
 
     if (sectionId === 'review') {
-        loadReviewList();
+        if (!restoreActiveReviewSession()) {
+            loadReviewList();
+        }
     } else if (sectionId === 'discover') {
         prefetchDiscoveryWordbankForSearch();
         loadDiscovery();
@@ -3462,6 +3464,7 @@ function applyPendingRemovalToReviewSession(removedEnglishList) {
     if (modalOpen && wrongRoundNumber === 0 && reviewSessionMode === 'daily') {
         const countEl = document.getElementById('remedial-offer-count');
         if (countEl) countEl.textContent = String(wrongWordsOrder.length);
+        renderRemedialOfferWrongList();
         if (wrongWordsOrder.length === 0) {
             closeRemedialOfferModal();
             showFinalComplete();
@@ -3614,6 +3617,10 @@ function recordWrongAttempt(word) {
     renderWrongPanel();
 }
 
+function buildWrongWordItemHtml(w) {
+    return `<span class="ww-en">${escapeHtml(w.english)}</span><span class="ww-zh">${escapeHtml(w.chinese)}</span>`;
+}
+
 function renderWrongPanel() {
     const ul = document.getElementById('wrong-words-list');
     const empty = document.getElementById('wrong-words-empty');
@@ -3623,7 +3630,7 @@ function renderWrongPanel() {
         const w = wordMap.get(en);
         if (!w) continue;
         const li = document.createElement('li');
-        li.innerHTML = `<span class="ww-en">${escapeHtml(w.english)}</span><span class="ww-zh">${escapeHtml(w.chinese)}</span>`;
+        li.innerHTML = buildWrongWordItemHtml(w);
         ul.appendChild(li);
     }
     empty.style.display = wrongWordsOrder.length === 0 ? 'block' : 'none';
@@ -3631,6 +3638,70 @@ function renderWrongPanel() {
     if (badge) {
         badge.textContent = String(wrongWordsOrder.length);
     }
+}
+
+function renderRemedialOfferWrongList() {
+    const wrap = document.getElementById('remedial-offer-words');
+    const ul = document.getElementById('remedial-offer-words-list');
+    const empty = document.getElementById('remedial-offer-words-empty');
+    const count = document.getElementById('remedial-offer-list-count');
+    if (!wrap || !ul || !empty) return;
+
+    ul.innerHTML = '';
+    let rendered = 0;
+    for (const en of wrongWordsOrder) {
+        const w = wordMap.get(en);
+        if (!w) continue;
+        const li = document.createElement('li');
+        li.innerHTML = buildWrongWordItemHtml(w);
+        ul.appendChild(li);
+        rendered += 1;
+    }
+    if (count) count.textContent = String(rendered);
+    wrap.hidden = rendered === 0;
+    ul.hidden = rendered === 0;
+    empty.hidden = rendered !== 0;
+}
+
+function isRemedialOfferModalOpen() {
+    const modal = document.getElementById('remedial-offer-modal');
+    return !!(modal && modal.style.display === 'flex');
+}
+
+function hasActiveReviewSession() {
+    const hasPendingCard = currentReviewList.length > 0 && currentReviewIndex < currentReviewList.length;
+    return hasPendingCard || wrongWordsOrder.length > 0 || wrongRoundNumber > 0 || isRemedialOfferModalOpen();
+}
+
+function restoreActiveReviewSession() {
+    if (!hasActiveReviewSession()) return false;
+
+    showReviewEmptyActions(false);
+    renderWrongPanel();
+    updateWrongRoundLabel();
+
+    const reviewBox = document.getElementById('review-box');
+    const reviewComplete = document.getElementById('review-complete');
+    if (isRemedialOfferModalOpen()) {
+        if (reviewBox) reviewBox.style.display = 'none';
+        if (reviewComplete) reviewComplete.style.display = 'none';
+        renderRemedialOfferWrongList();
+        return true;
+    }
+
+    if (currentReviewList.length > 0 && currentReviewIndex < currentReviewList.length) {
+        if (reviewBox) reviewBox.style.display = 'block';
+        if (reviewComplete) reviewComplete.style.display = 'none';
+        focusWordCapture(60);
+        return true;
+    }
+
+    if (wrongWordsOrder.length > 0) {
+        showRemedialOfferModal();
+        return true;
+    }
+
+    return false;
 }
 
 function updateWrongRoundLabel() {
@@ -3827,6 +3898,7 @@ function showRemedialOfferModal() {
     const n = wrongWordsOrder.length;
     const countEl = document.getElementById('remedial-offer-count');
     if (countEl) countEl.textContent = String(n);
+    renderRemedialOfferWrongList();
     const modal = document.getElementById('remedial-offer-modal');
     if (modal) {
         modal.style.display = 'flex';
