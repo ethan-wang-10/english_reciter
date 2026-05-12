@@ -273,11 +273,14 @@ function buildReviewExamplesDisplayHtml(word) {
 }
 
 /** 导航连续火苗：0 天时灰色「熄灭」样式（见 .ng-streak-flame--out） */
-function ngStreakPillInnerHtml(streak) {
+function ngStreakPillInnerHtml(streak, makeupAvailable = false) {
     const n = Math.max(0, Number(streak) || 0);
     const out = n === 0;
     const flameClass = out ? 'ng-streak-flame ng-streak-flame--out' : 'ng-streak-flame';
-    return `<span class="${flameClass}" aria-hidden="true">🔥</span><span class="ng-streak-num">${formatNumber(n)}</span>`;
+    const badge = makeupAvailable
+        ? '<span class="ng-streak-makeup-badge" aria-hidden="true">补</span>'
+        : '';
+    return `<span class="${flameClass}" aria-hidden="true">🔥</span><span class="ng-streak-num">${formatNumber(n)}</span>${badge}`;
 }
 
 /** 排行榜「连续」列：显示当前连续，并在括号里补充历史最高连续 */
@@ -329,12 +332,18 @@ function updateGamificationNav(g) {
         Number(g.streak_max_record) > 0
             ? `当前连续 ${streakN} 天（有效打卡：每日至少答对 ${minC} 词）；中断后归零；历史最高 ${formatNumber(g.streak_max_record)} 天`
             : `当前连续（有效打卡：每日至少答对 ${minC} 词）；中断后归零`;
+    const makeupAvailable = !!(g.makeup_checkin && g.makeup_checkin.available === true);
+    const makeupHint = makeupAvailable
+        ? `；可用 ${formatNumber(Number(g.makeup_checkin.cost_xp) || 0)} XP 补救 ${g.makeup_checkin.target_date || '断点'}`
+        : '';
     if (lv && xp && st) {
         lv.textContent = `Lv.${g.level}`;
         xp.textContent = `${formatNumber(g.total_xp)} XP`;
-        st.innerHTML = ngStreakPillInnerHtml(g.streak);
+        st.innerHTML = ngStreakPillInnerHtml(g.streak, makeupAvailable);
         st.classList.toggle('ng-streak--out', streakN === 0);
-        st.title = streakTitle;
+        st.classList.toggle('ng-streak--makeup', makeupAvailable);
+        st.title = `${streakTitle}${makeupHint}。点击查看补救规则`;
+        st.setAttribute('aria-label', `${streakTitle}${makeupHint}。点击查看补救规则`);
     }
     if (ck) {
         ck.textContent = ckText;
@@ -348,9 +357,11 @@ function updateGamificationNav(g) {
     if (mlv && mxp && mst) {
         mlv.textContent = `Lv.${g.level}`;
         mxp.textContent = `${formatNumber(g.total_xp)} XP`;
-        mst.innerHTML = ngStreakPillInnerHtml(g.streak);
+        mst.innerHTML = ngStreakPillInnerHtml(g.streak, makeupAvailable);
         mst.classList.toggle('ng-streak--out', streakN === 0);
-        mst.title = streakTitle;
+        mst.classList.toggle('ng-streak--makeup', makeupAvailable);
+        mst.title = `${streakTitle}${makeupHint}。点击查看补救规则`;
+        mst.setAttribute('aria-label', `${streakTitle}${makeupHint}。点击查看补救规则`);
     }
     if (mck) {
         mck.textContent = ckText;
@@ -455,7 +466,7 @@ async function openDailySummaryPopover() {
         updateGamificationNav(g);
         if (isSettingsOverlayOpen() && lastGamificationProfile) {
             updateSettingsCheckinHintFromProfile(lastGamificationProfile);
-            updateSettingsMakeupCheckinFromProfile(lastGamificationProfile);
+            updateMakeupCheckinDialogFromProfile(lastGamificationProfile);
             updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
         }
         renderDailySummaryBody(g, ws);
@@ -763,23 +774,42 @@ function updateSettingsCheckinHintFromProfile(g) {
     hint.textContent = `今日已答对 ${tc} 词；有效打卡需至少 ${minC} 词。${done ? '今日已有效打卡。' : '继续加油。'}`;
 }
 
-/** 补打卡只补连续火苗，不补月目标/奖池/PK 天数。 */
-function updateSettingsMakeupCheckinFromProfile(g) {
-    const card = document.getElementById('settings-makeup-card');
-    const hint = document.getElementById('settings-makeup-hint');
-    const btn = document.getElementById('settings-makeup-buy');
-    if (!card || !hint || !btn) return;
+let makeupCheckinDialogOpen = false;
+
+function setMakeupEntrypointExpanded(open) {
+    document.querySelectorAll('.js-makeup-checkin-open').forEach((el) => {
+        el.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+}
+
+function renderMakeupCheckinDialog(g, options = {}) {
+    const status = document.getElementById('makeup-checkin-status');
+    const rules = document.getElementById('makeup-checkin-rules');
+    const btn = document.getElementById('makeup-checkin-buy');
+    if (!status || !rules || !btn) return;
+    if (options.loading) {
+        status.textContent = '正在刷新补救状态…';
+        rules.textContent = '补救只延续连续火苗，不计入本月目标、奖池或 PK。';
+        btn.disabled = true;
+        btn.textContent = '加载中…';
+        return;
+    }
+    if (options.error) {
+        status.textContent = options.error;
+        rules.textContent = '请稍后再试；补救购买成功前不会扣除 XP。';
+        btn.disabled = true;
+        btn.textContent = '暂不可用';
+        return;
+    }
     const m = g && g.makeup_checkin;
     if (!m) {
-        card.hidden = true;
+        status.textContent = '暂无补打卡数据。';
+        rules.textContent = '补救只延续连续火苗，不计入本月目标、奖池或 PK。';
+        btn.disabled = true;
+        btn.textContent = '暂不可用';
         return;
     }
     const code = String(m.reason_code || '');
-    const showCodes = new Set(['available', 'insufficient_xp', 'monthly_limit']);
-    if (!showCodes.has(code)) {
-        card.hidden = true;
-        return;
-    }
     const cost = Number(m.cost_xp) || 0;
     const target = m.target_date ? String(m.target_date) : '昨天';
     const currentXp = Number(m.current_xp) || 0;
@@ -793,20 +823,95 @@ function updateSettingsMakeupCheckinFromProfile(g) {
         Number(m.monthly_limit) > 0
             ? `本月已用 ${formatNumber(Number(m.month_makeups_used) || 0)} / ${formatNumber(Number(m.monthly_limit))} 次。`
             : '';
-    card.hidden = false;
+    rules.textContent =
+        '规则：必须从昨天开始逐日向过去补；越早越贵。补救只延续连续火苗，不计入本月目标、奖池或 PK。';
     if (code === 'available') {
-        hint.textContent =
+        status.textContent =
             `当前顺序目标是 ${target}（${targetLabel}），可消耗 ${formatNumber(cost)} XP 补救连续火苗；` +
-            `越早越贵，必须从昨天开始逐日向前补。补救日不计入本月目标、奖池或 PK。${todayRule} ${limitText}`;
+            `${todayRule} ${limitText}`;
+        btn.disabled = false;
     } else if (code === 'insufficient_xp') {
-        hint.textContent =
+        status.textContent =
             `当前顺序目标是 ${target}（${targetLabel}），需要 ${formatNumber(cost)} XP；当前 ${formatNumber(currentXp)} XP。` +
-            `先练习攒分；补救日仍不计入月目标、奖池或 PK。`;
+            `先练习攒分后再补。`;
+        btn.disabled = true;
     } else {
-        hint.textContent = `${m.reason || '当前不可补打卡'} 补救日不计入本月目标、奖池或 PK。`;
+        status.textContent = m.reason || '当前不可补打卡。';
+        btn.disabled = true;
     }
-    btn.disabled = code !== 'available';
     btn.textContent = cost > 0 ? `用 ${formatNumber(cost)} XP 补 ${target}` : `用 XP 补 ${target}`;
+}
+
+function updateMakeupCheckinDialogFromProfile(g) {
+    if (!makeupCheckinDialogOpen) return;
+    renderMakeupCheckinDialog(g);
+}
+
+async function openMakeupCheckinDialog() {
+    if (isParentSession) return;
+    closeDailySummaryPopover();
+    closeMobileMoreSheet();
+    const modal = document.getElementById('makeup-checkin-modal');
+    if (!modal) return;
+    makeupCheckinDialogOpen = true;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    setMakeupEntrypointExpanded(true);
+    if (lastGamificationProfile) {
+        renderMakeupCheckinDialog(lastGamificationProfile);
+    } else {
+        renderMakeupCheckinDialog(null, { loading: true });
+    }
+    try {
+        const g = await apiRequest('/gamification');
+        lastGamificationProfile = g;
+        updateGamificationNav(g);
+        renderMakeupCheckinDialog(g);
+    } catch (err) {
+        renderMakeupCheckinDialog(null, { error: err.message || '补救状态加载失败' });
+    }
+}
+
+function closeMakeupCheckinDialog() {
+    const modal = document.getElementById('makeup-checkin-modal');
+    if (!modal || !makeupCheckinDialogOpen) return;
+    makeupCheckinDialogOpen = false;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    setMakeupEntrypointExpanded(false);
+}
+
+async function buyMakeupCheckinFromDialog() {
+    const offer = lastGamificationProfile && lastGamificationProfile.makeup_checkin;
+    const cost = Number(offer && offer.cost_xp) || 0;
+    if (!offer || offer.available !== true || cost <= 0) return;
+    const btn = document.getElementById('makeup-checkin-buy');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '补救中…';
+    }
+    try {
+        const res = await apiRequest('/gamification/makeup-checkin', {
+            method: 'POST',
+            body: '{}',
+        });
+        lastGamificationProfile = { ...(lastGamificationProfile || {}), ...res };
+        updateGamificationNav(lastGamificationProfile);
+        updateSettingsCheckinHintFromProfile(lastGamificationProfile);
+        updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
+        renderMakeupCheckinDialog(lastGamificationProfile);
+        const purchase = res.makeup_checkin_purchase || {};
+        let msg = `已消耗 ${formatNumber(Number(purchase.cost_xp) || cost)} XP 补救连续打卡`;
+        if (purchase.new_achievements && purchase.new_achievements.length) {
+            msg += ` · 新成就：${purchase.new_achievements.map((x) => x.title).join('、')}`;
+        }
+        showMainBanner(msg);
+        if (isSettingsOverlayOpen()) {
+            await loadUserSettingsPanel();
+        }
+    } catch (err) {
+        renderMakeupCheckinDialog(lastGamificationProfile, { error: err.message || '补打卡失败' });
+    }
 }
 
 /** 月度打卡「额外奖励」说明（仅影响目标天数×30，不影响日常练习与其它积分） */
@@ -1116,7 +1221,7 @@ function renderUserSettingsPanel(s) {
     }
     updateNavUserAvatar(s.avatar_url);
     updateSettingsCheckinHintFromProfile(s);
-    updateSettingsMakeupCheckinFromProfile(s);
+    updateMakeupCheckinDialogFromProfile(s);
     updateSettingsMonthlyGoalBonusNotice(s);
     const dim = Number(s.month_days_in_month) || 31;
     const suggested = Math.min(
@@ -4240,7 +4345,7 @@ async function submitAnswer() {
             updateGamificationNav(lastGamificationProfile);
             if (isSettingsOverlayOpen()) {
                 updateSettingsCheckinHintFromProfile(lastGamificationProfile);
-                updateSettingsMakeupCheckinFromProfile(lastGamificationProfile);
+                updateMakeupCheckinDialogFromProfile(lastGamificationProfile);
                 updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
             }
         }
@@ -6487,38 +6592,18 @@ document.addEventListener('DOMContentLoaded', function() {
             setSettingsMessage(err.message || '保存失败', true);
         }
     });
-    document.getElementById('settings-makeup-buy')?.addEventListener('click', async () => {
-        const offer = lastGamificationProfile && lastGamificationProfile.makeup_checkin;
-        const cost = Number(offer && offer.cost_xp) || 0;
-        if (!offer || offer.available !== true || cost <= 0) return;
-        const target = offer.target_date ? String(offer.target_date) : '当前顺序目标';
-        const ok = window.confirm(
-            `确认消耗 ${formatNumber(cost)} XP 补救 ${target} 的连续打卡？\n\n补救必须按顺序向过去进行；补救只延续火苗，不计入本月目标、奖池或 PK 天数。`,
-        );
-        if (!ok) return;
-        const btn = document.getElementById('settings-makeup-buy');
-        if (btn) btn.disabled = true;
-        try {
-            const res = await apiRequest('/gamification/makeup-checkin', {
-                method: 'POST',
-                body: '{}',
-            });
-            lastGamificationProfile = { ...(lastGamificationProfile || {}), ...res };
-            updateGamificationNav(lastGamificationProfile);
-            updateSettingsCheckinHintFromProfile(lastGamificationProfile);
-            updateSettingsMakeupCheckinFromProfile(lastGamificationProfile);
-            updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
-            const purchase = res.makeup_checkin_purchase || {};
-            let msg = `已消耗 ${formatNumber(Number(purchase.cost_xp) || cost)} XP 补救连续打卡`;
-            if (purchase.new_achievements && purchase.new_achievements.length) {
-                msg += ` · 新成就：${purchase.new_achievements.map((x) => x.title).join('、')}`;
-            }
-            await loadUserSettingsPanel();
-            setSettingsMessage(msg);
-        } catch (err) {
-            setSettingsMessage(err.message || '补打卡失败', true);
-            updateSettingsMakeupCheckinFromProfile(lastGamificationProfile);
-        }
+    document.querySelectorAll('.js-makeup-checkin-open').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void openMakeupCheckinDialog();
+        });
+    });
+    document.getElementById('makeup-checkin-close')?.addEventListener('click', closeMakeupCheckinDialog);
+    document.getElementById('makeup-checkin-cancel')?.addEventListener('click', closeMakeupCheckinDialog);
+    document.getElementById('makeup-checkin-backdrop')?.addEventListener('click', closeMakeupCheckinDialog);
+    document.getElementById('makeup-checkin-buy')?.addEventListener('click', () => {
+        void buyMakeupCheckinFromDialog();
     });
     document.getElementById('settings-pool-join')?.addEventListener('click', async () => {
         try {
@@ -6579,6 +6664,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const pkHubModal = document.getElementById('pk-hub-modal');
         if (pkHubModal && pkHubModal.style.display !== 'none') {
             closePkHubModal();
+            return;
+        }
+        const makeupModal = document.getElementById('makeup-checkin-modal');
+        if (makeupModal && makeupModal.style.display !== 'none') {
+            closeMakeupCheckinDialog();
             return;
         }
         const ov = document.getElementById('settings-overlay');

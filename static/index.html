@@ -109,7 +109,7 @@
                 <div class="nav-gamification" id="nav-gamification" title="学习积分与连续打卡">
                     <span class="ng-level" id="ng-level">Lv.1</span>
                     <span class="ng-xp" id="ng-xp">0 XP</span>
-                    <span class="ng-streak ng-streak--out" id="ng-streak" title="当前连续有效打卡；中断后归零"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true">🔥</span><span class="ng-streak-num">0</span></span>
+                    <button type="button" class="ng-streak ng-streak--out js-makeup-checkin-open" id="ng-streak" title="当前连续有效打卡；中断后归零" aria-haspopup="dialog" aria-expanded="false" aria-controls="makeup-checkin-modal"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true">🔥</span><span class="ng-streak-num">0</span></button>
                     <span class="ng-checkin" id="ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
                     <button type="button" class="ng-pk js-pk-hub-open" id="ng-pk-active" title="1v1 打卡 PK">
                         <span class="ng-pk-label" aria-hidden="true">PK</span>
@@ -158,7 +158,7 @@
                     <div class="mobile-more-gamification" id="mobile-more-gamification" title="学习积分与连续打卡">
                         <span class="ng-level" id="mobile-ng-level">Lv.1</span>
                         <span class="ng-xp" id="mobile-ng-xp">0 XP</span>
-                        <span class="ng-streak ng-streak--out" id="mobile-ng-streak" title="当前连续有效打卡；中断后归零"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true">🔥</span><span class="ng-streak-num">0</span></span>
+                        <button type="button" class="ng-streak ng-streak--out js-makeup-checkin-open" id="mobile-ng-streak" title="当前连续有效打卡；中断后归零" aria-haspopup="dialog" aria-expanded="false" aria-controls="makeup-checkin-modal"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true">🔥</span><span class="ng-streak-num">0</span></button>
                         <span class="ng-checkin" id="mobile-ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
                         <button type="button" class="ng-pk js-pk-hub-open" id="mobile-ng-pk-active" title="1v1 打卡 PK">
                             <span class="ng-pk-label" aria-hidden="true">PK</span>
@@ -622,11 +622,6 @@
                     <div class="settings-block">
                         <h3 class="settings-subtitle">今日打卡</h3>
                         <p class="settings-hint" id="settings-checkin-hint">—</p>
-                        <div class="settings-makeup-card" id="settings-makeup-card" hidden>
-                            <p class="settings-makeup-title">连续打卡补救</p>
-                            <p class="settings-hint settings-makeup-hint" id="settings-makeup-hint">—</p>
-                            <button type="button" class="btn btn-primary" id="settings-makeup-buy">用 XP 补打卡</button>
-                        </div>
                     </div>
                     <div class="settings-block">
                         <h3 class="settings-subtitle">本月打卡目标</h3>
@@ -661,6 +656,25 @@
                         <button type="button" class="btn btn-primary" id="settings-parent-pw-save">保存密码</button>
                     </div>
                     <p class="settings-message" id="settings-message" role="status"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 连续打卡补救：点击顶栏/移动端火苗打开 -->
+        <div id="makeup-checkin-modal" class="makeup-checkin-modal" style="display: none;" aria-hidden="true">
+            <div class="makeup-checkin-backdrop" id="makeup-checkin-backdrop"></div>
+            <div class="makeup-checkin-card" role="dialog" aria-modal="true" aria-labelledby="makeup-checkin-title">
+                <div class="makeup-checkin-card-head">
+                    <h3 id="makeup-checkin-title">连续打卡补救</h3>
+                    <button type="button" class="makeup-checkin-close" id="makeup-checkin-close" aria-label="关闭">×</button>
+                </div>
+                <div class="makeup-checkin-body">
+                    <p id="makeup-checkin-status" class="makeup-checkin-status">加载中…</p>
+                    <p id="makeup-checkin-rules" class="makeup-checkin-rules">补救只延续连续火苗，不计入本月目标、奖池或 PK。</p>
+                    <div class="makeup-checkin-actions">
+                        <button type="button" class="btn btn-secondary" id="makeup-checkin-cancel">稍后</button>
+                        <button type="button" class="btn btn-primary" id="makeup-checkin-buy">用 XP 补打卡</button>
+                    </div>
                 </div>
             </div>
         </div>
