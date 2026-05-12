@@ -2812,8 +2812,6 @@ def get_user_settings(username):
         prof["duels"] = duels
         prof["wager_tiers"] = list(challenges_mod.WAGER_TIERS)
         prof["stake_safety_reserve_xp"] = challenges_mod.STAKE_SAFETY_RESERVE_XP
-        prof["max_active_wagered_duels_per_user"] = challenges_mod.MAX_ACTIVE_WAGERED_DUELS_PER_USER
-        prof["max_active_wager_exposure_xp"] = challenges_mod.MAX_ACTIVE_WAGER_EXPOSURE_XP
         prof["duel_opponents"] = list_challenge_opponent_usernames(username)
         return jsonify(prof), 200
     except Exception as e:

@@ -23,8 +23,6 @@ PREPARATION_LAST_DAY = 5
 COMPETITION_START_DAY = 6
 JOIN_WINDOW_LAST_DAY = PREPARATION_LAST_DAY  # 仅准备期内可加入奖池
 WAGER_TIERS = (0, 50, 100, 200)
-MAX_ACTIVE_WAGERED_DUELS_PER_USER = 3
-MAX_ACTIVE_WAGER_EXPOSURE_XP = 300
 # 1v1 邀约：自发起日起第 N 个自然日 23:59:59 前未接受则自动过期
 DUEL_INVITE_EXPIRY_DAYS = 5
 
@@ -195,50 +193,6 @@ def _has_open_duel_between(duels: List[Dict[str, Any]], user_a: str, user_b: str
         if status == "active" and not d.get("settled") and str(d.get("month") or "") == ym:
             return True
     return False
-
-
-def _active_wager_stats_for_user(
-    duels: List[Dict[str, Any]],
-    username: str,
-    ym: str,
-) -> Tuple[int, int]:
-    count = 0
-    exposure = 0
-    for d in duels:
-        if d.get("status") != "active" or d.get("settled"):
-            continue
-        if str(d.get("month") or "") != ym:
-            continue
-        if username not in (str(d.get("from_user") or ""), str(d.get("target_user") or "")):
-            continue
-        wager = int(d.get("wager_xp") or 0)
-        if wager <= 0:
-            continue
-        count += 1
-        exposure += wager
-    return count, exposure
-
-
-def _can_accept_more_wagered_duels(
-    duels: List[Dict[str, Any]],
-    username: str,
-    ym: str,
-    new_wager_xp: int,
-) -> Tuple[bool, str]:
-    if new_wager_xp <= 0:
-        return True, ""
-    count, exposure = _active_wager_stats_for_user(duels, username, ym)
-    if count + 1 > MAX_ACTIVE_WAGERED_DUELS_PER_USER:
-        return (
-            False,
-            f"本月带赌注 PK 已达 {MAX_ACTIVE_WAGERED_DUELS_PER_USER} 局上限",
-        )
-    if exposure + int(new_wager_xp) > MAX_ACTIVE_WAGER_EXPOSURE_XP:
-        return (
-            False,
-            f"本月 PK 风险敞口最多 {MAX_ACTIVE_WAGER_EXPOSURE_XP} XP",
-        )
-    return True, ""
 
 
 def expire_pending_duels_if_needed(data_dir: Path) -> None:
@@ -497,15 +451,6 @@ def respond_duel(
         a, b = found.get("from_user"), found.get("target_user")
         accept_now = china_now()
         accept_month = month_key(accept_now.date())
-        for participant in (str(a), str(b)):
-            ok_limit, limit_msg = _can_accept_more_wagered_duels(
-                duels,
-                participant,
-                accept_month,
-                w,
-            )
-            if not ok_limit:
-                return False, f"{participant} {limit_msg}", None
         if w > 0:
             ok1, msg1, _ = gamification_mod.spend_xp_with_reserve(
                 data_dir,

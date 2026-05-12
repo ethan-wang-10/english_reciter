@@ -1,4 +1,4 @@
-"""游戏化挑战的风险敞口与安全余量。"""
+"""游戏化挑战的安全余量与 PK 鼓励规则。"""
 import shutil
 import unittest
 import uuid
@@ -53,24 +53,19 @@ class TestChallengeBalanceGuards(unittest.TestCase):
             self.assertIn("已有", msg)
             self.assertIsNone(row)
 
-    def test_active_wagered_duel_count_is_capped(self):
+    def test_multiple_wagered_duels_are_allowed(self):
         with temp_data_dir() as d:
             _save_xp(d, "alice", 1000)
             for challenger in ("bob", "carl", "dina", "erin"):
                 _save_xp(d, challenger, 1000)
 
-            for challenger in ("bob", "carl", "dina"):
+            for challenger in ("bob", "carl", "dina", "erin"):
                 ok, msg, row = ch.create_duel(d, challenger, "alice", wager_xp=100)
                 self.assertTrue(ok, msg)
                 ok, msg, _ = ch.respond_duel(d, str(row["id"]), "alice", accept=True)
                 self.assertTrue(ok, msg)
 
-            ok, msg, row = ch.create_duel(d, "erin", "alice", wager_xp=50)
-            self.assertTrue(ok, msg)
-            ok, msg, _ = ch.respond_duel(d, str(row["id"]), "alice", accept=True)
-
-            self.assertFalse(ok)
-            self.assertIn("上限", msg)
+            self.assertEqual(gm.load_state(d, "alice")["total_xp"], 600)
 
 
 if __name__ == "__main__":
