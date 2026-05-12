@@ -208,7 +208,7 @@ def _settle_one_week(
         reward = 0
         if px > 0:
             reward = WEEK_REWARD_XP[i]
-            ok, _, _ = gamification_mod.apply_xp_delta(data_dir, un, reward)
+            ok, _, _ = gamification_mod.apply_xp_delta(data_dir, un, reward, source="weekly_reward")
             if not ok:
                 reward = 0
         top.append(
@@ -251,7 +251,7 @@ def _settle_one_month(
         reward = 0
         if px > 0:
             reward = MONTH_REWARD_XP[i]
-            ok, _, _ = gamification_mod.apply_xp_delta(data_dir, un, reward)
+            ok, _, _ = gamification_mod.apply_xp_delta(data_dir, un, reward, source="monthly_reward")
             if not ok:
                 reward = 0
         top.append(

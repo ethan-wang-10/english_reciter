@@ -2645,6 +2645,17 @@ def get_gamification(username):
         return jsonify({'error': '服务器内部错误'}), 500
 
 
+@app.route('/api/gamification/xp-history', methods=['GET'])
+@token_required
+def get_xp_history(username):
+    """最近 2 个月 XP 获取历史"""
+    try:
+        return jsonify(gamification_mod.xp_history_recent(DATA_DIR, username)), 200
+    except Exception as e:
+        logger.error(f"获取 XP 历史失败: {e}")
+        return jsonify({'error': '服务器内部错误'}), 500
+
+
 @app.route('/api/gamification', methods=['PATCH'])
 @token_required
 @parent_forbidden

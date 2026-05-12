@@ -371,6 +371,7 @@ function updateGamificationNav(g) {
 }
 
 let dailySummaryPopoverOpen = false;
+let xpHistoryModalOpen = false;
 
 function formatDailySummaryDateLabel() {
     const d = new Date();
@@ -505,6 +506,144 @@ function setupDailySummaryPopover() {
         if (e.key === 'Escape' && dailySummaryPopoverOpen) {
             closeDailySummaryPopover();
         }
+    });
+}
+
+function setXpHistoryTriggerExpanded(expanded) {
+    document.getElementById('ng-xp')?.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    document.getElementById('mobile-ng-xp')?.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+}
+
+function closeXpHistoryModal() {
+    const modal = document.getElementById('xp-history-modal');
+    if (!modal || !xpHistoryModalOpen) return;
+    xpHistoryModalOpen = false;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    setXpHistoryTriggerExpanded(false);
+}
+
+function formatXpHistoryDate(dateIso) {
+    const d = new Date(`${String(dateIso).slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return String(dateIso || '');
+    return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric', weekday: 'short' });
+}
+
+function formatXpHistoryMonth(monthKey) {
+    const parts = String(monthKey || '').split('-');
+    if (parts.length !== 2) return monthKey || '';
+    return `${parts[0]}年${Number(parts[1])}月`;
+}
+
+function xpHistorySourceText(sources) {
+    const rows = Array.isArray(sources) ? sources.filter((s) => Number(s.xp) > 0) : [];
+    if (!rows.length) return '来源：练习答题';
+    const labels = rows.slice(0, 2).map((s) => `${s.label || 'XP'} +${formatNumber(s.xp)}`);
+    const more = rows.length > 2 ? ` +${rows.length - 2}项` : '';
+    return `来源：${labels.join(' / ')}${more}`;
+}
+
+function buildXpHistorySummaryHtml(data) {
+    const total = Number(data?.total_xp) || 0;
+    const activeDays = Number(data?.active_days) || 0;
+    const bestDay = data?.best_day;
+    const bestText = bestDay ? `${formatXpHistoryDate(bestDay.date)} +${formatNumber(bestDay.xp)}` : '暂无';
+    return (
+        '<div class="xp-history-summary">' +
+        `<div class="xp-history-stat"><span class="xp-history-stat-label">累计获得</span><span class="xp-history-stat-value">${formatNumber(total)} XP</span></div>` +
+        `<div class="xp-history-stat"><span class="xp-history-stat-label">有记录天数</span><span class="xp-history-stat-value">${formatNumber(activeDays)} 天</span></div>` +
+        `<div class="xp-history-stat"><span class="xp-history-stat-label">最高单日</span><span class="xp-history-stat-value">${escapeHtml(bestText)}</span></div>` +
+        '</div>'
+    );
+}
+
+function renderXpHistoryBody(data) {
+    const body = document.getElementById('xp-history-body');
+    if (!body) return;
+    const entries = Array.isArray(data?.entries) ? data.entries : [];
+    const range =
+        data?.start_date && data?.end_date
+            ? `${escapeHtml(data.start_date)} 至 ${escapeHtml(data.end_date)}，仅显示获得过 XP 的日期`
+            : '仅显示获得过 XP 的日期';
+    if (!entries.length) {
+        body.innerHTML =
+            buildXpHistorySummaryHtml(data || {}) +
+            `<p class="xp-history-range">${range}</p>` +
+            '<p class="xp-history-empty">最近 2 个月还没有 XP 获取记录。</p>';
+        return;
+    }
+
+    const maxXp = Math.max(...entries.map((row) => Number(row.xp) || 0), 1);
+    const groups = new Map();
+    entries.forEach((row) => {
+        const key = String(row.date || '').slice(0, 7) || 'unknown';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row);
+    });
+    const monthHtml = Array.from(groups.entries())
+        .map(([monthKey, rows]) => {
+            const monthTotal = rows.reduce((sum, row) => sum + (Number(row.xp) || 0), 0);
+            const rowsHtml = rows
+                .map((row) => {
+                    const xp = Number(row.xp) || 0;
+                    const pct = Math.max(4, Math.min(100, Math.round((xp / maxXp) * 100)));
+                    return (
+                        '<li class="xp-history-row">' +
+                        `<span class="xp-history-date">${escapeHtml(formatXpHistoryDate(row.date))}</span>` +
+                        `<span class="xp-history-bar" aria-hidden="true"><span class="xp-history-bar-fill" style="width:${pct}%"></span></span>` +
+                        `<span class="xp-history-xp">+${formatNumber(xp)} XP</span>` +
+                        `<span class="xp-history-sources" title="${escapeHtml(xpHistorySourceText(row.sources))}">${escapeHtml(xpHistorySourceText(row.sources))}</span>` +
+                        '</li>'
+                    );
+                })
+                .join('');
+            return (
+                '<section class="xp-history-month">' +
+                `<h4 class="xp-history-month-title"><span>${escapeHtml(formatXpHistoryMonth(monthKey))}</span><span class="xp-history-month-total">+${formatNumber(monthTotal)} XP</span></h4>` +
+                `<ul class="xp-history-list">${rowsHtml}</ul>` +
+                '</section>'
+            );
+        })
+        .join('');
+
+    body.innerHTML =
+        buildXpHistorySummaryHtml(data || {}) +
+        `<p class="xp-history-range">${range}</p>` +
+        `<div class="xp-history-scroll">${monthHtml}</div>`;
+}
+
+async function openXpHistoryModal() {
+    const modal = document.getElementById('xp-history-modal');
+    const body = document.getElementById('xp-history-body');
+    if (!modal || !body) return;
+    closeDailySummaryPopover();
+    xpHistoryModalOpen = true;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    setXpHistoryTriggerExpanded(true);
+    body.innerHTML = '<p class="xp-history-loading">加载中…</p>';
+    try {
+        const data = await apiRequest('/gamification/xp-history');
+        renderXpHistoryBody(data);
+    } catch (e) {
+        body.innerHTML = `<p class="xp-history-error">${escapeHtml(e.message || '加载失败')}</p>`;
+    }
+}
+
+function setupXpHistoryModal() {
+    const open = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void openXpHistoryModal();
+    };
+    document.getElementById('ng-xp')?.addEventListener('click', open);
+    document.getElementById('mobile-ng-xp')?.addEventListener('click', open);
+    document.getElementById('xp-history-close')?.addEventListener('click', closeXpHistoryModal);
+    document.getElementById('xp-history-modal')?.addEventListener('click', (e) => {
+        if (e.target.classList.contains('xp-history-backdrop')) closeXpHistoryModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && xpHistoryModalOpen) closeXpHistoryModal();
     });
 }
 
@@ -6342,6 +6481,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupVisualViewportKeyboardAvoid();
     setupWrongWordsAsideToggle();
     setupDailySummaryPopover();
+    setupXpHistoryModal();
 
     document.querySelectorAll('.btn-toggle-pw').forEach((btn) => {
         btn.addEventListener('click', () => {

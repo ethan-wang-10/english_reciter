@@ -263,7 +263,9 @@ def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
         remainder = pool - share * len(winners)
 
         for w in winners:
-            ok, _, _ = gamification_mod.apply_xp_delta(data_dir, w, share)
+            ok, _, _ = gamification_mod.apply_xp_delta(
+                data_dir, w, share, source="monthly_pool_reward"
+            )
             if not ok:
                 pass
         block["settled"] = True
@@ -467,7 +469,7 @@ def respond_duel(
                 STAKE_SAFETY_RESERVE_XP,
             )
             if not ok2:
-                gamification_mod.apply_xp_delta(data_dir, str(a), w)
+                gamification_mod.apply_xp_delta(data_dir, str(a), w, source="duel_refund")
                 return False, f"应战方{msg2}", None
         found["month"] = accept_month
         found["status"] = "active"
@@ -504,10 +506,10 @@ def settle_due_duels(data_dir: Path) -> None:
             elif db > da:
                 winner = b
             if winner and w > 0:
-                gamification_mod.apply_xp_delta(data_dir, winner, 2 * w)
+                gamification_mod.apply_xp_delta(data_dir, winner, 2 * w, source="duel_reward")
             elif winner is None and w > 0:
-                gamification_mod.apply_xp_delta(data_dir, a, w)
-                gamification_mod.apply_xp_delta(data_dir, b, w)
+                gamification_mod.apply_xp_delta(data_dir, a, w, source="duel_refund")
+                gamification_mod.apply_xp_delta(data_dir, b, w, source="duel_refund")
             d["settled"] = True
             d["settled_at"] = china_now_iso(timespec="seconds")
             d["days_a"] = da

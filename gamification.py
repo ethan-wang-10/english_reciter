@@ -53,6 +53,18 @@ MAKEUP_CHECKIN_MAX_COST_XP = 1200
 MAKEUP_CHECKIN_MONTHLY_LIMIT = 3
 MAKEUP_CHECKINS_KEY = "makeup_checkins"
 
+XP_HISTORY_DAYS = 62
+XP_HISTORY_SOURCE_LABELS: Dict[str, str] = {
+    "practice": "练习答题",
+    "monthly_goal_bonus": "打卡目标奖励",
+    "weekly_reward": "周榜奖励",
+    "monthly_reward": "月榜奖励",
+    "monthly_pool_reward": "月度奖池奖励",
+    "duel_reward": "PK 奖励",
+    "duel_refund": "PK 退还",
+    "manual": "XP 调整",
+}
+
 # 连续火苗「当前连续 + 最高连续」规则生效日（含当日）起：对外 streak 为当前连续（断档未再打卡前即显示 0），
 # 并持久化 streak_max；此前仍沿用旧逻辑（直接读 gamification.json 中的 streak 字段）。
 # 部署时请改为「上线次日」。
@@ -169,6 +181,7 @@ def default_state() -> Dict[str, Any]:
         # 付费补救的火苗日。只参与连续 streak，不参与真实打卡天数、月目标、奖池或 PK。
         MAKEUP_CHECKINS_KEY: {},
         "daily_xp": {},
+        "xp_gain_history": {},
         "achievements": {},
         "leaderboard_opt_in": True,
         # 本月打卡天数目标：与 mcheckin_goal_month 同时有效
@@ -200,6 +213,22 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
         base["achievements"] = dict(raw["achievements"])
     if "daily_xp" in raw and isinstance(raw["daily_xp"], dict):
         base["daily_xp"] = {str(k): int(v) for k, v in raw["daily_xp"].items()}
+    if "xp_gain_history" in raw and isinstance(raw["xp_gain_history"], dict):
+        hist: Dict[str, Dict[str, int]] = {}
+        for dk, sources in raw["xp_gain_history"].items():
+            if not isinstance(sources, dict):
+                continue
+            clean_sources: Dict[str, int] = {}
+            for source, amount in sources.items():
+                try:
+                    n = int(amount)
+                except (TypeError, ValueError):
+                    continue
+                if n > 0:
+                    clean_sources[str(source)] = n
+            if clean_sources:
+                hist[str(dk)] = clean_sources
+        base["xp_gain_history"] = hist
     if "streak_correct_by_day" in raw and isinstance(raw["streak_correct_by_day"], dict):
         sbd: Dict[str, int] = {}
         for dk, cnt in raw["streak_correct_by_day"].items():
@@ -318,6 +347,100 @@ def checkin_completion_bonus_raw(streak_after_checkin: int) -> int:
         CHECKIN_STREAK_BONUS_CAP_DAYS,
     )
     return CHECKIN_COMPLETION_XP + streak_days * CHECKIN_STREAK_BONUS_XP_PER_DAY
+
+
+def _record_xp_gain_unlocked(
+    state: Dict[str, Any],
+    source: str,
+    amount: int,
+    day_key: Optional[str] = None,
+) -> None:
+    n = int(amount or 0)
+    if n <= 0:
+        return
+    dk = day_key or china_today().isoformat()
+    hist = state.setdefault("xp_gain_history", {})
+    if not isinstance(hist, dict):
+        hist = {}
+        state["xp_gain_history"] = hist
+    day = hist.setdefault(dk, {})
+    if not isinstance(day, dict):
+        day = {}
+        hist[dk] = day
+    key = source if source in XP_HISTORY_SOURCE_LABELS else "manual"
+    day[key] = int(day.get(key, 0) or 0) + n
+
+
+def xp_history_from_state(
+    state: Dict[str, Any],
+    *,
+    today: Optional[date] = None,
+    days: int = XP_HISTORY_DAYS,
+) -> Dict[str, Any]:
+    """最近一段时间的 XP 获取历史，按天汇总，供弹窗紧凑展示。"""
+    end = today or china_today()
+    span = max(1, int(days or XP_HISTORY_DAYS))
+    start = end - timedelta(days=span - 1)
+    daily_xp = state.get("daily_xp") or {}
+    raw_hist = state.get("xp_gain_history") or {}
+    entries: List[Dict[str, Any]] = []
+
+    for offset in range(span):
+        d = end - timedelta(days=offset)
+        dk = d.isoformat()
+        sources: Dict[str, int] = {}
+        source_block = raw_hist.get(dk) if isinstance(raw_hist, dict) else None
+        if isinstance(source_block, dict):
+            for source, amount in source_block.items():
+                try:
+                    n = int(amount)
+                except (TypeError, ValueError):
+                    continue
+                if n > 0:
+                    key = str(source) if str(source) in XP_HISTORY_SOURCE_LABELS else "manual"
+                    sources[key] = sources.get(key, 0) + n
+
+        try:
+            daily_practice_xp = int(daily_xp.get(dk, 0)) if isinstance(daily_xp, dict) else 0
+        except (TypeError, ValueError):
+            daily_practice_xp = 0
+        if daily_practice_xp > int(sources.get("practice", 0) or 0):
+            sources["practice"] = daily_practice_xp
+
+        total = sum(sources.values())
+        if total <= 0:
+            continue
+        entries.append(
+            {
+                "date": dk,
+                "xp": total,
+                "sources": [
+                    {
+                        "source": source,
+                        "label": XP_HISTORY_SOURCE_LABELS.get(source, XP_HISTORY_SOURCE_LABELS["manual"]),
+                        "xp": amount,
+                    }
+                    for source, amount in sorted(sources.items(), key=lambda item: (-item[1], item[0]))
+                ],
+            }
+        )
+
+    total_xp = sum(int(row["xp"]) for row in entries)
+    best = max(entries, key=lambda row: int(row["xp"]), default=None)
+    return {
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "days": span,
+        "total_xp": total_xp,
+        "active_days": len(entries),
+        "best_day": best,
+        "entries": entries,
+    }
+
+
+def xp_history_recent(data_dir: Path, username: str, days: int = XP_HISTORY_DAYS) -> Dict[str, Any]:
+    state = load_state(data_dir, username)
+    return xp_history_from_state(state, days=days)
 
 
 def streak_v2_active(today: date) -> bool:
@@ -778,11 +901,18 @@ def try_grant_monthly_checkin_goal_bonus(data_dir: Path, username: str) -> int:
         bonus = g * CHECKIN_GOAL_XP_PER_DAY
         state["mcheckin_goal_bonus_awarded_month"] = ym
         state["total_xp"] = int(state.get("total_xp") or 0) + bonus
+        _record_xp_gain_unlocked(state, "monthly_goal_bonus", bonus, today.isoformat())
         _save_state_unlocked(data_dir, username, state)
         return bonus
 
 
-def apply_xp_delta(data_dir: Path, username: str, delta: int) -> Tuple[bool, str, int]:
+def apply_xp_delta(
+    data_dir: Path,
+    username: str,
+    delta: int,
+    *,
+    source: str = "manual",
+) -> Tuple[bool, str, int]:
     """
     调整 total_xp（可为负）。成功返回 (True, "", new_total)；失败 (False, 错误信息, 当前 total)。
     """
@@ -793,6 +923,8 @@ def apply_xp_delta(data_dir: Path, username: str, delta: int) -> Tuple[bool, str
         if new_total < 0:
             return False, "积分不足", cur
         state["total_xp"] = new_total
+        if int(delta) > 0:
+            _record_xp_gain_unlocked(state, source, int(delta))
         _save_state_unlocked(data_dir, username, state)
         return True, "", new_total
 
@@ -1088,6 +1220,9 @@ def award_correct_answer(
             state["daily_xp"][day_key] = daily_so_far + xp_gain
         if monthly_bonus_xp > 0:
             state["total_xp"] = int(state.get("total_xp") or 0) + monthly_bonus_xp
+            _record_xp_gain_unlocked(state, "monthly_goal_bonus", monthly_bonus_xp, day_key)
+        if xp_gain > 0:
+            _record_xp_gain_unlocked(state, "practice", xp_gain, day_key)
 
         new_achievements = _unlock_achievements(
             state,

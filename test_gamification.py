@@ -164,7 +164,6 @@ class TestStreakDisplayV2(unittest.TestCase):
         self.assertEqual(rows[0]["streak"], 3)
         self.assertEqual(rows[0]["streak_max_record"], 7)
 
-
 class TestMakeupCheckin(unittest.TestCase):
     def test_offer_available_for_yesterday_gap(self):
         today = date(2026, 5, 11)
@@ -254,6 +253,45 @@ class TestMakeupCheckin(unittest.TestCase):
             self.assertGreater(second_offer["cost_xp"], first["cost_xp"])
             self.assertEqual(second["streak"], 3)
             self.assertEqual(gm.valid_checkin_days_in_month(saved, today.strftime("%Y-%m")), 1)
+
+
+class TestXpHistory(unittest.TestCase):
+    def test_history_filters_recent_days_and_merges_breakdown(self):
+        today = date(2024, 5, 7)
+        st = gm.default_state()
+        st["daily_xp"] = {
+            "2024-05-07": 15,
+            "2024-04-01": 10,
+            "2024-02-01": 99,
+        }
+        st["xp_gain_history"] = {
+            "2024-05-07": {"practice": 5, "monthly_goal_bonus": 30},
+            "2024-04-01": {"weekly_reward": 20},
+        }
+
+        out = gm.xp_history_from_state(st, today=today, days=62)
+
+        self.assertEqual(out["start_date"], "2024-03-07")
+        self.assertEqual(out["end_date"], "2024-05-07")
+        self.assertEqual(out["active_days"], 2)
+        self.assertEqual(out["total_xp"], 75)
+        self.assertEqual(out["entries"][0]["date"], "2024-05-07")
+        self.assertEqual(out["entries"][0]["xp"], 45)
+        self.assertEqual(out["entries"][1]["xp"], 30)
+
+    def test_apply_xp_delta_records_positive_source_only(self):
+        with temp_data_dir() as d:
+            ok, msg, total = gm.apply_xp_delta(d, "alice", 50, source="weekly_reward")
+            self.assertTrue(ok, msg)
+            self.assertEqual(total, 50)
+            ok, _, total = gm.apply_xp_delta(d, "alice", -20)
+            self.assertTrue(ok)
+            self.assertEqual(total, 30)
+
+            out = gm.xp_history_recent(d, "alice")
+
+            self.assertEqual(out["total_xp"], 50)
+            self.assertEqual(out["entries"][0]["sources"][0]["source"], "weekly_reward")
 
 
 if __name__ == "__main__":

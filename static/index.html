@@ -108,7 +108,7 @@
                 </div>
                 <div class="nav-gamification" id="nav-gamification" title="学习积分与连续打卡">
                     <span class="ng-level" id="ng-level">Lv.1</span>
-                    <span class="ng-xp" id="ng-xp">0 XP</span>
+                    <button type="button" class="ng-xp" id="ng-xp" title="点击查看 XP 获取历史" aria-haspopup="dialog" aria-expanded="false" aria-controls="xp-history-modal">0 XP</button>
                     <button type="button" class="ng-streak ng-streak--out js-makeup-checkin-open" id="ng-streak" title="当前连续有效打卡；中断后归零" aria-haspopup="dialog" aria-expanded="false" aria-controls="makeup-checkin-modal"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true">🔥</span><span class="ng-streak-num">0</span></button>
                     <span class="ng-checkin" id="ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
                     <button type="button" class="ng-pk js-pk-hub-open" id="ng-pk-active" title="1v1 打卡 PK">
@@ -157,7 +157,7 @@
                     </div>
                     <div class="mobile-more-gamification" id="mobile-more-gamification" title="学习积分与连续打卡">
                         <span class="ng-level" id="mobile-ng-level">Lv.1</span>
-                        <span class="ng-xp" id="mobile-ng-xp">0 XP</span>
+                        <button type="button" class="ng-xp" id="mobile-ng-xp" title="点击查看 XP 获取历史" aria-haspopup="dialog" aria-expanded="false" aria-controls="xp-history-modal">0 XP</button>
                         <button type="button" class="ng-streak ng-streak--out js-makeup-checkin-open" id="mobile-ng-streak" title="当前连续有效打卡；中断后归零" aria-haspopup="dialog" aria-expanded="false" aria-controls="makeup-checkin-modal"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true">🔥</span><span class="ng-streak-num">0</span></button>
                         <span class="ng-checkin" id="mobile-ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
                         <button type="button" class="ng-pk js-pk-hub-open" id="mobile-ng-pk-active" title="1v1 打卡 PK">
@@ -737,6 +737,23 @@
                 <div class="avatar-crop-actions">
                     <button type="button" class="btn btn-secondary" id="avatar-crop-cancel">取消</button>
                     <button type="button" class="btn btn-primary" id="avatar-crop-ok">确定上传</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- XP 获取历史 -->
+        <div id="xp-history-modal" class="xp-history-modal" style="display: none;" aria-hidden="true">
+            <div class="xp-history-backdrop"></div>
+            <div class="xp-history-card" role="dialog" aria-modal="true" aria-labelledby="xp-history-title">
+                <div class="xp-history-head">
+                    <div>
+                        <p class="xp-history-kicker">最近 2 个月</p>
+                        <h3 id="xp-history-title">XP 获取历史</h3>
+                    </div>
+                    <button type="button" class="xp-history-close" id="xp-history-close" aria-label="关闭">&times;</button>
+                </div>
+                <div id="xp-history-body" class="xp-history-body">
+                    <p class="xp-history-loading">加载中…</p>
                 </div>
             </div>
         </div>
