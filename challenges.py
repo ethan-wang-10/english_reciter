@@ -361,6 +361,7 @@ def join_monthly_pool(data_dir: Path, username: str) -> Tuple[bool, str, Dict[st
             username,
             MONTHLY_POOL_FEE_XP,
             STAKE_SAFETY_RESERVE_XP,
+            source="monthly_pool_fee",
         )
         if not ok:
             return False, msg or "积分不足", {}
@@ -459,6 +460,7 @@ def respond_duel(
                 str(a),
                 w,
                 STAKE_SAFETY_RESERVE_XP,
+                source="duel_stake",
             )
             if not ok1:
                 return False, f"发起方{msg1}", None
@@ -467,6 +469,7 @@ def respond_duel(
                 str(b),
                 w,
                 STAKE_SAFETY_RESERVE_XP,
+                source="duel_stake",
             )
             if not ok2:
                 gamification_mod.apply_xp_delta(data_dir, str(a), w, source="duel_refund")

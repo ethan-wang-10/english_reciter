@@ -164,6 +164,21 @@ class TestStreakDisplayV2(unittest.TestCase):
         self.assertEqual(rows[0]["streak"], 3)
         self.assertEqual(rows[0]["streak_max_record"], 7)
 
+
+    @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
+    def test_current_streak_recomputed_from_history_when_stored_value_is_stale(self):
+        today = date(2026, 5, 13)
+        st = gm.default_state()
+        st["streak"] = 49
+        st["streak_max"] = 51
+        st["last_streak_date"] = today.isoformat()
+        for i in range(51):
+            st["streak_correct_by_day"][(today - timedelta(days=i)).isoformat()] = gm.CHECKIN_MIN_CORRECT
+
+        self.assertEqual(gm.display_streak(st, today), 51)
+        self.assertEqual(gm.streak_max_record_display(st, today), 51)
+
+
 class TestMakeupCheckin(unittest.TestCase):
     def test_offer_available_for_yesterday_gap(self):
         today = date(2026, 5, 11)
@@ -265,7 +280,7 @@ class TestXpHistory(unittest.TestCase):
             "2024-02-01": 99,
         }
         st["xp_gain_history"] = {
-            "2024-05-07": {"practice": 5, "monthly_goal_bonus": 30},
+            "2024-05-07": {"practice": 5, "monthly_goal_bonus": 30, "makeup_checkin": -12},
             "2024-04-01": {"weekly_reward": 20},
         }
 
@@ -275,11 +290,16 @@ class TestXpHistory(unittest.TestCase):
         self.assertEqual(out["end_date"], "2024-05-07")
         self.assertEqual(out["active_days"], 2)
         self.assertEqual(out["total_xp"], 75)
+        self.assertEqual(out["total_income_xp"], 75)
+        self.assertEqual(out["total_expense_xp"], 12)
+        self.assertEqual(out["net_xp"], 63)
         self.assertEqual(out["entries"][0]["date"], "2024-05-07")
-        self.assertEqual(out["entries"][0]["xp"], 45)
+        self.assertEqual(out["entries"][0]["income_xp"], 45)
+        self.assertEqual(out["entries"][0]["expense_xp"], 12)
+        self.assertEqual(out["entries"][0]["xp"], 33)
         self.assertEqual(out["entries"][1]["xp"], 30)
 
-    def test_apply_xp_delta_records_positive_source_only(self):
+    def test_apply_xp_delta_records_income_and_expense(self):
         with temp_data_dir() as d:
             ok, msg, total = gm.apply_xp_delta(d, "alice", 50, source="weekly_reward")
             self.assertTrue(ok, msg)
@@ -291,7 +311,50 @@ class TestXpHistory(unittest.TestCase):
             out = gm.xp_history_recent(d, "alice")
 
             self.assertEqual(out["total_xp"], 50)
-            self.assertEqual(out["entries"][0]["sources"][0]["source"], "weekly_reward")
+            self.assertEqual(out["total_income_xp"], 50)
+            self.assertEqual(out["total_expense_xp"], 20)
+            self.assertEqual(out["net_xp"], 30)
+            self.assertEqual(out["entries"][0]["xp"], 30)
+            sources = {row["source"]: row["xp"] for row in out["entries"][0]["sources"]}
+            self.assertEqual(sources["weekly_reward"], 50)
+            self.assertEqual(sources["manual_deduct"], -20)
+
+    def test_spend_xp_with_reserve_records_expense_source(self):
+        with temp_data_dir() as d:
+            gm.apply_xp_delta(d, "alice", 300, source="manual")
+            ok, msg, total = gm.spend_xp_with_reserve(
+                d,
+                "alice",
+                120,
+                50,
+                source="monthly_pool_fee",
+            )
+            self.assertTrue(ok, msg)
+            self.assertEqual(total, 180)
+
+            out = gm.xp_history_recent(d, "alice")
+            sources = {row["source"]: row["xp"] for row in out["entries"][0]["sources"]}
+
+            self.assertEqual(out["total_expense_xp"], 120)
+            self.assertEqual(sources["monthly_pool_fee"], -120)
+
+    def test_history_infers_legacy_makeup_checkin_expense(self):
+        today = date(2024, 5, 7)
+        st = gm.default_state()
+        st[gm.MAKEUP_CHECKINS_KEY] = {
+            "2024-05-06": {
+                "created_at": "2024-05-07T08:30:00",
+                "cost_xp": 130,
+            }
+        }
+
+        out = gm.xp_history_from_state(st, today=today, days=2)
+
+        self.assertEqual(out["total_income_xp"], 0)
+        self.assertEqual(out["total_expense_xp"], 130)
+        self.assertEqual(out["net_xp"], -130)
+        self.assertEqual(out["entries"][0]["sources"][0]["source"], "makeup_checkin")
+        self.assertEqual(out["entries"][0]["sources"][0]["xp"], -130)
 
 
 if __name__ == "__main__":

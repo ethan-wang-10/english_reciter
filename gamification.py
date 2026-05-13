@@ -60,9 +60,14 @@ XP_HISTORY_SOURCE_LABELS: Dict[str, str] = {
     "weekly_reward": "周榜奖励",
     "monthly_reward": "月榜奖励",
     "monthly_pool_reward": "月度奖池奖励",
+    "monthly_pool_fee": "加入月度奖池",
     "duel_reward": "PK 奖励",
     "duel_refund": "PK 退还",
+    "duel_stake": "PK 押注",
+    "makeup_checkin": "补打卡扣除",
+    "spend": "XP 消耗",
     "manual": "XP 调整",
+    "manual_deduct": "XP 调整扣除",
 }
 
 # 连续火苗「当前连续 + 最高连续」规则生效日（含当日）起：对外 streak 为当前连续（断档未再打卡前即显示 0），
@@ -224,7 +229,7 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
                     n = int(amount)
                 except (TypeError, ValueError):
                     continue
-                if n > 0:
+                if n != 0:
                     clean_sources[str(source)] = n
             if clean_sources:
                 hist[str(dk)] = clean_sources
@@ -349,14 +354,14 @@ def checkin_completion_bonus_raw(streak_after_checkin: int) -> int:
     return CHECKIN_COMPLETION_XP + streak_days * CHECKIN_STREAK_BONUS_XP_PER_DAY
 
 
-def _record_xp_gain_unlocked(
+def _record_xp_flow_unlocked(
     state: Dict[str, Any],
     source: str,
     amount: int,
     day_key: Optional[str] = None,
 ) -> None:
     n = int(amount or 0)
-    if n <= 0:
+    if n == 0:
         return
     dk = day_key or china_today().isoformat()
     hist = state.setdefault("xp_gain_history", {})
@@ -367,7 +372,12 @@ def _record_xp_gain_unlocked(
     if not isinstance(day, dict):
         day = {}
         hist[dk] = day
-    key = source if source in XP_HISTORY_SOURCE_LABELS else "manual"
+    if source in XP_HISTORY_SOURCE_LABELS:
+        key = source
+    else:
+        key = "manual_deduct" if n < 0 else "manual"
+    if key == "manual" and n < 0:
+        key = "manual_deduct"
     day[key] = int(day.get(key, 0) or 0) + n
 
 
@@ -377,12 +387,31 @@ def xp_history_from_state(
     today: Optional[date] = None,
     days: int = XP_HISTORY_DAYS,
 ) -> Dict[str, Any]:
-    """最近一段时间的 XP 获取历史，按天汇总，供弹窗紧凑展示。"""
+    """最近一段时间的 XP 收支历史，按天汇总，供弹窗紧凑展示。"""
     end = today or china_today()
     span = max(1, int(days or XP_HISTORY_DAYS))
     start = end - timedelta(days=span - 1)
     daily_xp = state.get("daily_xp") or {}
     raw_hist = state.get("xp_gain_history") or {}
+    makeup_spend_by_day: Dict[str, int] = {}
+    raw_makeups = state.get(MAKEUP_CHECKINS_KEY) or {}
+    if isinstance(raw_makeups, dict):
+        for target_day_key, meta in raw_makeups.items():
+            row = meta if isinstance(meta, dict) else {}
+            try:
+                cost = int(row.get("cost_xp") or 0)
+            except (TypeError, ValueError):
+                continue
+            if cost <= 0:
+                continue
+            created_key = str(row.get("created_at") or "")[:10]
+            if not created_key:
+                created_key = str(target_day_key)[:10]
+            try:
+                date.fromisoformat(created_key)
+            except ValueError:
+                continue
+            makeup_spend_by_day[created_key] = makeup_spend_by_day.get(created_key, 0) + cost
     entries: List[Dict[str, Any]] = []
 
     for offset in range(span):
@@ -396,8 +425,14 @@ def xp_history_from_state(
                     n = int(amount)
                 except (TypeError, ValueError):
                     continue
-                if n > 0:
-                    key = str(source) if str(source) in XP_HISTORY_SOURCE_LABELS else "manual"
+                if n != 0:
+                    key = (
+                        str(source)
+                        if str(source) in XP_HISTORY_SOURCE_LABELS
+                        else ("manual_deduct" if n < 0 else "manual")
+                    )
+                    if key == "manual" and n < 0:
+                        key = "manual_deduct"
                     sources[key] = sources.get(key, 0) + n
 
         try:
@@ -406,34 +441,58 @@ def xp_history_from_state(
             daily_practice_xp = 0
         if daily_practice_xp > int(sources.get("practice", 0) or 0):
             sources["practice"] = daily_practice_xp
+        makeup_cost = int(makeup_spend_by_day.get(dk, 0) or 0)
+        if makeup_cost > abs(min(0, int(sources.get("makeup_checkin", 0) or 0))):
+            sources["makeup_checkin"] = -makeup_cost
 
-        total = sum(sources.values())
-        if total <= 0:
+        sources = {k: v for k, v in sources.items() if int(v or 0) != 0}
+        if not sources:
             continue
+        income = sum(v for v in sources.values() if v > 0)
+        expense = -sum(v for v in sources.values() if v < 0)
+        net = income - expense
         entries.append(
             {
                 "date": dk,
-                "xp": total,
+                "xp": net,
+                "net_xp": net,
+                "income_xp": income,
+                "expense_xp": expense,
                 "sources": [
                     {
                         "source": source,
                         "label": XP_HISTORY_SOURCE_LABELS.get(source, XP_HISTORY_SOURCE_LABELS["manual"]),
                         "xp": amount,
                     }
-                    for source, amount in sorted(sources.items(), key=lambda item: (-item[1], item[0]))
+                    for source, amount in sorted(sources.items(), key=lambda item: (-abs(item[1]), item[0]))
                 ],
             }
         )
 
-    total_xp = sum(int(row["xp"]) for row in entries)
-    best = max(entries, key=lambda row: int(row["xp"]), default=None)
+    total_income_xp = sum(int(row["income_xp"]) for row in entries)
+    total_expense_xp = sum(int(row["expense_xp"]) for row in entries)
+    net_xp = total_income_xp - total_expense_xp
+    best = (
+        max(entries, key=lambda row: int(row["income_xp"]), default=None)
+        if total_income_xp > 0
+        else None
+    )
+    largest_expense = (
+        max(entries, key=lambda row: int(row["expense_xp"]), default=None)
+        if total_expense_xp > 0
+        else None
+    )
     return {
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
         "days": span,
-        "total_xp": total_xp,
+        "total_xp": total_income_xp,
+        "total_income_xp": total_income_xp,
+        "total_expense_xp": total_expense_xp,
+        "net_xp": net_xp,
         "active_days": len(entries),
         "best_day": best,
+        "largest_expense_day": largest_expense,
         "entries": entries,
     }
 
@@ -571,9 +630,14 @@ def longest_valid_streak_from_history(state: Dict[str, Any]) -> int:
 
 def effective_current_streak(state: Dict[str, Any], today: date) -> int:
     """
-    当前连续有效打卡天数：末次有效日在「今天或昨天」则沿用已存 streak；否则视为已断档（0）。
-    未再打卡前，gamification.json 内 streak 可能仍为旧值，展示须用本函数。
+    当前连续有效打卡天数：从真实打卡/补救火苗历史即时推算，避免旧的 streak 存量值偏小。
+    末次有效日在「今天或昨天」才算当前连续；否则视为已断档（0）。
     """
+    if _streak_valid_checkin_day(state, today):
+        return _streak_run_ending_on(state, today)
+    yesterday = today - timedelta(days=1)
+    if _streak_valid_checkin_day(state, yesterday):
+        return _streak_run_ending_on(state, yesterday)
     last = state.get("last_streak_date")
     streak = int(state.get("streak") or 0)
     if not last:
@@ -582,11 +646,7 @@ def effective_current_streak(state: Dict[str, Any], today: date) -> int:
         last_d = date.fromisoformat(str(last))
     except ValueError:
         return 0
-    if last_d > today:
-        return 0
-    if last_d == today:
-        return streak
-    if last_d == today - timedelta(days=1):
+    if last_d == today or last_d == yesterday:
         return streak
     return 0
 
@@ -600,15 +660,13 @@ def display_streak(state: Dict[str, Any], today: date) -> int:
 
 def streak_max_record_display(state: Dict[str, Any], today: date) -> int:
     """历史最高连续（展示用，不在 GET 时写盘）。streak_max 未写入前按历史推算。"""
-    raw = state.get("streak_max")
-    if raw is not None:
-        return max(0, int(raw))
     if not streak_v2_active(today):
         return 0
-    return max(
-        longest_valid_streak_from_history(state),
-        int(state.get("streak") or 0),
-    )
+    try:
+        raw = int(state.get("streak_max") or 0)
+    except (TypeError, ValueError):
+        raw = 0
+    return max(raw, longest_valid_streak_from_history(state), effective_current_streak(state, today))
 
 
 def _ensure_streak_max_initialized(state: Dict[str, Any], today: date) -> None:
@@ -901,7 +959,7 @@ def try_grant_monthly_checkin_goal_bonus(data_dir: Path, username: str) -> int:
         bonus = g * CHECKIN_GOAL_XP_PER_DAY
         state["mcheckin_goal_bonus_awarded_month"] = ym
         state["total_xp"] = int(state.get("total_xp") or 0) + bonus
-        _record_xp_gain_unlocked(state, "monthly_goal_bonus", bonus, today.isoformat())
+        _record_xp_flow_unlocked(state, "monthly_goal_bonus", bonus, today.isoformat())
         _save_state_unlocked(data_dir, username, state)
         return bonus
 
@@ -923,8 +981,7 @@ def apply_xp_delta(
         if new_total < 0:
             return False, "积分不足", cur
         state["total_xp"] = new_total
-        if int(delta) > 0:
-            _record_xp_gain_unlocked(state, source, int(delta))
+        _record_xp_flow_unlocked(state, source, int(delta))
         _save_state_unlocked(data_dir, username, state)
         return True, "", new_total
 
@@ -934,6 +991,8 @@ def spend_xp_with_reserve(
     username: str,
     cost_xp: int,
     reserve_xp: int = 0,
+    *,
+    source: str = "spend",
 ) -> Tuple[bool, str, int]:
     """
     原子扣除 XP，并要求扣除后仍保留 reserve_xp。
@@ -952,6 +1011,7 @@ def spend_xp_with_reserve(
             )
         new_total = cur - cost
         state["total_xp"] = new_total
+        _record_xp_flow_unlocked(state, source, -cost)
         _save_state_unlocked(data_dir, username, state)
         return True, "", new_total
 
@@ -1125,6 +1185,7 @@ def purchase_makeup_checkin(
             "policy": "makeup_checkin_v1",
         }
         state["total_xp"] = after_xp
+        _record_xp_flow_unlocked(state, "makeup_checkin", -cost, today.isoformat())
         _ensure_streak_max_initialized(state, today)
         _recompute_current_streak_from_history(state, today)
         new_achievements = _unlock_achievements(
@@ -1220,9 +1281,9 @@ def award_correct_answer(
             state["daily_xp"][day_key] = daily_so_far + xp_gain
         if monthly_bonus_xp > 0:
             state["total_xp"] = int(state.get("total_xp") or 0) + monthly_bonus_xp
-            _record_xp_gain_unlocked(state, "monthly_goal_bonus", monthly_bonus_xp, day_key)
+            _record_xp_flow_unlocked(state, "monthly_goal_bonus", monthly_bonus_xp, day_key)
         if xp_gain > 0:
-            _record_xp_gain_unlocked(state, "practice", xp_gain, day_key)
+            _record_xp_flow_unlocked(state, "practice", xp_gain, day_key)
 
         new_achievements = _unlock_achievements(
             state,

@@ -722,9 +722,20 @@ body {
 .xp-history-stat-value {
     display: block;
     margin-top: 2px;
-    color: var(--secondary-dark);
     font-size: 1.08rem;
     font-weight: 900;
+}
+
+.xp-history-value--positive {
+    color: var(--secondary-dark);
+}
+
+.xp-history-value--negative {
+    color: var(--error-dark);
+}
+
+.xp-history-value--neutral {
+    color: var(--text-secondary);
 }
 
 .xp-history-range {
@@ -808,8 +819,15 @@ body {
     background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
 }
 
+.xp-history-row--negative .xp-history-bar-fill {
+    background: linear-gradient(90deg, #ffb36b, var(--error-color));
+}
+
+.xp-history-row--neutral .xp-history-bar-fill {
+    background: linear-gradient(90deg, #cfd6df, #9aa4b2);
+}
+
 .xp-history-xp {
-    color: var(--secondary-dark);
     font-weight: 900;
     white-space: nowrap;
 }

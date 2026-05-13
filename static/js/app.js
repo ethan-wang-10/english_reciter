@@ -535,24 +535,37 @@ function formatXpHistoryMonth(monthKey) {
     return `${parts[0]}年${Number(parts[1])}月`;
 }
 
+function formatSignedXp(n) {
+    const value = Number(n) || 0;
+    if (value > 0) return `+${formatNumber(value)} XP`;
+    if (value < 0) return `-${formatNumber(Math.abs(value))} XP`;
+    return '0 XP';
+}
+
+function xpHistoryValueClass(n) {
+    const value = Number(n) || 0;
+    if (value > 0) return 'xp-history-value--positive';
+    if (value < 0) return 'xp-history-value--negative';
+    return 'xp-history-value--neutral';
+}
+
 function xpHistorySourceText(sources) {
-    const rows = Array.isArray(sources) ? sources.filter((s) => Number(s.xp) > 0) : [];
-    if (!rows.length) return '来源：练习答题';
-    const labels = rows.slice(0, 2).map((s) => `${s.label || 'XP'} +${formatNumber(s.xp)}`);
+    const rows = Array.isArray(sources) ? sources.filter((s) => Number(s.xp) !== 0) : [];
+    if (!rows.length) return '明细：暂无';
+    const labels = rows.slice(0, 2).map((s) => `${s.label || 'XP'} ${formatSignedXp(s.xp)}`);
     const more = rows.length > 2 ? ` +${rows.length - 2}项` : '';
-    return `来源：${labels.join(' / ')}${more}`;
+    return `明细：${labels.join(' / ')}${more}`;
 }
 
 function buildXpHistorySummaryHtml(data) {
-    const total = Number(data?.total_xp) || 0;
-    const activeDays = Number(data?.active_days) || 0;
-    const bestDay = data?.best_day;
-    const bestText = bestDay ? `${formatXpHistoryDate(bestDay.date)} +${formatNumber(bestDay.xp)}` : '暂无';
+    const income = Number(data?.total_income_xp ?? data?.total_xp) || 0;
+    const expense = Number(data?.total_expense_xp) || 0;
+    const net = Number(data?.net_xp ?? income - expense) || 0;
     return (
         '<div class="xp-history-summary">' +
-        `<div class="xp-history-stat"><span class="xp-history-stat-label">累计获得</span><span class="xp-history-stat-value">${formatNumber(total)} XP</span></div>` +
-        `<div class="xp-history-stat"><span class="xp-history-stat-label">有记录天数</span><span class="xp-history-stat-value">${formatNumber(activeDays)} 天</span></div>` +
-        `<div class="xp-history-stat"><span class="xp-history-stat-label">最高单日</span><span class="xp-history-stat-value">${escapeHtml(bestText)}</span></div>` +
+        `<div class="xp-history-stat"><span class="xp-history-stat-label">收入</span><span class="xp-history-stat-value xp-history-value--positive">+${formatNumber(income)} XP</span></div>` +
+        `<div class="xp-history-stat"><span class="xp-history-stat-label">支出</span><span class="xp-history-stat-value xp-history-value--negative">-${formatNumber(expense)} XP</span></div>` +
+        `<div class="xp-history-stat"><span class="xp-history-stat-label">净变化</span><span class="xp-history-stat-value ${xpHistoryValueClass(net)}">${formatSignedXp(net)}</span></div>` +
         '</div>'
     );
 }
@@ -563,17 +576,17 @@ function renderXpHistoryBody(data) {
     const entries = Array.isArray(data?.entries) ? data.entries : [];
     const range =
         data?.start_date && data?.end_date
-            ? `${escapeHtml(data.start_date)} 至 ${escapeHtml(data.end_date)}，仅显示获得过 XP 的日期`
-            : '仅显示获得过 XP 的日期';
+            ? `${escapeHtml(data.start_date)} 至 ${escapeHtml(data.end_date)}，仅显示有 XP 收支的日期`
+            : '仅显示有 XP 收支的日期';
     if (!entries.length) {
         body.innerHTML =
             buildXpHistorySummaryHtml(data || {}) +
             `<p class="xp-history-range">${range}</p>` +
-            '<p class="xp-history-empty">最近 2 个月还没有 XP 获取记录。</p>';
+            '<p class="xp-history-empty">最近 2 个月还没有 XP 收支记录。</p>';
         return;
     }
 
-    const maxXp = Math.max(...entries.map((row) => Number(row.xp) || 0), 1);
+    const maxXp = Math.max(...entries.map((row) => Math.abs(Number(row.net_xp ?? row.xp) || 0)), 1);
     const groups = new Map();
     entries.forEach((row) => {
         const key = String(row.date || '').slice(0, 7) || 'unknown';
@@ -582,16 +595,22 @@ function renderXpHistoryBody(data) {
     });
     const monthHtml = Array.from(groups.entries())
         .map(([monthKey, rows]) => {
-            const monthTotal = rows.reduce((sum, row) => sum + (Number(row.xp) || 0), 0);
+            const monthTotal = rows.reduce((sum, row) => sum + (Number(row.net_xp ?? row.xp) || 0), 0);
             const rowsHtml = rows
                 .map((row) => {
-                    const xp = Number(row.xp) || 0;
-                    const pct = Math.max(4, Math.min(100, Math.round((xp / maxXp) * 100)));
+                    const xp = Number(row.net_xp ?? row.xp) || 0;
+                    const pct = Math.max(4, Math.min(100, Math.round((Math.abs(xp) / maxXp) * 100)));
+                    const flowClass =
+                        xp > 0
+                            ? 'xp-history-row--positive'
+                            : xp < 0
+                              ? 'xp-history-row--negative'
+                              : 'xp-history-row--neutral';
                     return (
-                        '<li class="xp-history-row">' +
+                        `<li class="xp-history-row ${flowClass}">` +
                         `<span class="xp-history-date">${escapeHtml(formatXpHistoryDate(row.date))}</span>` +
                         `<span class="xp-history-bar" aria-hidden="true"><span class="xp-history-bar-fill" style="width:${pct}%"></span></span>` +
-                        `<span class="xp-history-xp">+${formatNumber(xp)} XP</span>` +
+                        `<span class="xp-history-xp ${xpHistoryValueClass(xp)}">${formatSignedXp(xp)}</span>` +
                         `<span class="xp-history-sources" title="${escapeHtml(xpHistorySourceText(row.sources))}">${escapeHtml(xpHistorySourceText(row.sources))}</span>` +
                         '</li>'
                     );
@@ -599,7 +618,7 @@ function renderXpHistoryBody(data) {
                 .join('');
             return (
                 '<section class="xp-history-month">' +
-                `<h4 class="xp-history-month-title"><span>${escapeHtml(formatXpHistoryMonth(monthKey))}</span><span class="xp-history-month-total">+${formatNumber(monthTotal)} XP</span></h4>` +
+                `<h4 class="xp-history-month-title"><span>${escapeHtml(formatXpHistoryMonth(monthKey))}</span><span class="xp-history-month-total ${xpHistoryValueClass(monthTotal)}">${formatSignedXp(monthTotal)}</span></h4>` +
                 `<ul class="xp-history-list">${rowsHtml}</ul>` +
                 '</section>'
             );
