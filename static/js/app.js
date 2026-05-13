@@ -299,6 +299,32 @@ function lbStreakCellInnerHtml(streak, streakMax) {
     return `<span class="${flameClass}" aria-hidden="true">🔥</span> <span class="lb-streak-val">${escapeHtml(formatNumber(n))}</span>${maxHtml}`;
 }
 
+function streakDiagnosticsHintFromRow(r) {
+    const streak = Math.max(0, Number(r?.streak) || 0);
+    const maxRecord = Math.max(0, Number(r?.streak_max_record) || 0);
+    const minCorrect = Math.max(1, Number(r?.check_in_min_correct) || 5);
+    const start = r?.streak_current_start_date;
+    const end = r?.streak_current_end_date;
+    const parts = [];
+    if (start && end) {
+        parts.push(`当前连续 ${formatNumber(streak)} 天：${start} 至 ${end}`);
+    } else {
+        parts.push(`当前连续 ${formatNumber(streak)} 天`);
+    }
+    if (maxRecord > 0) {
+        parts.push(`历史最高 ${formatNumber(maxRecord)} 天`);
+    }
+    const gap = r?.streak_gap_before_current_date;
+    if (gap && maxRecord > streak) {
+        const cnt = Number(r?.streak_gap_before_current_correct_count) || 0;
+        const xp = Number(r?.streak_gap_before_current_daily_xp) || 0;
+        parts.push(
+            `系统认为 ${gap} 未达到有效打卡：答对 ${formatNumber(cnt)}/${formatNumber(minCorrect)}，当日 XP ${formatNumber(xp)}`,
+        );
+    }
+    return parts.join('；');
+}
+
 /** 今日小结「当前连续」一行：0 天时灰色火苗 */
 function dailySummaryStreakLineHtml(streak) {
     const n = Math.max(0, Number(streak) || 0);
@@ -332,6 +358,12 @@ function updateGamificationNav(g) {
         Number(g.streak_max_record) > 0
             ? `当前连续 ${streakN} 天（有效打卡：每日至少答对 ${minC} 词）；中断后归零；历史最高 ${formatNumber(g.streak_max_record)} 天`
             : `当前连续（有效打卡：每日至少答对 ${minC} 词）；中断后归零`;
+    const sd = g.streak_diagnostics || {};
+    const gap = sd.gap_before_current_date;
+    const gapHint =
+        gap && Number(g.streak_max_record) > streakN
+            ? `；系统认为 ${gap} 未达到有效打卡：答对 ${formatNumber(sd.gap_before_current_correct_count || 0)}/${formatNumber(minC)}，当日 XP ${formatNumber(sd.gap_before_current_daily_xp || 0)}`
+            : '';
     const makeupAvailable = !!(g.makeup_checkin && g.makeup_checkin.available === true);
     const makeupHint = makeupAvailable
         ? `；可用 ${formatNumber(Number(g.makeup_checkin.cost_xp) || 0)} XP 补救 ${g.makeup_checkin.target_date || '断点'}`
@@ -342,8 +374,8 @@ function updateGamificationNav(g) {
         st.innerHTML = ngStreakPillInnerHtml(g.streak, makeupAvailable);
         st.classList.toggle('ng-streak--out', streakN === 0);
         st.classList.toggle('ng-streak--makeup', makeupAvailable);
-        st.title = `${streakTitle}${makeupHint}。点击查看补救规则`;
-        st.setAttribute('aria-label', `${streakTitle}${makeupHint}。点击查看补救规则`);
+        st.title = `${streakTitle}${gapHint}${makeupHint}。点击查看补救规则`;
+        st.setAttribute('aria-label', `${streakTitle}${gapHint}${makeupHint}。点击查看补救规则`);
     }
     if (ck) {
         ck.textContent = ckText;
@@ -360,8 +392,8 @@ function updateGamificationNav(g) {
         mst.innerHTML = ngStreakPillInnerHtml(g.streak, makeupAvailable);
         mst.classList.toggle('ng-streak--out', streakN === 0);
         mst.classList.toggle('ng-streak--makeup', makeupAvailable);
-        mst.title = `${streakTitle}${makeupHint}。点击查看补救规则`;
-        mst.setAttribute('aria-label', `${streakTitle}${makeupHint}。点击查看补救规则`);
+        mst.title = `${streakTitle}${gapHint}${makeupHint}。点击查看补救规则`;
+        mst.setAttribute('aria-label', `${streakTitle}${gapHint}${makeupHint}。点击查看补救规则`);
     }
     if (mck) {
         mck.textContent = ckText;
@@ -2166,12 +2198,13 @@ function leaderboardTableRowHtml(r, sc) {
         ? `<img class="lb-avatar" src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="32" height="32" loading="lazy" />`
         : '<span class="lb-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
     const xpVal = sc === 'total' ? r.total_xp : r.period_xp;
+    const streakHint = streakDiagnosticsHintFromRow(r);
     return `<tr class="${me}">
                 <td>${escapeHtml(r.rank)}</td>
                 <td class="lb-user-cell">${av}<span class="lb-username">${escapeHtml(r.username)}${r.is_viewer ? ' <span class="lb-you">我</span>' : ''}</span></td>
                 <td>Lv.${escapeHtml(r.level)}</td>
                 <td>${escapeHtml(formatNumber(xpVal))}</td>
-                <td class="lb-streak-cell">${lbStreakCellInnerHtml(r.streak, r.streak_max_record)}</td>
+                <td class="lb-streak-cell" title="${escapeHtml(streakHint)}">${lbStreakCellInnerHtml(r.streak, r.streak_max_record)}</td>
                 <td>${escapeHtml(r.achievements_count)}</td>
             </tr>`;
 }

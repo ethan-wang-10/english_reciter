@@ -124,6 +124,7 @@ def build_period_leaderboard_from_states(
         ach_n = len(st.get("achievements") or {})
         streak = gamification_mod.display_streak(st, today)
         streak_max = gamification_mod.streak_max_record_display(st, today)
+        streak_diag = gamification_mod.streak_diagnostics(st, today)
         if gamification_mod.streak_v2_active(today):
             streak_max = max(streak, streak_max)
         rows.append(
@@ -134,6 +135,12 @@ def build_period_leaderboard_from_states(
                 "level": gamification_mod.level_from_xp(xp),
                 "streak": streak,
                 "streak_max_record": streak_max,
+                "streak_current_start_date": streak_diag.get("current_start_date"),
+                "streak_current_end_date": streak_diag.get("current_end_date"),
+                "streak_gap_before_current_date": streak_diag.get("gap_before_current_date"),
+                "streak_gap_before_current_correct_count": streak_diag.get("gap_before_current_correct_count"),
+                "streak_gap_before_current_daily_xp": streak_diag.get("gap_before_current_daily_xp"),
+                "check_in_min_correct": gamification_mod.CHECKIN_MIN_CORRECT,
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
             }

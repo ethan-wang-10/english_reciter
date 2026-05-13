@@ -178,6 +178,26 @@ class TestStreakDisplayV2(unittest.TestCase):
         self.assertEqual(gm.display_streak(st, today), 51)
         self.assertEqual(gm.streak_max_record_display(st, today), 51)
 
+    @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
+    def test_streak_diagnostics_reports_gap_before_current_run(self):
+        today = date(2026, 5, 13)
+        st = gm.default_state()
+        st["streak"] = 49
+        st["streak_max"] = 51
+        st["last_streak_date"] = today.isoformat()
+        for i in range(49):
+            st["streak_correct_by_day"][(today - timedelta(days=i)).isoformat()] = gm.CHECKIN_MIN_CORRECT
+        gap_day = today - timedelta(days=49)
+        st["streak_correct_by_day"][gap_day.isoformat()] = gm.CHECKIN_MIN_CORRECT - 1
+        st["daily_xp"][gap_day.isoformat()] = 12
+
+        diag = gm.streak_diagnostics(st, today)
+
+        self.assertEqual(diag["current_streak"], 49)
+        self.assertEqual(diag["gap_before_current_date"], gap_day.isoformat())
+        self.assertEqual(diag["gap_before_current_correct_count"], gm.CHECKIN_MIN_CORRECT - 1)
+        self.assertEqual(diag["gap_before_current_daily_xp"], 12)
+
 
 class TestMakeupCheckin(unittest.TestCase):
     def test_offer_available_for_yesterday_gap(self):

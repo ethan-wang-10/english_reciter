@@ -669,6 +669,69 @@ def streak_max_record_display(state: Dict[str, Any], today: date) -> int:
     return max(raw, longest_valid_streak_from_history(state), effective_current_streak(state, today))
 
 
+def streak_diagnostics(state: Dict[str, Any], today: date) -> Dict[str, Any]:
+    """解释当前连续的日期区间，并指出当前连续之前的第一个断点。"""
+    current = display_streak(state, today)
+    longest_history = longest_valid_streak_from_history(state) if streak_v2_active(today) else 0
+    max_record = streak_max_record_display(state, today)
+    try:
+        stored_max = int(state.get("streak_max") or 0)
+    except (TypeError, ValueError):
+        stored_max = 0
+    current_end: Optional[date] = None
+    history_backed = False
+    if _streak_valid_checkin_day(state, today):
+        current_end = today
+        history_backed = True
+    elif _streak_valid_checkin_day(state, today - timedelta(days=1)):
+        current_end = today - timedelta(days=1)
+        history_backed = True
+    else:
+        last = state.get("last_streak_date")
+        try:
+            last_d = date.fromisoformat(str(last)) if last else None
+        except ValueError:
+            last_d = None
+        if last_d in (today, today - timedelta(days=1)):
+            current_end = last_d
+
+    current_start: Optional[date] = None
+    gap_day: Optional[date] = None
+    gap_correct_count: Optional[int] = None
+    gap_daily_xp: Optional[int] = None
+    gap_has_makeup = False
+    if current > 0 and current_end is not None:
+        current_start = current_end - timedelta(days=current - 1)
+        gap_day = current_start - timedelta(days=1)
+        gap_key = gap_day.isoformat()
+        sbd = state.get("streak_correct_by_day") or {}
+        dx = state.get("daily_xp") or {}
+        try:
+            gap_correct_count = int(sbd.get(gap_key, 0) or 0)
+        except (TypeError, ValueError):
+            gap_correct_count = 0
+        try:
+            gap_daily_xp = int(dx.get(gap_key, 0) or 0)
+        except (TypeError, ValueError):
+            gap_daily_xp = 0
+        gap_has_makeup = gap_key in _makeup_checkin_map(state)
+
+    return {
+        "current_streak": current,
+        "current_start_date": current_start.isoformat() if current_start else None,
+        "current_end_date": current_end.isoformat() if current_end else None,
+        "current_history_backed": history_backed,
+        "longest_history_streak": longest_history,
+        "stored_streak_max": stored_max,
+        "max_record": max_record,
+        "gap_before_current_date": gap_day.isoformat() if gap_day else None,
+        "gap_before_current_correct_count": gap_correct_count,
+        "gap_before_current_daily_xp": gap_daily_xp,
+        "gap_before_current_has_makeup": gap_has_makeup,
+        "check_in_min_correct": CHECKIN_MIN_CORRECT,
+    }
+
+
 def _ensure_streak_max_initialized(state: Dict[str, Any], today: date) -> None:
     if not streak_v2_active(today):
         return
@@ -1394,6 +1457,7 @@ def public_profile(
     dim = calendar.monthrange(today.year, today.month)[1]
     suggested_days = max(1, min(dim, days_inclusive_today_through_month_end(today)))
     can_edit_goal = state.get("mcheckin_goal_edits_ym") != ym
+    streak_diag = streak_diagnostics(state, today)
 
     return {
         "total_xp": total_xp,
@@ -1401,6 +1465,7 @@ def public_profile(
         "xp_to_next_level": need,
         "streak": display_streak(state, today),
         "streak_max_record": streak_max_record_display(state, today),
+        "streak_diagnostics": streak_diag,
         "last_streak_date": state.get("last_streak_date"),
         "total_correct": int(state.get("total_correct") or 0),
         "leaderboard_opt_in": bool(state.get("leaderboard_opt_in", True)),
@@ -1517,6 +1582,7 @@ def build_leaderboard_from_states(
         ach_n = len(st.get("achievements") or {})
         streak = display_streak(st, today)
         streak_max = streak_max_record_display(st, today)
+        streak_diag = streak_diagnostics(st, today)
         if streak_v2_active(today):
             streak_max = max(streak, streak_max)
         rows.append(
@@ -1526,6 +1592,12 @@ def build_leaderboard_from_states(
                 "level": level_from_xp(xp),
                 "streak": streak,
                 "streak_max_record": streak_max,
+                "streak_current_start_date": streak_diag.get("current_start_date"),
+                "streak_current_end_date": streak_diag.get("current_end_date"),
+                "streak_gap_before_current_date": streak_diag.get("gap_before_current_date"),
+                "streak_gap_before_current_correct_count": streak_diag.get("gap_before_current_correct_count"),
+                "streak_gap_before_current_daily_xp": streak_diag.get("gap_before_current_daily_xp"),
+                "check_in_min_correct": CHECKIN_MIN_CORRECT,
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
             }
