@@ -34,6 +34,8 @@ MAX_LEVEL = 99
 
 # 当日答对次数 ≥ 此值才算「有效打卡」，并参与连续打卡统计
 CHECKIN_MIN_CORRECT = 5
+# 兼容早期数据：少数日期的答对次数丢失，但 daily_xp 明显很高。仅用于历史有效打卡推断。
+LEGACY_CHECKIN_MIN_DAILY_XP = 100
 
 # 今日首次达成有效打卡时发放；连续天数只给小额加成，鼓励不断档但不制造滚雪球。
 CHECKIN_COMPLETION_XP = 20
@@ -507,9 +509,16 @@ def streak_v2_active(today: date) -> bool:
 
 
 def _actual_valid_checkin_day(state: Dict[str, Any], day: date) -> bool:
+    key = day.isoformat()
     sbd = state.get("streak_correct_by_day") or {}
     try:
-        return int(sbd.get(day.isoformat(), 0) or 0) >= CHECKIN_MIN_CORRECT
+        if int(sbd.get(key, 0) or 0) >= CHECKIN_MIN_CORRECT:
+            return True
+    except (TypeError, ValueError):
+        pass
+    dx = state.get("daily_xp") or {}
+    try:
+        return int(dx.get(key, 0) or 0) >= LEGACY_CHECKIN_MIN_DAILY_XP
     except (TypeError, ValueError):
         return False
 
@@ -546,22 +555,20 @@ def _streak_run_ending_on(state: Dict[str, Any], end_day: date) -> int:
 
 
 def _latest_streak_valid_day_before(state: Dict[str, Any], before_day: date) -> Optional[date]:
-    days: List[date] = []
+    candidates = set()
     sbd = state.get("streak_correct_by_day") or {}
-    for day_key, cnt in sbd.items():
+    dx = state.get("daily_xp") or {}
+    for day_key in set(sbd.keys()) | set(dx.keys()):
         try:
             d = date.fromisoformat(str(day_key)[:10])
         except ValueError:
             continue
-        try:
-            if d < before_day and int(cnt or 0) >= CHECKIN_MIN_CORRECT:
-                days.append(d)
-        except (TypeError, ValueError):
-            continue
+        if d < before_day and _actual_valid_checkin_day(state, d):
+            candidates.add(d)
     for d in _makeup_checkin_days(state):
         if d < before_day:
-            days.append(d)
-    return max(days) if days else None
+            candidates.add(d)
+    return max(candidates) if candidates else None
 
 
 def _next_makeup_target_date(state: Dict[str, Any], today: date) -> date:
@@ -602,14 +609,15 @@ def _recompute_current_streak_from_history(state: Dict[str, Any], today: date) -
 def longest_valid_streak_from_history(state: Dict[str, Any]) -> int:
     """根据真实打卡与补救火苗日，计算历史上最长连续天数。"""
     sbd = state.get("streak_correct_by_day") or {}
+    dx = state.get("daily_xp") or {}
     days_set = set()
-    for dk, cnt in sbd.items():
-        if int(cnt or 0) < CHECKIN_MIN_CORRECT:
-            continue
+    for dk in set(sbd.keys()) | set(dx.keys()):
         try:
-            days_set.add(date.fromisoformat(str(dk)[:10]))
+            d = date.fromisoformat(str(dk)[:10])
         except ValueError:
             continue
+        if _actual_valid_checkin_day(state, d):
+            days_set.add(d)
     for makeup_day in _makeup_checkin_days(state):
         days_set.add(makeup_day)
     days = sorted(days_set)
@@ -716,6 +724,12 @@ def streak_diagnostics(state: Dict[str, Any], today: date) -> Dict[str, Any]:
             gap_daily_xp = 0
         gap_has_makeup = gap_key in _makeup_checkin_map(state)
 
+    inferred_from_daily_xp = (
+        gap_daily_xp is not None
+        and gap_daily_xp >= LEGACY_CHECKIN_MIN_DAILY_XP
+        and (gap_correct_count or 0) < CHECKIN_MIN_CORRECT
+    )
+
     return {
         "current_streak": current,
         "current_start_date": current_start.isoformat() if current_start else None,
@@ -728,7 +742,9 @@ def streak_diagnostics(state: Dict[str, Any], today: date) -> Dict[str, Any]:
         "gap_before_current_correct_count": gap_correct_count,
         "gap_before_current_daily_xp": gap_daily_xp,
         "gap_before_current_has_makeup": gap_has_makeup,
+        "gap_before_current_inferred_from_daily_xp": inferred_from_daily_xp,
         "check_in_min_correct": CHECKIN_MIN_CORRECT,
+        "legacy_checkin_min_daily_xp": LEGACY_CHECKIN_MIN_DAILY_XP,
     }
 
 

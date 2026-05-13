@@ -198,6 +198,23 @@ class TestStreakDisplayV2(unittest.TestCase):
         self.assertEqual(diag["gap_before_current_correct_count"], gm.CHECKIN_MIN_CORRECT - 1)
         self.assertEqual(diag["gap_before_current_daily_xp"], 12)
 
+    @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
+    def test_legacy_high_daily_xp_counts_as_valid_checkin(self):
+        today = date(2026, 5, 13)
+        gap_day = today - timedelta(days=49)
+        st = gm.default_state()
+        st["streak"] = 49
+        st["streak_max"] = 51
+        st["last_streak_date"] = today.isoformat()
+        for i in range(49):
+            st["streak_correct_by_day"][(today - timedelta(days=i)).isoformat()] = gm.CHECKIN_MIN_CORRECT
+        st["streak_correct_by_day"][gap_day.isoformat()] = 1
+        st["daily_xp"][gap_day.isoformat()] = gm.LEGACY_CHECKIN_MIN_DAILY_XP
+        st["streak_correct_by_day"][(gap_day - timedelta(days=1)).isoformat()] = gm.CHECKIN_MIN_CORRECT
+
+        self.assertEqual(gm.display_streak(st, today), 51)
+        self.assertEqual(gm.longest_valid_streak_from_history(st), 51)
+
 
 class TestMakeupCheckin(unittest.TestCase):
     def test_offer_available_for_yesterday_gap(self):
