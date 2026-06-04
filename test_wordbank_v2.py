@@ -83,6 +83,44 @@ class TestWordbankV2(unittest.TestCase):
         self.assertIn("蝙蝠", csl[0])
         self.assertIn("球棒", csl[1])
 
+    def test_finalize_rejects_chinese_example_en_without_translation(self):
+        raw = {
+            "english": "light up",
+            "senses": [
+                {
+                    "pos": "phrase",
+                    "definition_zh": "点亮",
+                    "example_en": "她点亮了蜡烛。",
+                    "example_cn": "",
+                    "example_form": "lights up",
+                },
+            ],
+            "phonetic": "/laɪt ʌp/",
+            "level": "初中",
+        }
+        self.assertIsNone(wordbank_v2.finalize_v2_entry_from_deepseek(raw))
+
+    def test_finalize_repairs_swapped_examples(self):
+        raw = {
+            "english": "light up",
+            "senses": [
+                {
+                    "pos": "phrase",
+                    "definition_zh": "点亮",
+                    "example_en": "她点亮了蜡烛。",
+                    "example_cn": "She lights up the candle.",
+                    "example_form": "lights up",
+                },
+            ],
+            "phonetic": "/laɪt ʌp/",
+            "level": "初中",
+        }
+        fin = wordbank_v2.finalize_v2_entry_from_deepseek(raw)
+        self.assertIsNotNone(fin)
+        assert fin is not None
+        self.assertEqual(fin["senses"][0]["example_en"], "She lights up the candle.")
+        self.assertEqual(fin["senses"][0]["example_cn"], "她点亮了蜡烛。")
+
     def test_slim_v2_roundtrip_and_stale_flat_ignored(self):
         """落盘仅 senses；读取时从 senses 派生扁平行；若文件曾含陈旧 example*，以 senses 为准。"""
         raw = {

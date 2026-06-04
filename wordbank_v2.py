@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -28,6 +29,9 @@ _words_v2_lock = threading.Lock()
 _words_v2_cache: Optional[List[dict]] = None
 _words_v2_cache_mtime: float = 0.0
 _words_v2_by_key: Optional[Dict[str, dict]] = None
+
+_CJK_RE = re.compile(r"[\u3400-\u9fff]")
+_LATIN_RE = re.compile(r"[A-Za-z]")
 
 
 def normalize_english_key(s: str) -> str:
@@ -101,6 +105,38 @@ def assign_sense_ids(english_norm: str, senses: List[dict]) -> None:
         s["id"] = f"{english_norm}#s{i}"
 
 
+def _has_cjk(s: str) -> bool:
+    return bool(_CJK_RE.search(str(s or "")))
+
+
+def _has_latin(s: str) -> bool:
+    return bool(_LATIN_RE.search(str(s or "")))
+
+
+def _valid_english_example(s: str) -> bool:
+    text = str(s or "").strip()
+    return bool(text) and _has_latin(text) and not _has_cjk(text)
+
+
+def _valid_chinese_example(s: str) -> bool:
+    text = str(s or "").strip()
+    return bool(text) and _has_cjk(text)
+
+
+def _normalize_sense_examples(sense: dict) -> bool:
+    """
+    Ensure example_en is English and example_cn is Chinese.
+    DeepSeek occasionally swaps these fields; swap back when both values are recoverable.
+    """
+    ex_en = str(sense.get("example_en", "")).strip()
+    ex_cn = str(sense.get("example_cn", "")).strip()
+    if _has_cjk(ex_en) and _valid_english_example(ex_cn):
+        sense["example_en"] = ex_cn
+        sense["example_cn"] = ex_en
+        return _valid_chinese_example(ex_en)
+    return _valid_english_example(ex_en) and _valid_chinese_example(ex_cn)
+
+
 def finalize_v2_entry_from_deepseek(raw: dict) -> Optional[dict]:
     """
     将 DeepSeek 返回的单条 dict 规范为 LexicalEntryV2；非法则 None。
@@ -136,6 +172,14 @@ def finalize_v2_entry_from_deepseek(raw: dict) -> Optional[dict]:
     assign_sense_ids(en, senses)
     # 兼容旧 prompt：仅顶层 example1/example2 时按义项顺序填入
     _hydrate_sense_examples_from_legacy_top_level(senses, raw)
+    for i, sense in enumerate(senses):
+        if not _normalize_sense_examples(sense):
+            logger.warning(
+                "拒绝 DeepSeek v2 词条 %r: sense[%s] 例句中英文字段不合法",
+                en,
+                i,
+            )
+            return None
     ek = str(raw.get("entry_kind", "")).strip().lower()
     if ek not in ("word", "phrase"):
         ek = "phrase" if " " in en else "word"

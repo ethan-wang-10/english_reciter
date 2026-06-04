@@ -1717,6 +1717,7 @@ def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Opti
 规则：
 - senses：每条含 pos、definition_zh（2～12 字）；senses[0] 为最常见义；pos 用 noun|verb|adjective|adverb|phrase。
 - **例句与义项一一对应**：每条 sense 必须同时含 example_en、example_cn、example_form（句中词形与 lemma 相同则填 ""）。**有几条 sense 就要有几条例句**，禁止 3 个义项只写 2 条例句。
+- **字段语言不能颠倒**：example_en 必须是英文句子，不能包含中文；example_cn 必须是对应的中文翻译，不能为空。严禁把中文例句写入 example_en。
 - 多义词覆盖主要高频义（如 key：钥匙/关键/键/键入）；勿合并义项。
 - english 与列表一致；phonetic 一条；level 为 小学/初中/高中/GRE 之一{level_rule}。
 
