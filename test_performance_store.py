@@ -8,6 +8,8 @@ from performance_store import (
     list_performance_logs,
     performance_log_dir,
     sanitize_value,
+    sign_performance_log_name,
+    verify_performance_share_signature,
     write_performance_events,
 )
 
@@ -66,3 +68,14 @@ def test_list_performance_logs(tmp_path: Path) -> None:
     assert len(logs) == 1
     assert logs[0]["name"].startswith("perf-")
     assert logs[0]["size_bytes"] > 0
+
+
+def test_performance_share_signature() -> None:
+    name = "perf-2026-06-07.jsonl"
+    expires_at = 1_780_000_000
+    sig = sign_performance_log_name(name, expires_at, "app-secret")
+
+    assert verify_performance_share_signature(name, expires_at, sig, "app-secret", expires_at - 60)
+    assert not verify_performance_share_signature(name, expires_at, sig, "wrong-secret", expires_at - 60)
+    assert not verify_performance_share_signature(name, expires_at, sig, "app-secret", expires_at + 1)
+    assert not verify_performance_share_signature("../perf-2026-06-07.jsonl", expires_at, sig, "app-secret", expires_at - 60)

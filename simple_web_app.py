@@ -61,6 +61,7 @@ from auth_session_store import (
 from user_store import close_connection as close_user_store_sqlite, init_user_store, load_users, mutate_users
 from app_time import china_now_iso, china_today
 from performance_store import (
+    PERFORMANCE_SHARE_MAX_TTL_SEC,
     backend_sample_rate,
     browser_sample_rate,
     is_valid_performance_log_name,
@@ -69,8 +70,10 @@ from performance_store import (
     max_report_events,
     performance_enabled,
     performance_log_dir,
+    sign_performance_log_name,
     should_sample,
     slow_request_threshold_ms,
+    verify_performance_share_signature,
     write_performance_events,
 )
 
@@ -5340,6 +5343,58 @@ def admin_performance_log_download(name):
     """下载单个性能采集 JSONL 文件。"""
     if not is_valid_performance_log_name(name):
         return jsonify({"error": "无效的日志文件名"}), 400
+    path = performance_log_dir(DATA_DIR) / name
+    if not path.is_file():
+        return jsonify({"error": "日志不存在"}), 404
+    return send_file(
+        path,
+        mimetype="application/x-ndjson",
+        as_attachment=True,
+        download_name=name,
+        max_age=0,
+    )
+
+
+@app.route('/api/admin/performance/logs/<name>/share-link', methods=['POST'])
+@admin_required
+def admin_performance_log_share_link(name):
+    """生成短期有效的公开性能日志下载链接。"""
+    if not is_valid_performance_log_name(name):
+        return jsonify({"error": "无效的日志文件名"}), 400
+    path = performance_log_dir(DATA_DIR) / name
+    if not path.is_file():
+        return jsonify({"error": "日志不存在"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        ttl = int(data.get("ttl_seconds") or 1800)
+    except (TypeError, ValueError):
+        ttl = 1800
+    ttl = max(60, min(PERFORMANCE_SHARE_MAX_TTL_SEC, ttl))
+    expires_at = int(time() + ttl)
+    sig = sign_performance_log_name(name, expires_at, app.secret_key)
+    url = request.host_url.rstrip("/") + f"/api/performance/logs/{name}?expires={expires_at}&sig={sig}"
+    return jsonify(
+        {
+            "url": url,
+            "name": name,
+            "expires_at": expires_at,
+            "ttl_seconds": ttl,
+        }
+    ), 201
+
+
+@app.route('/api/performance/logs/<name>', methods=['GET'])
+def performance_log_public_download(name):
+    """短期签名链接下载性能日志；不需要管理员 token。"""
+    if not is_valid_performance_log_name(name):
+        return jsonify({"error": "无效的日志文件名"}), 400
+    try:
+        expires_at = int(request.args.get("expires") or "0")
+    except (TypeError, ValueError):
+        expires_at = 0
+    sig = request.args.get("sig") or ""
+    if not verify_performance_share_signature(name, expires_at, sig, app.secret_key, int(time())):
+        return jsonify({"error": "链接无效或已过期"}), 403
     path = performance_log_dir(DATA_DIR) / name
     if not path.is_file():
         return jsonify({"error": "日志不存在"}), 404

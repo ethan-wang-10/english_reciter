@@ -29,12 +29,23 @@ curl -H "Authorization: Bearer <admin_token>" \
   https://your-domain/api/admin/performance/logs/perf-2026-06-07.jsonl
 ```
 
+生成 30 分钟有效的临时公开下载链接：
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"ttl_seconds":1800}' \
+  https://your-domain/api/admin/performance/logs/perf-2026-06-07.jsonl/share-link
+```
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---:|---|
 | `PERF_MONITOR_ENABLED` | `true` | 总开关，设为 `0`/`false` 可关闭 |
 | `PERF_LOG_DIR` | 空 | 自定义日志目录；默认在 `user_data_simple/_shared/performance` |
+| `PERF_SHARE_SECRET` | 空 | 临时下载链接签名密钥；默认使用 Flask `SECRET_KEY` |
 | `PERF_SLOW_REQUEST_MS` | `1000` | 后端慢请求阈值，也作为前端慢 API 参考阈值 |
 | `PERF_BACKEND_SAMPLE_RATE` | `0.02` | 后端非慢/非错误请求抽样率 |
 | `PERF_BROWSER_SAMPLE_RATE` | `1.0` | 浏览器会话抽样率 |

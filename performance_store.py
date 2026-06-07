@@ -12,6 +12,8 @@ import os
 import random
 import re
 import threading
+import hmac
+import hashlib
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +25,7 @@ from app_time import CHINA_TZ, china_now_iso, china_today
 PERFORMANCE_SCHEMA = "english_reciter.performance/v1"
 PERFORMANCE_LOG_PREFIX = "perf-"
 PERFORMANCE_LOG_SUFFIX = ".jsonl"
+PERFORMANCE_SHARE_MAX_TTL_SEC = 24 * 60 * 60
 
 _WRITE_LOCK = threading.Lock()
 _LOG_NAME_RE = re.compile(r"^perf-\d{4}-\d{2}-\d{2}\.jsonl$")
@@ -161,6 +164,29 @@ def performance_log_path(data_dir: Path | str) -> Path:
 
 def is_valid_performance_log_name(name: str) -> bool:
     return bool(_LOG_NAME_RE.fullmatch(name or ""))
+
+
+def performance_share_secret(app_secret: str) -> bytes:
+    raw = os.getenv("PERF_SHARE_SECRET", "").strip() or app_secret or ""
+    if not raw:
+        raw = "english-reciter-performance-share-development-secret"
+    return raw.encode("utf-8")
+
+
+def sign_performance_log_name(name: str, expires_at: int, app_secret: str) -> str:
+    msg = f"{name}.{int(expires_at)}".encode("utf-8")
+    return hmac.new(performance_share_secret(app_secret), msg, hashlib.sha256).hexdigest()
+
+
+def verify_performance_share_signature(name: str, expires_at: int, sig: str, app_secret: str, now_ts: int) -> bool:
+    if not is_valid_performance_log_name(name):
+        return False
+    if int(expires_at) < int(now_ts):
+        return False
+    if int(expires_at) - int(now_ts) > PERFORMANCE_SHARE_MAX_TTL_SEC:
+        return False
+    expected = sign_performance_log_name(name, int(expires_at), app_secret)
+    return hmac.compare_digest(expected, str(sig or ""))
 
 
 def list_performance_logs(data_dir: Path | str, *, limit: int = 14) -> List[Dict[str, Any]]:
