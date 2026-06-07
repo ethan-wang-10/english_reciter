@@ -19,6 +19,7 @@
     const chatSeenIds = new Set();
     let chatLoadingOlder = false;
     let chatHasMoreOlder = true;
+    let chatSendInFlight = false;
 
     /** 最新消息 id（用于 SSE 断线补拉；收起侧栏时 DOM 可能未更新） */
     let lastChatMessageId = null;
@@ -892,8 +893,10 @@
         const ta = document.getElementById("chat-input");
         const btn = document.getElementById("chat-send");
         if (!ta || !token) return;
+        if (chatSendInFlight) return;
         const body = (ta.value || "").trim();
         if (!body) return;
+        chatSendInFlight = true;
         if (btn) btn.disabled = true;
         try {
             const r = await fetch(`${base}/chat/messages`, {
@@ -919,6 +922,7 @@
         } catch (e) {
             showChatError(e.message || "网络错误");
         } finally {
+            chatSendInFlight = false;
             if (btn) btn.disabled = false;
         }
     }

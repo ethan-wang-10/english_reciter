@@ -97,8 +97,10 @@ let lastGamificationProfile = null;
 
 /** PK 邀约角标轮询（主界面登录后启动，登出/回登录页停止） */
 let pkInvitePollTimer = null;
+let pkInviteRefreshInFlight = false;
 const PK_INVITE_POLL_MS = 3600000;
 const pkDuelRespondInFlight = new Set();
+let pkDuelSendInFlight = false;
 
 // API 基础 URL
 const API_BASE = '/api';
@@ -157,6 +159,10 @@ function escapeHtml(text) {
 
 function escapeRegExp(str) {
     return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isAbortError(error) {
+    return !!error && (error.name === 'AbortError' || error.code === 20);
 }
 
 /** 将焦点放回透明输入层（真正可输入的元素），便于连打与重试 */
@@ -1240,12 +1246,16 @@ async function refreshPkInviteIndicator() {
         updatePkNavBadgesFromDuels([]);
         return;
     }
+    if (pkInviteRefreshInFlight) return;
+    pkInviteRefreshInFlight = true;
     try {
         const data = await apiRequest('/challenges');
         const list = data.challenges || [];
         updatePkNavBadgesFromDuels(list);
     } catch (_) {
         /* ignore */
+    } finally {
+        pkInviteRefreshInFlight = false;
     }
 }
 
@@ -4955,6 +4965,7 @@ let discoveryModeToday = false;
 let discoverySearchMode = false;
 let discoverySearchDebounceTimer = null;
 let discoverySearchRequestSeq = 0;
+let discoverySearchAbort = null;
 
 /** 单词学习搜索：本地前缀/子串匹配（全量 CSV），上限避免一次渲染过多 */
 const DISCOVERY_SEARCH_MAX_DECK = 280;
@@ -4971,6 +4982,17 @@ function hideDiscoverySearchSuggestions() {
     box.hidden = true;
     box.innerHTML = '';
     setDiscoverySearchListboxOpen(false);
+}
+
+function cancelDiscoverySearchRequest() {
+    discoverySearchRequestSeq++;
+    if (!discoverySearchAbort) return;
+    try {
+        discoverySearchAbort.abort();
+    } catch (_) {
+        /* ignore */
+    }
+    discoverySearchAbort = null;
 }
 
 function renderDiscoverySearchSuggestions(rows) {
@@ -5306,6 +5328,15 @@ async function loadDiscoverySearchFromQuery(q) {
     const sug = document.getElementById('discovery-search-suggestions');
     const trimmed = String(q || '').trim();
     const seq = ++discoverySearchRequestSeq;
+    if (discoverySearchAbort) {
+        try {
+            discoverySearchAbort.abort();
+        } catch (_) {
+            /* ignore */
+        }
+    }
+    const controller = new AbortController();
+    discoverySearchAbort = controller;
     discoverySearchMode = true;
     discoveryModeToday = false;
     if (sug && !discoveryWordbankFullCsvCached()) {
@@ -5316,8 +5347,8 @@ async function loadDiscoverySearchFromQuery(q) {
     try {
         const [allRows, st, masteredRes] = await Promise.all([
             getDiscoveryWordbankRows(),
-            apiRequest('/words/status'),
-            apiRequest('/words/mastered'),
+            apiRequest('/words/status', { signal: controller.signal }),
+            apiRequest('/words/mastered', { signal: controller.signal }),
         ]);
         discoveryPendingKeys = new Set((st.words || []).map((x) => discoveryEnglishKey(x.english)));
         discoveryMasteredKeys = new Set((masteredRes.words || []).map((x) => discoveryEnglishKey(x.english)));
@@ -5354,8 +5385,9 @@ async function loadDiscoverySearchFromQuery(q) {
         if (emptyEl) emptyEl.style.display = 'none';
         if (rootEl) rootEl.style.display = 'block';
         renderDiscoveryCard();
-    } catch (_) {
+    } catch (error) {
         if (seq !== discoverySearchRequestSeq) return;
+        if (isAbortError(error)) return;
         discoveryPendingKeys = new Set();
         discoveryMasteredKeys = new Set();
         discoverySearchMode = false;
@@ -5370,6 +5402,10 @@ async function loadDiscoverySearchFromQuery(q) {
         }
         if (rootEl) rootEl.style.display = 'none';
         showMainBanner('搜索失败，请稍后重试');
+    } finally {
+        if (discoverySearchAbort === controller) {
+            discoverySearchAbort = null;
+        }
     }
 }
 
@@ -5381,6 +5417,7 @@ async function loadDiscovery() {
         await loadDiscoverySearchFromQuery(searchQ);
         return;
     }
+    cancelDiscoverySearchRequest();
     hideDiscoverySearchSuggestions();
     discoverySearchMode = false;
     const level = String(getDiscoverySelectedLevel() || '').trim();
@@ -5700,6 +5737,9 @@ const wbState = {
     selectedMap: new Map(),
     searchTimer: null,
     loading: false,
+    searchAbort: null,
+    searchSeq: 0,
+    importBusy: false,
 };
 
 function wordbankKey(en) {
@@ -5794,6 +5834,15 @@ function renderWordbankList() {
 }
 
 async function doWordbankSearch(q) {
+    const seq = ++wbState.searchSeq;
+    if (wbState.searchAbort) {
+        try {
+            wbState.searchAbort.abort();
+        } catch (_) {
+            /* ignore */
+        }
+        wbState.searchAbort = null;
+    }
     if (!q) {
         wbState.filtered = [];
         wbState.loading = false;
@@ -5801,20 +5850,31 @@ async function doWordbankSearch(q) {
         renderWordbankList();
         return;
     }
+    const controller = new AbortController();
+    wbState.searchAbort = controller;
     wbState.loading = true;
     renderWordbankMeta();
     try {
         const params = new URLSearchParams({ q, heuristics: '0', surface_first: '1' });
-        const data = await apiRequest(`/wordbank/csv/search?${params}`);
+        const data = await apiRequest(`/wordbank/csv/search?${params}`, { signal: controller.signal });
+        if (seq !== wbState.searchSeq) return;
         wbState.filtered = Array.isArray(data.words) ? data.words : [];
     } catch (e) {
+        if (seq !== wbState.searchSeq || isAbortError(e)) return;
         wbState.filtered = [];
         showImportNotice(e.message || '搜索失败', { isError: true });
     } finally {
-        wbState.loading = false;
+        if (wbState.searchAbort === controller) {
+            wbState.searchAbort = null;
+        }
+        if (seq === wbState.searchSeq) {
+            wbState.loading = false;
+        }
     }
-    renderWordbankMeta();
-    renderWordbankList();
+    if (seq === wbState.searchSeq) {
+        renderWordbankMeta();
+        renderWordbankList();
+    }
 }
 
 function initWordbankPanel() {
@@ -5868,6 +5928,7 @@ function initWordbankPanel() {
 }
 
 async function wordbankImportSelected() {
+    if (wbState.importBusy) return;
     if (!wbState.selected.size) {
         showImportNotice('请先勾选单词', { isError: true });
         return;
@@ -5889,6 +5950,7 @@ async function wordbankImportSelected() {
         showImportNotice('没有可导入的词条（请重新搜索并勾选）', { isError: true });
         return;
     }
+    wbState.importBusy = true;
     const importBtn = document.getElementById('wordbank-import-btn');
     if (importBtn) {
         importBtn.disabled = true;
@@ -5935,14 +5997,23 @@ async function wordbankImportSelected() {
                     b.disabled = false;
                     b.textContent = '将选中的词加入待复习';
                 }
+                wbState.importBusy = false;
             },
         });
     } catch (error) {
         showImportNotice(error.message || '导入失败', { isError: true });
+        wbState.importBusy = false;
+        if (importBtn) {
+            importBtn.disabled = false;
+            importBtn.textContent = '将选中的词加入待复习';
+        }
     } finally {
         if (importBtn && !importResultModalPending) {
             importBtn.disabled = false;
             importBtn.textContent = '将选中的词加入待复习';
+        }
+        if (!importResultModalPending) {
+            wbState.importBusy = false;
         }
     }
 }
@@ -6056,11 +6127,17 @@ function initImportNceLessonSelect() {
 /** 文章提取后：气泡圈选，确认后再写入待复习 */
 let articleImportPickMode = false;
 let articleImportWords = [];
+let articleImportBusy = false;
+let articleConfirmImportBusy = false;
+let importOcrBusy = false;
+let importVocabBusy = false;
 /** @type {Set<number>} */
 let articleImportSelectedIdx = new Set();
 /** 导入成功且结果对话框已打开时，finally 不再恢复「确认导入」按钮 */
 function resetArticleImportPickUI() {
     articleImportPickMode = false;
+    articleImportBusy = false;
+    articleConfirmImportBusy = false;
     articleImportWords = [];
     articleImportSelectedIdx.clear();
     importResultModalOnClose = null;
@@ -6205,6 +6282,7 @@ function applyArticleExtractResult(words, data) {
 }
 
 async function confirmArticleImportFromPicks() {
+    if (articleConfirmImportBusy) return;
     if (!articleImportSelectedIdx.size) {
         showImportNotice('请至少圈选一个词', { isError: true });
         return;
@@ -6227,6 +6305,7 @@ async function confirmArticleImportFromPicks() {
         showImportNotice('没有可导入的词条', { isError: true });
         return;
     }
+    articleConfirmImportBusy = true;
     const btnA = document.getElementById('import-article-btn');
     if (btnA) {
         btnA.disabled = true;
@@ -6265,16 +6344,25 @@ async function confirmArticleImportFromPicks() {
             onClose: () => {
                 resetArticleImportPickUI();
                 loadStats();
+                articleConfirmImportBusy = false;
             },
         });
     } catch (error) {
         showImportNotice(error.message || '导入失败', { isError: true });
+        articleConfirmImportBusy = false;
+        if (btnA) {
+            btnA.disabled = false;
+            btnA.textContent = '确认导入';
+        }
     } finally {
         if (articleImportPickMode && !importResultModalPending) {
             if (btnA) {
                 btnA.disabled = false;
                 btnA.textContent = '确认导入';
             }
+        }
+        if (!importResultModalPending) {
+            articleConfirmImportBusy = false;
         }
     }
 }
@@ -6284,6 +6372,7 @@ async function importFromArticle() {
         await confirmArticleImportFromPicks();
         return;
     }
+    if (articleImportBusy) return;
     const prefix = 'import-article';
     const ta = document.getElementById('import-article-textarea');
     if (!ta) return;
@@ -6292,6 +6381,7 @@ async function importFromArticle() {
         showImportNotice('请先粘贴英文，或通过课文 / 图片识别填入下方文本框', { isError: true });
         return;
     }
+    articleImportBusy = true;
     const btnA = document.getElementById('import-article-btn');
     if (btnA) btnA.disabled = true;
     const resultDiv = document.getElementById('article-import-result');
@@ -6361,6 +6451,7 @@ async function importFromArticle() {
         if (resultDiv) resultDiv.style.display = 'none';
     } finally {
         if (btnA) btnA.disabled = false;
+        articleImportBusy = false;
     }
 }
 
@@ -6424,10 +6515,12 @@ function applyImportVocabTextareaNormalize() {
 
 /** 从图片 OCR 填入「从文章导入」文本框（整段 raw_text） */
 async function runImportOcrToTextarea(file) {
+    if (importOcrBusy) return;
     if (!file || !file.size) {
         showImportNotice('请选择有效的图片文件', { isError: true });
         return;
     }
+    importOcrBusy = true;
     const btn = document.getElementById('import-ocr-pick-img-btn');
     const ta = document.getElementById('import-article-textarea');
     if (btn) {
@@ -6460,6 +6553,7 @@ async function runImportOcrToTextarea(file) {
             btn.disabled = false;
             btn.textContent = '选择图片…';
         }
+        importOcrBusy = false;
     }
 }
 
@@ -6474,6 +6568,7 @@ function initImportVocabTextareaNormalize() {
 }
 
 async function importVocabToCSV() {
+    if (importVocabBusy) return;
     if (userPlan !== 'paid') {
         showImportNotice('词汇导入功能仅限 VIP 用户使用', { title: '无法导入', isError: true });
         return;
@@ -6492,6 +6587,7 @@ async function importVocabToCSV() {
     const level = levelSel ? levelSel.value : '';
     const alsoAddToQueue = addToQueueCb ? !!addToQueueCb.checked : true;
     const btn = document.getElementById('import-vocab-btn');
+    importVocabBusy = true;
     if (btn) {
         btn.disabled = true;
         btn.textContent = '处理中…';
@@ -6512,16 +6608,25 @@ async function importVocabToCSV() {
                     b.disabled = false;
                     b.textContent = '词汇导入';
                 }
+                importVocabBusy = false;
             },
         });
         ta.value = '';
         if (levelSel) levelSel.value = '';
     } catch (error) {
         showImportNotice(error.message || '导入失败', { isError: true });
+        importVocabBusy = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '词汇导入';
+        }
     } finally {
         if (btn && !importResultModalPending) {
             btn.disabled = false;
             btn.textContent = '词汇导入';
+        }
+        if (!importResultModalPending) {
+            importVocabBusy = false;
         }
     }
 }
@@ -6880,6 +6985,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     document.getElementById('pk-hub-duel-send')?.addEventListener('click', async () => {
+        if (pkDuelSendInFlight) return;
         const tin = document.getElementById('pk-hub-duel-target-select');
         const t = (tin && tin.value) || '';
         const w = document.getElementById('pk-hub-duel-wager');
@@ -6887,6 +6993,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!t.trim()) {
             showMainBanner('请选择对手');
             return;
+        }
+        const btn = document.getElementById('pk-hub-duel-send');
+        const oldText = btn ? btn.textContent : '';
+        pkDuelSendInFlight = true;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '发送中…';
         }
         try {
             await apiRequest('/challenges', {
@@ -6899,6 +7012,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isSettingsOverlayOpen()) await loadUserSettingsPanel();
         } catch (err) {
             showMainBanner(err.message || '发起失败');
+        } finally {
+            pkDuelSendInFlight = false;
+            if (btn) {
+                btn.disabled = false;
+                if (oldText) btn.textContent = oldText;
+            }
         }
     });
     document.getElementById('pk-hub-challenges-root')?.addEventListener('click', async (e) => {

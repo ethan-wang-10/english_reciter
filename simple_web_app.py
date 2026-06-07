@@ -1964,13 +1964,24 @@ def accumulate_valid_deepseek_v2_entries(
 
 # 登录/注册简单限流（按 IP，内存存储）
 _rate_buckets: Dict[str, List[float]] = defaultdict(list)
+_rate_buckets_lock = threading.Lock()
 _RATE_WINDOW_SEC = 60
 _RATE_MAX_LOGIN = 20
 _RATE_MAX_REGISTER = 10
 _RATE_MAX_ADMIN_LOGIN = 10
 _RATE_MAX_ADMIN_DELETE_USER = 8
 _RATE_MAX_CHAT_POST = 30
+_RATE_MAX_CHAT_GET = 240
+_RATE_MAX_CHAT_STREAM_TOKEN = 60
 _RATE_MAX_PERF_REPORT = 120
+_RATE_MAX_TTS_AUDIO = 90
+_RATE_MAX_WORDBANK_SEARCH = 180
+_RATE_MAX_ARTICLE_IMPORT = 20
+_RATE_MAX_OCR = 20
+_RATE_MAX_VOCAB_IMPORT = 12
+_RATE_MAX_IMPORT_JSON = 60
+_RATE_MAX_CHALLENGE_CREATE = 30
+_RATE_MAX_CHALLENGE_RESPOND = 60
 
 _CHAT_MENTION_RE = re.compile(r"@([a-zA-Z0-9_]{3,32})")
 
@@ -1992,12 +2003,13 @@ def _client_ip() -> str:
 
 def _rate_allow(bucket_key: str, max_events: int) -> bool:
     now = time()
-    window: List[float] = _rate_buckets[bucket_key]
-    window[:] = [t for t in window if now - t < _RATE_WINDOW_SEC]
-    if len(window) >= max_events:
-        return False
-    window.append(now)
-    return True
+    with _rate_buckets_lock:
+        window: List[float] = _rate_buckets[bucket_key]
+        window[:] = [t for t in window if now - t < _RATE_WINDOW_SEC]
+        if len(window) >= max_events:
+            return False
+        window.append(now)
+        return True
 
 
 def is_valid_username(username: str) -> bool:
@@ -3179,6 +3191,8 @@ def api_challenges_list(username):
 @token_required
 @parent_forbidden
 def api_challenges_create(username):
+    if not _rate_allow(f"challenge_create:{username}", _RATE_MAX_CHALLENGE_CREATE):
+        return jsonify({'error': '发起挑战过于频繁，请稍后再试'}), 429
     data = request.get_json() or {}
     target = (data.get('target_username') or '').strip()
     if not is_valid_username(target):
@@ -3209,6 +3223,8 @@ def api_challenges_create(username):
 @token_required
 @parent_forbidden
 def api_challenges_respond(username, duel_id):
+    if not _rate_allow(f"challenge_respond:{username}", _RATE_MAX_CHALLENGE_RESPOND):
+        return jsonify({'error': 'PK 操作过于频繁，请稍后再试'}), 429
     data = request.get_json() or {}
     accept = bool(data.get('accept'))
     ok, msg, row = challenges_mod.respond_duel(DATA_DIR, duel_id, username, accept)
@@ -3515,6 +3531,8 @@ def tts_capabilities():
 @parent_forbidden
 def speak_text_audio(username):
     """使用 Piper 合成英文 WAV 并返回，供浏览器播放（远程可用）。"""
+    if not _rate_allow(f"tts_audio:{username}", _RATE_MAX_TTS_AUDIO):
+        return jsonify({'error': '朗读请求过于频繁，请稍后再试'}), 429
     try:
         data = request.get_json()
         if not data:
@@ -3562,6 +3580,8 @@ def _parse_import_json_body(request):
 @token_required
 def import_words_json(username):
     """家长粘贴学习数据格式的 JSON，合并到当前用户的待复习词库。"""
+    if not _rate_allow(f"import_json:{username}", _RATE_MAX_IMPORT_JSON):
+        return jsonify({'error': '导入过于频繁，请稍后再试'}), 429
     items, err = _parse_import_json_body(request)
     if err:
         return jsonify({'error': err}), 400
@@ -4405,6 +4425,8 @@ def search_wordbank_csv(username):
     - 未指定 ``heuristics`` 时：``per_surface=1``（课文学习逐词）默认开启启发式；否则默认关闭（导入页词库搜索）。
     - ``surface_first=1``（导入页「从词库搜索」）：英文词先仅用表面形与管理员映射匹配，未命中再启用 spaCy 原型匹配。
     """
+    if not _rate_allow(f"wordbank_search:{username}", _RATE_MAX_WORDBANK_SEARCH):
+        return jsonify({'error': '词库搜索过于频繁，请稍后再试'}), 429
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
     per_surface = request.args.get('per_surface', '').strip().lower() in ('1', 'true', 'yes')
@@ -4567,6 +4589,8 @@ def import_from_article(username):
     - VIP：默认 extract_mode=spacy；extract_mode=ai 仅当管理后台开启且请求携带有效管理员 token
     前端拿到词条列表后注入选框，让用户确认后再加入待复习。
     """
+    if not _rate_allow(f"article_import:{username}", _RATE_MAX_ARTICLE_IMPORT):
+        return jsonify({'error': '文章提取过于频繁，请稍后再试'}), 429
     data = request.get_json(silent=True) or {}
     text = str(data.get('text', '')).strip()
     if not text:
@@ -4736,6 +4760,8 @@ def _english_tokens_from_ocr_text(text: str) -> List[str]:
 @token_required
 def wordbank_ocr_extract(username):
     """上传图片，本地 Tesseract 识别英文并返回 raw_text 与词列表（不入库；供从图片导入流程使用）。"""
+    if not _rate_allow(f"ocr:{username}", _RATE_MAX_OCR):
+        return jsonify({'error': '图片识别过于频繁，请稍后再试'}), 429
     if not _ocr_stack_ready():
         return jsonify({
             'error': '服务器未启用图片识别：请安装 Pillow、pytesseract，并在系统安装 Tesseract（含 eng 语言包）',
@@ -4792,6 +4818,8 @@ def import_vocab_to_csv(username):
     - 仅当 **words_v2.json** 中尚无该英文键时调用 DeepSeek 生成并写入 v2；仅在旧 ``words.csv`` 中有仍会生成并写入 v2。已存在于 v2 则跳过生成。
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
+    if not _rate_allow(f"vocab_import:{username}", _RATE_MAX_VOCAB_IMPORT):
+        return jsonify({'error': '词汇导入过于频繁，请稍后再试'}), 429
     if not is_paid_user(username):
         return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
 
@@ -6045,6 +6073,8 @@ def _chat_extract_mentions(body: str, valid: Set[str]) -> List[str]:
 @token_required
 def api_chat_stream_token(username):
     """用登录 token 换取短期 SSE token；SSE URL 不再携带长期 bearer token。"""
+    if not _rate_allow(f"chat_stream_token:{username}", _RATE_MAX_CHAT_STREAM_TOKEN):
+        return jsonify({"error": "聊天连接过于频繁，请稍后再试"}), 429
     login = getattr(g, "login_username", username)
     return jsonify({
         "stream_token": create_chat_stream_token(login),
@@ -6083,6 +6113,8 @@ def _verify_chat_stream_auth() -> Optional[str]:
 @app.route("/api/chat/messages", methods=["GET"])
 @token_required
 def api_chat_messages_get(username):
+    if not _rate_allow(f"chat_get:{username}", _RATE_MAX_CHAT_GET):
+        return jsonify({"error": "聊天拉取过于频繁，请稍后再试"}), 429
     before_id = (request.args.get("before_id") or "").strip() or None
     after_id = (request.args.get("after_id") or "").strip() or None
     try:
