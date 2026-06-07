@@ -85,6 +85,7 @@ cp config.example.json config.json
 | `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
 | `static/wordbanks/words.csv` | 内置词库（**不随 Git 发布**；本地从 `words.csv.example` 复制或自备；线上勿被 `git pull` 覆盖，由服务器文件或管理后台「增量上传」维护） |
 | `static/wordbanks/words_v2.json` | 新版内置词库（线上运行时数据；仓库只保留空占位，部署脚本会保护服务器本地文件） |
+| `user_data_simple/_shared/performance/` | Web 性能采集 JSONL 日志（见 [docs/performance-monitoring.md](docs/performance-monitoring.md)） |
 | `backups/` | 学习数据自动备份（若开启） |
 | `reciter.log` | 运行日志 |
 

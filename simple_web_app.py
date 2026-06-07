@@ -60,6 +60,19 @@ from auth_session_store import (
 )
 from user_store import close_connection as close_user_store_sqlite, init_user_store, load_users, mutate_users
 from app_time import china_now_iso, china_today
+from performance_store import (
+    backend_sample_rate,
+    browser_sample_rate,
+    is_valid_performance_log_name,
+    list_performance_logs,
+    max_report_bytes,
+    max_report_events,
+    performance_enabled,
+    performance_log_dir,
+    should_sample,
+    slow_request_threshold_ms,
+    write_performance_events,
+)
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -242,6 +255,119 @@ _words_csv_by_key_cache_mtime: float = -1.0
 _merge_wordbank_rows_lock = threading.Lock()
 _merge_wordbank_rows_cache: Dict[str, Tuple[List[dict], Set[str]]] = {}
 _merge_wordbank_rows_cache_rev: Tuple[float, float] = (-1.0, -1.0)
+
+
+def _safe_request_path() -> str:
+    path = request.path or ""
+    if not path.startswith("/"):
+        path = "/" + path
+    return path[:240]
+
+
+def _safe_request_endpoint() -> str:
+    return str(request.endpoint or "")[:120]
+
+
+def _safe_user_agent() -> str:
+    return (request.headers.get("User-Agent") or "")[:300]
+
+
+def _safe_referrer_path() -> str:
+    raw = request.headers.get("Referer") or request.headers.get("Referrer") or ""
+    if not raw:
+        return ""
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(raw)
+        return (parts.path or "/")[:240]
+    except Exception:
+        return raw[:240]
+
+
+def _performance_user_context() -> dict:
+    out = {
+        "login_username": getattr(g, "login_username", None),
+        "effective_username": getattr(g, "effective_username", None),
+        "is_parent": getattr(g, "is_parent", None),
+    }
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def _record_performance_event(event: dict) -> None:
+    if not performance_enabled():
+        return
+    try:
+        write_performance_events(DATA_DIR, [event])
+    except Exception as exc:
+        logger.debug("写入性能采集日志失败: %s", exc)
+
+
+@app.before_request
+def _performance_before_request() -> None:
+    g.request_started_at = time()
+    rid = (request.headers.get("X-Request-ID") or "").strip()
+    g.request_id = rid[:80] if rid else uuid.uuid4().hex
+
+
+@app.after_request
+def _performance_after_request(response: Response) -> Response:
+    rid = getattr(g, "request_id", "")
+    if rid:
+        response.headers["X-Request-ID"] = rid
+
+    if not performance_enabled():
+        return response
+    path = _safe_request_path()
+    if path == "/api/performance/report" or path.startswith("/api/chat/stream"):
+        return response
+    started_at = getattr(g, "request_started_at", None)
+    if not isinstance(started_at, (int, float)):
+        return response
+    duration_ms = round((time() - started_at) * 1000.0, 1)
+    status = int(response.status_code or 0)
+    slow = duration_ms >= slow_request_threshold_ms()
+    failed = status >= 500
+    sampled = should_sample(backend_sample_rate())
+    if not (slow or failed or sampled):
+        return response
+
+    event = {
+        "source": "server",
+        "type": "http_request",
+        "request_id": rid,
+        "method": request.method,
+        "path": path,
+        "endpoint": _safe_request_endpoint(),
+        "status": status,
+        "duration_ms": duration_ms,
+        "slow": slow,
+        "content_length": response.content_length,
+        "remote_addr": _client_ip() if request else "",
+        "user_agent": _safe_user_agent(),
+        "referrer_path": _safe_referrer_path(),
+        "user": _performance_user_context(),
+    }
+    _record_performance_event(event)
+    return response
+
+
+@app.teardown_request
+def _performance_teardown_request(exc: Optional[BaseException]) -> None:
+    if exc is not None and performance_enabled():
+        event = {
+            "source": "server",
+            "type": "exception",
+            "request_id": getattr(g, "request_id", ""),
+            "method": request.method if request else "",
+            "path": _safe_request_path() if request else "",
+            "endpoint": _safe_request_endpoint() if request else "",
+            "duration_ms": round((time() - getattr(g, "request_started_at", time())) * 1000.0, 1),
+            "error_class": exc.__class__.__name__,
+            "error": str(exc)[:500],
+            "user": _performance_user_context(),
+        }
+        _record_performance_event(event)
 
 
 @contextmanager
@@ -1841,6 +1967,7 @@ _RATE_MAX_REGISTER = 10
 _RATE_MAX_ADMIN_LOGIN = 10
 _RATE_MAX_ADMIN_DELETE_USER = 8
 _RATE_MAX_CHAT_POST = 30
+_RATE_MAX_PERF_REPORT = 120
 
 _CHAT_MENTION_RE = re.compile(r"@([a-zA-Z0-9_]{3,32})")
 
@@ -2409,6 +2536,76 @@ def send_static(path):
         resp.cache_control.max_age = 86400
         resp.cache_control.public = True
     return resp
+
+
+@app.route('/api/performance/config', methods=['GET'])
+def performance_config():
+    """浏览器端性能采样配置。"""
+    return jsonify(
+        {
+            "enabled": performance_enabled(),
+            "sample_rate": browser_sample_rate(),
+            "slow_api_ms": slow_request_threshold_ms(),
+            "max_events": max_report_events(),
+        }
+    ), 200
+
+
+@app.route('/api/performance/report', methods=['POST'])
+def performance_report():
+    """接收浏览器端性能事件，写入本地 JSONL。"""
+    if not performance_enabled():
+        return jsonify({"ok": True, "stored": 0, "disabled": True}), 200
+    if not _rate_allow(f"perf:{_client_ip()}", _RATE_MAX_PERF_REPORT):
+        return jsonify({"error": "请求过于频繁，请稍后再试"}), 429
+
+    clen = request.content_length
+    if clen is not None and clen > max_report_bytes():
+        return jsonify({"error": "性能上报内容过大"}), 413
+    data = request.get_json(silent=True) or {}
+    raw_events = data.get("events")
+    if isinstance(raw_events, dict):
+        raw_events = [raw_events]
+    if not isinstance(raw_events, list):
+        return jsonify({"error": "events 须为数组"}), 400
+
+    limit = max_report_events()
+    events = []
+    login_username = None
+    effective_username = None
+    is_parent = None
+    auth_header = request.headers.get("Authorization") or ""
+    if auth_header.startswith("Bearer "):
+        login_username = verify_token(auth_header[7:].strip())
+        if login_username and is_user_enabled(login_username):
+            users = load_users()
+            urow = users.get(login_username)
+            if isinstance(urow, dict) and is_parent_user_record(urow):
+                child = (urow.get("child_username") or "").strip()
+                effective_username = child if child and is_valid_username(child) else None
+                is_parent = True
+            else:
+                effective_username = login_username
+                is_parent = False
+
+    for ev in raw_events[:limit]:
+        if not isinstance(ev, dict):
+            continue
+        row = dict(ev)
+        row["source"] = "browser"
+        row.setdefault("request_id", getattr(g, "request_id", ""))
+        row["remote_addr"] = _client_ip()
+        row["server_received_user_agent"] = _safe_user_agent()
+        if login_username:
+            row["user"] = {
+                "login_username": login_username,
+                "effective_username": effective_username,
+                "is_parent": is_parent,
+            }
+        events.append(row)
+    stored = write_performance_events(DATA_DIR, events)
+    return jsonify({"ok": True, "stored": stored}), 202
+
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
@@ -5121,6 +5318,38 @@ def admin_logout():
     tok = auth[7:].strip() if auth.startswith('Bearer ') else ''
     revoke_token(SESSION_KIND_ADMIN, tok)
     return jsonify({'message': '已退出'}), 200
+
+
+@app.route('/api/admin/performance/logs', methods=['GET'])
+@admin_required
+def admin_performance_logs():
+    """列出最近的性能采集 JSONL 文件。"""
+    limit = request.args.get("limit", 14, type=int) or 14
+    return jsonify(
+        {
+            "enabled": performance_enabled(),
+            "log_dir": str(performance_log_dir(DATA_DIR)),
+            "logs": list_performance_logs(DATA_DIR, limit=limit),
+        }
+    ), 200
+
+
+@app.route('/api/admin/performance/logs/<name>', methods=['GET'])
+@admin_required
+def admin_performance_log_download(name):
+    """下载单个性能采集 JSONL 文件。"""
+    if not is_valid_performance_log_name(name):
+        return jsonify({"error": "无效的日志文件名"}), 400
+    path = performance_log_dir(DATA_DIR) / name
+    if not path.is_file():
+        return jsonify({"error": "日志不存在"}), 404
+    return send_file(
+        path,
+        mimetype="application/x-ndjson",
+        as_attachment=True,
+        download_name=name,
+        max_age=0,
+    )
 
 
 @app.route('/api/admin/users', methods=['GET'])
