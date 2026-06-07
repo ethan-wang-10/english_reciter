@@ -98,6 +98,7 @@ let lastGamificationProfile = null;
 /** PK 邀约角标轮询（主界面登录后启动，登出/回登录页停止） */
 let pkInvitePollTimer = null;
 const PK_INVITE_POLL_MS = 3600000;
+const pkDuelRespondInFlight = new Set();
 
 // API 基础 URL
 const API_BASE = '/api';
@@ -6906,6 +6907,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const id = btn.getAttribute('data-duel-id');
         const accept = btn.getAttribute('data-duel-accept') === '1';
         if (!id) return;
+        if (pkDuelRespondInFlight.has(id)) return;
+        pkDuelRespondInFlight.add(id);
+        const root = document.getElementById('pk-hub-challenges-root');
+        const peerButtons = root
+            ? Array.from(root.querySelectorAll('.settings-duel-btn[data-duel-id]')).filter(
+                  (b) => b.getAttribute('data-duel-id') === id,
+              )
+            : [btn];
+        peerButtons.forEach((b) => {
+            b.dataset.pkWasDisabled = b.disabled ? '1' : '0';
+            b.disabled = true;
+        });
+        const oldText = btn.textContent;
+        btn.textContent = accept ? '接受中…' : '拒绝中…';
         try {
             await apiRequest(`/challenges/${encodeURIComponent(id)}/respond`, {
                 method: 'POST',
@@ -6916,6 +6931,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isSettingsOverlayOpen()) await loadUserSettingsPanel();
         } catch (err) {
             showMainBanner(err.message || '操作失败');
+            peerButtons.forEach((b) => {
+                b.disabled = b.dataset.pkWasDisabled === '1';
+                delete b.dataset.pkWasDisabled;
+            });
+            btn.textContent = oldText;
+        } finally {
+            pkDuelRespondInFlight.delete(id);
         }
     });
     document.addEventListener('keydown', (e) => {
