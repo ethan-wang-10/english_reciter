@@ -7311,15 +7311,18 @@ button.import-article-chip--selected:hover {
 }
 
 .btn-gear-invite {
-    font-size: 0.78rem;
-    font-weight: 900;
     color: var(--primary-dark);
-    background: var(--primary-light);
+    background: var(--surface);
+}
+
+.btn-gear-invite svg {
+    display: block;
 }
 
 .btn-gear-invite:hover,
 .btn-gear-invite:focus-visible {
     border-color: var(--primary-color);
+    background: var(--primary-light);
     color: var(--primary-dark);
 }
 
