@@ -58,7 +58,13 @@ from auth_session_store import (
     revoke_token,
     verify_session,
 )
-from user_store import close_connection as close_user_store_sqlite, init_user_store, load_users, mutate_users
+from user_store import (
+    DEFAULT_INVITE_QUOTA,
+    close_connection as close_user_store_sqlite,
+    init_user_store,
+    load_users,
+    mutate_users,
+)
 from app_time import china_now_iso, china_today
 from performance_store import (
     PERFORMANCE_SHARE_MAX_TTL_SEC,
@@ -211,7 +217,7 @@ SESSION_KIND_CHAT_STREAM = "chat_stream"
 USER_SESSION_TTL = timedelta(days=30)
 ADMIN_SESSION_TTL = timedelta(hours=8)
 CHAT_STREAM_SESSION_TTL = timedelta(minutes=2)
-USER_INVITE_QUOTA_DEFAULT = 5
+USER_INVITE_QUOTA_DEFAULT = DEFAULT_INVITE_QUOTA
 
 # 数据目录
 DATA_DIR = Path("user_data_simple")
@@ -3267,7 +3273,7 @@ def get_user_invites(username):
 @token_required
 @parent_forbidden
 def create_user_invite(username):
-    """当前用户生成一次性邀请码（每个用户默认最多 5 个）。"""
+    """当前用户生成一次性邀请码（每个用户默认最多 15 个）。"""
     with _invites_lock:
         data = load_invites()
         invites = data.setdefault("invites", [])

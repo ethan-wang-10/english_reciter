@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _data_dir: Optional[Path] = None
 _conn: Optional[sqlite3.Connection] = None
-_DEFAULT_INVITE_QUOTA = 5
+DEFAULT_INVITE_QUOTA = 15
+_DEFAULT_INVITE_QUOTA = DEFAULT_INVITE_QUOTA
+_OLD_DEFAULT_INVITE_QUOTA = 5
+_SCHEMA_VERSION = 1
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -33,7 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT,
     child_username TEXT,
     plan TEXT NOT NULL DEFAULT 'free',
-    invite_quota_limit INTEGER NOT NULL DEFAULT 5,
+    invite_quota_limit INTEGER NOT NULL DEFAULT 15,
     invite_quota_used INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
@@ -114,6 +117,7 @@ def _open_conn_and_migrate_unlocked() -> None:
     _conn.execute("PRAGMA busy_timeout=30000")
     _conn.executescript(_SCHEMA)
     _ensure_user_columns_unlocked(_conn)
+    _run_schema_migrations_unlocked(_conn)
     _conn.commit()
     _auto_migrate_from_json_unlocked(_conn)
 
@@ -123,9 +127,25 @@ def _ensure_user_columns_unlocked(conn: sqlite3.Connection) -> None:
     cur = conn.execute("PRAGMA table_info(users)")
     columns = {str(row[1]) for row in cur.fetchall()}
     if "invite_quota_limit" not in columns:
-        conn.execute("ALTER TABLE users ADD COLUMN invite_quota_limit INTEGER NOT NULL DEFAULT 5")
+        conn.execute("ALTER TABLE users ADD COLUMN invite_quota_limit INTEGER NOT NULL DEFAULT 15")
     if "invite_quota_used" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN invite_quota_used INTEGER NOT NULL DEFAULT 0")
+
+
+def _run_schema_migrations_unlocked(conn: sqlite3.Connection) -> None:
+    """Run one-time SQLite data migrations that cannot be expressed in CREATE TABLE defaults."""
+    cur = conn.execute("PRAGMA user_version")
+    try:
+        version = int(cur.fetchone()[0] or 0)
+    except (TypeError, ValueError):
+        version = 0
+    if version < 1:
+        conn.execute(
+            "UPDATE users SET invite_quota_limit = ? WHERE invite_quota_limit = ?",
+            (_DEFAULT_INVITE_QUOTA, _OLD_DEFAULT_INVITE_QUOTA),
+        )
+    if version < _SCHEMA_VERSION:
+        conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
 
 
 def _user_row_tuple(

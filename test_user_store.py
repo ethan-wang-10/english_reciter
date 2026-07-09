@@ -1,11 +1,20 @@
 """user_store：SQLite 用户表与 JSON 迁移测试。"""
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
 
-from user_store import import_users_from_json, init_user_store, load_users, save_users, user_table_count
+from user_store import (
+    DEFAULT_INVITE_QUOTA,
+    close_connection,
+    import_users_from_json,
+    init_user_store,
+    load_users,
+    save_users,
+    user_table_count,
+)
 
 
 @pytest.fixture
@@ -39,6 +48,7 @@ def test_save_load_roundtrip(ud: Path) -> None:
     got = load_users()
     assert got["alice"]["password_hash"] == "x"
     assert got["alice"].get("plan") is None  # free 省略与旧 JSON 行为一致
+    assert got["alice"].get("invite_quota_limit") is None
     assert got["alice"]["invite_quota_used"] == 2
     assert got["bob_parent"]["role"] == "parent"
     assert got["bob_parent"]["child_username"] == "bob"
@@ -65,6 +75,38 @@ def test_auto_migrate_from_json(ud: Path) -> None:
     assert user_table_count() == 1
     assert load_users()["carol"]["password_hash"] == "h"
     assert not jf.is_file()
+
+
+def test_old_default_invite_quota_migrates_to_current_default(ud: Path) -> None:
+    init_user_store(ud)
+    save_users(
+        {
+            "legacy": {
+                "password_hash": "h",
+                "created_at": "2026-03-01T00:00:00",
+                "enabled": True,
+                "invite_quota_limit": 5,
+            },
+            "custom": {
+                "password_hash": "h",
+                "created_at": "2026-03-01T00:00:00",
+                "enabled": True,
+                "invite_quota_limit": 3,
+            },
+        }
+    )
+    close_connection()
+    with sqlite3.connect(str(ud / "users.sqlite3")) as conn:
+        conn.execute("PRAGMA user_version = 0")
+    init_user_store(ud)
+    users = load_users()
+    assert users["legacy"].get("invite_quota_limit") is None
+    assert users["custom"]["invite_quota_limit"] == 3
+    with sqlite3.connect(str(ud / "users.sqlite3")) as conn:
+        row = conn.execute(
+            "SELECT invite_quota_limit FROM users WHERE username = 'legacy'"
+        ).fetchone()
+    assert row[0] == DEFAULT_INVITE_QUOTA
 
 
 def test_save_users_upsert_drops_removed(ud: Path) -> None:
