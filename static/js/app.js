@@ -1486,6 +1486,7 @@ function renderUserSettingsPanel(s) {
     }
 
     updatePkNavBadgesFromDuels(s.duels);
+    renderInviteSettingsPanel(s);
 }
 
 const AVATAR_CROP_VIEW = 280;
@@ -1536,6 +1537,367 @@ async function refreshNavUserAvatar() {
         updateNavUserAvatar(s && s.avatar_url);
     } catch (_) {
         updateNavUserAvatar(null);
+    }
+}
+
+let currentInviteCard = {
+    code: '',
+    imageUrl: '',
+    blob: null,
+    file: null,
+};
+let inviteCreateInFlight = false;
+
+function renderInviteSettingsPanel(s) {
+    const hint = document.getElementById('settings-invite-hint');
+    const btn = document.getElementById('settings-invite-create');
+    const latest = document.getElementById('settings-invite-latest');
+    const history = document.getElementById('settings-invite-history');
+    if (!hint || !btn) return;
+    const limit = Math.max(0, Number(s.invite_quota_limit) || 0);
+    const used = Math.max(0, Number(s.invite_quota_used) || 0);
+    const remaining = Math.max(0, Number(s.invite_quota_remaining) || 0);
+    hint.textContent = `已生成 ${formatNumber(used)} / ${formatNumber(limit)} 个邀请码，剩余 ${formatNumber(remaining)} 个。`;
+    btn.disabled = remaining <= 0;
+    btn.textContent = remaining > 0 ? '生成邀请图片' : '邀请次数已用完';
+    if (latest && !latest.dataset.hasInvite) {
+        latest.hidden = true;
+        latest.innerHTML = '';
+    }
+    if (history) {
+        const invites = Array.isArray(s.invites) ? s.invites : [];
+        if (!invites.length) {
+            history.innerHTML = '<p class="settings-hint settings-invite-empty">还没有生成过邀请码。</p>';
+        } else {
+            const rows = invites.slice(0, 5).map((inv) => {
+                const status = inv.status === 'used'
+                    ? `已被 ${escapeHtml(inv.used_by || '用户')} 使用`
+                    : '未使用';
+                return `<div class="settings-invite-row"><span>${escapeHtml(inv.created_at || '—')}</span><strong>${status}</strong></div>`;
+            }).join('');
+            history.innerHTML = rows;
+        }
+    }
+}
+
+function updateInviteQuotaInSettings(data) {
+    const hint = document.getElementById('settings-invite-hint');
+    const btn = document.getElementById('settings-invite-create');
+    if (!hint || !btn || !data) return;
+    const limit = Math.max(0, Number(data.invite_quota_limit) || 0);
+    const used = Math.max(0, Number(data.invite_quota_used) || 0);
+    const remaining = Math.max(0, Number(data.invite_quota_remaining) || 0);
+    hint.textContent = `已生成 ${formatNumber(used)} / ${formatNumber(limit)} 个邀请码，剩余 ${formatNumber(remaining)} 个。`;
+    btn.disabled = remaining <= 0;
+    btn.textContent = remaining > 0 ? '生成邀请图片' : '邀请次数已用完';
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+}
+
+function loadImageForCanvas(src) {
+    return new Promise((resolve) => {
+        if (!src) {
+            resolve(null);
+            return;
+        }
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
+    });
+}
+
+function drawCenteredText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
+    const source = String(text || '');
+    const chars = Array.from(source);
+    const lines = [];
+    let line = '';
+    chars.forEach((ch) => {
+        const next = line + ch;
+        if (ctx.measureText(next).width > maxWidth && line) {
+            lines.push(line);
+            line = ch;
+        } else {
+            line = next;
+        }
+    });
+    if (line) lines.push(line);
+    const visible = lines.slice(0, maxLines);
+    if (lines.length > maxLines && visible.length) {
+        let last = visible[visible.length - 1];
+        while (last.length > 1 && ctx.measureText(`${last}…`).width > maxWidth) {
+            last = last.slice(0, -1);
+        }
+        visible[visible.length - 1] = `${last}…`;
+    }
+    visible.forEach((ln, idx) => {
+        ctx.fillText(ln, x, y + idx * lineHeight);
+    });
+}
+
+async function buildInviteCardImage({ code, registerUrl, inviterName, avatarUrl }) {
+    const w = 900;
+    const h = 1200;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#f6fbf3';
+    ctx.fillRect(0, 0, w, h);
+
+    const bg = ctx.createLinearGradient(0, 0, w, h);
+    bg.addColorStop(0, '#e8f8ff');
+    bg.addColorStop(0.52, '#f7ffe9');
+    bg.addColorStop(1, '#fff4d8');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    roundRectPath(ctx, 70, 70, 760, 1060, 48);
+    ctx.fill();
+    ctx.strokeStyle = '#58cc02';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+
+    ctx.fillStyle = '#3c3c3c';
+    ctx.textAlign = 'center';
+    ctx.font = '800 64px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    ctx.fillText('智能英语背诵', w / 2, 190);
+    ctx.font = '700 32px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    ctx.fillStyle = '#46a302';
+    ctx.fillText('每天一点点，单词变简单', w / 2, 242);
+
+    const avatar = await loadImageForCanvas(avatarUrl ? `${avatarDisplayUrl(avatarUrl, 256)}&t=${Date.now()}` : '');
+    const ax = w / 2;
+    const ay = 382;
+    const ar = 92;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ax, ay, ar, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    if (avatar) {
+        const side = Math.min(avatar.naturalWidth || avatar.width, avatar.naturalHeight || avatar.height);
+        const sx = ((avatar.naturalWidth || avatar.width) - side) / 2;
+        const sy = ((avatar.naturalHeight || avatar.height) - side) / 2;
+        ctx.drawImage(avatar, sx, sy, side, side, ax - ar, ay - ar, ar * 2, ar * 2);
+    } else {
+        ctx.fillStyle = '#e4ffce';
+        ctx.fillRect(ax - ar, ay - ar, ar * 2, ar * 2);
+        ctx.font = '900 78px "Segoe UI Emoji", sans-serif';
+        ctx.fillStyle = '#46a302';
+        ctx.fillText('👤', ax, ay + 28);
+    }
+    ctx.restore();
+    ctx.strokeStyle = '#58cc02';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(ax, ay, ar, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#3c3c3c';
+    ctx.font = '800 38px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    drawCenteredText(ctx, `${inviterName || '好友'} 邀请你一起背单词`, w / 2, 530, 680, 48, 2);
+
+    ctx.fillStyle = '#777777';
+    ctx.font = '700 27px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    drawCenteredText(ctx, '注册时填写下方邀请码，开启你的英语复习计划', w / 2, 635, 660, 38, 2);
+
+    ctx.fillStyle = '#fff9e6';
+    roundRectPath(ctx, 165, 710, 570, 160, 32);
+    ctx.fill();
+    ctx.strokeStyle = '#ffc800';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.fillStyle = '#777777';
+    ctx.font = '800 26px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    ctx.fillText('邀请码', w / 2, 765);
+    ctx.fillStyle = '#2f7f02';
+    ctx.font = '900 64px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    ctx.fillText(String(code || '').toUpperCase(), w / 2, 835);
+
+    ctx.fillStyle = '#f0f9ff';
+    roundRectPath(ctx, 165, 925, 570, 92, 28);
+    ctx.fill();
+    ctx.strokeStyle = '#1cb0f6';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.fillStyle = '#1899d6';
+    ctx.font = '800 26px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    ctx.fillText('打开链接注册', w / 2, 962);
+    ctx.font = '700 22px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    drawCenteredText(ctx, registerUrl || window.location.origin, w / 2, 996, 520, 28, 1);
+
+    ctx.fillStyle = '#777777';
+    ctx.font = '700 22px "Plus Jakarta Sans", "Segoe UI", sans-serif';
+    ctx.fillText('邀请码仅可使用一次', w / 2, 1080);
+
+    const blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+    if (!blob) throw new Error('无法生成邀请图片');
+    return {
+        blob,
+        url: URL.createObjectURL(blob),
+    };
+}
+
+function closeInviteCardModal() {
+    const modal = document.getElementById('invite-card-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    const msg = document.getElementById('invite-card-message');
+    if (msg) msg.textContent = '';
+}
+
+function showInviteCardModal(payload) {
+    const modal = document.getElementById('invite-card-modal');
+    const img = document.getElementById('invite-card-preview');
+    const dl = document.getElementById('invite-card-download');
+    const msg = document.getElementById('invite-card-message');
+    if (!modal || !img || !dl) return;
+    img.src = payload.imageUrl;
+    dl.href = payload.imageUrl;
+    dl.download = `invite-${payload.code || 'code'}.png`;
+    if (msg) msg.textContent = '';
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+async function createInviteCardFromSettings() {
+    if (inviteCreateInFlight) return;
+    const btn = document.getElementById('settings-invite-create');
+    const latest = document.getElementById('settings-invite-latest');
+    const prevText = btn ? btn.textContent : '';
+    closeMobileMoreSheet();
+    if (isParentSession) {
+        showMainBanner('家长账户不能生成邀请码');
+        return;
+    }
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '生成中…';
+    }
+    inviteCreateInFlight = true;
+    setSettingsMessage('');
+    try {
+        const data = await apiRequest('/user/invites', {
+            method: 'POST',
+            body: '{}',
+        });
+        if (currentInviteCard.imageUrl) {
+            URL.revokeObjectURL(currentInviteCard.imageUrl);
+        }
+        const studentName = sessionStudentUsername();
+        const avatarUrl = studentName ? `/api/user/avatar/${encodeURIComponent(studentName)}` : null;
+        const card = await buildInviteCardImage({
+            code: data.invite_code,
+            registerUrl: data.invite_register_url || window.location.origin,
+            inviterName: studentName,
+            avatarUrl,
+        });
+        let file = null;
+        try {
+            file = new File([card.blob], `invite-${data.invite_code}.png`, { type: 'image/png' });
+        } catch (_) {
+            file = null;
+        }
+        currentInviteCard = {
+            code: data.invite_code || '',
+            imageUrl: card.url,
+            blob: card.blob,
+            file,
+        };
+        if (latest) {
+            latest.dataset.hasInvite = '1';
+            latest.hidden = false;
+            latest.innerHTML =
+                `<div class="settings-invite-code-line"><span>新邀请码</span><strong>${escapeHtml(data.invite_code || '')}</strong></div>` +
+                `<p class="settings-hint">${escapeHtml(data.hint || '请保存图片，邀请码关闭后无法再次查看明文。')}</p>`;
+        }
+        updateInviteQuotaInSettings(data);
+        showInviteCardModal(currentInviteCard);
+        setSettingsMessage('邀请图片已生成');
+        apiRequest('/user/invites')
+            .then((fresh) => {
+                const history = document.getElementById('settings-invite-history');
+                if (!history) return;
+                const merged = { ...fresh, invite_quota_limit: data.invite_quota_limit, invite_quota_used: data.invite_quota_used, invite_quota_remaining: data.invite_quota_remaining };
+                renderInviteSettingsPanel(merged);
+                if (latest) {
+                    latest.dataset.hasInvite = '1';
+                    latest.hidden = false;
+                    latest.innerHTML =
+                        `<div class="settings-invite-code-line"><span>新邀请码</span><strong>${escapeHtml(data.invite_code || '')}</strong></div>` +
+                        `<p class="settings-hint">${escapeHtml(data.hint || '请保存图片，邀请码关闭后无法再次查看明文。')}</p>`;
+                }
+            })
+            .catch(() => {});
+    } catch (err) {
+        const msg = err.message || '生成失败';
+        setSettingsMessage(msg, true);
+        showMainBanner(msg);
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = prevText || '生成邀请图片';
+        }
+    } finally {
+        inviteCreateInFlight = false;
+        if (btn) {
+            if (!btn.disabled || btn.textContent === '生成中…') {
+                btn.textContent = prevText || '生成邀请图片';
+            }
+        }
+    }
+}
+
+async function copyInviteCodeFromModal() {
+    const msg = document.getElementById('invite-card-message');
+    if (!currentInviteCard.code) return;
+    try {
+        await navigator.clipboard.writeText(currentInviteCard.code);
+        if (msg) msg.textContent = '邀请码已复制';
+    } catch (_) {
+        if (msg) msg.textContent = `邀请码：${currentInviteCard.code}`;
+    }
+}
+
+async function shareInviteCardFromModal() {
+    const msg = document.getElementById('invite-card-message');
+    try {
+        if (
+            currentInviteCard.file &&
+            navigator.canShare &&
+            navigator.canShare({ files: [currentInviteCard.file] })
+        ) {
+            await navigator.share({
+                files: [currentInviteCard.file],
+                title: '邀请你一起背单词',
+                text: `邀请码：${currentInviteCard.code}`,
+            });
+            if (msg) msg.textContent = '已打开系统分享';
+        } else if (navigator.share) {
+            await navigator.share({
+                title: '邀请你一起背单词',
+                text: `邀请码：${currentInviteCard.code}`,
+                url: window.location.origin,
+            });
+            if (msg) msg.textContent = '已打开系统分享';
+        } else {
+            if (msg) msg.textContent = '当前浏览器不支持直接分享，请保存图片后发送';
+        }
+    } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        if (msg) msg.textContent = '分享失败，请保存图片后发送';
     }
 }
 
@@ -3439,6 +3801,9 @@ function applyParentNavMode() {
         });
     });
     document.querySelectorAll('#ng-pk-active, #mobile-ng-pk-active').forEach((el) => {
+        if (el) el.style.display = hide ? 'none' : '';
+    });
+    document.querySelectorAll('.js-invite-create').forEach((el) => {
         if (el) el.style.display = hide ? 'none' : '';
     });
     const lb = document.getElementById('leaderboard-opt-in');
@@ -6830,6 +7195,19 @@ document.addEventListener('DOMContentLoaded', function() {
             setSettingsMessage(err.message || '操作失败', true);
         }
     });
+    document.querySelectorAll('.js-invite-create, #settings-invite-create').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            void createInviteCardFromSettings();
+        });
+    });
+    document.getElementById('invite-card-backdrop')?.addEventListener('click', closeInviteCardModal);
+    document.getElementById('invite-card-close')?.addEventListener('click', closeInviteCardModal);
+    document.getElementById('invite-card-copy')?.addEventListener('click', () => {
+        void copyInviteCodeFromModal();
+    });
+    document.getElementById('invite-card-share')?.addEventListener('click', () => {
+        void shareInviteCardFromModal();
+    });
     document.getElementById('settings-month-goal-save')?.addEventListener('click', async () => {
         const inp = document.getElementById('settings-month-goal');
         const raw = inp && inp.value.trim();
@@ -6928,6 +7306,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const pkHubModal = document.getElementById('pk-hub-modal');
         if (pkHubModal && pkHubModal.style.display !== 'none') {
             closePkHubModal();
+            return;
+        }
+        const inviteModal = document.getElementById('invite-card-modal');
+        if (inviteModal && inviteModal.style.display !== 'none') {
+            closeInviteCardModal();
             return;
         }
         const makeupModal = document.getElementById('makeup-checkin-modal');

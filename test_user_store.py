@@ -22,6 +22,7 @@ def test_save_load_roundtrip(ud: Path) -> None:
             "created_at": "2026-01-01T00:00:00",
             "enabled": True,
             "plan": "free",
+            "invite_quota_used": 2,
         },
         "bob_parent": {
             "password_hash": "y",
@@ -30,6 +31,7 @@ def test_save_load_roundtrip(ud: Path) -> None:
             "role": "parent",
             "child_username": "bob",
             "plan": "paid",
+            "invite_quota_limit": 0,
         },
     }
     save_users(users)
@@ -37,9 +39,11 @@ def test_save_load_roundtrip(ud: Path) -> None:
     got = load_users()
     assert got["alice"]["password_hash"] == "x"
     assert got["alice"].get("plan") is None  # free 省略与旧 JSON 行为一致
+    assert got["alice"]["invite_quota_used"] == 2
     assert got["bob_parent"]["role"] == "parent"
     assert got["bob_parent"]["child_username"] == "bob"
     assert got["bob_parent"]["plan"] == "paid"
+    assert got["bob_parent"]["invite_quota_limit"] == 0
 
 
 def test_auto_migrate_from_json(ud: Path) -> None:

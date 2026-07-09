@@ -87,7 +87,7 @@ body {
     background-attachment: fixed;
     color: var(--text-primary);
     line-height: 1.55;
-    letter-spacing: -0.015em;
+    letter-spacing: 0;
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
 }
@@ -144,7 +144,7 @@ body {
     font-size: 1.75rem;
     font-weight: 800;
     color: var(--text-primary);
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
 }
 
 .login-tagline {
@@ -276,7 +276,7 @@ body {
     color: #fff;
     width: 100%;
     box-shadow: 0 var(--tactile-depth) 0 var(--primary-dark);
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
     font-size: 0.95rem;
 }
 
@@ -378,7 +378,7 @@ body {
     font-size: 1.25rem;
     font-weight: 800;
     color: var(--primary-dark);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
 }
 
 .nav-menu {
@@ -653,7 +653,7 @@ body {
     color: var(--secondary-dark);
     font-size: 0.78rem;
     font-weight: 900;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
 }
 
 .xp-history-head h3 {
@@ -1186,7 +1186,7 @@ body {
     font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
 }
 
 /* 复习区：主栏 + 右侧错题（顶对齐：统一用 review-layout 上内边距，勿给主栏单独 margin-top） */
@@ -1978,7 +1978,7 @@ body {
     font-size: 0.85rem;
     font-weight: 800;
     color: var(--secondary-dark);
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
 }
 
 .pk-hub-challenges-root {
@@ -2018,7 +2018,7 @@ body {
     margin: 0 0 8px;
     font-size: 0.78rem;
     font-weight: 800;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
     color: var(--text-secondary);
 }
 
@@ -2089,7 +2089,7 @@ body {
     font-size: clamp(1.75rem, 5vw, 2.25rem);
     font-weight: 800;
     color: var(--primary-dark);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
 }
 
 .word-progress {
@@ -2202,7 +2202,7 @@ body {
     font-weight: 800;
     font-family: inherit;
     line-height: 1.25;
-    letter-spacing: normal;
+    letter-spacing: 0;
     opacity: 0;
     caret-color: transparent;
 }
@@ -2456,7 +2456,7 @@ body {
     font-weight: 400;
     color: var(--text-secondary);
     font-family: "Lucida Sans Unicode", "DejaVu Sans", serif;
-    letter-spacing: 0.01em;
+    letter-spacing: 0;
 }
 
 .word-item-chinese {
@@ -2501,7 +2501,7 @@ body {
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
     color: var(--text-secondary);
 }
 
@@ -2514,7 +2514,7 @@ body {
     font-size: 1.5rem;
     color: var(--text-primary);
     margin-bottom: 8px;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
 }
 
 /* 系统词库（家长勾选导入） */
@@ -3726,17 +3726,19 @@ button.import-article-chip--selected:hover {
 .admin-table--users th:nth-child(2),
 .admin-table--users td:nth-child(2),
 .admin-table--users th:nth-child(3),
-.admin-table--users td:nth-child(3) {
+.admin-table--users td:nth-child(3),
+.admin-table--users th:nth-child(5),
+.admin-table--users td:nth-child(5) {
     min-width: 2.5rem;
 }
 
-.admin-table--users th:nth-child(6),
-.admin-table--users td:nth-child(6) {
+.admin-table--users th:nth-child(7),
+.admin-table--users td:nth-child(7) {
     min-width: 7.5rem;
 }
 
-.admin-table--users th:nth-child(8),
-.admin-table--users td:nth-child(8) {
+.admin-table--users th:nth-child(9),
+.admin-table--users td:nth-child(9) {
     min-width: 9rem;
 }
 
@@ -3747,6 +3749,10 @@ button.import-article-chip--selected:hover {
 .admin-table-num {
     text-align: right;
     font-variant-numeric: tabular-nums;
+}
+
+.admin-invite-quota-cell {
+    white-space: nowrap;
 }
 
 .admin-table-nowrap {
@@ -4450,6 +4456,67 @@ button.import-article-chip--selected:hover {
     margin: 0;
 }
 
+.settings-invite-create {
+    width: auto;
+    margin-bottom: 12px;
+}
+
+.settings-invite-latest {
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--primary-color);
+    background: #f5fff0;
+}
+
+.settings-invite-code-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.settings-invite-code-line span {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.settings-invite-code-line strong {
+    color: var(--primary-dark);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 1.2rem;
+    letter-spacing: 0;
+}
+
+.settings-invite-history {
+    display: grid;
+    gap: 6px;
+}
+
+.settings-invite-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.02);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 650;
+}
+
+.settings-invite-row strong {
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.settings-invite-empty {
+    margin-bottom: 0;
+}
+
 /* 头像裁剪弹层 */
 .avatar-crop-overlay {
     position: fixed;
@@ -4540,6 +4607,105 @@ button.import-article-chip--selected:hover {
     flex-wrap: wrap;
     gap: 10px;
     justify-content: flex-end;
+}
+
+/* 邀请图片预览 */
+.invite-card-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 11950;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: max(16px, env(safe-area-inset-top, 16px)) max(16px, env(safe-area-inset-right, 16px))
+        max(16px, env(safe-area-inset-bottom, 16px)) max(16px, env(safe-area-inset-left, 16px));
+}
+
+.invite-card-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.48);
+}
+
+.invite-card-dialog {
+    position: relative;
+    z-index: 1;
+    width: min(390px, 100%);
+    max-height: min(92vh, 760px);
+    max-height: min(760px, calc(100svh - 32px));
+    max-height: min(760px, calc(100dvh - 32px));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    border-radius: var(--radius-lg);
+    border: 2px solid var(--primary-color);
+    background: var(--surface);
+    box-shadow: 0 var(--tactile-depth) 0 var(--primary-dark), 0 18px 54px rgba(0, 0, 0, 0.2);
+    animation: modalPopIn 0.38s cubic-bezier(0.34, 1.35, 0.64, 1) both;
+}
+
+.invite-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.invite-card-head h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 900;
+    color: var(--primary-dark);
+}
+
+.invite-card-close {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 1.35rem;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.invite-card-preview {
+    width: 100%;
+    min-height: 0;
+    max-height: min(58vh, 540px);
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border);
+    background: #f6fbf3;
+}
+
+.invite-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.invite-card-actions .btn,
+.invite-card-download {
+    flex: 1 1 auto;
+    min-width: 104px;
+    text-align: center;
+    text-decoration: none;
+    padding: 10px 12px;
+    font-size: 0.88rem;
+}
+
+.invite-card-message {
+    margin: 0;
+    min-height: 1.2em;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    font-weight: 700;
+    text-align: center;
 }
 
 .settings-goal-row {
@@ -4726,7 +4892,7 @@ button.import-article-chip--selected:hover {
 .leaderboard-page h2 {
     margin-bottom: 8px;
     font-weight: 800;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
 }
 
 .leaderboard-intro {
@@ -4762,7 +4928,7 @@ button.import-article-chip--selected:hover {
     margin: 0 0 6px;
     font-size: 1.12rem;
     font-weight: 800;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     color: var(--text-primary);
 }
 
@@ -4968,7 +5134,7 @@ button.import-article-chip--selected:hover {
     font-size: 1.15rem;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
     color: var(--text-primary);
 }
 
@@ -5063,7 +5229,7 @@ button.import-article-chip--selected:hover {
     font-weight: 800;
     font-size: 1.1rem;
     color: var(--text-primary);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
 }
 
 .mp-race-badge {
@@ -5384,7 +5550,7 @@ button.import-article-chip--selected:hover {
     margin: 0 0 6px;
     font-size: 1.05rem;
     font-weight: 800;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
 }
 
 .leaderboard-podium-sub {
@@ -5473,7 +5639,7 @@ button.import-article-chip--selected:hover {
     margin-bottom: 12px;
     font-size: 1.15rem;
     font-weight: 800;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
 }
 
 .achievements-grid {
@@ -5545,7 +5711,7 @@ button.import-article-chip--selected:hover {
 .learning-map-heading {
     font-size: 1.15rem;
     font-weight: 800;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
     color: var(--text-primary);
     margin: 0 0 8px;
 }
@@ -5655,7 +5821,7 @@ button.import-article-chip--selected:hover {
 .learning-map-node-level {
     font-size: 0.7rem;
     font-weight: 800;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     color: var(--secondary-dark);
     background: #eef7ff;
     border: 2px solid var(--secondary-color);
@@ -5749,7 +5915,7 @@ button.import-article-chip--selected:hover {
     font-size: 0.78rem;
     font-weight: 800;
     color: var(--primary-dark);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
 }
 
 .learning-map-node--unlocked .learning-map-node-count {
@@ -5760,7 +5926,7 @@ button.import-article-chip--selected:hover {
     font-size: 0.82rem;
     font-weight: 800;
     color: var(--text-primary);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     margin-top: 2px;
     line-height: 1.25;
 }
@@ -6077,7 +6243,7 @@ button.import-article-chip--selected:hover {
     margin: 0;
     font-size: clamp(2rem, 8vw, 2.75rem);
     font-weight: 800;
-    letter-spacing: -0.04em;
+    letter-spacing: 0;
     color: var(--text-primary);
     line-height: 1.15;
 }
@@ -6162,7 +6328,7 @@ button.import-article-chip--selected:hover {
     font-weight: 800;
     color: var(--text-secondary);
     margin-bottom: 8px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
 }
 
 .discovery-sense-list {
@@ -6367,7 +6533,7 @@ button.import-article-chip--selected:hover {
     font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
 }
 .wrong-order-btns {
     display: flex;
@@ -7142,6 +7308,19 @@ button.import-article-chip--selected:hover {
 .btn-gear-chat:hover,
 .btn-gear-chat:focus-visible {
     color: var(--primary-color);
+}
+
+.btn-gear-invite {
+    font-size: 0.78rem;
+    font-weight: 900;
+    color: var(--primary-dark);
+    background: var(--primary-light);
+}
+
+.btn-gear-invite:hover,
+.btn-gear-invite:focus-visible {
+    border-color: var(--primary-color);
+    color: var(--primary-dark);
 }
 
 .btn-gear-badge {

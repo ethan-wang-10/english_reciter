@@ -80,7 +80,7 @@
                         <div class="form-group">
                             <label>邀请码</label>
                             <input type="text" id="reg-invite" required autocomplete="off"
-                                placeholder="由管理员生成的一次性邀请码">
+                                placeholder="由用户或管理员生成的一次性邀请码">
                         </div>
                         <button type="submit" class="btn btn-primary">注册</button>
                     </form>
@@ -122,6 +122,7 @@
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             <span id="chat-side-badge" class="btn-gear-badge" hidden aria-hidden="true"></span>
                         </button>
+                        <button type="button" id="nav-invite-trigger" class="btn-gear btn-gear-invite js-invite-create" title="邀请好友" aria-label="生成邀请图片">邀</button>
                         <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
                     </div>
                     <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
@@ -169,6 +170,7 @@
                     <button type="button" class="mobile-more-link" data-page="textbook">课文学习</button>
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
+                    <button type="button" class="mobile-more-link js-invite-create" id="mobile-open-invite">邀请好友</button>
                     <button type="button" class="mobile-more-link" id="mobile-open-settings">用户设置</button>
                     <button type="button" class="mobile-more-link" id="mobile-open-chat">聊天室<span id="mobile-chat-badge" class="mobile-chat-badge" hidden aria-hidden="true"></span></button>
                 </div>
@@ -628,6 +630,13 @@
                         </div>
                     </div>
                     <div class="settings-block">
+                        <h3 class="settings-subtitle">邀请好友</h3>
+                        <p class="settings-hint" id="settings-invite-hint">—</p>
+                        <button type="button" class="btn btn-primary settings-invite-create" id="settings-invite-create">生成邀请图片</button>
+                        <div id="settings-invite-latest" class="settings-invite-latest" hidden></div>
+                        <div id="settings-invite-history" class="settings-invite-history"></div>
+                    </div>
+                    <div class="settings-block">
                         <h3 class="settings-subtitle">今日打卡</h3>
                         <p class="settings-hint" id="settings-checkin-hint">—</p>
                     </div>
@@ -738,6 +747,24 @@
                     <button type="button" class="btn btn-secondary" id="avatar-crop-cancel">取消</button>
                     <button type="button" class="btn btn-primary" id="avatar-crop-ok">确定上传</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- 邀请图片预览 -->
+        <div id="invite-card-modal" class="invite-card-modal" style="display: none;" aria-hidden="true">
+            <div class="invite-card-backdrop" id="invite-card-backdrop"></div>
+            <div class="invite-card-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-card-title">
+                <div class="invite-card-head">
+                    <h3 id="invite-card-title">邀请图片</h3>
+                    <button type="button" class="invite-card-close" id="invite-card-close" aria-label="关闭">×</button>
+                </div>
+                <img id="invite-card-preview" class="invite-card-preview" alt="邀请图片预览" />
+                <div class="invite-card-actions">
+                    <button type="button" class="btn btn-secondary" id="invite-card-copy">复制邀请码</button>
+                    <button type="button" class="btn btn-secondary" id="invite-card-share">分享图片</button>
+                    <a id="invite-card-download" class="btn btn-primary invite-card-download" download="invite.png" href="#">保存图片</a>
+                </div>
+                <p id="invite-card-message" class="invite-card-message" role="status"></p>
             </div>
         </div>
 
@@ -947,6 +974,7 @@
                                     <th>待复习</th>
                                     <th>已掌握</th>
                                     <th>套餐</th>
+                                    <th>邀请</th>
                                     <th>状态</th>
                                     <th>家长账户</th>
                                     <th>学生账号</th>
@@ -963,6 +991,7 @@
                             <thead>
                                 <tr>
                                     <th>创建时间</th>
+                                    <th>来源</th>
                                     <th>状态</th>
                                     <th>使用者</th>
                                 </tr>

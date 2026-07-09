@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _data_dir: Optional[Path] = None
 _conn: Optional[sqlite3.Connection] = None
+_DEFAULT_INVITE_QUOTA = 5
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -31,7 +32,9 @@ CREATE TABLE IF NOT EXISTS users (
     enabled INTEGER NOT NULL DEFAULT 1,
     role TEXT,
     child_username TEXT,
-    plan TEXT NOT NULL DEFAULT 'free'
+    plan TEXT NOT NULL DEFAULT 'free',
+    invite_quota_limit INTEGER NOT NULL DEFAULT 5,
+    invite_quota_used INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 """
@@ -110,12 +113,26 @@ def _open_conn_and_migrate_unlocked() -> None:
     _conn.execute("PRAGMA synchronous=NORMAL")
     _conn.execute("PRAGMA busy_timeout=30000")
     _conn.executescript(_SCHEMA)
+    _ensure_user_columns_unlocked(_conn)
     _conn.commit()
     _auto_migrate_from_json_unlocked(_conn)
 
 
-def _user_row_tuple(username: str, u: Dict[str, Any]) -> Tuple[str, str, Optional[str], str, int, Optional[str], Optional[str], str]:
-    """INSERT / UPSERT 用的 8 元组，与表列顺序一致。"""
+def _ensure_user_columns_unlocked(conn: sqlite3.Connection) -> None:
+    """为已存在的 users.sqlite3 补新列。"""
+    cur = conn.execute("PRAGMA table_info(users)")
+    columns = {str(row[1]) for row in cur.fetchall()}
+    if "invite_quota_limit" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN invite_quota_limit INTEGER NOT NULL DEFAULT 5")
+    if "invite_quota_used" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN invite_quota_used INTEGER NOT NULL DEFAULT 0")
+
+
+def _user_row_tuple(
+    username: str,
+    u: Dict[str, Any],
+) -> Tuple[str, str, Optional[str], str, int, Optional[str], Optional[str], str, int, int]:
+    """INSERT / UPSERT 用的元组，与表列顺序一致。"""
     ph = str(u.get("password_hash") or "")
     email = u.get("email")
     if email is not None:
@@ -133,14 +150,39 @@ def _user_row_tuple(username: str, u: Dict[str, Any]) -> Tuple[str, str, Optiona
     plan = str(u.get("plan") or "free").strip() or "free"
     if plan not in ("free", "paid"):
         plan = "free"
-    return (username, ph, email, created_at, enabled, role, child_username, plan)
+    limit_raw = u.get("invite_quota_limit", _DEFAULT_INVITE_QUOTA)
+    if limit_raw is None or limit_raw == "":
+        invite_quota_limit = _DEFAULT_INVITE_QUOTA
+    else:
+        try:
+            invite_quota_limit = int(limit_raw)
+        except (TypeError, ValueError):
+            invite_quota_limit = _DEFAULT_INVITE_QUOTA
+    try:
+        invite_quota_used = int(u.get("invite_quota_used", 0) or 0)
+    except (TypeError, ValueError):
+        invite_quota_used = 0
+    invite_quota_limit = max(0, invite_quota_limit)
+    invite_quota_used = max(0, invite_quota_used)
+    return (
+        username,
+        ph,
+        email,
+        created_at,
+        enabled,
+        role,
+        child_username,
+        plan,
+        invite_quota_limit,
+        invite_quota_used,
+    )
 
 
 def _upsert_user_unlocked(conn: sqlite3.Connection, username: str, u: Dict[str, Any]) -> None:
     row = _user_row_tuple(username, u)
     conn.execute(
-        "INSERT INTO users (username, password_hash, email, created_at, enabled, role, child_username, plan) "
-        "VALUES (?,?,?,?,?,?,?,?) "
+        "INSERT INTO users (username, password_hash, email, created_at, enabled, role, child_username, plan, invite_quota_limit, invite_quota_used) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(username) DO UPDATE SET "
         "password_hash=excluded.password_hash, "
         "email=excluded.email, "
@@ -148,7 +190,9 @@ def _upsert_user_unlocked(conn: sqlite3.Connection, username: str, u: Dict[str, 
         "enabled=excluded.enabled, "
         "role=excluded.role, "
         "child_username=excluded.child_username, "
-        "plan=excluded.plan",
+        "plan=excluded.plan, "
+        "invite_quota_limit=excluded.invite_quota_limit, "
+        "invite_quota_used=excluded.invite_quota_used",
         row,
     )
 
@@ -171,7 +215,18 @@ def _sync_users_table_unlocked(conn: sqlite3.Connection, users: Dict[str, Any]) 
 
 
 def _row_to_user_dict(row: tuple) -> Dict[str, Any]:
-    _, password_hash, email, created_at, enabled, role, child_username, plan = row
+    (
+        _,
+        password_hash,
+        email,
+        created_at,
+        enabled,
+        role,
+        child_username,
+        plan,
+        invite_quota_limit,
+        invite_quota_used,
+    ) = row
     d: Dict[str, Any] = {
         "password_hash": password_hash,
         "created_at": created_at,
@@ -184,12 +239,24 @@ def _row_to_user_dict(row: tuple) -> Dict[str, Any]:
     if role:
         d["role"] = str(role)
         d["child_username"] = (child_username or "") if child_username is not None else ""
+    try:
+        quota_limit = int(invite_quota_limit)
+    except (TypeError, ValueError):
+        quota_limit = _DEFAULT_INVITE_QUOTA
+    try:
+        quota_used = int(invite_quota_used)
+    except (TypeError, ValueError):
+        quota_used = 0
+    if quota_limit != _DEFAULT_INVITE_QUOTA:
+        d["invite_quota_limit"] = max(0, quota_limit)
+    if quota_used > 0:
+        d["invite_quota_used"] = max(0, quota_used)
     return d
 
 
 def _load_users_unlocked(conn: sqlite3.Connection) -> Dict[str, Any]:
     cur = conn.execute(
-        "SELECT username, password_hash, email, created_at, enabled, role, child_username, plan "
+        "SELECT username, password_hash, email, created_at, enabled, role, child_username, plan, invite_quota_limit, invite_quota_used "
         "FROM users ORDER BY username"
     )
     out: Dict[str, Any] = {}

@@ -98,6 +98,9 @@ function renderAdminUsers(users) {
         const planLabel = plan === 'paid' ? '<span class="plan-badge-vip">VIP</span>' : '<span class="plan-badge-free">免费</span>';
         const pchk = u.parent_account_enabled ? 'checked' : '';
         const parentLogin = `${escapeHtml(u.username)}_parent`;
+        const inviteUsed = Number(u.invite_quota_used) || 0;
+        const inviteLimit = Number(u.invite_quota_limit) || 0;
+        const inviteRemaining = Number(u.invite_quota_remaining) || 0;
         const planTitle = plan === 'paid' ? '降为免费版' : '升为 VIP';
         /* 皇冠 = 升为 VIP；星形 = 降为免费（普通版） */
         const planSvg =
@@ -110,6 +113,7 @@ function renderAdminUsers(users) {
                 <td class="admin-table-num">${escapeHtml(u.pending_words)}</td>
                 <td class="admin-table-num">${escapeHtml(u.mastered_words)}</td>
                 <td>${planLabel}</td>
+                <td class="admin-table-num admin-invite-quota-cell" title="剩余 ${escapeHtml(inviteRemaining)} 个">${escapeHtml(inviteUsed)} / ${escapeHtml(inviteLimit)}</td>
                 <td class="admin-table-nowrap">${en ? '正常' : '已禁用'}</td>
                 <td class="admin-user-col-parent">
                     <div class="admin-user-cell-stack">
@@ -134,6 +138,7 @@ function renderAdminUsers(users) {
                     <div class="admin-user-actions">
                         <button type="button" class="btn-admin-pw" data-admin-set-password="${escapeHtml(u.username)}" title="设置学生登录密码">密码</button>
                         <button type="button" class="btn-admin-plan btn-admin-plan--icon" data-admin-set-plan="${escapeHtml(u.username)}" data-current-plan="${escapeHtml(plan)}" title="${planTitle}" aria-label="${planTitle}">${planSvg}</button>
+                        <button type="button" class="btn-admin-pw" data-admin-reset-invites="${escapeHtml(u.username)}" title="重置该用户邀请次数">邀请</button>
                         <button type="button" class="btn btn-danger-outline btn-admin-delete-user btn-admin-del" data-admin-delete-user="${escapeHtml(u.username)}" title="永久删除该用户及全部学习数据">删除</button>
                     </div>
                 </td>
@@ -237,6 +242,26 @@ function renderAdminUsers(users) {
         });
     });
 
+    tbody.querySelectorAll('[data-admin-reset-invites]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const un = btn.getAttribute('data-admin-reset-invites');
+            if (!un) return;
+            const ok = window.confirm(`重置用户「${un}」的邀请码生成次数？\n\n重置后该用户可以继续生成邀请码。`);
+            if (!ok) return;
+            showAdminNotice('');
+            try {
+                const res = await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/invite-quota`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ reset: true })
+                });
+                await loadAdminDashboard();
+                showAdminNotice(`用户 ${un} 邀请次数已重置：剩余 ${res.invite_quota_remaining} 个`);
+            } catch (e) {
+                showAdminNotice(e.message || '重置失败');
+            }
+        });
+    });
+
     tbody.querySelectorAll('[data-admin-set-plan]').forEach((btn) => {
         btn.addEventListener('click', async () => {
             const un = btn.getAttribute('data-admin-set-plan');
@@ -262,9 +287,12 @@ function renderAdminInvites(invites) {
     if (!tbody) return;
     tbody.innerHTML = (invites || []).map((inv) => {
         const st = inv.status === 'used' ? '已使用' : '未使用';
+        const byKind = inv.created_by_kind === 'user' ? '用户' : '管理员';
+        const by = inv.created_by ? `${byKind}：${inv.created_by}` : byKind;
         return `
             <tr>
                 <td>${escapeHtml(inv.created_at || '—')}</td>
+                <td>${escapeHtml(by)}</td>
                 <td>${escapeHtml(st)}</td>
                 <td>${escapeHtml(inv.used_by || '—')}</td>
             </tr>`;

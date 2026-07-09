@@ -195,6 +195,7 @@ SESSION_KIND_CHAT_STREAM = "chat_stream"
 USER_SESSION_TTL = timedelta(days=30)
 ADMIN_SESSION_TTL = timedelta(hours=8)
 CHAT_STREAM_SESSION_TTL = timedelta(minutes=2)
+USER_INVITE_QUOTA_DEFAULT = 5
 
 # 数据目录
 DATA_DIR = Path("user_data_simple")
@@ -2006,6 +2007,93 @@ def _hash_invite_code(plain: str) -> str:
     return hashlib.sha256(plain.strip().encode('utf-8')).hexdigest()
 
 
+def _invite_code_hash_candidates(plain: str) -> List[str]:
+    code = plain.strip()
+    candidates = [_hash_invite_code(code)]
+    upper = code.upper()
+    if upper != code:
+        candidates.append(_hash_invite_code(upper))
+    return candidates
+
+
+def _new_invite_code() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(10))
+
+
+def _fresh_invite_code(existing_invites: List[dict]) -> str:
+    used_hashes = {
+        str(inv.get("code_hash") or "")
+        for inv in existing_invites
+        if isinstance(inv, dict)
+    }
+    for _ in range(16):
+        plain = _new_invite_code()
+        if _hash_invite_code(plain) not in used_hashes:
+            return plain
+    return secrets.token_urlsafe(18)
+
+
+def invite_quota_used(user_dict: dict) -> int:
+    try:
+        return max(0, int(user_dict.get("invite_quota_used", 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def invite_quota_limit(user_dict: dict) -> int:
+    raw_val = user_dict.get("invite_quota_limit", USER_INVITE_QUOTA_DEFAULT)
+    if raw_val is None or raw_val == "":
+        return USER_INVITE_QUOTA_DEFAULT
+    try:
+        raw = int(raw_val)
+    except (TypeError, ValueError):
+        raw = USER_INVITE_QUOTA_DEFAULT
+    return max(0, raw)
+
+
+def invite_quota_payload(user_dict: dict) -> dict:
+    limit = invite_quota_limit(user_dict)
+    used = min(invite_quota_used(user_dict), limit)
+    return {
+        "invite_quota_limit": limit,
+        "invite_quota_used": used,
+        "invite_quota_remaining": max(0, limit - used),
+    }
+
+
+def invite_public_row(inv: dict) -> dict:
+    used = bool(inv.get("used_at"))
+    return {
+        "id": inv.get("id"),
+        "created_at": inv.get("created_at"),
+        "created_by": inv.get("created_by"),
+        "created_by_kind": inv.get("created_by_kind") or "admin",
+        "used_at": inv.get("used_at"),
+        "used_by": inv.get("used_by"),
+        "status": "used" if used else "unused",
+    }
+
+
+def _list_invites_created_by(username: str) -> List[dict]:
+    data = load_invites()
+    rows = []
+    for inv in data.get("invites", []):
+        if not isinstance(inv, dict):
+            continue
+        if inv.get("created_by_kind") == "user" and inv.get("created_by") == username:
+            rows.append(invite_public_row(inv))
+    rows.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return rows
+
+
+def _public_origin() -> str:
+    configured = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    if configured:
+        return configured
+    return request.url_root.rstrip("/")
+
+
 def load_invites() -> dict:
     """加载邀请码列表。"""
     if not INVITES_FILE.exists():
@@ -2040,13 +2128,13 @@ def register_user_with_invite(
     if not is_valid_username(username):
         return False, '用户名须为3-32位字母、数字或下划线'
 
-    code_hash = _hash_invite_code(invite_code)
+    code_hashes = set(_invite_code_hash_candidates(invite_code))
     with _invites_lock:
         data = load_invites()
         invites = data.get('invites', [])
         matched = None
         for inv in invites:
-            if inv.get('code_hash') == code_hash and inv.get('used_at') is None:
+            if inv.get('code_hash') in code_hashes and inv.get('used_at') is None:
                 matched = inv
                 break
         if not matched:
@@ -2820,6 +2908,10 @@ def get_user_settings(username):
         duels = challenges_mod.list_duels_for_user(DATA_DIR, username)
         av = user_avatar_disk_path(username)
         prof["avatar_url"] = f"/api/user/avatar/{username}" if av else None
+        prof.update(invite_quota_payload(load_users().get(username) or {}))
+        with _invites_lock:
+            prof["invites"] = _list_invites_created_by(username)
+        prof["invite_register_url"] = f"{_public_origin()}/"
         prof["monthly_pool"] = pool
         prof["duels"] = duels
         prof["wager_tiers"] = list(challenges_mod.WAGER_TIERS)
@@ -2939,6 +3031,76 @@ def delete_user_avatar(username):
         except OSError:
             pass
     return jsonify({'ok': True, 'avatar_url': None}), 200
+
+
+@app.route('/api/user/invites', methods=['GET'])
+@token_required
+@parent_forbidden
+def get_user_invites(username):
+    """当前用户创建的邀请码列表与剩余额度（不含明文）。"""
+    users = load_users()
+    u = users.get(username)
+    if not isinstance(u, dict) or is_parent_user_record(u):
+        return jsonify({'error': '用户不存在'}), 404
+    with _invites_lock:
+        invites = _list_invites_created_by(username)
+    return jsonify({
+        **invite_quota_payload(u),
+        "invites": invites,
+        "invite_register_url": f"{_public_origin()}/",
+    }), 200
+
+
+@app.route('/api/user/invites', methods=['POST'])
+@token_required
+@parent_forbidden
+def create_user_invite(username):
+    """当前用户生成一次性邀请码（每个用户默认最多 5 个）。"""
+    with _invites_lock:
+        data = load_invites()
+        invites = data.setdefault("invites", [])
+        plain = _fresh_invite_code(invites)
+        inv_id = str(uuid.uuid4())
+        quota_after: Optional[dict] = None
+
+        def _consume_quota(users: Dict[str, Any]) -> Tuple[bool, int, str, Optional[dict]]:
+            u = users.get(username)
+            if not isinstance(u, dict):
+                return False, 404, "用户不存在", None
+            if is_parent_user_record(u):
+                return False, 403, "家长账户不能生成邀请码", None
+            limit = invite_quota_limit(u)
+            used = invite_quota_used(u)
+            if used >= limit:
+                return False, 400, "邀请码次数已用完，请联系管理员重置", invite_quota_payload(u)
+            u["invite_quota_limit"] = limit
+            u["invite_quota_used"] = used + 1
+            return True, 201, "", invite_quota_payload(u)
+
+        ok, status_code, err, quota_after = mutate_users(_consume_quota)
+        if not ok:
+            return jsonify({"error": err, **(quota_after or {})}), status_code
+
+        entry = {
+            "id": inv_id,
+            "code_hash": _hash_invite_code(plain),
+            "created_at": china_now_iso(timespec="seconds"),
+            "created_by": username,
+            "created_by_kind": "user",
+            "used_at": None,
+            "used_by": None,
+        }
+        invites.append(entry)
+        save_invites(data)
+
+    logger.info("用户生成邀请码: user=%s id=%s", username, inv_id)
+    return jsonify({
+        "id": inv_id,
+        "invite_code": plain,
+        "invite_register_url": f"{_public_origin()}/",
+        "hint": "请复制保存，关闭后无法再次查看明文",
+        **(quota_after or {}),
+    }), 201
 
 
 @app.route('/api/monthly-pool', methods=['GET'])
@@ -5146,6 +5308,7 @@ def admin_list_users():
             'created_at': u.get('created_at'),
             'enabled': u.get('enabled', True),
             'plan': u.get('plan', 'free'),
+            **invite_quota_payload(u),
             'pending_words': summ['pending'],
             'mastered_words': summ['mastered'],
             'parent_account_enabled': has_parent,
@@ -5324,6 +5487,47 @@ def admin_set_user_password(username):
     _invalidate_user_reciter_cache(username)
     logger.info("管理员重置用户密码: %s", username)
     return jsonify({'username': username, 'message': '密码已更新，该用户需重新登录'}), 200
+
+
+@app.route('/api/admin/users/<username>/invite-quota', methods=['PATCH'])
+@admin_required
+def admin_reset_user_invite_quota(username):
+    """管理员重置用户邀请次数；默认把已用数清零，可选调整总额度。"""
+    if not is_valid_username(username):
+        return jsonify({'error': '无效的用户名'}), 400
+    data = request.get_json(silent=True) or {}
+    limit_raw = data.get("limit")
+    new_limit: Optional[int] = None
+    if limit_raw not in (None, ""):
+        try:
+            new_limit = int(limit_raw)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'limit 须为整数'}), 400
+        if new_limit < 0 or new_limit > 100:
+            return jsonify({'error': 'limit 须在 0 到 100 之间'}), 400
+
+    def _reset_quota(users: Dict[str, Any]) -> Tuple[bool, int, Dict[str, Any]]:
+        u = users.get(username)
+        if not isinstance(u, dict):
+            return False, 404, {'error': '用户不存在'}
+        if is_parent_user_record(u):
+            return False, 400, {'error': '不能为家长账户设置邀请次数'}
+        if new_limit is not None:
+            u["invite_quota_limit"] = new_limit
+        else:
+            u["invite_quota_limit"] = invite_quota_limit(u)
+        u["invite_quota_used"] = 0
+        return True, 200, {
+            "username": username,
+            **invite_quota_payload(u),
+            "message": "邀请次数已重置",
+        }
+
+    ok, status_code, body = mutate_users(_reset_quota)
+    if not ok:
+        return jsonify(body), status_code
+    logger.info("管理员重置用户邀请次数: %s limit=%s", username, body.get("invite_quota_limit"))
+    return jsonify(body), 200
 
 
 @app.route('/api/admin/users/<username>', methods=['DELETE'])
@@ -5563,19 +5767,21 @@ def admin_delete_user_words(username):
 @admin_required
 def admin_create_invite():
     """生成一次性邀请码（仅响应中明文展示一次）。"""
-    plain = secrets.token_urlsafe(18)
-    inv_id = str(uuid.uuid4())
-    entry = {
-        'id': inv_id,
-        'code_hash': _hash_invite_code(plain),
-        'created_at': china_now_iso(timespec="seconds"),
-        'created_by': os.getenv('ADMIN_USERNAME', 'admin'),
-        'used_at': None,
-        'used_by': None,
-    }
     with _invites_lock:
         data = load_invites()
-        data.setdefault('invites', []).append(entry)
+        invites = data.setdefault('invites', [])
+        plain = _fresh_invite_code(invites)
+        inv_id = str(uuid.uuid4())
+        entry = {
+            'id': inv_id,
+            'code_hash': _hash_invite_code(plain),
+            'created_at': china_now_iso(timespec="seconds"),
+            'created_by': os.getenv('ADMIN_USERNAME', 'admin'),
+            'created_by_kind': 'admin',
+            'used_at': None,
+            'used_by': None,
+        }
+        invites.append(entry)
         save_invites(data)
 
     logger.info("管理员生成邀请码 id=%s", inv_id)
@@ -5593,14 +5799,8 @@ def admin_list_invites():
     data = load_invites()
     rows = []
     for inv in data.get('invites', []):
-        rows.append({
-            'id': inv.get('id'),
-            'created_at': inv.get('created_at'),
-            'created_by': inv.get('created_by'),
-            'used_at': inv.get('used_at'),
-            'used_by': inv.get('used_by'),
-            'status': 'used' if inv.get('used_at') else 'unused',
-        })
+        if isinstance(inv, dict):
+            rows.append(invite_public_row(inv))
     rows.sort(key=lambda x: x.get('created_at') or '', reverse=True)
     return jsonify({'invites': rows}), 200
 
