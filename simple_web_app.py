@@ -60,6 +60,22 @@ from auth_session_store import (
 )
 from user_store import close_connection as close_user_store_sqlite, init_user_store, load_users, mutate_users
 from app_time import china_now_iso, china_today
+from performance_store import (
+    PERFORMANCE_SHARE_MAX_TTL_SEC,
+    backend_sample_rate,
+    browser_sample_rate,
+    is_valid_performance_log_name,
+    list_performance_logs,
+    max_report_bytes,
+    max_report_events,
+    performance_enabled,
+    performance_log_dir,
+    sign_performance_log_name,
+    should_sample,
+    slow_request_threshold_ms,
+    verify_performance_share_signature,
+    write_performance_events,
+)
 
 try:
     from tts_piper import piper_runtime_ready, piper_synthesize_wav
@@ -243,6 +259,119 @@ _words_csv_by_key_cache_mtime: float = -1.0
 _merge_wordbank_rows_lock = threading.Lock()
 _merge_wordbank_rows_cache: Dict[str, Tuple[List[dict], Set[str]]] = {}
 _merge_wordbank_rows_cache_rev: Tuple[float, float] = (-1.0, -1.0)
+
+
+def _safe_request_path() -> str:
+    path = request.path or ""
+    if not path.startswith("/"):
+        path = "/" + path
+    return path[:240]
+
+
+def _safe_request_endpoint() -> str:
+    return str(request.endpoint or "")[:120]
+
+
+def _safe_user_agent() -> str:
+    return (request.headers.get("User-Agent") or "")[:300]
+
+
+def _safe_referrer_path() -> str:
+    raw = request.headers.get("Referer") or request.headers.get("Referrer") or ""
+    if not raw:
+        return ""
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(raw)
+        return (parts.path or "/")[:240]
+    except Exception:
+        return raw[:240]
+
+
+def _performance_user_context() -> dict:
+    out = {
+        "login_username": getattr(g, "login_username", None),
+        "effective_username": getattr(g, "effective_username", None),
+        "is_parent": getattr(g, "is_parent", None),
+    }
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def _record_performance_event(event: dict) -> None:
+    if not performance_enabled():
+        return
+    try:
+        write_performance_events(DATA_DIR, [event])
+    except Exception as exc:
+        logger.debug("写入性能采集日志失败: %s", exc)
+
+
+@app.before_request
+def _performance_before_request() -> None:
+    g.request_started_at = time()
+    rid = (request.headers.get("X-Request-ID") or "").strip()
+    g.request_id = rid[:80] if rid else uuid.uuid4().hex
+
+
+@app.after_request
+def _performance_after_request(response: Response) -> Response:
+    rid = getattr(g, "request_id", "")
+    if rid:
+        response.headers["X-Request-ID"] = rid
+
+    if not performance_enabled():
+        return response
+    path = _safe_request_path()
+    if path == "/api/performance/report" or path.startswith("/api/chat/stream"):
+        return response
+    started_at = getattr(g, "request_started_at", None)
+    if not isinstance(started_at, (int, float)):
+        return response
+    duration_ms = round((time() - started_at) * 1000.0, 1)
+    status = int(response.status_code or 0)
+    slow = duration_ms >= slow_request_threshold_ms()
+    failed = status >= 500
+    sampled = should_sample(backend_sample_rate())
+    if not (slow or failed or sampled):
+        return response
+
+    event = {
+        "source": "server",
+        "type": "http_request",
+        "request_id": rid,
+        "method": request.method,
+        "path": path,
+        "endpoint": _safe_request_endpoint(),
+        "status": status,
+        "duration_ms": duration_ms,
+        "slow": slow,
+        "content_length": response.content_length,
+        "remote_addr": _client_ip() if request else "",
+        "user_agent": _safe_user_agent(),
+        "referrer_path": _safe_referrer_path(),
+        "user": _performance_user_context(),
+    }
+    _record_performance_event(event)
+    return response
+
+
+@app.teardown_request
+def _performance_teardown_request(exc: Optional[BaseException]) -> None:
+    if exc is not None and performance_enabled():
+        event = {
+            "source": "server",
+            "type": "exception",
+            "request_id": getattr(g, "request_id", ""),
+            "method": request.method if request else "",
+            "path": _safe_request_path() if request else "",
+            "endpoint": _safe_request_endpoint() if request else "",
+            "duration_ms": round((time() - getattr(g, "request_started_at", time())) * 1000.0, 1),
+            "error_class": exc.__class__.__name__,
+            "error": str(exc)[:500],
+            "user": _performance_user_context(),
+        }
+        _record_performance_event(event)
 
 
 @contextmanager
@@ -1836,12 +1965,24 @@ def accumulate_valid_deepseek_v2_entries(
 
 # 登录/注册简单限流（按 IP，内存存储）
 _rate_buckets: Dict[str, List[float]] = defaultdict(list)
+_rate_buckets_lock = threading.Lock()
 _RATE_WINDOW_SEC = 60
 _RATE_MAX_LOGIN = 20
 _RATE_MAX_REGISTER = 10
 _RATE_MAX_ADMIN_LOGIN = 10
 _RATE_MAX_ADMIN_DELETE_USER = 8
 _RATE_MAX_CHAT_POST = 30
+_RATE_MAX_CHAT_GET = 240
+_RATE_MAX_CHAT_STREAM_TOKEN = 60
+_RATE_MAX_PERF_REPORT = 120
+_RATE_MAX_TTS_AUDIO = 90
+_RATE_MAX_WORDBANK_SEARCH = 180
+_RATE_MAX_ARTICLE_IMPORT = 20
+_RATE_MAX_OCR = 20
+_RATE_MAX_VOCAB_IMPORT = 12
+_RATE_MAX_IMPORT_JSON = 60
+_RATE_MAX_CHALLENGE_CREATE = 30
+_RATE_MAX_CHALLENGE_RESPOND = 60
 
 _CHAT_MENTION_RE = re.compile(r"@([a-zA-Z0-9_]{3,32})")
 
@@ -1863,12 +2004,13 @@ def _client_ip() -> str:
 
 def _rate_allow(bucket_key: str, max_events: int) -> bool:
     now = time()
-    window: List[float] = _rate_buckets[bucket_key]
-    window[:] = [t for t in window if now - t < _RATE_WINDOW_SEC]
-    if len(window) >= max_events:
-        return False
-    window.append(now)
-    return True
+    with _rate_buckets_lock:
+        window: List[float] = _rate_buckets[bucket_key]
+        window[:] = [t for t in window if now - t < _RATE_WINDOW_SEC]
+        if len(window) >= max_events:
+            return False
+        window.append(now)
+        return True
 
 
 def is_valid_username(username: str) -> bool:
@@ -2497,6 +2639,76 @@ def send_static(path):
         resp.cache_control.max_age = 86400
         resp.cache_control.public = True
     return resp
+
+
+@app.route('/api/performance/config', methods=['GET'])
+def performance_config():
+    """浏览器端性能采样配置。"""
+    return jsonify(
+        {
+            "enabled": performance_enabled(),
+            "sample_rate": browser_sample_rate(),
+            "slow_api_ms": slow_request_threshold_ms(),
+            "max_events": max_report_events(),
+        }
+    ), 200
+
+
+@app.route('/api/performance/report', methods=['POST'])
+def performance_report():
+    """接收浏览器端性能事件，写入本地 JSONL。"""
+    if not performance_enabled():
+        return jsonify({"ok": True, "stored": 0, "disabled": True}), 200
+    if not _rate_allow(f"perf:{_client_ip()}", _RATE_MAX_PERF_REPORT):
+        return jsonify({"error": "请求过于频繁，请稍后再试"}), 429
+
+    clen = request.content_length
+    if clen is not None and clen > max_report_bytes():
+        return jsonify({"error": "性能上报内容过大"}), 413
+    data = request.get_json(silent=True) or {}
+    raw_events = data.get("events")
+    if isinstance(raw_events, dict):
+        raw_events = [raw_events]
+    if not isinstance(raw_events, list):
+        return jsonify({"error": "events 须为数组"}), 400
+
+    limit = max_report_events()
+    events = []
+    login_username = None
+    effective_username = None
+    is_parent = None
+    auth_header = request.headers.get("Authorization") or ""
+    if auth_header.startswith("Bearer "):
+        login_username = verify_token(auth_header[7:].strip())
+        if login_username and is_user_enabled(login_username):
+            users = load_users()
+            urow = users.get(login_username)
+            if isinstance(urow, dict) and is_parent_user_record(urow):
+                child = (urow.get("child_username") or "").strip()
+                effective_username = child if child and is_valid_username(child) else None
+                is_parent = True
+            else:
+                effective_username = login_username
+                is_parent = False
+
+    for ev in raw_events[:limit]:
+        if not isinstance(ev, dict):
+            continue
+        row = dict(ev)
+        row["source"] = "browser"
+        row.setdefault("request_id", getattr(g, "request_id", ""))
+        row["remote_addr"] = _client_ip()
+        row["server_received_user_agent"] = _safe_user_agent()
+        if login_username:
+            row["user"] = {
+                "login_username": login_username,
+                "effective_username": effective_username,
+                "is_parent": is_parent,
+            }
+        events.append(row)
+    stored = write_performance_events(DATA_DIR, events)
+    return jsonify({"ok": True, "stored": stored}), 202
+
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
@@ -3141,6 +3353,8 @@ def api_challenges_list(username):
 @token_required
 @parent_forbidden
 def api_challenges_create(username):
+    if not _rate_allow(f"challenge_create:{username}", _RATE_MAX_CHALLENGE_CREATE):
+        return jsonify({'error': '发起挑战过于频繁，请稍后再试'}), 429
     data = request.get_json() or {}
     target = (data.get('target_username') or '').strip()
     if not is_valid_username(target):
@@ -3171,6 +3385,8 @@ def api_challenges_create(username):
 @token_required
 @parent_forbidden
 def api_challenges_respond(username, duel_id):
+    if not _rate_allow(f"challenge_respond:{username}", _RATE_MAX_CHALLENGE_RESPOND):
+        return jsonify({'error': 'PK 操作过于频繁，请稍后再试'}), 429
     data = request.get_json() or {}
     accept = bool(data.get('accept'))
     ok, msg, row = challenges_mod.respond_duel(DATA_DIR, duel_id, username, accept)
@@ -3477,6 +3693,8 @@ def tts_capabilities():
 @parent_forbidden
 def speak_text_audio(username):
     """使用 Piper 合成英文 WAV 并返回，供浏览器播放（远程可用）。"""
+    if not _rate_allow(f"tts_audio:{username}", _RATE_MAX_TTS_AUDIO):
+        return jsonify({'error': '朗读请求过于频繁，请稍后再试'}), 429
     try:
         data = request.get_json()
         if not data:
@@ -3524,6 +3742,8 @@ def _parse_import_json_body(request):
 @token_required
 def import_words_json(username):
     """家长粘贴学习数据格式的 JSON，合并到当前用户的待复习词库。"""
+    if not _rate_allow(f"import_json:{username}", _RATE_MAX_IMPORT_JSON):
+        return jsonify({'error': '导入过于频繁，请稍后再试'}), 429
     items, err = _parse_import_json_body(request)
     if err:
         return jsonify({'error': err}), 400
@@ -4367,6 +4587,8 @@ def search_wordbank_csv(username):
     - 未指定 ``heuristics`` 时：``per_surface=1``（课文学习逐词）默认开启启发式；否则默认关闭（导入页词库搜索）。
     - ``surface_first=1``（导入页「从词库搜索」）：英文词先仅用表面形与管理员映射匹配，未命中再启用 spaCy 原型匹配。
     """
+    if not _rate_allow(f"wordbank_search:{username}", _RATE_MAX_WORDBANK_SEARCH):
+        return jsonify({'error': '词库搜索过于频繁，请稍后再试'}), 429
     q = request.args.get('q', '').strip()
     level = request.args.get('level', '').strip()
     per_surface = request.args.get('per_surface', '').strip().lower() in ('1', 'true', 'yes')
@@ -4529,6 +4751,8 @@ def import_from_article(username):
     - VIP：默认 extract_mode=spacy；extract_mode=ai 仅当管理后台开启且请求携带有效管理员 token
     前端拿到词条列表后注入选框，让用户确认后再加入待复习。
     """
+    if not _rate_allow(f"article_import:{username}", _RATE_MAX_ARTICLE_IMPORT):
+        return jsonify({'error': '文章提取过于频繁，请稍后再试'}), 429
     data = request.get_json(silent=True) or {}
     text = str(data.get('text', '')).strip()
     if not text:
@@ -4698,6 +4922,8 @@ def _english_tokens_from_ocr_text(text: str) -> List[str]:
 @token_required
 def wordbank_ocr_extract(username):
     """上传图片，本地 Tesseract 识别英文并返回 raw_text 与词列表（不入库；供从图片导入流程使用）。"""
+    if not _rate_allow(f"ocr:{username}", _RATE_MAX_OCR):
+        return jsonify({'error': '图片识别过于频繁，请稍后再试'}), 429
     if not _ocr_stack_ready():
         return jsonify({
             'error': '服务器未启用图片识别：请安装 Pillow、pytesseract，并在系统安装 Tesseract（含 eng 语言包）',
@@ -4754,6 +4980,8 @@ def import_vocab_to_csv(username):
     - 仅当 **words_v2.json** 中尚无该英文键时调用 DeepSeek 生成并写入 v2；仅在旧 ``words.csv`` 中有仍会生成并写入 v2。已存在于 v2 则跳过生成。
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
+    if not _rate_allow(f"vocab_import:{username}", _RATE_MAX_VOCAB_IMPORT):
+        return jsonify({'error': '词汇导入过于频繁，请稍后再试'}), 429
     if not is_paid_user(username):
         return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
 
@@ -5283,6 +5511,90 @@ def admin_logout():
     tok = auth[7:].strip() if auth.startswith('Bearer ') else ''
     revoke_token(SESSION_KIND_ADMIN, tok)
     return jsonify({'message': '已退出'}), 200
+
+
+@app.route('/api/admin/performance/logs', methods=['GET'])
+@admin_required
+def admin_performance_logs():
+    """列出最近的性能采集 JSONL 文件。"""
+    limit = request.args.get("limit", 14, type=int) or 14
+    return jsonify(
+        {
+            "enabled": performance_enabled(),
+            "log_dir": str(performance_log_dir(DATA_DIR)),
+            "logs": list_performance_logs(DATA_DIR, limit=limit),
+        }
+    ), 200
+
+
+@app.route('/api/admin/performance/logs/<name>', methods=['GET'])
+@admin_required
+def admin_performance_log_download(name):
+    """下载单个性能采集 JSONL 文件。"""
+    if not is_valid_performance_log_name(name):
+        return jsonify({"error": "无效的日志文件名"}), 400
+    path = performance_log_dir(DATA_DIR) / name
+    if not path.is_file():
+        return jsonify({"error": "日志不存在"}), 404
+    return send_file(
+        path,
+        mimetype="application/x-ndjson",
+        as_attachment=True,
+        download_name=name,
+        max_age=0,
+    )
+
+
+@app.route('/api/admin/performance/logs/<name>/share-link', methods=['POST'])
+@admin_required
+def admin_performance_log_share_link(name):
+    """生成短期有效的公开性能日志下载链接。"""
+    if not is_valid_performance_log_name(name):
+        return jsonify({"error": "无效的日志文件名"}), 400
+    path = performance_log_dir(DATA_DIR) / name
+    if not path.is_file():
+        return jsonify({"error": "日志不存在"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        ttl = int(data.get("ttl_seconds") or 1800)
+    except (TypeError, ValueError):
+        ttl = 1800
+    ttl = max(60, min(PERFORMANCE_SHARE_MAX_TTL_SEC, ttl))
+    expires_at = int(time() + ttl)
+    sig = sign_performance_log_name(name, expires_at, app.secret_key)
+    url = request.host_url.rstrip("/") + f"/api/performance/logs/{name}?expires={expires_at}&sig={sig}"
+    return jsonify(
+        {
+            "url": url,
+            "name": name,
+            "expires_at": expires_at,
+            "ttl_seconds": ttl,
+        }
+    ), 201
+
+
+@app.route('/api/performance/logs/<name>', methods=['GET'])
+def performance_log_public_download(name):
+    """短期签名链接下载性能日志；不需要管理员 token。"""
+    if not is_valid_performance_log_name(name):
+        return jsonify({"error": "无效的日志文件名"}), 400
+    try:
+        expires_at = int(request.args.get("expires") or "0")
+    except (TypeError, ValueError):
+        expires_at = 0
+    sig = request.args.get("sig") or ""
+    if not verify_performance_share_signature(name, expires_at, sig, app.secret_key, int(time())):
+        return jsonify({"error": "链接无效或已过期"}), 403
+    path = performance_log_dir(DATA_DIR) / name
+    if not path.is_file():
+        return jsonify({"error": "日志不存在"}), 404
+    return send_file(
+        path,
+        mimetype="application/x-ndjson",
+        as_attachment=True,
+        download_name=name,
+        max_age=0,
+    )
 
 
 @app.route('/api/admin/users', methods=['GET'])
@@ -5961,6 +6273,8 @@ def _chat_extract_mentions(body: str, valid: Set[str]) -> List[str]:
 @token_required
 def api_chat_stream_token(username):
     """用登录 token 换取短期 SSE token；SSE URL 不再携带长期 bearer token。"""
+    if not _rate_allow(f"chat_stream_token:{username}", _RATE_MAX_CHAT_STREAM_TOKEN):
+        return jsonify({"error": "聊天连接过于频繁，请稍后再试"}), 429
     login = getattr(g, "login_username", username)
     return jsonify({
         "stream_token": create_chat_stream_token(login),
@@ -5999,6 +6313,8 @@ def _verify_chat_stream_auth() -> Optional[str]:
 @app.route("/api/chat/messages", methods=["GET"])
 @token_required
 def api_chat_messages_get(username):
+    if not _rate_allow(f"chat_get:{username}", _RATE_MAX_CHAT_GET):
+        return jsonify({"error": "聊天拉取过于频繁，请稍后再试"}), 429
     before_id = (request.args.get("before_id") or "").strip() or None
     after_id = (request.args.get("after_id") or "").strip() or None
     try:

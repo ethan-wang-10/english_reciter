@@ -11,9 +11,15 @@
     /** 侧栏折叠时用轮询代替 SSE，降低长连接与解析开销（毫秒） */
     let chatPollTimer = null;
     const CHAT_COLLAPSED_POLL_MS = 20000;
+    const CHAT_COLLAPSED_POLL_BACKOFF_MAX_MS = 120000;
+    let chatPollInFlight = false;
+    let chatPollBackoffMs = CHAT_COLLAPSED_POLL_MS;
+    let chatPollAbort = null;
+    let chatPollGeneration = 0;
     const chatSeenIds = new Set();
     let chatLoadingOlder = false;
     let chatHasMoreOlder = true;
+    let chatSendInFlight = false;
 
     /** 最新消息 id（用于 SSE 断线补拉；收起侧栏时 DOM 可能未更新） */
     let lastChatMessageId = null;
@@ -623,10 +629,17 @@
     }
 
     function stopChatPoll() {
+        chatPollGeneration++;
         if (chatPollTimer) {
-            clearInterval(chatPollTimer);
+            clearTimeout(chatPollTimer);
             chatPollTimer = null;
         }
+        if (chatPollAbort) {
+            chatPollAbort.abort();
+            chatPollAbort = null;
+        }
+        chatPollInFlight = false;
+        chatPollBackoffMs = CHAT_COLLAPSED_POLL_MS;
     }
 
     /**
@@ -634,14 +647,20 @@
      * 首次无游标时拉一页历史并视为已读，避免把旧消息算成未读。
      */
     async function pollChatOnce() {
+        if (chatPollInFlight) return;
         if (!token) return;
         if (isChatSidebarOpen()) return;
         const main = document.getElementById("main-page");
         if (!main || !main.classList.contains("active")) return;
+        const controller = new AbortController();
+        chatPollAbort = controller;
+        chatPollInFlight = true;
+        let ok = false;
         try {
             if (!lastChatMessageId) {
                 const r = await fetch(`${base}/chat/messages?limit=50`, {
                     headers: { Authorization: "Bearer " + token },
+                    signal: controller.signal,
                 });
                 if (!r.ok) return;
                 if (isChatSidebarOpen()) return;
@@ -651,11 +670,15 @@
                     if (m && m.id) chatSeenIds.add(m.id);
                 }
                 if (msgs.length) lastChatMessageId = msgs[msgs.length - 1].id;
+                ok = true;
                 return;
             }
             const r = await fetch(
                 `${base}/chat/messages?after_id=${encodeURIComponent(lastChatMessageId)}&limit=100`,
-                { headers: { Authorization: "Bearer " + token } }
+                {
+                    headers: { Authorization: "Bearer " + token },
+                    signal: controller.signal,
+                }
             );
             if (!r.ok) return;
             if (isChatSidebarOpen()) return;
@@ -663,7 +686,34 @@
             for (const m of data.messages || []) {
                 handleInboundChatMessage(m);
             }
-        } catch (_) {}
+            ok = true;
+        } catch (_) {
+        } finally {
+            if (chatPollAbort === controller) {
+                chatPollAbort = null;
+                chatPollInFlight = false;
+                chatPollBackoffMs = ok
+                    ? CHAT_COLLAPSED_POLL_MS
+                    : Math.min(chatPollBackoffMs * 2, CHAT_COLLAPSED_POLL_BACKOFF_MAX_MS);
+            }
+        }
+    }
+
+    function scheduleNextChatPoll(delayMs, generation) {
+        if (generation !== chatPollGeneration) return;
+        if (chatPollTimer) {
+            clearTimeout(chatPollTimer);
+            chatPollTimer = null;
+        }
+        if (!token) return;
+        if (isChatSidebarOpen()) return;
+        chatPollTimer = setTimeout(async () => {
+            chatPollTimer = null;
+            await pollChatOnce();
+            if (generation === chatPollGeneration) {
+                scheduleNextChatPoll(chatPollBackoffMs, generation);
+            }
+        }, delayMs);
     }
 
     function startChatPoll() {
@@ -672,8 +722,11 @@
         const main = document.getElementById("main-page");
         if (!main || !main.classList.contains("active")) return;
         if (isChatSidebarOpen()) return;
-        void pollChatOnce();
-        chatPollTimer = setInterval(() => void pollChatOnce(), CHAT_COLLAPSED_POLL_MS);
+        const generation = ++chatPollGeneration;
+        void (async () => {
+            await pollChatOnce();
+            scheduleNextChatPoll(chatPollBackoffMs, generation);
+        })();
     }
 
     async function fetchMissedThenReconnect() {
@@ -840,8 +893,10 @@
         const ta = document.getElementById("chat-input");
         const btn = document.getElementById("chat-send");
         if (!ta || !token) return;
+        if (chatSendInFlight) return;
         const body = (ta.value || "").trim();
         if (!body) return;
+        chatSendInFlight = true;
         if (btn) btn.disabled = true;
         try {
             const r = await fetch(`${base}/chat/messages`, {
@@ -867,6 +922,7 @@
         } catch (e) {
             showChatError(e.message || "网络错误");
         } finally {
+            chatSendInFlight = false;
             if (btn) btn.disabled = false;
         }
     }

@@ -7,6 +7,7 @@ let textbookReaderContext = null;
 const textbookWordCache = new Map();
 /** 词库无词条时：疑难词是否拦截（与 surface 对齐的小写 key） */
 const textbookTroubleBlockedCache = new Map();
+const textbookTroubleStatusInflight = new Map();
 /** 同一 lemma 正在进行的单次查词请求（与预取并行时去重） */
 const textbookLookupInflight = new Map();
 /** 本次会话内：隐式词形命中类型 plural / past / ing / contraction（用于气泡提示） */
@@ -597,7 +598,14 @@ async function textbookSubtextWhenMissingInWordbank(lemma, k, touchHint) {
         return sub;
     }
     try {
-        const ts = await apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(lemma)}`);
+        let p = textbookTroubleStatusInflight.get(k);
+        if (!p) {
+            p = apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(lemma)}`).finally(() => {
+                textbookTroubleStatusInflight.delete(k);
+            });
+            textbookTroubleStatusInflight.set(k, p);
+        }
+        const ts = await p;
         if (ts && ts.blocked) {
             sub = '词库暂无；该词已列入疑难词，请联系管理员配置映射';
             textbookTroubleBlockedCache.set(k, true);
