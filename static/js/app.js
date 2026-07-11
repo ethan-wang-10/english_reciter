@@ -1612,6 +1612,21 @@ function buildInviteRegistrationLink(baseUrl, rawCode) {
     return url.toString();
 }
 
+function inviteWebsiteUrl(baseUrl) {
+    let url;
+    try {
+        url = new URL(baseUrl || '/', window.location.origin);
+    } catch (_) {
+        url = new URL('/', window.location.origin);
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        url = new URL('/', window.location.origin);
+    }
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+}
+
 function captureInviteRegistrationFromUrl() {
     let url;
     try {
@@ -1971,7 +1986,7 @@ async function buildInviteCardImage({ code, registerUrl, inviterName, avatarUrl 
     ctx.stroke();
     ctx.fillStyle = '#1899d6';
     ctx.font = '800 26px "Plus Jakarta Sans", "Segoe UI", sans-serif';
-    ctx.fillText('打开链接注册', w / 2, 962);
+    ctx.fillText('打开网站注册', w / 2, 962);
     ctx.font = '700 22px "Plus Jakarta Sans", "Segoe UI", sans-serif';
     drawCenteredText(ctx, registerUrl || window.location.origin, w / 2, 996, 520, 28, 1);
 
@@ -1996,7 +2011,7 @@ async function selectInviteCodeForCard({ code, registerUrl }, flow = currentInvi
     const targetUrl = buildInviteRegistrationLink(registerUrl, normalizedCode);
     const card = await buildInviteCardImage({
         code: normalizedCode,
-        registerUrl: targetUrl,
+        registerUrl: inviteWebsiteUrl(registerUrl),
         inviterName: studentName,
         avatarUrl,
     });
