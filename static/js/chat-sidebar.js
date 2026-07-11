@@ -486,7 +486,7 @@
             '<img class="chat-msg-avatar-img" src="' +
             escapeHtml(url) +
             '" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.onerror=null;this.parentElement.classList.add(\'chat-msg-avatar--fallback\');this.removeAttribute(\'src\');" />' +
-            '<span class="chat-msg-avatar-ph" aria-hidden="true"><svg class="ui-icon"><use href="#icon-user-round"></use></svg></span>' +
+            '<span class="chat-msg-avatar-ph" aria-hidden="true">👤</span>' +
             "</div>"
         );
     }
@@ -928,6 +928,11 @@
     }
 
     function bind() {
+        document.getElementById("chat-side-trigger")?.addEventListener("click", () => void openChatSidebar());
+        document.getElementById("mobile-open-chat")?.addEventListener("click", () => {
+            if (typeof closeMobileMoreSheet === "function") closeMobileMoreSheet();
+            void openChatSidebar();
+        });
         document.getElementById("chat-sidebar-close")?.addEventListener("click", closeChatSidebar);
         document.getElementById("chat-sidebar-backdrop")?.addEventListener("click", closeChatSidebar);
         document.getElementById("chat-send")?.addEventListener("click", () => void sendChat());
@@ -1036,7 +1041,6 @@
 
     window.chatRoomEnsureSse = ensureChatSse;
     window.chatRoomOnLogout = onChatLogout;
-    window.chatRoomOpen = openChatSidebar;
 
     if (typeof token !== "undefined" && token && document.getElementById("main-page")?.classList.contains("active")) {
         ensureChatSse();

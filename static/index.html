@@ -3,135 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#58cc02">
+    <meta name="theme-color" content="#58CC02">
     <title>智能英语背诵系统</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260711-duo8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <!-- Rounded local icon sprite: functional controls stay consistent without a network dependency. -->
-    <svg class="ui-icon-sprite" width="0" height="0" aria-hidden="true" focusable="false">
-        <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.74v.5a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>
-        </symbol>
-        <symbol id="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.1 12s3.6-7 9.9-7 9.9 7 9.9 7-3.6 7-9.9 7-9.9-7-9.9-7z"/><circle cx="12" cy="12" r="3"/></symbol>
-        <symbol id="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 18 18"/><path d="M10.6 5.2A10.8 10.8 0 0 1 12 5c6.3 0 9.9 7 9.9 7a14.7 14.7 0 0 1-2 3"/><path d="M6.2 6.2C3.5 8 2.1 12 2.1 12s3.6 7 9.9 7a9.7 9.7 0 0 0 4.1-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
-        <symbol id="icon-message-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
-        <symbol id="icon-user-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></symbol>
-        <symbol id="icon-user-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
-        <symbol id="icon-clipboard-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="18" x="4" y="4" rx="2"/><path d="M9 4V2h6v2M9 13l2 2 4-4"/></symbol>
-        <symbol id="icon-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
-        <symbol id="icon-book-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z"/></symbol>
-        <symbol id="icon-notebook-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h4M2 10h4M2 14h4M2 18h4"/><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9.5 8h7M9.5 12H16M9.5 16h5"/></symbol>
-        <symbol id="icon-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></symbol>
-        <symbol id="icon-ellipsis" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
-        <symbol id="icon-file-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/></symbol>
-        <symbol id="icon-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14.7A7 7 0 0 1 5 8V3h14v5a7 7 0 0 1-5 6.7V18h4v3H6v-3h4z"/><path d="M5 5H2v2a4 4 0 0 0 4 4M19 5h3v2a4 4 0 0 1-4 4"/></symbol>
-        <symbol id="icon-circle-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.7 2.7L16.5 9"/></symbol>
-        <symbol id="icon-calendar-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v7"/><path d="M3 10v9a2 2 0 0 0 2 2h7"/><circle cx="17" cy="17" r="4"/><path d="M17 15v2l1.5 1"/></symbol>
-        <symbol id="icon-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5zM3 12l9 5 9-5M3 17l9 5 9-5"/></symbol>
-        <symbol id="icon-volume-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12"/></symbol>
-        <symbol id="icon-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c4.4 0 7-3.2 7-7.1 0-3.1-1.6-5.9-4.3-8.4.1 2.2-.8 3.8-2.2 4.9.2-3.7-1.6-6.7-4.2-9.4.1 3.5-3.3 5.5-3.3 9.8C5 17.5 8.1 22 12 22z"/><path d="M9.5 17.3c0 1.6 1.1 2.7 2.5 2.7s2.5-1.1 2.5-2.7c0-1.2-.6-2.2-1.7-3.2 0 1-.4 1.6-.9 2.1-.1-1.4-.8-2.5-1.7-3.5 0 1.4-.7 2.4-.7 4.6z"/></symbol>
-        <symbol id="icon-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M9 6v12M15 6v12"/></symbol>
-        <symbol id="icon-play" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="m8 5 11 7-11 7z"/></symbol>
-        <symbol id="icon-party" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 8-8M5.5 11.5l7 7L3 21zM15 4l1-2M19 8l3-1M17 12l2 2M11 6l-2-2"/><path d="M14 10c1.5-1.5.5-3.5 2-5s3.5-.5 5-2"/></symbol>
-        <symbol id="icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
-        <symbol id="icon-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></symbol>
-        <symbol id="icon-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
-        <symbol id="icon-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
-        <symbol id="icon-smile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></symbol>
-    </svg>
     <div id="app">
-        <button type="button" id="admin-gear-login" class="btn-gear btn-gear-fixed" title="管理员设置" aria-label="管理员设置"><svg class="ui-icon" aria-hidden="true"><use href="#icon-settings"></use></svg></button>
+        <button type="button" id="admin-gear-login" class="btn-gear btn-gear-fixed" title="管理员设置">⚙</button>
         <!-- 登录页面 -->
         <div id="login-page" class="page active">
             <div class="container">
                 <div class="login-box">
-                    <div class="login-brand-panel">
                     <div class="login-brand">
-                        <span class="login-mascot" aria-hidden="true">
-                            <span class="book-buddy book-buddy--hero">
-                                <span class="book-buddy-eye book-buddy-eye--left"></span>
-                                <span class="book-buddy-eye book-buddy-eye--right"></span>
-                                <span class="book-buddy-smile"></span>
-                                <span class="book-buddy-bookmark"></span>
-                                <span class="book-buddy-pencil"></span>
-                            </span>
-                        </span>
-                        <span class="login-sticker login-sticker--sound" aria-hidden="true"><svg class="ui-icon"><use href="#icon-volume-2"></use></svg></span>
-                        <span class="login-sticker login-sticker--trophy" aria-hidden="true"><svg class="ui-icon"><use href="#icon-trophy"></use></svg></span>
-                        <span class="login-sticker login-sticker--book" aria-hidden="true"><svg class="ui-icon"><use href="#icon-book-open"></use></svg></span>
+                        <span class="login-mascot" aria-hidden="true">📚</span>
                         <h1>智能英语背诵</h1>
                         <p class="login-tagline">每天一点点，单词变简单</p>
                     </div>
                     <p class="login-sub">基于艾宾浩斯遗忘曲线的单词学习</p>
-                    </div>
 
-                    <div class="login-form-panel">
-                    <div class="tabs" role="tablist" aria-label="账户操作">
-                        <button type="button" id="auth-tab-login" class="tab active" data-tab="login" role="tab"
-                            aria-selected="true" aria-controls="login-form">登录</button>
-                        <button type="button" id="auth-tab-register" class="tab" data-tab="register" role="tab"
-                            aria-selected="false" aria-controls="register-form">注册</button>
+                    <div class="tabs">
+                        <button class="tab active" data-tab="login">登录</button>
+                        <button class="tab" data-tab="register">注册</button>
                     </div>
                     
                     <!-- 登录表单 -->
-                    <form id="login-form" class="auth-form" aria-labelledby="auth-tab-login" aria-describedby="auth-error">
+                    <form id="login-form" class="auth-form">
                         <div class="form-group">
-                            <label for="login-username">用户名</label>
+                            <label>用户名</label>
                             <input type="text" id="login-username" required autocomplete="username">
                         </div>
                         <div class="form-group">
-                            <label for="login-password">密码</label>
+                            <label>密码</label>
                             <div class="password-input-wrap">
                                 <input type="password" id="login-password" required autocomplete="current-password">
-                                <button type="button" class="btn-toggle-pw" data-target="login-password" aria-label="显示密码">
-                                    <span class="pw-eye-icon" aria-hidden="true"><svg class="ui-icon pw-eye-open"><use href="#icon-eye"></use></svg><svg class="ui-icon pw-eye-closed"><use href="#icon-eye-off"></use></svg></span>
+                                <button type="button" class="btn-toggle-pw" data-target="login-password" aria-label="显示密码" tabindex="-1">
+                                    <span class="pw-eye-icon">👁</span>
                                 </button>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary" data-idle-label="登录">登录</button>
+                        <button type="submit" class="btn btn-primary">登录</button>
                     </form>
                     
                     <!-- 注册表单 -->
-                    <form id="register-form" class="auth-form" style="display: none;" aria-labelledby="auth-tab-register" aria-describedby="auth-error">
+                    <form id="register-form" class="auth-form" style="display: none;">
                         <div class="form-group">
-                            <label for="reg-username">用户名</label>
+                            <label>用户名</label>
                             <input type="text" id="reg-username" required minlength="3" maxlength="32"
                                 pattern="[a-zA-Z0-9_]{3,32}"
-                                title="3-32位字母、数字或下划线" autocomplete="username">
+                                title="3-32位字母、数字或下划线">
                         </div>
                         <div class="form-group">
-                            <label for="reg-email">邮箱（可选）</label>
-                            <input type="email" id="reg-email" autocomplete="email">
+                            <label>邮箱（可选）</label>
+                            <input type="email" id="reg-email">
                         </div>
                         <div class="form-group">
-                            <label for="reg-password">密码</label>
+                            <label>密码</label>
                             <div class="password-input-wrap">
                                 <input type="password" id="reg-password" required minlength="6" autocomplete="new-password">
-                                <button type="button" class="btn-toggle-pw" data-target="reg-password" aria-label="显示密码">
-                                    <span class="pw-eye-icon" aria-hidden="true"><svg class="ui-icon pw-eye-open"><use href="#icon-eye"></use></svg><svg class="ui-icon pw-eye-closed"><use href="#icon-eye-off"></use></svg></span>
+                                <button type="button" class="btn-toggle-pw" data-target="reg-password" aria-label="显示密码" tabindex="-1">
+                                    <span class="pw-eye-icon">👁</span>
                                 </button>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="reg-password-confirm">确认密码</label>
+                            <label>确认密码</label>
                             <div class="password-input-wrap">
                                 <input type="password" id="reg-password-confirm" required autocomplete="new-password">
-                                <button type="button" class="btn-toggle-pw" data-target="reg-password-confirm" aria-label="显示密码">
-                                    <span class="pw-eye-icon" aria-hidden="true"><svg class="ui-icon pw-eye-open"><use href="#icon-eye"></use></svg><svg class="ui-icon pw-eye-closed"><use href="#icon-eye-off"></use></svg></span>
+                                <button type="button" class="btn-toggle-pw" data-target="reg-password-confirm" aria-label="显示密码" tabindex="-1">
+                                    <span class="pw-eye-icon">👁</span>
                                 </button>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="reg-invite">邀请码</label>
+                            <label>邀请码</label>
                             <input type="text" id="reg-invite" required autocomplete="off"
                                 placeholder="由用户或管理员生成的一次性邀请码">
                         </div>
-                        <button type="submit" class="btn btn-primary" data-idle-label="注册">注册</button>
+                        <button type="submit" class="btn btn-primary">注册</button>
                     </form>
                     
-                    <div id="auth-error" class="error-message" role="alert" aria-live="assertive" aria-atomic="true"></div>
-                    </div>
+                    <div id="auth-error" class="error-message"></div>
                 </div>
             </div>
         </div>
@@ -140,24 +94,24 @@
         <div id="main-page" class="page">
             <nav class="navbar">
                 <div class="nav-brand" aria-label="智能英语背诵" title="智能英语背诵">
-                    <span class="logo" aria-hidden="true"><span class="book-buddy"><span class="book-buddy-eye book-buddy-eye--left"></span><span class="book-buddy-eye book-buddy-eye--right"></span><span class="book-buddy-smile"></span></span></span>
+                    <span class="logo" aria-hidden="true">📚</span>
                     <span class="brand-name"><span class="brand-name-full">智能英语背诵</span><span class="brand-name-short" aria-hidden="true">智能背诵</span><span class="brand-name-tiny" aria-hidden="true">背诵</span></span>
                 </div>
                 <div class="nav-menu nav-menu-desktop">
-                    <button class="nav-item active" data-page="review"><svg class="ui-icon nav-item-icon" aria-hidden="true"><use href="#icon-rotate-ccw"></use></svg><span>今日复习</span></button>
-                    <button class="nav-item" data-page="discover"><svg class="ui-icon nav-item-icon" aria-hidden="true"><use href="#icon-book-open"></use></svg><span>单词学习</span></button>
-                    <button class="nav-item" data-page="textbook"><svg class="ui-icon nav-item-icon" aria-hidden="true"><use href="#icon-notebook-text"></use></svg><span>课文学习</span></button>
-                    <button class="nav-item" data-page="progress"><svg class="ui-icon nav-item-icon" aria-hidden="true"><use href="#icon-chart"></use></svg><span>学习进度</span></button>
-                    <button class="nav-item" data-page="import"><svg class="ui-icon nav-item-icon" aria-hidden="true"><use href="#icon-file-up"></use></svg><span>导入单词</span></button>
-                    <button class="nav-item" data-page="mastered"><svg class="ui-icon nav-item-icon" aria-hidden="true"><use href="#icon-circle-check"></use></svg><span>已掌握</span></button>
-                    <button class="nav-item" data-page="leaderboard"><svg class="ui-icon nav-item-icon" aria-hidden="true"><use href="#icon-trophy"></use></svg><span>排行榜</span></button>
+                    <button class="nav-item active" data-page="review">今日复习</button>
+                    <button class="nav-item" data-page="discover">单词学习</button>
+                    <button class="nav-item" data-page="textbook">课文学习</button>
+                    <button class="nav-item" data-page="progress">学习进度</button>
+                    <button class="nav-item" data-page="import">导入单词</button>
+                    <button class="nav-item" data-page="mastered">已掌握</button>
+                    <button class="nav-item" data-page="leaderboard">排行榜</button>
                 </div>
                 <div class="nav-gamification" id="nav-gamification" title="学习积分与连续打卡">
                     <span class="ng-level" id="ng-level">Lv.1</span>
                     <button type="button" class="ng-xp" id="ng-xp" title="点击查看 XP 收支历史" aria-haspopup="dialog" aria-expanded="false" aria-controls="xp-history-modal">0 XP</button>
-                    <button type="button" class="ng-streak ng-streak--out js-makeup-checkin-open" id="ng-streak" title="当前连续有效打卡；中断后归零" aria-haspopup="dialog" aria-expanded="false" aria-controls="makeup-checkin-modal"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true"><svg class="ui-icon"><use href="#icon-flame"></use></svg></span><span class="ng-streak-num">0</span></button>
+                    <button type="button" class="ng-streak ng-streak--out js-makeup-checkin-open" id="ng-streak" title="当前连续有效打卡；中断后归零" aria-haspopup="dialog" aria-expanded="false" aria-controls="makeup-checkin-modal"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true">🔥</span><span class="ng-streak-num">0</span></button>
                     <span class="ng-checkin" id="ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
-                    <button type="button" class="ng-pk js-pk-hub-open" id="ng-pk-active" title="1v1 打卡 PK" aria-label="打开 1v1 打卡 PK">
+                    <button type="button" class="ng-pk js-pk-hub-open" id="ng-pk-active" title="1v1 打卡 PK">
                         <span class="ng-pk-label" aria-hidden="true">PK</span>
                         <span id="ng-pk-badge" class="ng-pk-badge" hidden aria-hidden="true"></span>
                     </button>
@@ -165,21 +119,26 @@
                 <div class="nav-user">
                     <div class="nav-user-gear-cluster">
                         <button type="button" id="chat-side-trigger" class="btn-gear btn-gear-chat" title="聊天室" aria-label="打开聊天室" aria-expanded="false" aria-controls="chat-sidebar">
-                            <svg class="ui-icon" aria-hidden="true"><use href="#icon-message-circle"></use></svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             <span id="chat-side-badge" class="btn-gear-badge" hidden aria-hidden="true"></span>
                         </button>
                         <button type="button" id="nav-invite-trigger" class="btn-gear btn-gear-invite js-invite-create" title="邀请好友" aria-label="生成邀请图片">
-                            <svg class="ui-icon" aria-hidden="true"><use href="#icon-user-plus"></use></svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M19 8v6"/>
+                                <path d="M22 11h-6"/>
+                            </svg>
                         </button>
-                        <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置" aria-label="用户设置"><svg class="ui-icon" aria-hidden="true"><use href="#icon-settings"></use></svg></button>
+                        <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
                     </div>
                     <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
                         <img id="nav-user-avatar-img" class="nav-user-avatar-img" alt="" width="32" height="32" loading="lazy" hidden />
-                        <span id="nav-user-avatar-ph" class="nav-user-avatar-ph" aria-hidden="true"><svg class="ui-icon"><use href="#icon-user-round"></use></svg></span>
+                        <span id="nav-user-avatar-ph" class="nav-user-avatar-ph" aria-hidden="true">👤</span>
                     </span>
                     <div class="nav-user-summary-wrap" id="nav-user-summary-wrap">
                         <button type="button" class="username-inline" id="username-display" title="点击查看今日小结" aria-expanded="false" aria-haspopup="dialog" aria-controls="daily-summary-popover"></button>
-                        <button type="button" class="btn-daily-summary-mobile" id="daily-summary-mobile-btn" title="今日小结" aria-label="今日小结" aria-expanded="false" aria-haspopup="dialog" aria-controls="daily-summary-popover"><svg class="ui-icon" aria-hidden="true"><use href="#icon-clipboard-check"></use></svg></button>
+                        <button type="button" class="btn-daily-summary-mobile" id="daily-summary-mobile-btn" title="今日小结" aria-label="今日小结" aria-expanded="false" aria-haspopup="dialog" aria-controls="daily-summary-popover">📋</button>
                         <div id="daily-summary-popover" class="daily-summary-popover" role="dialog" aria-modal="false" aria-labelledby="daily-summary-title" hidden>
                             <div class="daily-summary-popover-inner">
                                 <h3 id="daily-summary-title" class="daily-summary-title">今日小结</h3>
@@ -192,35 +151,35 @@
             </nav>
 
             <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="主导航">
-                <button type="button" class="mobile-tab active" data-page="review"><svg class="ui-icon mobile-tab-icon" aria-hidden="true"><use href="#icon-rotate-ccw"></use></svg><span>今日复习</span></button>
-                <button type="button" class="mobile-tab" data-page="discover"><svg class="ui-icon mobile-tab-icon" aria-hidden="true"><use href="#icon-book-open"></use></svg><span>学单词</span></button>
-                <button type="button" class="mobile-tab" data-page="textbook"><svg class="ui-icon mobile-tab-icon" aria-hidden="true"><use href="#icon-notebook-text"></use></svg><span>课文</span></button>
-                <button type="button" class="mobile-tab" data-page="progress"><svg class="ui-icon mobile-tab-icon" aria-hidden="true"><use href="#icon-chart"></use></svg><span>进度</span></button>
-                <button type="button" class="mobile-tab mobile-tab-more" id="mobile-more-btn" aria-expanded="false" aria-controls="mobile-more-sheet"><svg class="ui-icon mobile-tab-icon" aria-hidden="true"><use href="#icon-ellipsis"></use></svg><span>更多</span></button>
+                <button type="button" class="mobile-tab active" data-page="review">今日复习</button>
+                <button type="button" class="mobile-tab" data-page="import">导入</button>
+                <button type="button" class="mobile-tab" data-page="leaderboard">排行</button>
+                <button type="button" class="mobile-tab mobile-tab-more" id="mobile-more-btn" aria-expanded="false" aria-controls="mobile-more-sheet">更多</button>
             </nav>
             <div id="mobile-more-sheet" class="mobile-more-sheet" aria-hidden="true">
                 <div class="mobile-more-backdrop" id="mobile-more-backdrop"></div>
                 <div class="mobile-more-panel" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
                     <div class="mobile-more-panel-head">
                         <h3 id="mobile-more-title" class="mobile-more-title">更多</h3>
-                        <button type="button" class="mobile-more-close" id="mobile-more-close" aria-label="关闭"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+                        <button type="button" class="mobile-more-close" id="mobile-more-close" aria-label="关闭">×</button>
                     </div>
                     <div class="mobile-more-gamification" id="mobile-more-gamification" title="学习积分与连续打卡">
                         <span class="ng-level" id="mobile-ng-level">Lv.1</span>
                         <button type="button" class="ng-xp" id="mobile-ng-xp" title="点击查看 XP 收支历史" aria-haspopup="dialog" aria-expanded="false" aria-controls="xp-history-modal">0 XP</button>
-                        <button type="button" class="ng-streak ng-streak--out js-makeup-checkin-open" id="mobile-ng-streak" title="当前连续有效打卡；中断后归零" aria-haspopup="dialog" aria-expanded="false" aria-controls="makeup-checkin-modal"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true"><svg class="ui-icon"><use href="#icon-flame"></use></svg></span><span class="ng-streak-num">0</span></button>
+                        <button type="button" class="ng-streak ng-streak--out js-makeup-checkin-open" id="mobile-ng-streak" title="当前连续有效打卡；中断后归零" aria-haspopup="dialog" aria-expanded="false" aria-controls="makeup-checkin-modal"><span class="ng-streak-flame ng-streak-flame--out" aria-hidden="true">🔥</span><span class="ng-streak-num">0</span></button>
                         <span class="ng-checkin" id="mobile-ng-checkin" title="今日答对词数 / 有效打卡所需">打卡 0/5</span>
-                        <button type="button" class="ng-pk js-pk-hub-open" id="mobile-ng-pk-active" title="1v1 打卡 PK" aria-label="打开 1v1 打卡 PK">
+                        <button type="button" class="ng-pk js-pk-hub-open" id="mobile-ng-pk-active" title="1v1 打卡 PK">
                             <span class="ng-pk-label" aria-hidden="true">PK</span>
                             <span id="mobile-ng-pk-badge" class="ng-pk-badge" hidden aria-hidden="true"></span>
                         </button>
                     </div>
-                    <button type="button" class="mobile-more-link" data-page="import"><svg class="ui-icon mobile-more-link-icon ui-icon--blue" aria-hidden="true"><use href="#icon-file-up"></use></svg><span>导入单词</span></button>
-                    <button type="button" class="mobile-more-link" data-page="leaderboard"><svg class="ui-icon mobile-more-link-icon ui-icon--yellow" aria-hidden="true"><use href="#icon-trophy"></use></svg><span>排行榜</span></button>
-                    <button type="button" class="mobile-more-link" data-page="mastered"><svg class="ui-icon mobile-more-link-icon ui-icon--green" aria-hidden="true"><use href="#icon-circle-check"></use></svg><span>已掌握</span></button>
-                    <button type="button" class="mobile-more-link js-invite-create" id="mobile-open-invite"><svg class="ui-icon mobile-more-link-icon ui-icon--purple" aria-hidden="true"><use href="#icon-user-plus"></use></svg><span>邀请好友</span></button>
-                    <button type="button" class="mobile-more-link" id="mobile-open-settings"><svg class="ui-icon mobile-more-link-icon ui-icon--orange" aria-hidden="true"><use href="#icon-settings"></use></svg><span>用户设置</span></button>
-                    <button type="button" class="mobile-more-link" id="mobile-open-chat"><svg class="ui-icon mobile-more-link-icon ui-icon--blue" aria-hidden="true"><use href="#icon-message-circle"></use></svg><span>聊天室</span><span id="mobile-chat-badge" class="mobile-chat-badge" hidden aria-hidden="true"></span></button>
+                    <button type="button" class="mobile-more-link" data-page="discover">单词学习</button>
+                    <button type="button" class="mobile-more-link" data-page="textbook">课文学习</button>
+                    <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
+                    <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
+                    <button type="button" class="mobile-more-link js-invite-create" id="mobile-open-invite">邀请好友</button>
+                    <button type="button" class="mobile-more-link" id="mobile-open-settings">用户设置</button>
+                    <button type="button" class="mobile-more-link" id="mobile-open-chat">聊天室<span id="mobile-chat-badge" class="mobile-chat-badge" hidden aria-hidden="true"></span></button>
                 </div>
             </div>
 
@@ -230,22 +189,22 @@
             <div id="review-section" class="section active">
                 <div class="container">
                     <div class="stats-grid">
-                        <div class="stat-card stat-card--blue">
-                            <div class="stat-icon stat-icon--blue" aria-hidden="true"><svg class="ui-icon"><use href="#icon-calendar-clock"></use></svg></div>
+                        <div class="stat-card">
+                            <div class="stat-icon">📝</div>
                             <div class="stat-content">
                                 <div class="stat-label">今日待复习</div>
                                 <div class="stat-value" id="review-count">0</div>
                             </div>
                         </div>
-                        <div class="stat-card stat-card--green">
-                            <div class="stat-icon stat-icon--green" aria-hidden="true"><svg class="ui-icon"><use href="#icon-circle-check"></use></svg></div>
+                        <div class="stat-card">
+                            <div class="stat-icon">✅</div>
                             <div class="stat-content">
                                 <div class="stat-label">已掌握</div>
                                 <div class="stat-value" id="mastered-count">0</div>
                             </div>
                         </div>
-                        <div class="stat-card stat-card--yellow">
-                            <div class="stat-icon stat-icon--yellow" aria-hidden="true"><svg class="ui-icon"><use href="#icon-layers"></use></svg></div>
+                        <div class="stat-card">
+                            <div class="stat-icon">📊</div>
                             <div class="stat-content">
                                 <div class="stat-label">当前轮次</div>
                                 <div class="stat-value" id="round-count">0</div>
@@ -280,7 +239,7 @@
                                 <div class="word-chinese" id="current-word-chinese">苹果</div>
                                 <div class="word-example-container">
                                     <div id="current-word-example" class="review-example-root">This is an example.</div>
-                                    <button id="speak-example-btn" class="btn-speak" title="朗读例句" aria-label="朗读例句"><svg class="ui-icon" aria-hidden="true"><use href="#icon-volume-2"></use></svg></button>
+                                    <button id="speak-example-btn" class="btn-speak" title="朗读例句">🔊</button>
                                 </div>
                                 </div>
                                 <div class="word-input">
@@ -291,33 +250,14 @@
                                         <div id="underline-input" class="underline-input" tabindex="-1" aria-hidden="true"></div>
                                     </div>
                                     <button id="submit-answer" class="btn btn-primary">提交</button>
-                                    <button type="button" id="next-review-word" class="btn btn-secondary" hidden>下一词</button>
                                 </div>
-                                <div class="word-message" id="word-message" role="status" aria-live="polite" aria-atomic="true">
-                                    <span class="review-feedback-buddy" aria-hidden="true">
-                                        <span class="book-buddy book-buddy--feedback">
-                                            <span class="book-buddy-eye book-buddy-eye--left"></span>
-                                            <span class="book-buddy-eye book-buddy-eye--right"></span>
-                                            <span class="book-buddy-smile"></span>
-                                            <span class="book-buddy-bookmark"></span>
-                                        </span>
-                                    </span>
-                                    <span class="word-message-copy" id="word-message-copy"></span>
-                                </div>
+                                <div class="word-message" id="word-message"></div>
                                 <div class="word-message-extra" id="word-message-extra" aria-live="polite"></div>
                             </div>
                         </div>
                         
-                        <div id="review-complete" class="review-complete" data-state="complete" style="display: none;">
-                            <div class="review-mascot-scene" aria-hidden="true">
-                                <span class="book-buddy book-buddy--review">
-                                    <span class="book-buddy-eye book-buddy-eye--left"></span>
-                                    <span class="book-buddy-eye book-buddy-eye--right"></span>
-                                    <span class="book-buddy-smile"></span>
-                                    <span class="book-buddy-bookmark"></span>
-                                </span>
-                                <span class="complete-icon icon-sticker icon-sticker--yellow"><svg class="ui-icon"><use id="review-mascot-icon-use" href="#icon-party"></use></svg></span>
-                            </div>
+                        <div id="review-complete" class="review-complete" style="display: none;">
+                            <div class="complete-icon">🎉</div>
                             <h2 id="review-complete-title">今日复习完成！</h2>
                             <p id="review-complete-desc">你已经完成了今天的复习任务</p>
                             <div id="review-session-summary" class="review-session-summary" hidden></div>
@@ -439,7 +379,6 @@
                                         <input type="checkbox" id="import-article-select-all-cb" />
                                         <span>全选</span>
                                     </label>
-                                    <button type="button" id="import-article-back-edit" class="import-article-back-edit">返回编辑</button>
                                 </div>
                                 <div id="import-article-pick" class="import-article-pick" role="group" aria-label="选择要导入的词"></div>
                             </div>
@@ -563,9 +502,9 @@
                     <div id="discovery-root" class="discovery-root" style="display: none;">
                         <div id="discovery-card-wrap" class="discovery-card-wrap"></div>
                         <div class="discovery-toolbar discovery-bottom-nav">
-                            <button type="button" id="discovery-prev" class="btn btn-secondary discovery-nav-btn"><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-left"></use></svg><span>上一词</span></button>
+                            <button type="button" id="discovery-prev" class="btn btn-secondary discovery-nav-btn">← 上一词</button>
                             <span id="discovery-counter" class="discovery-counter" aria-live="polite"></span>
-                            <button type="button" id="discovery-next" class="btn btn-secondary discovery-nav-btn"><span>下一词</span><svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-right"></use></svg></button>
+                            <button type="button" id="discovery-next" class="btn btn-secondary discovery-nav-btn">下一词 →</button>
                         </div>
                     </div>
                 </div>
@@ -657,14 +596,14 @@
             <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
                 <div class="settings-panel-head">
                     <h2 id="settings-title">用户设置</h2>
-                    <button type="button" class="settings-close" id="settings-close" aria-label="关闭"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+                    <button type="button" class="settings-close" id="settings-close" aria-label="关闭">×</button>
                 </div>
                 <div class="settings-panel-body" id="settings-panel-body">
                     <div id="settings-pending-words-block" class="settings-block">
                         <h3 class="settings-subtitle">待复习词汇</h3>
                         <button type="button" id="settings-pending-words-toggle" class="settings-pending-words-toggle"
                             aria-expanded="false" aria-controls="settings-pending-words-panel">
-                            <svg class="ui-icon settings-pending-words-chevron" aria-hidden="true"><use href="#icon-chevron-right"></use></svg>
+                            <span class="settings-pending-words-chevron" aria-hidden="true">▶</span>
                             <span id="settings-pending-words-toggle-text" class="settings-pending-words-toggle-text">点击展开：查看列表并管理待复习单词</span>
                         </button>
                         <div id="settings-pending-words-panel" class="settings-pending-words-panel" hidden>
@@ -689,7 +628,7 @@
                         <p class="settings-hint settings-avatar-upload-hint">选择图片后可在圆框内拖动、缩放；服务器只保留一张 WebP 头像。</p>
                         <div class="settings-avatar-row">
                             <img id="settings-avatar-preview" class="settings-avatar-preview" alt="" width="72" height="72" hidden />
-                            <span id="settings-avatar-placeholder" class="settings-avatar-placeholder" aria-hidden="true"><svg class="ui-icon"><use href="#icon-user-round"></use></svg></span>
+                            <span id="settings-avatar-placeholder" class="settings-avatar-placeholder" aria-hidden="true">👤</span>
                             <div class="settings-avatar-actions">
                                 <input type="file" id="settings-avatar-input" accept="image/jpeg,image/png,image/webp" class="settings-avatar-input" />
                                 <label for="settings-avatar-input" class="btn btn-secondary settings-avatar-label">选择图片</label>
@@ -751,7 +690,7 @@
             <div class="makeup-checkin-card" role="dialog" aria-modal="true" aria-labelledby="makeup-checkin-title">
                 <div class="makeup-checkin-card-head">
                     <h3 id="makeup-checkin-title">连续打卡补救</h3>
-                    <button type="button" class="makeup-checkin-close" id="makeup-checkin-close" aria-label="关闭"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+                    <button type="button" class="makeup-checkin-close" id="makeup-checkin-close" aria-label="关闭">×</button>
                 </div>
                 <div class="makeup-checkin-body">
                     <p id="makeup-checkin-status" class="makeup-checkin-status">加载中…</p>
@@ -770,7 +709,7 @@
             <div class="pk-invite-card pk-hub-card" role="dialog" aria-modal="true" aria-labelledby="pk-hub-title">
                 <div class="pk-invite-card-head">
                     <h3 id="pk-hub-title">1v1 打卡 PK</h3>
-                    <button type="button" class="pk-invite-close" id="pk-hub-close" aria-label="关闭"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+                    <button type="button" class="pk-invite-close" id="pk-hub-close" aria-label="关闭">×</button>
                 </div>
                 <div id="pk-hub-body" class="pk-invite-body pk-hub-body">
                     <p id="pk-hub-loading" class="pk-invite-loading" hidden>加载中…</p>
@@ -824,7 +763,7 @@
             <div class="invite-card-dialog" role="dialog" aria-modal="true" aria-labelledby="invite-card-title">
                 <div class="invite-card-head">
                     <h3 id="invite-card-title">邀请图片</h3>
-                    <button type="button" class="invite-card-close" id="invite-card-close" aria-label="关闭"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+                    <button type="button" class="invite-card-close" id="invite-card-close" aria-label="关闭">×</button>
                 </div>
                 <img id="invite-card-preview" class="invite-card-preview" alt="邀请图片预览" />
                 <div class="invite-card-actions">
@@ -845,7 +784,7 @@
                         <p class="xp-history-kicker">最近 2 个月</p>
                         <h3 id="xp-history-title">XP 收支历史</h3>
                     </div>
-                    <button type="button" class="xp-history-close" id="xp-history-close" aria-label="关闭"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+                    <button type="button" class="xp-history-close" id="xp-history-close" aria-label="关闭">&times;</button>
                 </div>
                 <div id="xp-history-body" class="xp-history-body">
                     <p class="xp-history-loading">加载中…</p>
@@ -870,7 +809,7 @@
             <div class="admin-panel">
                 <div class="admin-panel-head">
                     <h2 id="admin-panel-title">管理后台</h2>
-                    <button type="button" class="admin-close" id="admin-close" aria-label="关闭"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+                    <button type="button" class="admin-close" id="admin-close" aria-label="关闭">&times;</button>
                 </div>
                 <div id="admin-notice" class="admin-notice" style="display: none;"></div>
 
@@ -1095,7 +1034,7 @@
         <aside id="chat-sidebar" class="chat-sidebar" aria-label="聊天室" aria-hidden="true">
             <div class="chat-sidebar-head">
                 <h2 class="chat-sidebar-title">大厅</h2>
-                <button type="button" id="chat-sidebar-close" class="chat-sidebar-close" aria-label="关闭聊天室"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+                <button type="button" id="chat-sidebar-close" class="chat-sidebar-close" aria-label="关闭聊天室">×</button>
             </div>
             <div id="chat-log" class="chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
             <div class="chat-compose">
@@ -1105,7 +1044,7 @@
                     <textarea id="chat-input" class="chat-input" rows="2" maxlength="2000" placeholder="说点什么… 输入 @ 选择用户" autocomplete="off"></textarea>
                 </div>
                 <div class="chat-compose-actions">
-                    <button type="button" id="chat-emoji-btn" class="chat-emoji-btn" title="表情" aria-label="插入表情" aria-expanded="false" aria-controls="chat-emoji-panel"><svg class="ui-icon" aria-hidden="true"><use href="#icon-smile"></use></svg></button>
+                    <button type="button" id="chat-emoji-btn" class="chat-emoji-btn" title="表情" aria-label="插入表情" aria-expanded="false" aria-controls="chat-emoji-panel">😊</button>
                     <button type="button" id="chat-send" class="btn btn-primary chat-send">发送</button>
                 </div>
             </div>
@@ -1113,7 +1052,9 @@
     </div>
     
     <script src="/static/js/performance.js" defer></script>
-    <script src="/static/js/app.js?v=20260711-duo8" defer></script>
+    <script src="/static/js/app.js" defer></script>
+    <script src="/static/js/chat-sidebar.js" defer></script>
+    <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>
 </body>
 </html>

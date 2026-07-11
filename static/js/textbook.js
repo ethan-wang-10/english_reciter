@@ -25,11 +25,13 @@ const textbookNlpFreeExhausted = new Set();
 // ----- 全文朗读（逐句、高亮；暂停/继续/从头/退出） -----
 /** 图标栏内 SVG（currentColor 随主题） */
 const TB_FR_SVG = {
-    pause: '<svg class="tb-fr-svg ui-icon" aria-hidden="true"><use href="#icon-pause"></use></svg>',
-    play: '<svg class="tb-fr-svg ui-icon" aria-hidden="true"><use href="#icon-play"></use></svg>',
-    restart: '<svg class="tb-fr-svg ui-icon" aria-hidden="true"><use href="#icon-rotate-ccw"></use></svg>',
-    exit: '<svg class="tb-fr-svg ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg>',
-    volume: '<svg class="ui-icon" aria-hidden="true"><use href="#icon-volume-2"></use></svg>',
+    pause:
+        '<svg class="tb-fr-svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 5h4v14H6V5zm8 0h4v14h-4V5z"/></svg>',
+    play: '<svg class="tb-fr-svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>',
+    restart:
+        '<svg class="tb-fr-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 3v5h5"/></svg>',
+    exit:
+        '<svg class="tb-fr-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>',
 };
 
 /** @type {number} */
@@ -961,7 +963,7 @@ function renderTextbookReader(data) {
             return (
                 `<div class="textbook-line" data-line-index="${idx}">` +
                 `<div class="textbook-line-row">` +
-                `<button type="button" class="btn-speak textbook-speak-line" data-idx="${idx}" title="朗读本句" aria-label="朗读句子">${TB_FR_SVG.volume}</button>` +
+                `<button type="button" class="btn-speak textbook-speak-line" data-idx="${idx}" title="朗读本句" aria-label="朗读句子">🔊</button>` +
                 `<div class="textbook-en-line">${renderTextbookEnglishTokens(en, idx)}</div>` +
                 `</div>` +
                 `<div class="textbook-zh-wrap">` +
