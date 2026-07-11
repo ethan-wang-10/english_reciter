@@ -1676,9 +1676,9 @@ function renderInviteUnusedList(payload, statusMessage = '') {
     if (!list || !count || !status) return;
 
     inviteUnusedPayload = payload && typeof payload === 'object' ? payload : { invites: [] };
-    const rows = Array.isArray(inviteUnusedPayload.invites) ? inviteUnusedPayload.invites : [];
-    const selectable = rows.filter((row) => row && row.selectable && row.invite_code);
-    const unavailable = rows.length - selectable.length;
+    const rows = Array.isArray(inviteUnusedPayload.invites)
+        ? inviteUnusedPayload.invites.filter((row) => row && row.selectable && row.invite_code)
+        : [];
     inviteUnusedById.clear();
     list.replaceChildren();
 
@@ -1689,45 +1689,29 @@ function renderInviteUnusedList(payload, statusMessage = '') {
         button.type = 'button';
         button.className = 'invite-card-unused-item';
         button.dataset.inviteId = id;
-        button.disabled = inviteCreateInFlight || !row.selectable || !row.invite_code;
+        button.disabled = inviteCreateInFlight;
         const isCurrent = !!row.invite_code && row.invite_code === currentInviteCard.code;
-        const unavailableItem = !row.selectable || !row.invite_code;
         button.setAttribute('aria-pressed', isCurrent ? 'true' : 'false');
-        button.setAttribute(
-            'aria-label',
-            unavailableItem
-                ? `历史邀请码，创建于 ${formatInviteCreatedAt(row.created_at)}，无法重新显示`
-                : `选择邀请码 ${row.invite_code}`,
-        );
+        button.setAttribute('aria-label', `选择邀请码 ${row.invite_code}`);
 
         const code = document.createElement('strong');
         code.className = 'invite-card-unused-code';
-        const decryptFailed = row.unavailable_reason === 'decrypt_failed';
-        code.textContent = unavailableItem
-            ? decryptFailed ? '邀请码暂时无法解密' : '历史邀请码不可恢复'
-            : String(row.invite_code);
+        code.textContent = String(row.invite_code);
         const created = document.createElement('span');
         created.className = 'invite-card-unused-time';
         created.textContent = formatInviteCreatedAt(row.created_at);
         const mark = document.createElement('em');
         mark.className = 'invite-card-unused-mark';
-        mark.textContent = isCurrent
-            ? '当前'
-            : unavailableItem ? decryptFailed ? '暂不可用' : '需原图片' : '选择';
+        mark.textContent = isCurrent ? '当前' : '选择';
         button.append(code, created, mark);
         list.appendChild(button);
     });
 
-    count.textContent = selectable.length > 0 ? `可选择 ${selectable.length} 个` : '暂无可选择邀请码';
+    count.textContent = rows.length > 0 ? `${rows.length} 个可用` : '暂无可用记录';
     if (statusMessage) {
         status.textContent = statusMessage;
-    } else if (unavailable > 0) {
-        const decryptFailures = rows.filter((row) => row && row.unavailable_reason === 'decrypt_failed').length;
-        status.textContent = decryptFailures > 0
-            ? `有 ${decryptFailures} 个邀请码暂时无法解密，请联系管理员检查加密密钥。`
-            : `另有 ${unavailable} 个旧邀请码未保存明文，请使用当时保存的邀请图片。`;
     } else if (!rows.length) {
-        status.textContent = '暂无未使用邀请码。';
+        status.textContent = '暂无可选择的历史邀请码。';
     } else {
         status.textContent = '';
     }
@@ -2007,6 +1991,7 @@ function closeInviteCardModal() {
 
 function showInviteCardModal(payload) {
     const modal = document.getElementById('invite-card-modal');
+    const dialog = modal?.querySelector('.invite-card-dialog');
     const img = document.getElementById('invite-card-preview');
     const dl = document.getElementById('invite-card-download');
     const msg = document.getElementById('invite-card-message');
@@ -2025,6 +2010,7 @@ function showInviteCardModal(payload) {
     if (msg) msg.textContent = '';
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
+    if (dialog) dialog.scrollTop = 0;
     syncInviteModalActions();
 }
 

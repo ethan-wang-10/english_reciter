@@ -4636,7 +4636,7 @@ button.import-article-chip--selected:hover {
     max-height: min(760px, calc(100dvh - 32px));
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: 16px;
@@ -4676,8 +4676,9 @@ button.import-article-chip--selected:hover {
 }
 
 .invite-card-preview {
+    flex: 0 0 auto;
     width: 100%;
-    min-height: 0;
+    height: auto;
     max-height: min(58vh, 540px);
     object-fit: contain;
     border-radius: var(--radius-md);
@@ -4718,8 +4719,13 @@ button.import-article-chip--selected:hover {
     text-align: center;
 }
 
+.invite-card-message:empty,
+.invite-card-unused-status:empty {
+    display: none;
+}
+
 .invite-card-unused {
-    padding-top: 12px;
+    padding-top: 8px;
     border-top: 1px solid var(--border);
 }
 
@@ -4727,22 +4733,29 @@ button.import-article-chip--selected:hover {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 8px;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.invite-card-unused-head > div {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
 }
 
 .invite-card-unused-head h4 {
     margin: 0;
     color: var(--text-primary);
-    font-size: 0.96rem;
+    font-size: 0.84rem;
     font-weight: 800;
 }
 
 .invite-card-unused-count {
-    display: block;
-    margin-top: 2px;
+    display: inline;
+    margin: 0;
     color: var(--text-secondary);
-    font-size: 0.76rem;
+    font-size: 0.68rem;
     font-weight: 700;
 }
 
@@ -4750,24 +4763,24 @@ button.import-article-chip--selected:hover {
     flex: 0 0 auto;
     width: auto;
     min-width: 0;
-    padding: 8px 10px;
-    font-size: 0.78rem;
+    padding: 6px 8px;
+    font-size: 0.7rem;
 }
 
 .invite-card-unused-list {
     display: grid;
-    gap: 7px;
+    gap: 4px;
 }
 
 .invite-card-unused-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: max-content minmax(0, 1fr) auto;
     align-items: center;
-    gap: 4px 10px;
+    gap: 6px;
     width: 100%;
-    min-height: 48px;
-    padding: 8px 10px;
-    border: 2px solid var(--border);
+    min-height: 38px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text-primary);
@@ -4785,7 +4798,7 @@ button.import-article-chip--selected:hover {
 .invite-card-unused-item[aria-pressed='true'] {
     border-color: var(--primary-color);
     background: var(--primary-light);
-    box-shadow: inset 4px 0 0 var(--primary-color);
+    box-shadow: inset 3px 0 0 var(--primary-color);
 }
 
 .invite-card-unused-item:disabled {
@@ -4797,32 +4810,36 @@ button.import-article-chip--selected:hover {
     min-width: 0;
     color: var(--primary-dark);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.98rem;
+    font-size: 0.82rem;
     font-weight: 900;
     letter-spacing: 0;
     overflow-wrap: anywhere;
 }
 
 .invite-card-unused-time {
-    grid-column: 1;
+    grid-column: 2;
+    min-width: 0;
     color: var(--text-secondary);
-    font-size: 0.72rem;
+    font-size: 0.64rem;
     font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .invite-card-unused-mark {
-    grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-column: 3;
+    grid-row: 1;
     align-self: center;
     color: var(--primary-dark);
-    font-size: 0.74rem;
+    font-size: 0.66rem;
     font-style: normal;
     font-weight: 800;
 }
 
 .invite-card-unused-status {
-    min-height: 1.1em;
-    margin: 8px 0 0;
+    min-height: 0;
+    margin: 5px 0 0;
     color: var(--text-secondary);
     font-size: 0.76rem;
     line-height: 1.45;
@@ -4838,10 +4855,6 @@ button.import-article-chip--selected:hover {
         flex-basis: 100%;
     }
 
-    .invite-card-unused-head {
-        align-items: flex-start;
-        flex-direction: column;
-    }
 }
 
 .settings-goal-row {
