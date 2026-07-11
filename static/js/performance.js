@@ -49,7 +49,7 @@
     }
 
     function pagePath() {
-        return `${location.pathname || "/"}${location.hash || ""}`.slice(0, 240);
+        return `${location.pathname || "/"}${scrubHash(location.hash)}`.slice(0, 240);
     }
 
     function normalizeUrl(input) {
@@ -79,6 +79,25 @@
             }
         });
         return kept.length ? `?${kept.join("&")}` : "";
+    }
+
+    function scrubHash(hash) {
+        const raw = String(hash || "").replace(/^#/, "");
+        if (!raw || !raw.includes("=")) return hash || "";
+        const params = new URLSearchParams(raw);
+        let hasSensitiveKey = false;
+        const kept = [];
+        params.forEach((value, key) => {
+            const k = String(key || "").toLowerCase();
+            if (/(token|password|secret|code|invite|session|auth)/.test(k)) {
+                hasSensitiveKey = true;
+                kept.push(`${encodeURIComponent(key)}=[redacted]`);
+            } else {
+                const v = String(value || "");
+                kept.push(`${encodeURIComponent(key)}=${encodeURIComponent(v.slice(0, 80))}`);
+            }
+        });
+        return hasSensitiveKey ? `#${kept.join("&")}` : hash || "";
     }
 
     function baseEvent(type) {

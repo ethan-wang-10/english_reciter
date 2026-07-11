@@ -1558,11 +1558,108 @@ let currentInviteCard = {
     blob: null,
     file: null,
 };
+const INVITE_REGISTRATION_SESSION_KEY = 'pending_invite_registration_code';
+let pendingInviteRegistrationCode = '';
 let inviteCreateInFlight = false;
 let inviteUnusedPayload = { invites: [] };
 const inviteUnusedById = new Map();
 let inviteSessionGeneration = 0;
 let inviteModalGeneration = 0;
+
+function normalizeInviteCodeForLink(raw) {
+    const code = String(raw || '').trim();
+    return /^[A-Za-z0-9_-]{4,64}$/.test(code) ? code : '';
+}
+
+function persistInviteRegistrationState(code) {
+    pendingInviteRegistrationCode = normalizeInviteCodeForLink(code);
+    try {
+        if (pendingInviteRegistrationCode) {
+            sessionStorage.setItem(INVITE_REGISTRATION_SESSION_KEY, pendingInviteRegistrationCode);
+        } else {
+            sessionStorage.removeItem(INVITE_REGISTRATION_SESSION_KEY);
+        }
+    } catch (_) {
+        /* 受限浏览器中仍保留当前页面内的预填状态。 */
+    }
+}
+
+function restoreInviteRegistrationState() {
+    try {
+        persistInviteRegistrationState(sessionStorage.getItem(INVITE_REGISTRATION_SESSION_KEY));
+    } catch (_) {
+        /* ignore */
+    }
+    return pendingInviteRegistrationCode;
+}
+
+function buildInviteRegistrationLink(baseUrl, rawCode) {
+    const code = normalizeInviteCodeForLink(rawCode);
+    if (!code) return '';
+    let url;
+    try {
+        url = new URL(baseUrl || '/', window.location.origin);
+    } catch (_) {
+        url = new URL('/', window.location.origin);
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        url = new URL('/', window.location.origin);
+    }
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+    hashParams.delete('invite_code');
+    hashParams.set('invite', code);
+    url.hash = hashParams.toString();
+    return url.toString();
+}
+
+function captureInviteRegistrationFromUrl() {
+    let url;
+    try {
+        url = new URL(window.location.href);
+    } catch (_) {
+        return '';
+    }
+
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+    const rawCode = [
+        hashParams.get('invite'),
+        hashParams.get('invite_code'),
+        url.searchParams.get('invite'),
+        url.searchParams.get('invite_code'),
+    ].find((candidate) => normalizeInviteCodeForLink(candidate)) || '';
+    const hasInviteParam = hashParams.has('invite') || hashParams.has('invite_code') ||
+        url.searchParams.has('invite') || url.searchParams.has('invite_code');
+    if (!hasInviteParam) return '';
+
+    hashParams.delete('invite');
+    hashParams.delete('invite_code');
+    url.searchParams.delete('invite');
+    url.searchParams.delete('invite_code');
+    url.hash = hashParams.toString();
+    const normalizedCode = normalizeInviteCodeForLink(rawCode);
+    if (normalizedCode) {
+        persistInviteRegistrationState(normalizedCode);
+    } else {
+        clearInviteRegistrationState();
+    }
+    try {
+        window.history.replaceState(
+            window.history.state,
+            document.title,
+            `${url.pathname}${url.search}${url.hash}`
+        );
+    } catch (_) {
+        /* 地址栏清理失败不应阻断注册预填。 */
+    }
+    return normalizedCode;
+}
+
+function clearInviteRegistrationState() {
+    persistInviteRegistrationState('');
+    const inviteInput = document.getElementById('reg-invite');
+    if (inviteInput) inviteInput.value = '';
+    if (document.getElementById('login-form')) activateAuthTab('login');
+}
 
 function currentInviteFlow() {
     return {
@@ -1864,7 +1961,7 @@ async function buildInviteCardImage({ code, registerUrl, inviterName, avatarUrl 
     ctx.fillText('邀请码', w / 2, 765);
     ctx.fillStyle = '#2f7f02';
     ctx.font = '900 64px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-    ctx.fillText(String(code || '').toUpperCase(), w / 2, 835);
+    ctx.fillText(String(code || ''), w / 2, 835);
 
     ctx.fillStyle = '#f0f9ff';
     roundRectPath(ctx, 165, 925, 570, 92, 28);
@@ -1892,11 +1989,11 @@ async function buildInviteCardImage({ code, registerUrl, inviterName, avatarUrl 
 
 async function selectInviteCodeForCard({ code, registerUrl }, flow = currentInviteFlow()) {
     if (!inviteFlowIsCurrent(flow)) return null;
-    const normalizedCode = String(code || '').trim().toUpperCase();
+    const normalizedCode = normalizeInviteCodeForLink(code);
     if (!normalizedCode) throw new Error('邀请码不可用');
     const studentName = sessionStudentUsername();
     const avatarUrl = studentName ? `/api/user/avatar/${encodeURIComponent(studentName)}` : null;
-    const targetUrl = registerUrl || window.location.origin;
+    const targetUrl = buildInviteRegistrationLink(registerUrl, normalizedCode);
     const card = await buildInviteCardImage({
         code: normalizedCode,
         registerUrl: targetUrl,
@@ -2185,20 +2282,62 @@ async function selectUnusedInviteFromModal(inviteId) {
     }
 }
 
+function copyTextWithLegacyFallback(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-1000px';
+    textarea.style.opacity = '0';
+    textarea.style.fontSize = '16px';
+    document.body.appendChild(textarea);
+    let copied = false;
+    try {
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        copied = typeof document.execCommand === 'function' && document.execCommand('copy');
+    } catch (_) {
+        copied = false;
+    } finally {
+        textarea.remove();
+    }
+    return copied;
+}
+
+async function writeTextToClipboard(text) {
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (_) {
+        /* 继续尝试兼容旧 WebView 的复制方式。 */
+    }
+    return copyTextWithLegacyFallback(text);
+}
+
 async function copyInviteCodeFromModal() {
     const msg = document.getElementById('invite-card-message');
     if (inviteCreateInFlight || !currentInviteCard.code) return;
+    const inviteLink = currentInviteCard.registerUrl ||
+        buildInviteRegistrationLink(window.location.origin, currentInviteCard.code);
+    if (!inviteLink) return;
     try {
-        await navigator.clipboard.writeText(currentInviteCard.code);
-        if (msg) msg.textContent = '邀请码已复制';
+        const copied = await writeTextToClipboard(inviteLink);
+        if (!copied) throw new Error('copy unavailable');
+        if (msg) msg.textContent = '邀请链接已复制';
     } catch (_) {
-        if (msg) msg.textContent = `邀请码：${currentInviteCard.code}`;
+        if (msg) msg.textContent = `邀请链接：${inviteLink}`;
     }
 }
 
 async function shareInviteCardFromModal() {
     const msg = document.getElementById('invite-card-message');
     if (inviteCreateInFlight || !currentInviteCard.code || !currentInviteCard.blob) return;
+    const inviteLink = currentInviteCard.registerUrl ||
+        buildInviteRegistrationLink(window.location.origin, currentInviteCard.code);
+    const shareText = `点击链接直接注册（邀请码已填好）：${inviteLink}`;
     try {
         if (
             currentInviteCard.file &&
@@ -2208,14 +2347,14 @@ async function shareInviteCardFromModal() {
             await navigator.share({
                 files: [currentInviteCard.file],
                 title: '邀请你一起背单词',
-                text: `邀请码：${currentInviteCard.code}`,
+                text: shareText,
             });
             if (msg) msg.textContent = '已打开系统分享';
         } else if (navigator.share) {
             await navigator.share({
                 title: '邀请你一起背单词',
                 text: `邀请码：${currentInviteCard.code}`,
-                url: currentInviteCard.registerUrl || window.location.origin,
+                url: inviteLink,
             });
             if (msg) msg.textContent = '已打开系统分享';
         } else {
@@ -4041,6 +4180,7 @@ async function login(loginUsername, password) {
         localStorage.setItem('token', token);
         localStorage.setItem('username', username);
 
+        clearInviteRegistrationState();
         void showMainPage();
     } catch (error) {
         showError(error.message);
@@ -4063,6 +4203,7 @@ async function register(username, password, email, inviteCode) {
         setSessionParentFlags(!!data.is_parent, data.child_username || '');
         localStorage.setItem('token', token);
         localStorage.setItem('username', username);
+        clearInviteRegistrationState();
         void showMainPage();
     } catch (error) {
         showError(error.message);
@@ -4101,6 +4242,37 @@ async function logout() {
 
 // ==================== 页面切换 ====================
 
+function activateAuthTab(tabName) {
+    const selectedTab = tabName === 'register' ? 'register' : 'login';
+    document.querySelectorAll('.tab').forEach((tab) => {
+        tab.classList.toggle('active', tab.dataset.tab === selectedTab);
+    });
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    if (loginForm) loginForm.style.display = selectedTab === 'login' ? 'block' : 'none';
+    if (registerForm) registerForm.style.display = selectedTab === 'register' ? 'block' : 'none';
+}
+
+function applyPendingInviteRegistration() {
+    if (!pendingInviteRegistrationCode || (token && username)) return false;
+    const inviteInput = document.getElementById('reg-invite');
+    if (!inviteInput) return false;
+    activateAuthTab('register');
+    inviteInput.value = pendingInviteRegistrationCode;
+    return true;
+}
+
+function handleInviteRegistrationNavigation() {
+    const inviteCode = captureInviteRegistrationFromUrl();
+    if (!inviteCode) return;
+    if (token && username) {
+        clearInviteRegistrationState();
+        showMainBanner('当前已登录，邀请链接仅供新用户注册');
+        return;
+    }
+    showLoginPage();
+}
+
 function showLoginPage() {
     resetInviteCardState();
     preloadedReviewData = null;
@@ -4113,6 +4285,7 @@ function showLoginPage() {
     updatePkNavBadgesFromDuels([]);
     closePkHubModal();
     stopPkInvitePolling();
+    applyPendingInviteRegistration();
 }
 
 function applyParentNavMode() {
@@ -7407,12 +7580,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Tab 切换
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            
-            const tabName = tab.dataset.tab;
-            document.getElementById('login-form').style.display = tabName === 'login' ? 'block' : 'none';
-            document.getElementById('register-form').style.display = tabName === 'register' ? 'block' : 'none';
+            activateAuthTab(tab.dataset.tab);
         });
     });
     
@@ -8076,9 +8244,24 @@ document.addEventListener('DOMContentLoaded', function() {
         void refreshPkInviteIndicator();
     });
 
+    restoreInviteRegistrationState();
+
+    // 同一页面内打开邀请链接时不会重新加载，需要监听哈希变化。
+    window.addEventListener('hashchange', handleInviteRegistrationNavigation);
+
+    // 邀请码进入内存后立即清理地址栏，避免一次性邀请码留在浏览历史中。
+    const incomingInviteCode = captureInviteRegistrationFromUrl();
+
     // 初始化页面
     if (token && username) {
-        showMainPage();
+        void showMainPage().finally(() => {
+            if (token && username) {
+                clearInviteRegistrationState();
+                if (incomingInviteCode) {
+                    showMainBanner('当前已登录，邀请链接仅供新用户注册');
+                }
+            }
+        });
     } else {
         showLoginPage();
     }

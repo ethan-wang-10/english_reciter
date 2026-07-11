@@ -4717,6 +4717,8 @@ button.import-article-chip--selected:hover {
     font-size: 0.86rem;
     font-weight: 700;
     text-align: center;
+    overflow-wrap: anywhere;
+    user-select: text;
 }
 
 .invite-card-message:empty,
