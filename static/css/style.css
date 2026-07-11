@@ -4,15 +4,15 @@
     box-sizing: border-box;
 }
 
-/* 视觉系统：白底、高饱和语义色、清晰的按压层级 */
+/* 视觉系统：护眼浅绿画布、高饱和语义色、清晰的按压层级 */
 :root {
-    --color-canvas: #ffffff;
-    --color-surface: #ffffff;
-    --color-surface-subtle: #f7f7f7;
+    --color-canvas: #f4faf1;
+    --color-surface: #fbfef9;
+    --color-surface-subtle: #eef7ea;
     --color-ink: #4b4b4b;
     --color-ink-secondary: #777777;
-    --color-border: #e5e5e5;
-    --color-border-strong: #d4d4d4;
+    --color-border: #dbe8d6;
+    --color-border-strong: #c9dbc3;
 
     --color-brand: #58cc02;
     --color-brand-depth: #43c000;
@@ -216,7 +216,7 @@ html.modal-open body {
     height: 72px;
     margin-bottom: 12px;
     font-size: 40px;
-    background: #fff;
+    background: var(--color-surface);
     border-radius: 50%;
     border: 1px solid rgba(255, 255, 255, 0.72);
     box-shadow: 0 6px 0 rgba(0, 0, 0, 0.14);
@@ -3598,7 +3598,7 @@ button.import-article-chip--selected:hover {
     font-size: 1.35rem;
     font-weight: 800;
     color: var(--text-primary);
-    background: #fff;
+    background: var(--color-surface-subtle);
     cursor: text;
     min-height: 60px;
     pointer-events: none;
@@ -4003,7 +4003,7 @@ button.import-article-chip--selected:hover {
     line-height: 1.3;
     border-radius: 5px;
     border: 1px solid var(--border);
-    background: #fff;
+    background: var(--color-surface);
     color: var(--text-primary);
     cursor: pointer;
     font-family: inherit;
@@ -4029,7 +4029,7 @@ button.import-article-chip--selected:hover {
     font-size: 0.85rem;
     border-radius: 8px;
     border: 2px solid var(--border);
-    background: #fff;
+    background: var(--color-surface);
     cursor: pointer;
     font-family: inherit;
     font-weight: 600;
@@ -7002,7 +7002,7 @@ button.import-article-chip--selected:hover {
     border-radius: var(--radius-md);
     font-size: 0.95rem;
     font-family: inherit;
-    background: #fff;
+    background: var(--color-surface);
     cursor: pointer;
 }
 .import-vocab-queue-row {
@@ -7165,7 +7165,7 @@ button.import-article-chip--selected:hover {
     padding: 8px 12px;
     border-radius: var(--radius-md);
     border: 2px solid var(--border);
-    background: #fff;
+    background: var(--color-surface);
     color: var(--text-primary);
     cursor: pointer;
     text-align: left;
@@ -7217,7 +7217,7 @@ button.import-article-chip--selected:hover {
     padding: 6px 14px;
     border-radius: 999px;
     border: 2px solid var(--secondary-color);
-    background: #fff;
+    background: var(--color-surface);
     color: var(--secondary-dark);
     cursor: pointer;
     white-space: nowrap;
@@ -7241,7 +7241,7 @@ button.import-article-chip--selected:hover {
     padding: 0;
     border-radius: 999px;
     border: 2px solid var(--secondary-color);
-    background: #fff;
+    background: var(--color-surface);
     color: var(--secondary-dark);
     cursor: pointer;
     flex-shrink: 0;
@@ -7285,7 +7285,7 @@ button.import-article-chip--selected:hover {
     padding: 8px 14px;
     border-radius: var(--radius-md);
     border: 2px solid var(--border);
-    background: #fff;
+    background: var(--color-surface);
     cursor: pointer;
 }
 .textbook-back-btn:hover {
@@ -7735,7 +7735,7 @@ body.chat-sidebar-open {
     padding: 0.5rem 0.7rem;
     border-radius: 10px;
     border: 1px solid var(--border);
-    background: #fff;
+    background: var(--color-surface);
     font-size: 0.9rem;
     line-height: 1.45;
     color: var(--text-primary);
@@ -8331,7 +8331,7 @@ button:disabled:active {
     margin-bottom: 34px;
     border: 4px solid var(--color-brand-border);
     border-radius: 30px;
-    background: #ffffff;
+    background: var(--color-surface);
     box-shadow: 12px 14px 0 var(--color-brand-depth);
     transform: rotate(-7deg);
 }
@@ -8368,7 +8368,7 @@ button:disabled:active {
     padding: 13px;
     border: 3px solid currentColor;
     border-radius: 18px;
-    background: #ffffff;
+    background: var(--color-surface);
     z-index: 2;
 }
 
@@ -8492,7 +8492,7 @@ button:disabled:active {
 
 .btn-secondary {
     color: var(--color-action-secondary);
-    background: #ffffff;
+    background: var(--color-surface);
     border: 2px solid var(--color-border);
     box-shadow: 0 var(--tactile-depth) 0 var(--color-border-strong);
 }
@@ -8541,7 +8541,7 @@ button:disabled:active {
     align-items: center;
     justify-content: center;
     gap: 7px;
-    background: #ffffff;
+    background: var(--color-surface);
     border-color: transparent;
 }
 
@@ -8676,7 +8676,7 @@ button:disabled:active {
 .mobile-tab.active .mobile-tab-icon,
 .mobile-tab-more.active .mobile-tab-icon {
     color: var(--color-action-primary);
-    background: #ffffff;
+    background: var(--color-surface);
     box-shadow: 0 2px 0 var(--color-brand-border);
 }
 
@@ -8708,7 +8708,7 @@ button:disabled:active {
     min-height: 52px;
     padding: 10px 12px;
     border-radius: var(--radius-card);
-    background: #ffffff;
+    background: var(--color-surface);
 }
 
 .mobile-more-link:hover,
@@ -8738,7 +8738,7 @@ button:disabled:active {
     --stat-accent: var(--color-sky);
     --stat-soft: var(--color-sky-soft);
     --stat-depth: #a8def6;
-    background: #ffffff;
+    background: var(--color-surface);
     border: 2px solid var(--stat-depth);
     border-radius: var(--radius-card);
     box-shadow: none;
@@ -8748,7 +8748,7 @@ button:disabled:active {
     --stat-accent: var(--color-action-secondary);
     --stat-soft: var(--color-sky-soft);
     --stat-depth: #a8def6;
-    background: #ffffff;
+    background: var(--color-surface);
     border-color: var(--stat-depth);
 }
 
@@ -8756,7 +8756,7 @@ button:disabled:active {
     --stat-accent: var(--color-action-primary);
     --stat-soft: var(--color-brand-soft);
     --stat-depth: var(--color-brand-border);
-    background: #ffffff;
+    background: var(--color-surface);
     border-color: var(--stat-depth);
 }
 
@@ -8764,7 +8764,7 @@ button:disabled:active {
     --stat-accent: var(--color-reward-ink);
     --stat-soft: var(--color-reward-soft);
     --stat-depth: #ead47c;
-    background: #ffffff;
+    background: var(--color-surface);
     border-color: var(--stat-depth);
 }
 
@@ -8809,7 +8809,7 @@ button:disabled:active {
 .settings-panel,
 .admin-panel,
 .chat-sidebar {
-    background: #ffffff;
+    background: var(--color-surface);
     border: 2px solid var(--color-border);
     border-radius: var(--radius-card);
     box-shadow: none;
@@ -8853,7 +8853,7 @@ input[type="radio"] {
 }
 
 .review-example-line--quiz {
-    background: #ffffff;
+    background: var(--color-surface);
 }
 
 .btn-speak {
@@ -8893,7 +8893,7 @@ input[type="radio"] {
     width: 46px;
     height: 46px;
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--color-surface);
     flex: 0 0 46px;
 }
 
@@ -8982,7 +8982,7 @@ html.keyboard-open .review-feedback-buddy {
 
 .review-complete {
     padding: 38px 24px 34px;
-    background: #ffffff;
+    background: var(--color-surface);
     border: 2px solid var(--color-border);
     border-top: 6px solid var(--color-reward);
     border-radius: var(--radius-card);
@@ -9290,7 +9290,7 @@ html.keyboard-open .review-feedback-buddy {
 
 .leaderboard-podium-card {
     border-radius: var(--radius-card);
-    background: #ffffff;
+    background: var(--color-surface);
     border-color: var(--color-border);
 }
 
@@ -9357,7 +9357,7 @@ html.keyboard-open .review-feedback-buddy {
     .avatar-crop-dialog,
     .admin-delete-user-dialog-inner
 ) {
-    background: #ffffff;
+    background: var(--color-surface);
     border: 2px solid var(--color-border);
     border-radius: var(--radius-card);
     box-shadow: 0 6px 0 rgba(75, 75, 75, 0.14), 0 20px 50px rgba(75, 75, 75, 0.18);
@@ -9469,7 +9469,7 @@ html.keyboard-open .review-feedback-buddy {
 }
 
 .admin-config-section {
-    background: #ffffff;
+    background: var(--color-surface);
     border-color: var(--color-border);
     border-radius: var(--radius-card);
 }
@@ -9524,7 +9524,7 @@ html.keyboard-open .review-feedback-buddy {
 
 .nav-user .btn-secondary {
     color: var(--color-action-secondary);
-    background: #ffffff;
+    background: var(--color-surface);
     border-color: var(--color-border);
     box-shadow: 0 3px 0 var(--color-border-strong);
 }

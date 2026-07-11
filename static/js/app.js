@@ -116,8 +116,8 @@ const UI_ICONS = Object.freeze({
 });
 
 const FEATURE_SCRIPTS = {
-    chat: '/static/js/chat-sidebar.js?v=20260711-duo6',
-    textbook: '/static/js/textbook.js?v=20260711-duo6',
+    chat: '/static/js/chat-sidebar.js?v=20260711-duo8',
+    textbook: '/static/js/textbook.js?v=20260711-duo8',
 };
 const featureScriptLoads = new Map();
 

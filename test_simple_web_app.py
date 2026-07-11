@@ -98,7 +98,7 @@ def test_frontend_asset_versions_match() -> None:
     source = Path("static/index.html").read_text(encoding="utf-8")
     source += Path("static/js/app.js").read_text(encoding="utf-8")
     versions = set(re.findall(r"\?v=([a-zA-Z0-9-]+)", source))
-    assert versions == {"20260711-duo6"}
+    assert versions == {"20260711-duo8"}
 
 
 def test_brand_color_pairs_keep_readable_contrast() -> None:
