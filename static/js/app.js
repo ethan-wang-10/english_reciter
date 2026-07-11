@@ -106,9 +106,18 @@ let pkDuelSendInFlight = false;
 // API 基础 URL
 const API_BASE = '/api';
 
+const UI_ICONS = Object.freeze({
+    volume: '<svg class="ui-icon" aria-hidden="true"><use href="#icon-volume-2"></use></svg>',
+    calendarClock: '<svg class="ui-icon" aria-hidden="true"><use href="#icon-calendar-clock"></use></svg>',
+    circleCheck: '<svg class="ui-icon" aria-hidden="true"><use href="#icon-circle-check"></use></svg>',
+    layers: '<svg class="ui-icon" aria-hidden="true"><use href="#icon-layers"></use></svg>',
+    user: '<svg class="ui-icon" aria-hidden="true"><use href="#icon-user-round"></use></svg>',
+    flame: '<svg class="ui-icon" aria-hidden="true"><use href="#icon-flame"></use></svg>',
+});
+
 const FEATURE_SCRIPTS = {
-    chat: '/static/js/chat-sidebar.js',
-    textbook: '/static/js/textbook.js',
+    chat: '/static/js/chat-sidebar.js?v=20260711-duo6',
+    textbook: '/static/js/textbook.js?v=20260711-duo6',
 };
 const featureScriptLoads = new Map();
 
@@ -395,7 +404,7 @@ function ngStreakPillInnerHtml(streak, makeupAvailable = false) {
     const badge = makeupAvailable
         ? '<span class="ng-streak-makeup-badge" aria-hidden="true">补</span>'
         : '';
-    return `<span class="${flameClass}" aria-hidden="true">🔥</span><span class="ng-streak-num">${formatNumber(n)}</span>${badge}`;
+    return `<span class="${flameClass}" aria-hidden="true">${UI_ICONS.flame}</span><span class="ng-streak-num">${formatNumber(n)}</span>${badge}`;
 }
 
 /** 排行榜「连续」列：显示当前连续，并在括号里补充历史最高连续 */
@@ -411,7 +420,7 @@ function lbStreakCellInnerHtml(streak, streakMax) {
         shownMax > 0
             ? ` <span class="lb-streak-max">（最高 ${escapeHtml(formatNumber(shownMax))}）</span>`
             : '';
-    return `<span class="${flameClass}" aria-hidden="true">🔥</span> <span class="lb-streak-val">${escapeHtml(formatNumber(n))}</span>${maxHtml}`;
+    return `<span class="${flameClass}" aria-hidden="true">${UI_ICONS.flame}</span> <span class="lb-streak-val">${escapeHtml(formatNumber(n))}</span>${maxHtml}`;
 }
 
 function streakDiagnosticsHintFromRow(r) {
@@ -449,7 +458,7 @@ function dailySummaryStreakLineHtml(streak) {
         `<li class="daily-summary-streak${out ? ' daily-summary-streak--out' : ''}">` +
         `当前连续有效打卡 ` +
         `<span class="ds-streak-inline">` +
-        `<span class="${flameClass}" aria-hidden="true">🔥</span>` +
+        `<span class="${flameClass}" aria-hidden="true">${UI_ICONS.flame}</span>` +
         `<strong class="ds-streak-num">${escapeHtml(formatNumber(n))}</strong> 天` +
         `</span></li>`
     );
@@ -2414,7 +2423,7 @@ function renderMonthlyPoolRace(pool) {
                 const me = uname === su ? ' mp-lane-me' : '';
                 const av = r.avatar_url
                     ? `<img src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="28" height="28" loading="lazy" />`
-                    : '<span class="mp-lane-avatar-ph" aria-hidden="true">👤</span>';
+                    : `<span class="mp-lane-avatar-ph" aria-hidden="true">${UI_ICONS.user}</span>`;
                 const you = uname === su ? ' <span class="lb-you">我</span>' : '';
                 return `<div class="mp-lane${me}">
                     <div class="mp-lane-user">${av}<span class="mp-lane-name">${u}${you}</span></div>
@@ -2553,7 +2562,7 @@ function monthlyPkAvatarHtml(uname, compact) {
     const wParam = compact ? 40 : 48;
     const wrapOpen = '<span class="monthly-pk-av-wrap">';
     if (!u) {
-        return wrapOpen + '<span class="monthly-pk-av-ph" aria-hidden="true">👤</span></span>';
+        return wrapOpen + `<span class="monthly-pk-av-ph" aria-hidden="true">${UI_ICONS.user}</span></span>`;
     }
     const path = '/api/user/avatar/' + encodeURIComponent(u);
     const src = typeof avatarDisplayUrl === 'function' ? avatarDisplayUrl(path, wParam) : path + '?w=' + wParam;
@@ -2561,7 +2570,7 @@ function monthlyPkAvatarHtml(uname, compact) {
         wrapOpen +
         `<img class="monthly-pk-av" src="${escapeHtml(src)}" alt="" width="${sz}" height="${sz}" loading="lazy" decoding="async" ` +
         `onerror="this.onerror=null;this.closest('.monthly-pk-av-wrap').classList.add('monthly-pk-av--fallback');this.removeAttribute('src');" />` +
-        '<span class="monthly-pk-av-ph" aria-hidden="true">👤</span></span>'
+        `<span class="monthly-pk-av-ph" aria-hidden="true">${UI_ICONS.user}</span></span>`
     );
 }
 
@@ -2677,7 +2686,7 @@ function leaderboardTableRowHtml(r, sc) {
     const me = r.is_viewer ? 'leaderboard-row-me' : '';
     const av = r.avatar_url
         ? `<img class="lb-avatar" src="${escapeHtml(avatarDisplayUrl(r.avatar_url, 64))}" alt="" width="32" height="32" loading="lazy" />`
-        : '<span class="lb-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
+        : `<span class="lb-avatar lb-avatar-placeholder" aria-hidden="true">${UI_ICONS.user}</span>`;
     const xpVal = sc === 'total' ? r.total_xp : r.period_xp;
     const streakHint = streakDiagnosticsHintFromRow(r);
     return `<tr class="${me}">
@@ -2736,7 +2745,7 @@ function renderLeaderboardPodium(apiData) {
             const rxNote = rx > 0 ? ` · 奖励 +${rx} XP` : '';
             const av = t.avatar_url
                 ? `<img class="lb-podium-avatar" src="${escapeHtml(avatarDisplayUrl(t.avatar_url, 96))}" alt="" width="48" height="48" loading="lazy" />`
-                : '<span class="lb-podium-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
+                : `<span class="lb-podium-avatar lb-avatar-placeholder" aria-hidden="true">${UI_ICONS.user}</span>`;
             const rk = Number(t.rank) || i + 1;
             return `<div class="leaderboard-podium-card rank-${rk}">
                 <div class="lb-podium-medal">${medals[i] || '🏅'}</div>
@@ -4792,13 +4801,24 @@ function onPassComplete() {
     enterRemedialRound();
 }
 
+function setReviewCompleteState(state) {
+    const complete = document.getElementById('review-complete');
+    if (!complete) return;
+    complete.dataset.state = state;
+    const icon = document.getElementById('review-mascot-icon-use');
+    const iconName = state === 'rest' ? 'book-open' : state === 'calm' ? 'rotate-ccw' : 'party';
+    if (icon) icon.setAttribute('href', `#icon-${iconName}`);
+}
+
 function showFinalComplete() {
     document.getElementById('review-box').style.display = 'none';
-    document.getElementById('review-complete').style.display = 'block';
+    const completeEl = document.getElementById('review-complete');
+    completeEl.style.display = 'block';
     const titleEl = document.getElementById('review-complete-title');
     const descEl = document.getElementById('review-complete-desc');
     const summaryEl = document.getElementById('review-session-summary');
     const isBonus = reviewSessionMode === 'bonus';
+    setReviewCompleteState(!isBonus && sessionSkippedRemedialAfterMain ? 'calm' : 'complete');
     if (titleEl) {
         if (!isBonus && sessionSkippedRemedialAfterMain) {
             titleEl.textContent = '今日主轮复习完成';
@@ -4832,7 +4852,9 @@ function showFinalComplete() {
 
 function showInitialEmptyReview() {
     document.getElementById('review-box').style.display = 'none';
-    document.getElementById('review-complete').style.display = 'block';
+    const completeEl = document.getElementById('review-complete');
+    completeEl.style.display = 'block';
+    setReviewCompleteState('rest');
     const titleEl = document.getElementById('review-complete-title');
     const descEl = document.getElementById('review-complete-desc');
     if (titleEl) titleEl.textContent = '今日暂无待复习';
@@ -5023,7 +5045,7 @@ async function showCurrentWord() {
     focusWordCapture(0);
 
     // 清空消息
-    document.getElementById('word-message').style.display = 'none';
+    hideReviewWordMessage();
     clearReviewWordMessageExtra();
 }
 
@@ -5040,6 +5062,29 @@ function clearReviewWordMessageExtra() {
     if (!el) return;
     el.innerHTML = '';
     el.classList.remove('word-message-extra--show');
+}
+
+function hideReviewWordMessage() {
+    const message = document.getElementById('word-message');
+    const copy = document.getElementById('word-message-copy');
+    if (copy) copy.textContent = '';
+    if (!message) return;
+    message.className = 'word-message';
+    message.style.display = 'none';
+}
+
+function showReviewWordMessage(text, tone) {
+    const message = document.getElementById('word-message');
+    if (!message) return;
+    const copy = document.getElementById('word-message-copy');
+    const content = String(text || '').replace(/^(?:✅|❌)\s*/u, '');
+    if (copy) {
+        copy.textContent = content;
+    } else {
+        message.textContent = content;
+    }
+    message.className = `word-message ${tone === 'success' ? 'success' : 'error'}`;
+    message.style.display = 'flex';
 }
 
 /**
@@ -5125,7 +5170,6 @@ async function submitAnswer() {
             }
         }
 
-        const messageDiv = document.getElementById('word-message');
         let msgText = result.message;
         clearReviewWordMessageExtra();
         if (result.correct && result.gamification) {
@@ -5157,9 +5201,7 @@ async function submitAnswer() {
                 updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
             }
         }
-        messageDiv.textContent = msgText;
-        messageDiv.className = `word-message ${result.correct ? 'success' : 'error'}`;
-        messageDiv.style.display = 'block';
+        showReviewWordMessage(msgText, result.correct ? 'success' : 'error');
         if (result.correct && result.other_senses_extra && result.other_senses_extra.length) {
             renderReviewOtherSensesExtra(result.other_senses_extra);
         }
@@ -5195,7 +5237,7 @@ async function submitAnswer() {
                 document.getElementById('current-word-english').textContent = hintString;
                 
                 // 显示剩余次数
-                messageDiv.textContent = `${result.message} (还剩 ${3 - currentErrorCount} 次尝试机会)`;
+                showReviewWordMessage(`${result.message} (还剩 ${3 - currentErrorCount} 次尝试机会)`, 'error');
                 // 清空下划线输入框，让用户重新输入
                 clearUnderlineInput();
                 isSubmitting = false;
@@ -5212,9 +5254,7 @@ async function submitAnswer() {
         const messageDiv = document.getElementById('word-message');
         if (reviewSection && reviewSection.classList.contains('active') && messageDiv) {
             clearReviewWordMessageExtra();
-            messageDiv.textContent = msg;
-            messageDiv.className = 'word-message error';
-            messageDiv.style.display = 'block';
+            showReviewWordMessage(msg, 'error');
             focusWordCapture(0);
         } else {
             showError(msg);
@@ -5395,22 +5435,22 @@ async function loadProgress() {
         renderLearningMap(data.stats.mastered_words);
 
         const statsHtml = `
-            <div class="stat-card">
-                <div class="stat-icon">📝</div>
+            <div class="stat-card stat-card--blue">
+                <div class="stat-icon stat-icon--blue" aria-hidden="true">${UI_ICONS.calendarClock}</div>
                 <div class="stat-content">
                     <div class="stat-label">总单词数</div>
                     <div class="stat-value">${data.stats.total_words}</div>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">✅</div>
+            <div class="stat-card stat-card--green">
+                <div class="stat-icon stat-icon--green" aria-hidden="true">${UI_ICONS.circleCheck}</div>
                 <div class="stat-content">
                     <div class="stat-label">已掌握</div>
                     <div class="stat-value">${data.stats.mastered_words}</div>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">📊</div>
+            <div class="stat-card stat-card--yellow">
+                <div class="stat-icon stat-icon--yellow" aria-hidden="true">${UI_ICONS.layers}</div>
                 <div class="stat-content">
                     <div class="stat-label">平均复习次数</div>
                     <div class="stat-value">${data.stats.avg_review_count.toFixed(1)}</div>
@@ -6137,7 +6177,7 @@ function renderDiscoveryCard() {
           <div class="discovery-card-word-row">
             <h3 class="discovery-card-word">${escapeHtml(w.english)}</h3>
             <div class="discovery-card-word-actions">
-              <button type="button" class="btn-speak discovery-speak-word" title="朗读单词" aria-label="朗读 ${escapeHtml(w.english)}">🔊</button>
+              <button type="button" class="btn-speak discovery-speak-word" title="朗读单词" aria-label="朗读 ${escapeHtml(w.english)}">${UI_ICONS.volume}</button>
               <button type="button" class="${importBtnClass}" title="${escapeHtml(importState.label)}" aria-label="${importAria}">${escapeHtml(
         importState.label,
     )}</button>
@@ -6221,7 +6261,7 @@ function discoveryExampleSlotsHtml(examples) {
       </div>
       <button type="button" class="btn-speak discovery-speak-example" data-example-slot="${idx}" title="朗读例句" aria-label="朗读例句 ${
           idx + 1
-      }" ${speakable ? '' : 'disabled'}>🔊</button>
+      }" ${speakable ? '' : 'disabled'}>${UI_ICONS.volume}</button>
     </div>`);
         } else {
             slots.push(
@@ -6263,7 +6303,7 @@ function discoveryPolysemeSenseExampleHtml(w) {
         </div>
         <button type="button" class="btn-speak discovery-speak-example" data-example-slot="${idx}" title="朗读例句" aria-label="朗读义项 ${idx + 1} 例句" ${
             speakable ? '' : 'disabled'
-        }>🔊</button>
+        }>${UI_ICONS.volume}</button>
       </div>
     </div>`;
     });

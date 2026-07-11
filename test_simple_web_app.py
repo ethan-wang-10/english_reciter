@@ -1,6 +1,10 @@
 """Flask 入口的轻量契约与静态资源测试。"""
 
+from html.parser import HTMLParser
+import gzip
 import os
+from pathlib import Path
+import re
 import tempfile
 
 import pytest
@@ -10,6 +14,42 @@ _WEB_DATA_DIR = tempfile.TemporaryDirectory(prefix="english-reciter-web-test-")
 os.environ["ENGLISH_RECITER_DATA_DIR"] = _WEB_DATA_DIR.name
 
 import simple_web_app as web  # noqa: E402
+
+
+class _IndexContractParser(HTMLParser):
+    """Collect references and accessible names without adding a DOM dependency."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.ids: list[str] = []
+        self.references: set[str] = set()
+        self.icon_references: set[str] = set()
+        self.buttons: list[dict[str, object]] = []
+        self._button_stack: list[dict[str, object]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = dict(attrs)
+        if values.get("id"):
+            self.ids.append(str(values["id"]))
+        for name in ("aria-controls", "aria-labelledby", "aria-describedby"):
+            self.references.update(str(values.get(name) or "").split())
+        if tag == "use" and str(values.get("href") or "").startswith("#"):
+            self.icon_references.add(str(values["href"])[1:])
+        if tag == "button":
+            button = {
+                "id": values.get("id") or values.get("class") or "button",
+                "has_text": False,
+                "has_name": bool(values.get("aria-label") or values.get("title")),
+            }
+            self._button_stack.append(button)
+
+    def handle_data(self, data: str) -> None:
+        if self._button_stack and data.strip():
+            self._button_stack[-1]["has_text"] = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "button" and self._button_stack:
+            self.buttons.append(self._button_stack.pop())
 
 
 @pytest.fixture
@@ -26,6 +66,66 @@ def test_static_assets_use_public_cache_headers(client) -> None:
     assert "public" in cache_control
     assert "max-age=3600" in cache_control
     assert "no-cache" not in cache_control
+
+
+def test_index_icon_and_accessibility_references_are_valid() -> None:
+    parser = _IndexContractParser()
+    index_text = Path("static/index.html").read_text(encoding="utf-8")
+    parser.feed(index_text)
+
+    script_icon_references: set[str] = set()
+    for script in Path("static/js").glob("*.js"):
+        script_icon_references.update(
+            re.findall(r'<use\s+href=["\']#([a-z0-9-]+)', script.read_text(encoding="utf-8"))
+        )
+
+    duplicate_ids = sorted({value for value in parser.ids if parser.ids.count(value) > 1})
+    missing_references = sorted(parser.references.difference(parser.ids))
+    missing_icons = sorted((parser.icon_references | script_icon_references).difference(parser.ids))
+    unnamed_buttons = sorted(
+        str(button["id"])
+        for button in parser.buttons
+        if not button["has_text"] and not button["has_name"]
+    )
+
+    assert duplicate_ids == []
+    assert missing_references == []
+    assert missing_icons == []
+    assert unnamed_buttons == []
+
+
+def test_frontend_asset_versions_match() -> None:
+    source = Path("static/index.html").read_text(encoding="utf-8")
+    source += Path("static/js/app.js").read_text(encoding="utf-8")
+    versions = set(re.findall(r"\?v=([a-zA-Z0-9-]+)", source))
+    assert versions == {"20260711-duo6"}
+
+
+def test_brand_color_pairs_keep_readable_contrast() -> None:
+    css = Path("static/css/style.css").read_text(encoding="utf-8")
+
+    def css_color(variable: str) -> str:
+        match = re.search(rf"--{re.escape(variable)}:\s*(#[0-9a-fA-F]{{6}})\s*;", css)
+        assert match is not None, f"missing CSS color token: {variable}"
+        return match.group(1)
+
+    def luminance(hex_color: str) -> float:
+        channels = [int(hex_color[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    def contrast(first: str, second: str) -> float:
+        light, dark = sorted((luminance(first), luminance(second)), reverse=True)
+        return (light + 0.05) / (dark + 0.05)
+
+    assert contrast(css_color("color-brand"), css_color("color-brand-ink")) >= 4.5
+    assert contrast(css_color("color-action-secondary"), css_color("color-surface")) >= 4.5
+    assert contrast(css_color("color-danger-action"), css_color("color-surface")) >= 4.5
+
+
+def test_frontend_css_stays_within_gzip_budget() -> None:
+    css = Path("static/css/style.css").read_bytes()
+    assert len(gzip.compress(css, compresslevel=9)) <= 36 * 1024
 
 
 @pytest.mark.parametrize("payload", ["null", "[]", "{broken"])

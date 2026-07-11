@@ -486,7 +486,7 @@
             '<img class="chat-msg-avatar-img" src="' +
             escapeHtml(url) +
             '" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.onerror=null;this.parentElement.classList.add(\'chat-msg-avatar--fallback\');this.removeAttribute(\'src\');" />' +
-            '<span class="chat-msg-avatar-ph" aria-hidden="true">👤</span>' +
+            '<span class="chat-msg-avatar-ph" aria-hidden="true"><svg class="ui-icon"><use href="#icon-user-round"></use></svg></span>' +
             "</div>"
         );
     }
