@@ -1553,11 +1553,35 @@ async function refreshNavUserAvatar() {
 
 let currentInviteCard = {
     code: '',
+    registerUrl: '',
     imageUrl: '',
     blob: null,
     file: null,
 };
 let inviteCreateInFlight = false;
+let inviteUnusedPayload = { invites: [] };
+const inviteUnusedById = new Map();
+let inviteSessionGeneration = 0;
+let inviteModalGeneration = 0;
+
+function currentInviteFlow() {
+    return {
+        sessionGeneration: inviteSessionGeneration,
+        modalGeneration: inviteModalGeneration,
+        token,
+    };
+}
+
+function inviteSessionIsCurrent(flow) {
+    return !!flow &&
+        !!token &&
+        flow.token === token &&
+        flow.sessionGeneration === inviteSessionGeneration;
+}
+
+function inviteFlowIsCurrent(flow) {
+    return inviteSessionIsCurrent(flow) && flow.modalGeneration === inviteModalGeneration;
+}
 
 function renderInviteSettingsPanel(s) {
     const hint = document.getElementById('settings-invite-hint');
@@ -1568,22 +1592,23 @@ function renderInviteSettingsPanel(s) {
     const limit = Math.max(0, Number(s.invite_quota_limit) || 0);
     const used = Math.max(0, Number(s.invite_quota_used) || 0);
     const remaining = Math.max(0, Number(s.invite_quota_remaining) || 0);
+    const invites = Array.isArray(s.invites) ? s.invites : [];
+    const hasUnused = invites.some((inv) => inv && inv.status === 'unused' && inv.selectable);
     hint.textContent = `已生成 ${formatNumber(used)} / ${formatNumber(limit)} 个邀请码，剩余 ${formatNumber(remaining)} 个。`;
-    btn.disabled = remaining <= 0;
-    btn.textContent = remaining > 0 ? '生成邀请图片' : '邀请次数已用完';
+    btn.disabled = inviteCreateInFlight || (remaining <= 0 && !hasUnused);
+    btn.textContent = hasUnused ? '打开邀请图片' : remaining > 0 ? '生成邀请图片' : '邀请次数已用完';
     if (latest && !latest.dataset.hasInvite) {
         latest.hidden = true;
         latest.innerHTML = '';
     }
     if (history) {
-        const invites = Array.isArray(s.invites) ? s.invites : [];
         if (!invites.length) {
             history.innerHTML = '<p class="settings-hint settings-invite-empty">还没有生成过邀请码。</p>';
         } else {
             const rows = invites.slice(0, 5).map((inv) => {
                 const status = inv.status === 'used'
                     ? `已被 ${escapeHtml(inv.used_by || '用户')} 使用`
-                    : '未使用';
+                    : inv.selectable === false ? '未使用（需原图片）' : '未使用';
                 return `<div class="settings-invite-row"><span>${escapeHtml(inv.created_at || '—')}</span><strong>${status}</strong></div>`;
             }).join('');
             history.innerHTML = rows;
@@ -1599,8 +1624,129 @@ function updateInviteQuotaInSettings(data) {
     const used = Math.max(0, Number(data.invite_quota_used) || 0);
     const remaining = Math.max(0, Number(data.invite_quota_remaining) || 0);
     hint.textContent = `已生成 ${formatNumber(used)} / ${formatNumber(limit)} 个邀请码，剩余 ${formatNumber(remaining)} 个。`;
-    btn.disabled = remaining <= 0;
-    btn.textContent = remaining > 0 ? '生成邀请图片' : '邀请次数已用完';
+    btn.disabled = false;
+    btn.textContent = '打开邀请图片';
+}
+
+function formatInviteCreatedAt(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return '创建时间未知';
+    return value.replace('T', ' ').replace(/\+08:00$/, '');
+}
+
+function syncInviteSettingsButton(payload, fallback = {}) {
+    const btn = document.getElementById('settings-invite-create');
+    if (!btn) return;
+    const hasQuota = payload && Object.prototype.hasOwnProperty.call(payload, 'invite_quota_remaining');
+    if (!hasQuota) {
+        btn.disabled = !!fallback.disabled;
+        btn.textContent = fallback.text || '打开邀请图片';
+        return;
+    }
+    const rows = Array.isArray(payload.invites) ? payload.invites : [];
+    const hasSelectable = !!currentInviteCard.code ||
+        rows.some((row) => row && row.selectable && row.invite_code);
+    const remaining = Math.max(0, Number(payload.invite_quota_remaining) || 0);
+    btn.disabled = inviteCreateInFlight || (remaining <= 0 && !hasSelectable);
+    btn.textContent = hasSelectable
+        ? '打开邀请图片'
+        : remaining > 0 ? '生成邀请图片' : '邀请次数已用完';
+}
+
+function syncInviteModalActions() {
+    const unavailable = inviteCreateInFlight || !currentInviteCard.code || !currentInviteCard.imageUrl;
+    const copy = document.getElementById('invite-card-copy');
+    const share = document.getElementById('invite-card-share');
+    const download = document.getElementById('invite-card-download');
+    const modal = document.getElementById('invite-card-modal');
+    if (copy) copy.disabled = unavailable;
+    if (share) share.disabled = unavailable;
+    if (download) {
+        download.setAttribute('aria-disabled', unavailable ? 'true' : 'false');
+        download.tabIndex = unavailable ? -1 : 0;
+    }
+    if (modal) modal.setAttribute('aria-busy', inviteCreateInFlight ? 'true' : 'false');
+}
+
+function renderInviteUnusedList(payload, statusMessage = '') {
+    const list = document.getElementById('invite-card-unused-list');
+    const count = document.getElementById('invite-card-unused-count');
+    const status = document.getElementById('invite-card-unused-status');
+    const createBtn = document.getElementById('invite-card-create-new');
+    if (!list || !count || !status) return;
+
+    inviteUnusedPayload = payload && typeof payload === 'object' ? payload : { invites: [] };
+    const rows = Array.isArray(inviteUnusedPayload.invites) ? inviteUnusedPayload.invites : [];
+    const selectable = rows.filter((row) => row && row.selectable && row.invite_code);
+    const unavailable = rows.length - selectable.length;
+    inviteUnusedById.clear();
+    list.replaceChildren();
+
+    rows.forEach((row, index) => {
+        const id = String(row.id || `invite-${index}`);
+        inviteUnusedById.set(id, row);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'invite-card-unused-item';
+        button.dataset.inviteId = id;
+        button.disabled = inviteCreateInFlight || !row.selectable || !row.invite_code;
+        const isCurrent = !!row.invite_code && row.invite_code === currentInviteCard.code;
+        const unavailableItem = !row.selectable || !row.invite_code;
+        button.setAttribute('aria-pressed', isCurrent ? 'true' : 'false');
+        button.setAttribute(
+            'aria-label',
+            unavailableItem
+                ? `历史邀请码，创建于 ${formatInviteCreatedAt(row.created_at)}，无法重新显示`
+                : `选择邀请码 ${row.invite_code}`,
+        );
+
+        const code = document.createElement('strong');
+        code.className = 'invite-card-unused-code';
+        const decryptFailed = row.unavailable_reason === 'decrypt_failed';
+        code.textContent = unavailableItem
+            ? decryptFailed ? '邀请码暂时无法解密' : '历史邀请码不可恢复'
+            : String(row.invite_code);
+        const created = document.createElement('span');
+        created.className = 'invite-card-unused-time';
+        created.textContent = formatInviteCreatedAt(row.created_at);
+        const mark = document.createElement('em');
+        mark.className = 'invite-card-unused-mark';
+        mark.textContent = isCurrent
+            ? '当前'
+            : unavailableItem ? decryptFailed ? '暂不可用' : '需原图片' : '选择';
+        button.append(code, created, mark);
+        list.appendChild(button);
+    });
+
+    count.textContent = selectable.length > 0 ? `可选择 ${selectable.length} 个` : '暂无可选择邀请码';
+    if (statusMessage) {
+        status.textContent = statusMessage;
+    } else if (unavailable > 0) {
+        const decryptFailures = rows.filter((row) => row && row.unavailable_reason === 'decrypt_failed').length;
+        status.textContent = decryptFailures > 0
+            ? `有 ${decryptFailures} 个邀请码暂时无法解密，请联系管理员检查加密密钥。`
+            : `另有 ${unavailable} 个旧邀请码未保存明文，请使用当时保存的邀请图片。`;
+    } else if (!rows.length) {
+        status.textContent = '暂无未使用邀请码。';
+    } else {
+        status.textContent = '';
+    }
+
+    if (createBtn) {
+        const remaining = Math.max(0, Number(inviteUnusedPayload.invite_quota_remaining) || 0);
+        createBtn.disabled = inviteCreateInFlight || remaining <= 0;
+        createBtn.textContent = remaining > 0 ? `生成新邀请码（剩余 ${remaining}）` : '生成额度已用完';
+    }
+    syncInviteModalActions();
+}
+
+async function loadInviteUnusedList(flow = currentInviteFlow()) {
+    const status = document.getElementById('invite-card-unused-status');
+    if (status) status.textContent = '正在加载未使用邀请码…';
+    const data = await apiRequest('/user/invites/unused');
+    if (!inviteFlowIsCurrent(flow)) return null;
+    renderInviteUnusedList(data);
+    return data;
 }
 
 function roundRectPath(ctx, x, y, w, h, r) {
@@ -1760,7 +1906,96 @@ async function buildInviteCardImage({ code, registerUrl, inviterName, avatarUrl 
     };
 }
 
+async function selectInviteCodeForCard({ code, registerUrl }, flow = currentInviteFlow()) {
+    if (!inviteFlowIsCurrent(flow)) return null;
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    if (!normalizedCode) throw new Error('邀请码不可用');
+    const studentName = sessionStudentUsername();
+    const avatarUrl = studentName ? `/api/user/avatar/${encodeURIComponent(studentName)}` : null;
+    const targetUrl = registerUrl || window.location.origin;
+    const card = await buildInviteCardImage({
+        code: normalizedCode,
+        registerUrl: targetUrl,
+        inviterName: studentName,
+        avatarUrl,
+    });
+    if (!inviteFlowIsCurrent(flow)) {
+        URL.revokeObjectURL(card.url);
+        return null;
+    }
+    let file = null;
+    try {
+        file = new File([card.blob], `invite-${normalizedCode}.png`, { type: 'image/png' });
+    } catch (_) {
+        file = null;
+    }
+    const previousUrl = currentInviteCard.imageUrl;
+    currentInviteCard = {
+        code: normalizedCode,
+        registerUrl: targetUrl,
+        imageUrl: card.url,
+        blob: card.blob,
+        file,
+    };
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
+    showInviteCardModal(currentInviteCard);
+    renderInviteUnusedList(inviteUnusedPayload);
+    return currentInviteCard;
+}
+
+function clearCurrentInviteCard() {
+    if (currentInviteCard.imageUrl) URL.revokeObjectURL(currentInviteCard.imageUrl);
+    currentInviteCard = {
+        code: '',
+        registerUrl: '',
+        imageUrl: '',
+        blob: null,
+        file: null,
+    };
+    const img = document.getElementById('invite-card-preview');
+    const download = document.getElementById('invite-card-download');
+    if (img) {
+        img.removeAttribute('src');
+        img.hidden = true;
+    }
+    if (download) {
+        download.removeAttribute('href');
+        download.download = 'invite.png';
+    }
+    syncInviteModalActions();
+}
+
+function resetInviteCardState() {
+    inviteSessionGeneration += 1;
+    inviteModalGeneration += 1;
+    inviteCreateInFlight = false;
+    clearCurrentInviteCard();
+    inviteUnusedPayload = { invites: [] };
+    inviteUnusedById.clear();
+    const modal = document.getElementById('invite-card-modal');
+    const list = document.getElementById('invite-card-unused-list');
+    const count = document.getElementById('invite-card-unused-count');
+    const status = document.getElementById('invite-card-unused-status');
+    const message = document.getElementById('invite-card-message');
+    const latest = document.getElementById('settings-invite-latest');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+        modal.setAttribute('aria-busy', 'false');
+    }
+    if (list) list.replaceChildren();
+    if (count) count.textContent = '';
+    if (status) status.textContent = '';
+    if (message) message.textContent = '';
+    if (latest) {
+        latest.hidden = true;
+        latest.innerHTML = '';
+        delete latest.dataset.hasInvite;
+    }
+}
+
 function closeInviteCardModal() {
+    inviteModalGeneration += 1;
     const modal = document.getElementById('invite-card-modal');
     if (modal) {
         modal.style.display = 'none';
@@ -1776,19 +2011,81 @@ function showInviteCardModal(payload) {
     const dl = document.getElementById('invite-card-download');
     const msg = document.getElementById('invite-card-message');
     if (!modal || !img || !dl) return;
-    img.src = payload.imageUrl;
-    dl.href = payload.imageUrl;
-    dl.download = `invite-${payload.code || 'code'}.png`;
+    if (payload && payload.imageUrl) {
+        img.hidden = false;
+        img.src = payload.imageUrl;
+        dl.href = payload.imageUrl;
+        dl.download = `invite-${payload.code || 'code'}.png`;
+    } else {
+        img.hidden = true;
+        img.removeAttribute('src');
+        dl.removeAttribute('href');
+        dl.download = 'invite.png';
+    }
     if (msg) msg.textContent = '';
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
+    syncInviteModalActions();
+}
+
+function renderLatestInviteInSettings(data) {
+    const latest = document.getElementById('settings-invite-latest');
+    if (!latest || !data || !data.invite_code) return;
+    latest.dataset.hasInvite = '1';
+    latest.hidden = false;
+    latest.innerHTML =
+        `<div class="settings-invite-code-line"><span>新邀请码</span><strong>${escapeHtml(data.invite_code)}</strong></div>` +
+        `<p class="settings-hint">${escapeHtml(data.hint || '未使用前可在邀请窗口中再次选择。')}</p>`;
+}
+
+function refreshInviteSettingsAfterCreate(data, flow) {
+    apiRequest('/user/invites')
+        .then((fresh) => {
+            if (!inviteFlowIsCurrent(flow)) return;
+            const history = document.getElementById('settings-invite-history');
+            if (!history) return;
+            renderInviteSettingsPanel({
+                ...fresh,
+                invite_quota_limit: data.invite_quota_limit,
+                invite_quota_used: data.invite_quota_used,
+                invite_quota_remaining: data.invite_quota_remaining,
+            });
+            renderLatestInviteInSettings(data);
+        })
+        .catch(() => {});
+}
+
+async function createNewInviteCard(flow = currentInviteFlow()) {
+    if (!inviteFlowIsCurrent(flow)) return null;
+    const data = await apiRequest('/user/invites', {
+        method: 'POST',
+        body: '{}',
+    });
+    if (!inviteFlowIsCurrent(flow)) return null;
+    const selected = await selectInviteCodeForCard({
+        code: data.invite_code,
+        registerUrl: data.invite_register_url || window.location.origin,
+    }, flow);
+    if (!selected || !inviteFlowIsCurrent(flow)) return null;
+    renderLatestInviteInSettings(data);
+    updateInviteQuotaInSettings(data);
+    setSettingsMessage('新邀请码和邀请图片已生成');
+    refreshInviteSettingsAfterCreate(data, flow);
+    try {
+        await loadInviteUnusedList(flow);
+    } catch (_) {
+        if (inviteFlowIsCurrent(flow)) {
+            renderInviteUnusedList(inviteUnusedPayload, '邀请码列表刷新失败，请稍后重试。');
+        }
+    }
+    return data;
 }
 
 async function createInviteCardFromSettings() {
     if (inviteCreateInFlight) return;
     const btn = document.getElementById('settings-invite-create');
-    const latest = document.getElementById('settings-invite-latest');
     const prevText = btn ? btn.textContent : '';
+    const prevDisabled = btn ? btn.disabled : false;
     closeMobileMoreSheet();
     if (isParentSession) {
         showMainBanner('家长账户不能生成邀请码');
@@ -1796,84 +2093,115 @@ async function createInviteCardFromSettings() {
     }
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '生成中…';
+        btn.textContent = '打开中…';
     }
+    const flow = currentInviteFlow();
     inviteCreateInFlight = true;
+    let finalStatus = '';
     setSettingsMessage('');
+    showInviteCardModal(currentInviteCard);
+    renderInviteUnusedList(inviteUnusedPayload, '正在加载未使用邀请码…');
     try {
-        const data = await apiRequest('/user/invites', {
-            method: 'POST',
-            body: '{}',
-        });
-        if (currentInviteCard.imageUrl) {
-            URL.revokeObjectURL(currentInviteCard.imageUrl);
+        const data = await loadInviteUnusedList(flow);
+        if (!data || !inviteFlowIsCurrent(flow)) return;
+        const rows = Array.isArray(data.invites) ? data.invites : [];
+        const reusable =
+            rows.find((row) => row.invite_code === currentInviteCard.code && row.selectable) ||
+            rows.find((row) => row && row.selectable && row.invite_code);
+        if (reusable) {
+            const selected = await selectInviteCodeForCard({
+                code: reusable.invite_code,
+                registerUrl: data.invite_register_url || window.location.origin,
+            }, flow);
+            if (!selected || !inviteFlowIsCurrent(flow)) return;
+            setSettingsMessage('已打开未使用的邀请码');
+        } else if (Math.max(0, Number(data.invite_quota_remaining) || 0) > 0) {
+            await createNewInviteCard(flow);
+        } else {
+            clearCurrentInviteCard();
+            showInviteCardModal(currentInviteCard);
+            renderInviteUnusedList(data);
+            finalStatus = '没有可重新显示的邀请码，且生成额度已用完。';
+            setSettingsMessage('没有可重新显示的邀请码，且生成额度已用完', true);
         }
-        const studentName = sessionStudentUsername();
-        const avatarUrl = studentName ? `/api/user/avatar/${encodeURIComponent(studentName)}` : null;
-        const card = await buildInviteCardImage({
-            code: data.invite_code,
-            registerUrl: data.invite_register_url || window.location.origin,
-            inviterName: studentName,
-            avatarUrl,
-        });
-        let file = null;
-        try {
-            file = new File([card.blob], `invite-${data.invite_code}.png`, { type: 'image/png' });
-        } catch (_) {
-            file = null;
-        }
-        currentInviteCard = {
-            code: data.invite_code || '',
-            imageUrl: card.url,
-            blob: card.blob,
-            file,
-        };
-        if (latest) {
-            latest.dataset.hasInvite = '1';
-            latest.hidden = false;
-            latest.innerHTML =
-                `<div class="settings-invite-code-line"><span>新邀请码</span><strong>${escapeHtml(data.invite_code || '')}</strong></div>` +
-                `<p class="settings-hint">${escapeHtml(data.hint || '请保存图片，邀请码关闭后无法再次查看明文。')}</p>`;
-        }
-        updateInviteQuotaInSettings(data);
-        showInviteCardModal(currentInviteCard);
-        setSettingsMessage('邀请图片已生成');
-        apiRequest('/user/invites')
-            .then((fresh) => {
-                const history = document.getElementById('settings-invite-history');
-                if (!history) return;
-                const merged = { ...fresh, invite_quota_limit: data.invite_quota_limit, invite_quota_used: data.invite_quota_used, invite_quota_remaining: data.invite_quota_remaining };
-                renderInviteSettingsPanel(merged);
-                if (latest) {
-                    latest.dataset.hasInvite = '1';
-                    latest.hidden = false;
-                    latest.innerHTML =
-                        `<div class="settings-invite-code-line"><span>新邀请码</span><strong>${escapeHtml(data.invite_code || '')}</strong></div>` +
-                        `<p class="settings-hint">${escapeHtml(data.hint || '请保存图片，邀请码关闭后无法再次查看明文。')}</p>`;
-                }
-            })
-            .catch(() => {});
     } catch (err) {
-        const msg = err.message || '生成失败';
+        if (!inviteFlowIsCurrent(flow)) return;
+        const msg = err.message || '邀请窗口打开失败';
+        finalStatus = msg;
+        clearCurrentInviteCard();
+        showInviteCardModal(currentInviteCard);
         setSettingsMessage(msg, true);
         showMainBanner(msg);
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = prevText || '生成邀请图片';
-        }
     } finally {
-        inviteCreateInFlight = false;
-        if (btn) {
-            if (!btn.disabled || btn.textContent === '生成中…') {
-                btn.textContent = prevText || '生成邀请图片';
-            }
+        if (inviteSessionIsCurrent(flow)) {
+            inviteCreateInFlight = false;
+            if (inviteFlowIsCurrent(flow)) renderInviteUnusedList(inviteUnusedPayload, finalStatus);
+            syncInviteSettingsButton(inviteUnusedPayload, {
+                disabled: prevDisabled,
+                text: prevText || '打开邀请图片',
+            });
+            syncInviteModalActions();
+        }
+    }
+}
+
+async function createNewInviteFromModal() {
+    if (inviteCreateInFlight) return;
+    const flow = currentInviteFlow();
+    inviteCreateInFlight = true;
+    let finalStatus = '';
+    renderInviteUnusedList(inviteUnusedPayload, '正在生成新邀请码…');
+    try {
+        const data = await createNewInviteCard(flow);
+        if (!data || !inviteFlowIsCurrent(flow)) return;
+        finalStatus = '新邀请码已选中。';
+    } catch (err) {
+        if (!inviteFlowIsCurrent(flow)) return;
+        const msg = err.message || '生成失败';
+        const modalMsg = document.getElementById('invite-card-message');
+        if (modalMsg) modalMsg.textContent = msg;
+        finalStatus = msg;
+    } finally {
+        if (inviteSessionIsCurrent(flow)) {
+            inviteCreateInFlight = false;
+            if (inviteFlowIsCurrent(flow)) renderInviteUnusedList(inviteUnusedPayload, finalStatus);
+            syncInviteSettingsButton(inviteUnusedPayload);
+            syncInviteModalActions();
+        }
+    }
+}
+
+async function selectUnusedInviteFromModal(inviteId) {
+    if (inviteCreateInFlight) return;
+    const row = inviteUnusedById.get(String(inviteId || ''));
+    if (!row || !row.selectable || !row.invite_code) return;
+    const flow = currentInviteFlow();
+    inviteCreateInFlight = true;
+    let finalStatus = '';
+    renderInviteUnusedList(inviteUnusedPayload, '正在切换邀请图片…');
+    try {
+        const selected = await selectInviteCodeForCard({
+            code: row.invite_code,
+            registerUrl: inviteUnusedPayload.invite_register_url || window.location.origin,
+        }, flow);
+        if (!selected || !inviteFlowIsCurrent(flow)) return;
+        finalStatus = `已选择邀请码 ${row.invite_code}`;
+    } catch (err) {
+        if (!inviteFlowIsCurrent(flow)) return;
+        finalStatus = err.message || '切换失败';
+    } finally {
+        if (inviteSessionIsCurrent(flow)) {
+            inviteCreateInFlight = false;
+            if (inviteFlowIsCurrent(flow)) renderInviteUnusedList(inviteUnusedPayload, finalStatus);
+            syncInviteSettingsButton(inviteUnusedPayload);
+            syncInviteModalActions();
         }
     }
 }
 
 async function copyInviteCodeFromModal() {
     const msg = document.getElementById('invite-card-message');
-    if (!currentInviteCard.code) return;
+    if (inviteCreateInFlight || !currentInviteCard.code) return;
     try {
         await navigator.clipboard.writeText(currentInviteCard.code);
         if (msg) msg.textContent = '邀请码已复制';
@@ -1884,6 +2212,7 @@ async function copyInviteCodeFromModal() {
 
 async function shareInviteCardFromModal() {
     const msg = document.getElementById('invite-card-message');
+    if (inviteCreateInFlight || !currentInviteCard.code || !currentInviteCard.blob) return;
     try {
         if (
             currentInviteCard.file &&
@@ -1900,7 +2229,7 @@ async function shareInviteCardFromModal() {
             await navigator.share({
                 title: '邀请你一起背单词',
                 text: `邀请码：${currentInviteCard.code}`,
-                url: window.location.origin,
+                url: currentInviteCard.registerUrl || window.location.origin,
             });
             if (msg) msg.textContent = '已打开系统分享';
         } else {
@@ -3755,19 +4084,7 @@ async function register(username, password, email, inviteCode) {
 }
 
 async function logout() {
-    try {
-        if (token) {
-            await fetch(`${API_BASE}/auth/logout`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-        }
-    } catch (e) {
-        /* 网络错误仍清除本地会话 */
-    }
+    const logoutToken = token;
     if (typeof window.chatRoomOnLogout === 'function') window.chatRoomOnLogout();
     token = null;
     username = null;
@@ -3777,15 +4094,29 @@ async function logout() {
     clearWordbankCsvDiscoveryCache();
     preloadedReviewData = null;
     resetArticleImportPickUI();
-
     closeSettings();
     showLoginPage();
+
+    try {
+        if (logoutToken) {
+            await fetch(`${API_BASE}/auth/logout`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${logoutToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+    } catch (e) {
+        /* 网络错误仍清除本地会话 */
+    }
 }
 
 
 // ==================== 页面切换 ====================
 
 function showLoginPage() {
+    resetInviteCardState();
     preloadedReviewData = null;
     document.getElementById('login-page').classList.add('active');
     document.getElementById('main-page').classList.remove('active');
@@ -7313,6 +7644,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     document.getElementById('invite-card-share')?.addEventListener('click', () => {
         void shareInviteCardFromModal();
+    });
+    document.getElementById('invite-card-download')?.addEventListener('click', (event) => {
+        if (event.currentTarget.getAttribute('aria-disabled') === 'true') event.preventDefault();
+    });
+    document.getElementById('invite-card-create-new')?.addEventListener('click', () => {
+        void createNewInviteFromModal();
+    });
+    document.getElementById('invite-card-unused-list')?.addEventListener('click', (event) => {
+        const target = event.target instanceof Element
+            ? event.target.closest('.invite-card-unused-item[data-invite-id]')
+            : null;
+        if (!target || target.disabled) return;
+        void selectUnusedInviteFromModal(target.dataset.inviteId);
     });
     document.getElementById('settings-month-goal-save')?.addEventListener('click', async () => {
         const inp = document.getElementById('settings-month-goal');

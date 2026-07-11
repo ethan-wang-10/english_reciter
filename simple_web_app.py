@@ -1995,7 +1995,11 @@ _RATE_MAX_CHALLENGE_RESPOND = 60
 _CHAT_MENTION_RE = re.compile(r"@([a-zA-Z0-9_]{3,32})")
 
 INVITES_FILE = DATA_DIR / "invites.json"
+INVITES_LOCK_FILE = SHARED_DATA_DIR / ".invites.lock"
+INVITE_CODE_KEY_FILE = SHARED_DATA_DIR / ".invite_code_fernet.key"
 _invites_lock = threading.Lock()
+_invite_crypto_lock = threading.Lock()
+_invite_fernet_cache = None
 
 # 每用户背诵器缓存 + 互斥锁（避免并发写 JSON 与重复初始化）
 _reciter_registry_lock = threading.Lock()
@@ -2157,6 +2161,130 @@ def _hash_invite_code(plain: str) -> str:
     return hashlib.sha256(plain.strip().encode('utf-8')).hexdigest()
 
 
+_INVITE_CODE_ENC_PREFIX = "er-invite:v1:"
+
+
+def _fernet_for_invite_storage():
+    """Return a stable Fernet instance for recoverable, unused invite codes."""
+    global _invite_fernet_cache
+    if _invite_fernet_cache is not None:
+        return _invite_fernet_cache
+    with _invite_crypto_lock:
+        if _invite_fernet_cache is not None:
+            return _invite_fernet_cache
+        try:
+            from cryptography.fernet import Fernet
+        except ImportError:
+            logger.error("未安装 cryptography，无法安全保存可复用邀请码")
+            return None
+
+        try:
+            key = INVITE_CODE_KEY_FILE.read_bytes().strip()
+        except FileNotFoundError:
+            master = os.getenv("INVITE_CODE_ENCRYPTION_SECRET", "").strip()
+            if master:
+                key = base64.urlsafe_b64encode(
+                    hashlib.sha256(
+                        (master + "|english_reciter.invites.v1").encode("utf-8")
+                    ).digest()
+                )
+            else:
+                try:
+                    INVITE_CODE_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    key = Fernet.generate_key()
+                    try:
+                        fd = os.open(
+                            str(INVITE_CODE_KEY_FILE),
+                            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                            0o600,
+                        )
+                    except FileExistsError:
+                        key = INVITE_CODE_KEY_FILE.read_bytes().strip()
+                    else:
+                        with os.fdopen(fd, "wb") as f:
+                            f.write(key)
+                            f.flush()
+                            os.fsync(f.fileno())
+                except OSError as exc:
+                    logger.error("邀请码加密密钥文件不可用: %s", exc)
+                    return None
+        except OSError as exc:
+            logger.error("邀请码加密密钥文件不可用: %s", exc)
+            return None
+        try:
+            os.chmod(INVITE_CODE_KEY_FILE, 0o600)
+        except OSError:
+            pass
+        try:
+            _invite_fernet_cache = Fernet(key)
+        except Exception as exc:
+            logger.error("邀请码加密密钥无效: %s", exc)
+            return None
+        return _invite_fernet_cache
+
+
+def _encrypt_invite_code_for_storage(plain: str) -> str:
+    fernet = _fernet_for_invite_storage()
+    if fernet is None:
+        raise RuntimeError("邀请码安全存储不可用")
+    normalized = plain.strip().upper()
+    token = fernet.encrypt(normalized.encode("utf-8")).decode("ascii")
+    return _INVITE_CODE_ENC_PREFIX + token
+
+
+def _legacy_invite_fernets_for_recovery() -> List[Any]:
+    """Support ciphertext produced by the short-lived SECRET_KEY-based implementation."""
+    try:
+        from cryptography.fernet import Fernet
+    except ImportError:
+        return []
+    candidates = []
+    seen_keys = set()
+    for env_name in ("INVITE_CODE_ENCRYPTION_SECRET", "SECRET_KEY"):
+        master = os.getenv(env_name, "").strip()
+        if not master:
+            continue
+        key = base64.urlsafe_b64encode(
+            hashlib.sha256((master + "|english_reciter.invites.v1").encode("utf-8")).digest()
+        )
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        candidates.append(Fernet(key))
+    return candidates
+
+
+def _recover_invite_code(inv: dict) -> str:
+    """Recover an unused code owned by its creator; never return used codes."""
+    if not isinstance(inv, dict) or inv.get("used_at"):
+        return ""
+    expected_hash = str(inv.get("code_hash") or "")
+    ciphertext = str(inv.get("code_ciphertext") or "").strip()
+    code = ""
+    if ciphertext.startswith(_INVITE_CODE_ENC_PREFIX):
+        token = ciphertext[len(_INVITE_CODE_ENC_PREFIX) :].encode("ascii")
+        candidates = []
+        primary = _fernet_for_invite_storage()
+        if primary is not None:
+            candidates.append(primary)
+        candidates.extend(_legacy_invite_fernets_for_recovery())
+        for fernet in candidates:
+            try:
+                code = fernet.decrypt(token).decode("utf-8").strip().upper()
+                break
+            except Exception:
+                continue
+        if not code:
+            logger.error("邀请码密文无法解密: id=%s", inv.get("id"))
+            return ""
+    else:
+        # Compatibility with any short-lived development builds that stored this field directly.
+        code = str(inv.get("invite_code") or "").strip().upper()
+    if not code or not expected_hash:
+        return ""
+    return code if secrets.compare_digest(_hash_invite_code(code), expected_hash) else ""
+
+
 def _invite_code_hash_candidates(plain: str) -> List[str]:
     code = plain.strip()
     candidates = [_hash_invite_code(code)]
@@ -2177,11 +2305,11 @@ def _fresh_invite_code(existing_invites: List[dict]) -> str:
         for inv in existing_invites
         if isinstance(inv, dict)
     }
-    for _ in range(16):
+    for _ in range(128):
         plain = _new_invite_code()
         if _hash_invite_code(plain) not in used_hashes:
             return plain
-    return secrets.token_urlsafe(18)
+    raise RuntimeError("无法生成唯一邀请码")
 
 
 def invite_quota_used(user_dict: dict) -> int:
@@ -2214,7 +2342,7 @@ def invite_quota_payload(user_dict: dict) -> dict:
 
 def invite_public_row(inv: dict) -> dict:
     used = bool(inv.get("used_at"))
-    return {
+    row = {
         "id": inv.get("id"),
         "created_at": inv.get("created_at"),
         "created_by": inv.get("created_by"),
@@ -2223,6 +2351,9 @@ def invite_public_row(inv: dict) -> dict:
         "used_by": inv.get("used_by"),
         "status": "used" if used else "unused",
     }
+    if not used and inv.get("created_by_kind") == "user":
+        row["selectable"] = bool(_recover_invite_code(inv))
+    return row
 
 
 def _list_invites_created_by(username: str) -> List[dict]:
@@ -2237,6 +2368,34 @@ def _list_invites_created_by(username: str) -> List[dict]:
     return rows
 
 
+def _list_unused_invites_created_by(username: str) -> List[dict]:
+    data = load_invites()
+    rows = []
+    for inv in data.get("invites", []):
+        if not isinstance(inv, dict):
+            continue
+        if inv.get("created_by_kind") != "user" or inv.get("created_by") != username:
+            continue
+        if inv.get("used_at"):
+            continue
+        code = _recover_invite_code(inv)
+        row = {
+            "id": inv.get("id"),
+            "created_at": inv.get("created_at"),
+            "status": "unused",
+            "selectable": bool(code),
+        }
+        if not code:
+            row["unavailable_reason"] = (
+                "decrypt_failed" if inv.get("code_ciphertext") else "legacy_hash_only"
+            )
+        if code:
+            row["invite_code"] = code
+        rows.append(row)
+    rows.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return rows
+
+
 def _public_origin() -> str:
     configured = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
     if configured:
@@ -2244,25 +2403,83 @@ def _public_origin() -> str:
     return request.url_root.rstrip("/")
 
 
+@contextmanager
+def _locked_invite_storage() -> Generator[None, None, None]:
+    """Serialize invite reads and writes across threads and Gunicorn workers."""
+    INVITES_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = open(INVITES_LOCK_FILE, "a+b", buffering=0)
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"\0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        with _invites_lock:
+            yield
+    finally:
+        if sys.platform == "win32":
+            import msvcrt
+
+            try:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        try:
+            lock_file.close()
+        except OSError:
+            pass
+
+
 def load_invites() -> dict:
     """加载邀请码列表。"""
-    if not INVITES_FILE.exists():
-        return {"invites": []}
     try:
         with open(INVITES_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
+    except FileNotFoundError:
+        return {"invites": []}
     except Exception as e:
         logger.error(f"加载邀请码失败: {e}")
-        return {"invites": []}
+        raise
 
 
 def save_invites(data: dict) -> None:
-    """保存邀请码文件。"""
+    """Atomically save invites so a failed write cannot truncate the live file."""
+    INVITES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{INVITES_FILE.name}.",
+        suffix=".tmp",
+        dir=str(INVITES_FILE.parent),
+        text=True,
+    )
     try:
-        with open(INVITES_FILE, 'w', encoding='utf-8') as f:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_name, INVITES_FILE)
     except Exception as e:
         logger.error(f"保存邀请码失败: {e}")
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def register_user_with_invite(
@@ -2279,7 +2496,7 @@ def register_user_with_invite(
         return False, '用户名须为3-32位字母、数字或下划线'
 
     code_hashes = set(_invite_code_hash_candidates(invite_code))
-    with _invites_lock:
+    with _locked_invite_storage():
         data = load_invites()
         invites = data.get('invites', [])
         matched = None
@@ -2291,27 +2508,43 @@ def register_user_with_invite(
             return False, '邀请码无效或已使用'
 
         def _add_user(users: Dict[str, Any]) -> Tuple[bool, str]:
+            if matched.get('created_by_kind') == 'user':
+                creator = users.get(str(matched.get('created_by') or ''))
+                if not _user_row_is_enabled(creator):
+                    return False, '邀请码无效或已使用'
             if username in users:
                 return False, '用户名已存在'
             if is_reserved_parent_username(username):
                 return False, '该用户名保留给家长账户使用，请更换'
+            if (DATA_DIR / username).exists():
+                return False, '用户名数据尚未清理，请稍后重试'
             users[username] = {
                 'password_hash': hash_password(password),
                 'email': email,
                 'created_at': china_now_iso(timespec="seconds"),
                 'enabled': True,
             }
+            matched['used_at'] = china_now_iso(timespec="seconds")
+            matched['used_by'] = username
+            matched.pop('code_ciphertext', None)
+            matched.pop('invite_code', None)
+            (DATA_DIR / username).mkdir(exist_ok=True)
+            save_invites(data)
             return True, ''
 
-        ok, err = mutate_users(_add_user)
+        original_invite = dict(matched)
+        try:
+            ok, err = mutate_users(_add_user)
+        except Exception:
+            matched.clear()
+            matched.update(original_invite)
+            try:
+                save_invites(data)
+            except Exception:
+                logger.exception("注册失败后恢复邀请码状态失败: invite_id=%s", matched.get('id'))
+            raise
         if not ok:
             return False, err
-
-        matched['used_at'] = china_now_iso(timespec="seconds")
-        matched['used_by'] = username
-        user_dir = DATA_DIR / username
-        user_dir.mkdir(exist_ok=True)
-        save_invites(data)
         logger.info("新用户注册: %s (invite_id=%s)", username, matched.get('id'))
         return True, ''
 
@@ -2339,31 +2572,85 @@ def _purge_student_account_completely(username: str) -> None:
     仅用于学生主账号；调用前须已校验非家长记录且用户名有效。
     """
     pname = parent_login_username_for_child(username)
-
-    def _delete_users(users: Dict[str, Any]) -> bool:
-        u = users.get(username)
-        if not isinstance(u, dict) or is_parent_user_record(u):
-            return False
-        if pname and pname in users and is_parent_user_record(users.get(pname)):
-            del users[pname]
-        if username in users:
-            del users[username]
-        return True
-
-    if not mutate_users(_delete_users):
-        return
-
-    if pname:
-        _revoke_user_tokens(pname)
-    _revoke_user_tokens(username)
-    with _reciter_registry_lock:
-        _user_reciter_cache.pop(username, None)
-        _user_reciter_locks.pop(username, None)
-    challenges_mod.purge_user_challenges_refs(DATA_DIR, username)
-
+    trashed_user_dir: Optional[Path] = None
     user_dir = DATA_DIR / username
-    if user_dir.is_dir():
-        shutil.rmtree(user_dir, ignore_errors=True)
+
+    with _locked_invite_storage():
+        current_user = get_user(username)
+        if not isinstance(current_user, dict) or is_parent_user_record(current_user):
+            return
+        invite_data = load_invites()
+        invite_rows = invite_data.setdefault("invites", [])
+        original_invite_rows = list(invite_rows)
+        if user_dir.exists():
+            trash_root = DATA_DIR / "_shared" / "deleted_users"
+            trash_root.mkdir(parents=True, exist_ok=True)
+            trashed_user_dir = trash_root / f"{username}-{uuid.uuid4().hex}"
+            user_dir.replace(trashed_user_dir)
+
+        def _delete_users(users: Dict[str, Any]) -> bool:
+            u = users.get(username)
+            if not isinstance(u, dict) or is_parent_user_record(u):
+                return False
+            if pname and pname in users and is_parent_user_record(users.get(pname)):
+                del users[pname]
+            del users[username]
+            remaining = [
+                inv
+                for inv in invite_rows
+                if not (
+                    isinstance(inv, dict)
+                    and inv.get("created_by_kind") == "user"
+                    and inv.get("created_by") == username
+                )
+            ]
+            if len(remaining) != len(invite_rows):
+                invite_data["invites"] = remaining
+                save_invites(invite_data)
+            return True
+
+        try:
+            deleted = mutate_users(_delete_users)
+        except Exception:
+            invite_data["invites"] = original_invite_rows
+            try:
+                save_invites(invite_data)
+            except Exception:
+                logger.exception("删除用户失败后恢复邀请码列表失败: user=%s", username)
+            if trashed_user_dir is not None and trashed_user_dir.exists() and not user_dir.exists():
+                try:
+                    trashed_user_dir.replace(user_dir)
+                    trashed_user_dir = None
+                except OSError:
+                    logger.exception("删除用户失败后恢复用户目录失败: user=%s", username)
+            raise
+        if not deleted:
+            if trashed_user_dir is not None and trashed_user_dir.exists() and not user_dir.exists():
+                trashed_user_dir.replace(user_dir)
+                trashed_user_dir = None
+            return
+        try:
+            if pname:
+                _revoke_user_tokens(pname)
+            _revoke_user_tokens(username)
+        except Exception:
+            logger.exception("删除用户后撤销会话失败: user=%s", username)
+        with _reciter_registry_lock:
+            _user_reciter_cache.pop(username, None)
+            _user_reciter_locks.pop(username, None)
+        try:
+            challenges_mod.purge_user_challenges_refs(DATA_DIR, username)
+        except Exception:
+            logger.exception("删除用户后清理挑战记录失败: user=%s", username)
+
+    if trashed_user_dir is not None:
+        if trashed_user_dir.is_dir():
+            shutil.rmtree(trashed_user_dir, ignore_errors=True)
+        else:
+            try:
+                trashed_user_dir.unlink()
+            except OSError:
+                pass
 
 
 def verify_user(username: str, password: str) -> bool:
@@ -3142,7 +3429,7 @@ def get_user_settings(username):
         av = user_avatar_disk_path(username)
         prof["avatar_url"] = f"/api/user/avatar/{username}" if av else None
         prof.update(invite_quota_payload(load_users().get(username) or {}))
-        with _invites_lock:
+        with _locked_invite_storage():
             prof["invites"] = _list_invites_created_by(username)
         prof["invite_register_url"] = f"{_public_origin()}/"
         prof["monthly_pool"] = pool
@@ -3275,7 +3562,7 @@ def get_user_invites(username):
     u = users.get(username)
     if not isinstance(u, dict) or is_parent_user_record(u):
         return jsonify({'error': '用户不存在'}), 404
-    with _invites_lock:
+    with _locked_invite_storage():
         invites = _list_invites_created_by(username)
     return jsonify({
         **invite_quota_payload(u),
@@ -3284,17 +3571,51 @@ def get_user_invites(username):
     }), 200
 
 
+@app.route('/api/user/invites/unused', methods=['GET'])
+@token_required
+@parent_forbidden
+def get_unused_user_invites(username):
+    """Return only this user's unused invite codes, without allowing intermediary caching."""
+    users = load_users()
+    u = users.get(username)
+    if not isinstance(u, dict) or is_parent_user_record(u):
+        return jsonify({'error': '用户不存在'}), 404
+    with _locked_invite_storage():
+        invites = _list_unused_invites_created_by(username)
+    response = jsonify({
+        **invite_quota_payload(u),
+        "invites": invites,
+        "invite_register_url": f"{_public_origin()}/",
+    })
+    response.headers["Cache-Control"] = "private, no-store"
+    return response, 200
+
+
 @app.route('/api/user/invites', methods=['POST'])
 @token_required
 @parent_forbidden
 def create_user_invite(username):
     """当前用户生成一次性邀请码（每个用户默认最多 15 个）。"""
-    with _invites_lock:
+    with _locked_invite_storage():
         data = load_invites()
         invites = data.setdefault("invites", [])
-        plain = _fresh_invite_code(invites)
+        plain = _fresh_invite_code(invites).strip().upper()
+        try:
+            ciphertext = _encrypt_invite_code_for_storage(plain)
+        except RuntimeError:
+            return jsonify({"error": "邀请码安全存储暂不可用，请稍后重试"}), 503
         inv_id = str(uuid.uuid4())
         quota_after: Optional[dict] = None
+        entry = {
+            "id": inv_id,
+            "code_hash": _hash_invite_code(plain),
+            "code_ciphertext": ciphertext,
+            "created_at": china_now_iso(timespec="seconds"),
+            "created_by": username,
+            "created_by_kind": "user",
+            "used_at": None,
+            "used_by": None,
+        }
 
         def _consume_quota(users: Dict[str, Any]) -> Tuple[bool, int, str, Optional[dict]]:
             u = users.get(username)
@@ -3308,30 +3629,33 @@ def create_user_invite(username):
                 return False, 400, "邀请码次数已用完，请联系管理员重置", invite_quota_payload(u)
             u["invite_quota_limit"] = limit
             u["invite_quota_used"] = used + 1
+            invites.append(entry)
+            try:
+                save_invites(data)
+            except Exception:
+                invites.remove(entry)
+                raise
             return True, 201, "", invite_quota_payload(u)
 
-        ok, status_code, err, quota_after = mutate_users(_consume_quota)
+        try:
+            ok, status_code, err, quota_after = mutate_users(_consume_quota)
+        except Exception:
+            if entry in invites:
+                invites.remove(entry)
+                try:
+                    save_invites(data)
+                except Exception:
+                    logger.exception("生成失败后恢复邀请码列表失败: invite_id=%s", inv_id)
+            raise
         if not ok:
             return jsonify({"error": err, **(quota_after or {})}), status_code
-
-        entry = {
-            "id": inv_id,
-            "code_hash": _hash_invite_code(plain),
-            "created_at": china_now_iso(timespec="seconds"),
-            "created_by": username,
-            "created_by_kind": "user",
-            "used_at": None,
-            "used_by": None,
-        }
-        invites.append(entry)
-        save_invites(data)
 
     logger.info("用户生成邀请码: user=%s id=%s", username, inv_id)
     return jsonify({
         "id": inv_id,
         "invite_code": plain,
         "invite_register_url": f"{_public_origin()}/",
-        "hint": "请复制保存，关闭后无法再次查看明文",
+        "hint": "未使用前可在邀请窗口中再次选择",
         **(quota_after or {}),
     }), 201
 
@@ -6098,10 +6422,10 @@ def admin_delete_user_words(username):
 @admin_required
 def admin_create_invite():
     """生成一次性邀请码（仅响应中明文展示一次）。"""
-    with _invites_lock:
+    with _locked_invite_storage():
         data = load_invites()
         invites = data.setdefault('invites', [])
-        plain = _fresh_invite_code(invites)
+        plain = _fresh_invite_code(invites).strip().upper()
         inv_id = str(uuid.uuid4())
         entry = {
             'id': inv_id,
@@ -6127,7 +6451,8 @@ def admin_create_invite():
 @admin_required
 def admin_list_invites():
     """邀请码列表（不含明文）。"""
-    data = load_invites()
+    with _locked_invite_storage():
+        data = load_invites()
     rows = []
     for inv in data.get('invites', []):
         if isinstance(inv, dict):
