@@ -61,9 +61,11 @@ from auth_session_store import (
 from user_store import (
     DEFAULT_INVITE_QUOTA,
     close_connection as close_user_store_sqlite,
+    get_user,
     init_user_store,
     load_users,
     mutate_users,
+    update_password_hash,
 )
 from app_time import china_now_iso, china_today
 from performance_store import (
@@ -155,7 +157,7 @@ AVATAR_THUMB_MIN = 32
 logger = get_logger(__name__)
 
 # Flask应用
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_folder=None)
 _secret = os.getenv("SECRET_KEY")
 if os.getenv("FLASK_ENV", "").lower() == "production" and not _secret:
     raise RuntimeError(
@@ -220,8 +222,8 @@ CHAT_STREAM_SESSION_TTL = timedelta(minutes=2)
 USER_INVITE_QUOTA_DEFAULT = DEFAULT_INVITE_QUOTA
 
 # 数据目录
-DATA_DIR = Path("user_data_simple")
-DATA_DIR.mkdir(exist_ok=True)
+DATA_DIR = Path(os.getenv("ENGLISH_RECITER_DATA_DIR", "user_data_simple")).expanduser()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 init_auth_session_store(DATA_DIR)
 init_user_store(DATA_DIR)
 
@@ -2121,7 +2123,7 @@ def list_challenge_opponent_usernames(viewer: str) -> List[str]:
     users = load_users()
     enabled = [
         u for u in users
-        if isinstance(users.get(u), dict) and is_user_enabled(u)
+        if _user_row_is_enabled(users.get(u))
         and not is_parent_user_record(users[u])
     ]
     rows = gamification_mod.build_leaderboard(DATA_DIR, enabled, viewer=viewer)
@@ -2314,12 +2316,12 @@ def register_user_with_invite(
         return True, ''
 
 
+def _user_row_is_enabled(row: Any) -> bool:
+    return isinstance(row, dict) and row.get('enabled', True) is not False
+
+
 def is_user_enabled(username: str) -> bool:
-    users = load_users()
-    u = users.get(username)
-    if not u or not isinstance(u, dict):
-        return False
-    return u.get('enabled', True) is not False
+    return _user_row_is_enabled(get_user(username))
 
 
 def _revoke_user_tokens(username: str) -> None:
@@ -2366,18 +2368,23 @@ def _purge_student_account_completely(username: str) -> None:
 
 def verify_user(username: str, password: str) -> bool:
     """验证用户；若仍为旧版哈希则自动升级为 Werkzeug 哈希。"""
-    def _verify_and_upgrade(users: Dict[str, Any]) -> bool:
-        if username not in users:
-            return False
-        stored = users[username]["password_hash"]
-        if not verify_password(password, stored):
-            return False
-        if _is_legacy_sha256_hex(stored):
-            users[username]["password_hash"] = hash_password(password)
+    row = get_user(username)
+    if not isinstance(row, dict):
+        return False
+    stored = str(row.get("password_hash") or "")
+    if not verify_password(password, stored):
+        return False
+    if _is_legacy_sha256_hex(stored):
+        upgraded = update_password_hash(username, stored, hash_password(password))
+        if upgraded:
             logger.info("用户 %s 的密码哈希已升级为安全格式", username)
-        return True
-
-    return bool(mutate_users(_verify_and_upgrade))
+        else:
+            current = get_user(username)
+            return isinstance(current, dict) and verify_password(
+                password,
+                str(current.get("password_hash") or ""),
+            )
+    return True
 
 def create_token(username: str) -> str:
     """创建访问令牌（SQLite 持久化，多 worker 共享）。"""
@@ -2482,28 +2489,30 @@ def token_required(f):
         if not login_username:
             return jsonify({'error': '无效或过期的token'}), 401
 
-        if not is_user_enabled(login_username):
+        urow = get_user(login_username)
+        if not isinstance(urow, dict) or urow.get('enabled', True) is False:
             _revoke_user_tokens(login_username)
             return jsonify({'error': '账号已停用'}), 403
 
-        users = load_users()
-        urow = users.get(login_username)
         g.login_username = login_username
+        g.user_row = urow
         if isinstance(urow, dict) and is_parent_user_record(urow):
             child = (urow.get("child_username") or "").strip()
             if not child or not is_valid_username(child):
                 return jsonify({'error': '家长账户配置错误'}), 403
-            ch = users.get(child)
+            ch = get_user(child)
             if not isinstance(ch, dict) or is_parent_user_record(ch):
                 return jsonify({'error': '关联学生不存在'}), 403
-            if not is_user_enabled(child):
+            if ch.get('enabled', True) is False:
                 return jsonify({'error': '学生账号已停用'}), 403
             g.is_parent = True
             g.effective_username = child
+            g.effective_user_row = ch
             return f(child, *args, **kwargs)
 
         g.is_parent = False
         g.effective_username = login_username
+        g.effective_user_row = urow
         return f(login_username, *args, **kwargs)
     return decorated_function
 
@@ -2631,17 +2640,19 @@ def sanitize_tts_text(text: str, max_len: int = 500) -> str:
 @app.route('/')
 def index():
     """主页"""
-    return send_file('static/index.html')
+    return send_file(Path(app.root_path) / 'static' / 'index.html')
 
 @app.route('/static/<path:path>')
 def send_static(path):
     """静态文件服务"""
-    resp = send_from_directory('static', path)
+    resp = send_from_directory(Path(app.root_path) / 'static', path)
     ext = path.rsplit('.', 1)[-1].lower() if '.' in path else ''
     if ext in ('css', 'js'):
+        resp.cache_control.no_cache = None
         resp.cache_control.max_age = 3600
         resp.cache_control.public = True
     elif ext in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'woff', 'woff2'):
+        resp.cache_control.no_cache = None
         resp.cache_control.max_age = 86400
         resp.cache_control.public = True
     return resp
@@ -2686,9 +2697,11 @@ def performance_report():
     auth_header = request.headers.get("Authorization") or ""
     if auth_header.startswith("Bearer "):
         login_username = verify_token(auth_header[7:].strip())
-        if login_username and is_user_enabled(login_username):
-            users = load_users()
-            urow = users.get(login_username)
+        if login_username:
+            urow = get_user(login_username)
+        else:
+            urow = None
+        if _user_row_is_enabled(urow):
             if isinstance(urow, dict) and is_parent_user_record(urow):
                 child = (urow.get("child_username") or "").strip()
                 effective_username = child if child and is_valid_username(child) else None
@@ -2723,8 +2736,8 @@ def register():
         if not _rate_allow(f"reg:{_client_ip()}", _RATE_MAX_REGISTER):
             return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
 
-        data = request.get_json()
-        if not data:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
             return jsonify({'error': '无效的JSON数据'}), 400
         
         username = data.get('username', '').strip()
@@ -2762,8 +2775,7 @@ def register():
 
 def _auth_session_payload(login_username: str) -> dict:
     """供登录与 /api/auth/session 返回家长/学生标识。"""
-    users = load_users()
-    u = users.get(login_username)
+    u = get_user(login_username)
     out = {
         'login_username': login_username,
         'is_parent': False,
@@ -2784,8 +2796,10 @@ def login():
             return jsonify({'error': '登录尝试过多，请稍后再试'}), 429
 
         # 支持表单数据和JSON数据
-        if request.content_type == 'application/json':
-            data = request.get_json()
+        if request.is_json:
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict):
+                return jsonify({'error': '无效的JSON数据'}), 400
             username = data.get('username', '').strip()
             password = data.get('password', '').strip()
         else:
@@ -2796,14 +2810,15 @@ def login():
             return jsonify({'error': '用户名和密码不能为空'}), 400
 
         if verify_user(username, password):
-            if not is_user_enabled(username):
+            urow = get_user(username)
+            if not isinstance(urow, dict) or urow.get('enabled', True) is False:
                 return jsonify({'error': '账号已停用，请联系管理员'}), 403
-            urow = load_users().get(username)
             if isinstance(urow, dict) and is_parent_user_record(urow):
                 child = (urow.get('child_username') or '').strip()
                 if not child or not is_valid_username(child):
                     return jsonify({'error': '家长账户配置错误'}), 403
-                if not is_user_enabled(child):
+                child_row = get_user(child)
+                if not isinstance(child_row, dict) or child_row.get('enabled', True) is False:
                     return jsonify({'error': '学生账号已停用，无法以家长身份登录'}), 403
             token = create_token(username)
             body = {
@@ -3065,7 +3080,7 @@ def get_leaderboard(username):
         users = load_users()
         enabled = [
             u for u in users
-            if isinstance(users.get(u), dict) and is_user_enabled(u)
+            if _user_row_is_enabled(users.get(u))
             and not is_parent_user_record(users[u])
         ]
         scope = (request.args.get("scope") or "total").strip().lower()
@@ -3370,9 +3385,8 @@ def api_challenges_create(username):
         return jsonify({'error': '用户不存在'}), 400
     target_row = users.get(target)
     if (
-        not isinstance(target_row, dict)
+        not _user_row_is_enabled(target_row)
         or is_parent_user_record(target_row)
-        or not is_user_enabled(target)
     ):
         return jsonify({'error': '只能挑战已启用的学生账号'}), 400
     if target == username:
@@ -4628,10 +4642,14 @@ def search_wordbank_csv(username):
             'heuristics_enabled': use_heuristics,
             'surface_first': surface_first,
         }), 200
-    terms = [
+    if len(q) > 2000:
+        return jsonify({'error': '搜索内容过长，请减少后重试'}), 400
+    terms = _dedupe_preserve_order([
         _normalize_apostrophe_token(t.strip())
         for t in re.split(r'[,，]', q) if t.strip()
-    ]
+    ])
+    if len(terms) > 64:
+        return jsonify({'error': '单次最多搜索 64 个词'}), 400
     mappings = get_wordbank_lemma_mappings()
     rows, csv_row_keys = merge_wordbank_rows_for_search(level)
     lemma_resolution: Dict[str, str] = {}
@@ -4697,37 +4715,32 @@ def search_wordbank_csv(username):
                         implicit_contraction_resolution[term] = hit
                     elif kind == 'suffix':
                         implicit_suffix_resolution[term] = hit
+    _nk = wordbank_v2.normalize_english_key
+    english_target_keys: Set[str] = set()
+    chinese_terms: List[str] = []
+    for term in terms:
+        if re.match(r'[a-z]', term):
+            if surface_first:
+                hit = term_hits.get(term)
+                if hit is not None:
+                    english_target_keys.add(_nk(hit))
+                continue
+            for candidate, _kind in _iter_csv_lemma_candidates(
+                term, mappings, use_spacy, spacy_lemma_map, use_heuristics,
+            ):
+                english_target_keys.add(_nk(candidate))
+        else:
+            chinese_terms.append(term)
+
     result = []
     seen = set()
-    _nk = wordbank_v2.normalize_english_key
     for row in rows:
         en = _nk(row.get("english", ""))
         zh = row.get("chinese", "")
-        matched = False
-        for term in terms:
-            if re.match(r'[a-z]', term):
-                if surface_first:
-                    th = term_hits.get(term)
-                    matched = th is not None and en == _nk(th)
-                else:
-                    if en == _nk(term):
-                        matched = True
-                    elif term in mappings and _nk(mappings[term]) == en:
-                        matched = True
-                    else:
-                        for cand, _ in _iter_csv_lemma_candidates(
-                            term, mappings, use_spacy, spacy_lemma_map, use_heuristics,
-                        ):
-                            if en == _nk(cand):
-                                matched = True
-                                break
-            else:
-                matched = term in zh
-            if matched:
-                if en not in seen:
-                    seen.add(en)
-                    result.append(row)
-                break
+        matched = en in english_target_keys or any(term in zh for term in chinese_terms)
+        if matched and en not in seen:
+            seen.add(en)
+            result.append(row)
     out: Dict[str, object] = {
         'words': result,
         'count': len(result),
@@ -6258,8 +6271,7 @@ def _chat_mentionable_usernames() -> Set[str]:
     return {
         u
         for u, row in users.items()
-        if isinstance(row, dict)
-        and is_user_enabled(u)
+        if _user_row_is_enabled(row)
         and not is_parent_user_record(row)
     }
 
@@ -6297,19 +6309,18 @@ def _verify_chat_stream_auth() -> Optional[str]:
     if not login_username:
         return None
     revoke_token(SESSION_KIND_CHAT_STREAM, token)
-    if not is_user_enabled(login_username):
+    urow = get_user(login_username)
+    if not _user_row_is_enabled(urow):
         _revoke_user_tokens(login_username)
         return None
-    users = load_users()
-    urow = users.get(login_username)
     if isinstance(urow, dict) and is_parent_user_record(urow):
         child = (urow.get("child_username") or "").strip()
         if not child or not is_valid_username(child):
             return None
-        ch = users.get(child)
+        ch = get_user(child)
         if not isinstance(ch, dict) or is_parent_user_record(ch):
             return None
-        if not is_user_enabled(child):
+        if not _user_row_is_enabled(ch):
             return None
     return login_username
 
@@ -6370,7 +6381,7 @@ def api_chat_users_suggest(username):
         if len(out) >= 20:
             break
         row = users.get(u)
-        if not isinstance(row, dict) or not is_user_enabled(u):
+        if not _user_row_is_enabled(row):
             continue
         if is_parent_user_record(row):
             continue

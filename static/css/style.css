@@ -4,33 +4,36 @@
     box-sizing: border-box;
 }
 
-/* LexiPlay / Duolingo 规范：触感游戏化、品牌绿、浅绿底、2px 灰边、大圆角 */
+/* 视觉系统：清晰、高对比、轻量游戏化 */
 :root {
-    --primary-color: #58cc02;
-    --primary-dark: #46a302;
-    --primary-light: #e4ffce;
-    --secondary-color: #1cb0f6;
-    --secondary-dark: #1899d6;
+    --primary-color: #287a24;
+    --primary-dark: #1e5f1a;
+    --primary-light: #e2f3dc;
+    --secondary-color: #147d92;
+    --secondary-dark: #0b6070;
     --accent-yellow: #ffc800;
     --accent-yellow-dark: #e5a400;
     --accent-orange: #ff9600;
     --accent-orange-dark: #e08500;
     --error-color: #ff4b4b;
     --error-dark: #ea2b2b;
-    --success-color: #58cc02;
-    --background: #f6fbf3;
-    --background-wash: linear-gradient(165deg, #e8f8ff 0%, #e4ffce 38%, #fff8e0 100%);
+    --success-color: #287a24;
+    --background: #f3f6f1;
+    --background-wash: #f3f6f1;
     --surface: #ffffff;
-    --text-primary: #3c3c3c;
-    --text-secondary: #777777;
-    --border: #e5e5e5;
-    --shadow: 0 8px 0 rgba(0, 0, 0, 0.06);
-    --shadow-card: 0 10px 0 rgba(70, 163, 2, 0.12);
+    --text-primary: #25302a;
+    --text-secondary: #617069;
+    --text-muted: #617069;
+    --border: #dce4dd;
+    --shadow: 0 6px 0 rgba(37, 48, 42, 0.06);
+    --shadow-card: 0 8px 0 rgba(30, 95, 26, 0.1);
     --tactile-depth: 4px;
     --radius-lg: 26px;
     --radius-md: 18px;
+    --radius-sm: 8px;
     --radius-pill: 999px;
-    --font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --primary: var(--primary-color);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
     /* 由 JS（visualViewport）在移动端键盘弹出时写入，避免输入区被遮挡 */
     --keyboard-inset: 0px;
 }
@@ -92,6 +95,24 @@ body {
     padding-right: env(safe-area-inset-right, 0px);
 }
 
+:where(button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid rgba(20, 125, 146, 0.45);
+    outline-offset: 2px;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+html.modal-open,
+html.modal-open body {
+    overflow: hidden;
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -112,13 +133,31 @@ body {
 }
 
 .login-box {
-    max-width: 420px;
+    display: grid;
+    grid-template-columns: minmax(270px, 0.9fr) minmax(360px, 1.1fr);
+    width: min(860px, 100%);
+    max-width: 860px;
     margin: 0 auto;
-    padding: 36px 32px 40px;
-    background: linear-gradient(180deg, #f9fff4 0%, var(--surface) 55%);
+    padding: 0;
+    overflow: hidden;
+    background: var(--surface);
     border-radius: var(--radius-lg);
-    border: 2px solid var(--border);
-    box-shadow: var(--shadow-card), 0 4px 24px rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--border);
+    box-shadow: 0 18px 50px rgba(37, 48, 42, 0.12);
+}
+
+.login-brand-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 48px 38px;
+    background: var(--primary-color);
+    color: #fff;
+}
+
+.login-form-panel {
+    min-width: 0;
+    padding: 38px 40px 42px;
 }
 
 .login-brand {
@@ -134,16 +173,16 @@ body {
     height: 72px;
     margin-bottom: 12px;
     font-size: 40px;
-    background: linear-gradient(145deg, var(--primary-light), #fff);
+    background: #fff;
     border-radius: 50%;
-    border: 2px solid var(--primary-color);
-    box-shadow: 0 var(--tactile-depth) 0 var(--primary-dark);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    box-shadow: 0 6px 0 rgba(0, 0, 0, 0.14);
 }
 
 .login-brand h1 {
     font-size: 1.75rem;
     font-weight: 800;
-    color: var(--text-primary);
+    color: #fff;
     letter-spacing: 0;
 }
 
@@ -151,14 +190,67 @@ body {
     margin-top: 6px;
     font-size: 1.05rem;
     font-weight: 700;
-    color: var(--primary-dark);
+    color: #f2f8f0;
 }
 
 .login-sub {
     text-align: center;
-    color: var(--text-secondary);
-    margin-bottom: 28px;
+    color: rgba(255, 255, 255, 0.82);
+    margin-bottom: 0;
     font-size: 0.95rem;
+}
+
+@media (max-width: 720px) {
+    #login-page.page.active {
+        align-items: flex-start;
+        padding: 16px 12px;
+    }
+
+    .login-box {
+        grid-template-columns: 1fr;
+        width: min(460px, 100%);
+    }
+
+    .login-brand-panel {
+        padding: 22px 24px 20px;
+    }
+
+    .login-brand {
+        display: grid;
+        grid-template-columns: 56px 1fr;
+        column-gap: 14px;
+        align-items: center;
+        text-align: left;
+        margin-bottom: 4px;
+    }
+
+    .login-mascot {
+        grid-row: 1 / span 2;
+        width: 56px;
+        height: 56px;
+        margin: 0;
+        font-size: 30px;
+        box-shadow: 0 4px 0 rgba(0, 0, 0, 0.14);
+    }
+
+    .login-brand h1 {
+        font-size: 1.35rem;
+    }
+
+    .login-tagline {
+        margin-top: 1px;
+        font-size: 0.92rem;
+    }
+
+    .login-sub {
+        padding-left: 70px;
+        text-align: left;
+        font-size: 0.78rem;
+    }
+
+    .login-form-panel {
+        padding: 24px 22px 28px;
+    }
 }
 
 .tabs {
@@ -230,13 +322,15 @@ body {
 
 .btn-toggle-pw {
     position: absolute;
-    right: 8px;
+    right: 4px;
     top: 50%;
     transform: translateY(-50%);
     background: none;
     border: none;
     cursor: pointer;
-    padding: 4px 6px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
     font-size: 1.1rem;
     line-height: 1;
     opacity: 0.5;
@@ -888,11 +982,12 @@ body {
 .mobile-tab {
     flex: 1;
     min-width: 0;
-    padding: 10px 6px;
+    min-height: 56px;
+    padding: 9px 5px;
     border: none;
     border-top: 2px solid var(--border);
     background: var(--surface);
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     font-weight: 800;
     font-family: inherit;
     color: var(--text-secondary);
@@ -2984,7 +3079,7 @@ button.import-article-chip--selected:hover {
     }
 
     #main-page {
-        padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px));
+        padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px));
     }
 
     /* 软键盘弹出时：底栏移出可视区，避免与键盘叠罗汉；底部留白不再重复计入 Tab 高度 */
@@ -3034,8 +3129,9 @@ button.import-article-chip--selected:hover {
         flex-wrap: nowrap;
         align-items: center;
         gap: 6px;
-        padding: 3px 8px;
-        padding-top: max(2px, env(safe-area-inset-top, 0px));
+        min-height: calc(52px + env(safe-area-inset-top, 0px));
+        padding: 4px 8px;
+        padding-top: max(4px, env(safe-area-inset-top, 0px));
         border-bottom-width: 2px;
         box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04);
     }
@@ -3049,7 +3145,7 @@ button.import-article-chip--selected:hover {
 
     .nav-brand .logo {
         display: block;
-        font-size: 1.45rem;
+        font-size: 1.65rem;
         line-height: 1;
     }
 
@@ -3066,8 +3162,8 @@ button.import-article-chip--selected:hover {
     }
 
     .nav-user-avatar-wrap {
-        width: 30px;
-        height: 30px;
+        width: 36px;
+        height: 36px;
     }
 
     .nav-user-avatar-ph {
@@ -3080,8 +3176,8 @@ button.import-article-chip--selected:hover {
 
     .btn-daily-summary-mobile {
         display: inline-flex;
-        width: 32px;
-        height: 32px;
+        width: 44px;
+        height: 44px;
         border-radius: 8px;
         border-width: 1px;
         font-size: 1rem;
@@ -3092,7 +3188,7 @@ button.import-article-chip--selected:hover {
         left: 12px;
         right: 12px;
         top: auto;
-        bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+        bottom: calc(64px + env(safe-area-inset-bottom, 0px));
         max-height: min(52vh, 420px);
         overflow-y: auto;
         min-width: 0;
@@ -3100,16 +3196,17 @@ button.import-article-chip--selected:hover {
     }
 
     .navbar .btn-gear {
-        width: 32px;
-        height: 32px;
+        width: 44px;
+        height: 44px;
         font-size: 1.05rem;
         border-radius: 8px;
         border-width: 1px;
     }
 
     .nav-user .btn-secondary {
-        padding: 4px 8px;
-        font-size: 0.72rem;
+        min-height: 44px;
+        padding: 6px 12px;
+        font-size: 0.76rem;
         font-weight: 700;
         border-width: 1px;
         box-shadow: 0 2px 0 var(--primary-dark);
@@ -3163,7 +3260,8 @@ button.import-article-chip--selected:hover {
         flex-direction: column;
     }
 
-    .word-input .btn-primary {
+    .word-input .btn-primary,
+    .word-input .btn-secondary {
         width: 100%;
     }
 
@@ -3181,13 +3279,14 @@ button.import-article-chip--selected:hover {
     }
 
     html.is-review-section .navbar {
-        padding: 2px 6px;
-        padding-top: max(2px, env(safe-area-inset-top, 0px));
+        min-height: calc(50px + env(safe-area-inset-top, 0px));
+        padding: 3px 8px;
+        padding-top: max(3px, env(safe-area-inset-top, 0px));
         gap: 4px;
     }
 
     html.is-review-section .navbar .nav-brand .logo {
-        font-size: 1.2rem;
+        font-size: 1.45rem;
     }
 
     html.is-review-section .nav-user {
@@ -3195,15 +3294,16 @@ button.import-article-chip--selected:hover {
     }
 
     html.is-review-section .nav-user .btn-secondary {
-        padding: 3px 8px;
-        font-size: 0.65rem;
-        min-height: 0;
-        line-height: 1.2;
+        min-height: 44px;
+        padding: 6px 12px;
+        font-size: 0.76rem;
+        line-height: 1;
     }
 
     html.is-review-section .mobile-tab {
-        padding: 7px 4px;
-        font-size: 0.65rem;
+        min-height: 56px;
+        padding: 9px 4px;
+        font-size: 0.7rem;
     }
 
     html.is-review-section #review-section.active .stats-grid {
@@ -7849,4 +7949,95 @@ body.chat-sidebar-open {
 
 @keyframes submitSpin {
     to { transform: rotate(360deg); }
+}
+
+.auth-form[aria-busy="true"] .btn-primary::after {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-left: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.42);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: submitSpin 0.65s linear infinite;
+    vertical-align: -2px;
+}
+
+.import-article-back-edit {
+    min-height: 38px;
+    margin-left: auto;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.discovery-suggest-item[aria-selected="true"] {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+}
+
+/* 中等桌面宽度隐藏次要积分药丸，保证顶栏始终保持单行。 */
+@media (min-width: 1200px) and (max-width: 1439px) {
+    .navbar {
+        flex-wrap: nowrap;
+        gap: 8px;
+        padding-inline: 16px;
+    }
+
+    .navbar .nav-gamification {
+        display: none;
+    }
+
+    .nav-menu {
+        flex-wrap: nowrap;
+        gap: 4px;
+    }
+
+    .nav-item {
+        padding: 9px 12px;
+        font-size: 0.86rem;
+    }
+
+    .nav-user {
+        gap: 7px;
+    }
+}
+
+@media (min-width: 1440px) and (max-width: 1899px) {
+    .navbar {
+        flex-wrap: nowrap;
+        gap: 6px;
+        padding-inline: 12px;
+    }
+
+    .nav-menu {
+        flex-wrap: nowrap;
+        gap: 4px;
+    }
+
+    .nav-item {
+        padding: 9px 11px;
+        font-size: 0.85rem;
+    }
+
+    .navbar .nav-gamification {
+        flex: 0 1 auto;
+        margin-inline-start: 0;
+    }
+
+    .navbar .nav-gamification .ng-checkin,
+    .navbar .nav-user-avatar-wrap {
+        display: none;
+    }
+
+    .nav-user {
+        gap: 6px;
+    }
 }

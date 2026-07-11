@@ -110,7 +110,7 @@ kill -9 <PID>
 
 ```bash
 # 使用国内镜像源
-pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip3 install -r requirements-simple.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 ### Docker 启动失败
@@ -143,9 +143,9 @@ docker-compose up -d
 
 ## 下一步
 
-- 查看 [WEB_README.md](WEB_README.md) 了解更多功能
+- 查看 [SIMPLE_WEB_README.md](SIMPLE_WEB_README.md) 了解更多功能
 - 查看 [DEPLOYMENT.md](DEPLOYMENT.md) 了解部署选项
-- 访问 http://localhost:8000/api/docs 查看 API 文档
+- 访问 http://localhost:8000/api/health 检查服务状态
 
 ---
 

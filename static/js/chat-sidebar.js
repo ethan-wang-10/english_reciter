@@ -928,11 +928,6 @@
     }
 
     function bind() {
-        document.getElementById("chat-side-trigger")?.addEventListener("click", () => void openChatSidebar());
-        document.getElementById("mobile-open-chat")?.addEventListener("click", () => {
-            if (typeof closeMobileMoreSheet === "function") closeMobileMoreSheet();
-            void openChatSidebar();
-        });
         document.getElementById("chat-sidebar-close")?.addEventListener("click", closeChatSidebar);
         document.getElementById("chat-sidebar-backdrop")?.addEventListener("click", closeChatSidebar);
         document.getElementById("chat-send")?.addEventListener("click", () => void sendChat());
@@ -1041,6 +1036,7 @@
 
     window.chatRoomEnsureSse = ensureChatSse;
     window.chatRoomOnLogout = onChatLogout;
+    window.chatRoomOpen = openChatSidebar;
 
     if (typeof token !== "undefined" && token && document.getElementById("main-page")?.classList.contains("active")) {
         ensureChatSse();

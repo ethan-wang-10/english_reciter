@@ -417,7 +417,10 @@ smoke_check() {
   fi
 
   if [ -n "$py" ]; then
-    run "$py" -m py_compile simple_web_app.py reciter.py user_store.py auth_session_store.py wordbank_v2.py
+    run "$py" -m py_compile \
+      simple_web_app.py reciter.py user_store.py auth_session_store.py wordbank_v2.py \
+      gamification.py challenges.py leaderboard_periods.py chat_room.py performance_store.py \
+      app_time.py project_paths.py tts_piper.py
   elif [ "$MODE" = "docker" ]; then
     warn "Python not available on host; Docker build will validate Python dependencies"
   else
@@ -425,7 +428,9 @@ smoke_check() {
   fi
 
   if have node; then
-    run node --check static/js/app.js
+    for js in static/js/app.js static/js/admin.js static/js/chat-sidebar.js static/js/performance.js static/js/textbook.js; do
+      run node --check "$js"
+    done
   else
     warn "node not found; skip JavaScript syntax check"
   fi

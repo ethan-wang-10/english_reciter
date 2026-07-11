@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """测试统计功能的脚本"""
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
 
-from reciter import WordReciter, Word
+from reciter import Config, WordReciter, Word
 from app_time import china_today
 
-def test_statistics():
+
+def test_statistics(tmp_path: Path):
     """测试统计功能"""
     print("🧪 测试统计功能...")
     
@@ -33,8 +32,12 @@ def test_statistics():
     for word in test_words:
         word.next_review_date = today
     
-    # 创建单词背诵器实例
-    reciter = WordReciter()
+    # 所有可能写入的路径都放进 pytest 临时目录，避免污染项目根目录。
+    config = Config(str(tmp_path / "missing-config.json"))
+    config.DATA_FILE = str(tmp_path / "learning_data.json")
+    config.EXAMPLE_DB = str(tmp_path / "word_examples.json")
+    config.BACKUP_ENABLED = False
+    reciter = WordReciter(config)
     reciter.all_words = test_words
     
     # 模拟复习过程
@@ -61,17 +64,11 @@ def test_statistics():
     reciter.all_words.remove(mastered_word)
     print(f"  已掌握: {mastered_word.english}")
     
-    # 显示统计结果
-    print("\n📊 统计结果:")
-    print(f"  总单词数: {len(test_words)}")
-    print(f"  正确复习数: 3")
-    print(f"  错误复习数: 2")
-    print(f"  正确率: {3/5*100:.1f}%")
-    print(f"  新掌握单词: 1")
-    print(f"  待复习单词: {len(reciter.all_words)}")
-    print(f"  已掌握单词: {len(reciter.mastered_words)}")
+    all_results = reciter.all_words + reciter.mastered_words
+    assert len(all_results) == 5
+    assert sum(word.review_count for word in all_results) == 5
+    assert len(reciter.all_words) == 4
+    assert reciter.mastered_words == [mastered_word]
+    assert not (tmp_path / "word_examples.json").exists()
     
     print("\n✅ 统计功能测试完成！")
-
-if __name__ == "__main__":
-    test_statistics()

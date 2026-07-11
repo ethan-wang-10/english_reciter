@@ -29,6 +29,7 @@ let currentErrorCount = 0; // 当前单词错误次数
 let currentRevealedCount = 0; // 当前单词已揭示字母数
 let isSubmitting = false; // 防止重复提交（修复一闪而过bug）
 let isAdvancing = false;  // 防止重复推进到下一题
+let reviewAdvanceTimer = null;
 
 /** 用户套餐类型: 'free' | 'paid'（paid 对应 VIP 权益，展示文案统一为 VIP） */
 let userPlan = 'free';
@@ -105,6 +106,44 @@ let pkDuelSendInFlight = false;
 // API 基础 URL
 const API_BASE = '/api';
 
+const FEATURE_SCRIPTS = {
+    chat: '/static/js/chat-sidebar.js',
+    textbook: '/static/js/textbook.js',
+};
+const featureScriptLoads = new Map();
+
+function loadFeatureScript(src) {
+    if (featureScriptLoads.has(src)) return featureScriptLoads.get(src);
+    const existing = document.querySelector(`script[data-feature-src="${src}"]`);
+    if (existing && existing.dataset.loaded === '1') return Promise.resolve();
+    const promise = new Promise((resolve, reject) => {
+        const script = existing || document.createElement('script');
+        script.src = src;
+        script.defer = true;
+        script.dataset.featureSrc = src;
+        script.addEventListener('load', () => {
+            script.dataset.loaded = '1';
+            resolve();
+        }, { once: true });
+        script.addEventListener('error', () => {
+            featureScriptLoads.delete(src);
+            reject(new Error('功能资源加载失败，请刷新后重试'));
+        }, { once: true });
+        if (!existing) document.body.appendChild(script);
+    });
+    featureScriptLoads.set(src, promise);
+    return promise;
+}
+
+async function openChatFeature() {
+    try {
+        await loadFeatureScript(FEATURE_SCRIPTS.chat);
+        if (typeof window.chatRoomOpen === 'function') await window.chatRoomOpen();
+    } catch (error) {
+        showMainBanner(error.message || '聊天室加载失败');
+    }
+}
+
 // ---- 性能优化：页面切换数据缓存 & 滚动位置记忆 ----
 const _sectionLastLoad = {};
 const _SECTION_STALE_MS = 30000;
@@ -127,6 +166,75 @@ function runWhenIdle(fn, timeout = 1500) {
     } else {
         setTimeout(fn, Math.min(timeout, 1200));
     }
+}
+
+let activeModalDialog = null;
+let modalReturnFocus = null;
+
+function topVisibleModalDialog() {
+    const dialogs = [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')];
+    const visible = dialogs.filter((dialog) => dialog.getClientRects().length > 0);
+    return visible.length ? visible[visible.length - 1] : null;
+}
+
+function syncModalAccessibility() {
+    const next = topVisibleModalDialog();
+    if (next === activeModalDialog) return;
+    if (next) {
+        if (!activeModalDialog) modalReturnFocus = document.activeElement;
+        activeModalDialog = next;
+        document.documentElement.classList.add('modal-open');
+        if (!next.hasAttribute('tabindex')) next.setAttribute('tabindex', '-1');
+        requestAnimationFrame(() => {
+            if (activeModalDialog !== next) return;
+            try {
+                next.focus({ preventScroll: true });
+            } catch (_) {
+                next.focus();
+            }
+        });
+        return;
+    }
+    activeModalDialog = null;
+    document.documentElement.classList.remove('modal-open');
+    const target = modalReturnFocus;
+    modalReturnFocus = null;
+    if (target && target.isConnected && typeof target.focus === 'function') {
+        requestAnimationFrame(() => target.focus());
+    }
+}
+
+function setupModalAccessibility() {
+    const observer = new MutationObserver(syncModalAccessibility);
+    observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'],
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Tab' || !activeModalDialog) return;
+        const focusable = [...activeModalDialog.querySelectorAll(
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+        )].filter((element) => element.getClientRects().length > 0);
+        if (!focusable.length) {
+            event.preventDefault();
+            activeModalDialog.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (document.activeElement === activeModalDialog) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    }, true);
+    syncModalAccessibility();
 }
 
 function _saveScrollPos(sectionId) {
@@ -2842,11 +2950,23 @@ function showMainBanner(message) {
 
 function showError(message) {
     const errorDiv = document.getElementById('auth-error');
+    if (!errorDiv) return;
     errorDiv.textContent = message;
-    errorDiv.style.display = 'block';
-    setTimeout(() => {
-        errorDiv.style.display = 'none';
-    }, 3000);
+    errorDiv.style.display = message ? 'block' : 'none';
+}
+
+function setAuthFormBusy(form, busy, busyLabel) {
+    if (!form) return;
+    form.dataset.busy = busy ? '1' : '0';
+    form.setAttribute('aria-busy', busy ? 'true' : 'false');
+    form.querySelectorAll('input, button').forEach((control) => {
+        control.disabled = busy;
+    });
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) {
+        const idle = submit.dataset.idleLabel || submit.textContent || '';
+        submit.textContent = busy ? busyLabel : idle;
+    }
 }
 
 /** 词汇导入（VIP）接口返回拼装成可读说明（在服务端 message 基础上补充词条明细） */
@@ -3097,7 +3217,8 @@ function initializeUnderlineInputForTarget(word, target) {
     capture.onkeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            submitAnswer();
+            if (isAdvancing) advanceReviewWord();
+            else submitAnswer();
         }
     };
 
@@ -3725,19 +3846,19 @@ async function login(loginUsername, password) {
         
         localStorage.setItem('token', token);
         localStorage.setItem('username', username);
-        
-        void showMainPage();
+
+        await showMainPage();
     } catch (error) {
         showError(error.message);
     }
 }
 
-async function register(username, password, email, inviteCode) {
+async function register(newUsername, password, email, inviteCode) {
     try {
         const data = await apiRequest('/auth/register', {
             method: 'POST',
             body: JSON.stringify({
-                username,
+                username: newUsername,
                 password,
                 email,
                 invite_code: inviteCode
@@ -3748,7 +3869,7 @@ async function register(username, password, email, inviteCode) {
         setSessionParentFlags(!!data.is_parent, data.child_username || '');
         localStorage.setItem('token', token);
         localStorage.setItem('username', username);
-        void showMainPage();
+        await showMainPage();
     } catch (error) {
         showError(error.message);
     }
@@ -3951,10 +4072,15 @@ async function showMainPage() {
     } else {
         showSection('review');
     }
-    runWhenIdle(() => {
-        void refreshPkInviteIndicator();
-        if (typeof window.chatRoomEnsureSse === 'function') window.chatRoomEnsureSse();
-    }, 5000);
+    runWhenIdle(() => void refreshPkInviteIndicator(), 5000);
+    setTimeout(() => {
+        if (!token || !document.getElementById('main-page')?.classList.contains('active')) return;
+        void loadFeatureScript(FEATURE_SCRIPTS.chat)
+            .then(() => {
+                if (typeof window.chatRoomEnsureSse === 'function') window.chatRoomEnsureSse();
+            })
+            .catch(() => {});
+    }, 8000);
 }
 
 async function loadUserPlan() {
@@ -4038,7 +4164,11 @@ function updatePlanUI() {
             if (vocabBtn) vocabBtn.style.display = 'none';
         }
     }
-    if (textbookCatalogCache && document.getElementById('textbook-section')?.classList.contains('active')) {
+    if (
+        typeof textbookCatalogCache !== 'undefined' &&
+        textbookCatalogCache &&
+        document.getElementById('textbook-section')?.classList.contains('active')
+    ) {
         renderTextbookCatalog(textbookCatalogCache);
     }
     if (document.getElementById('import-section')?.classList.contains('active')) {
@@ -4073,7 +4203,7 @@ function showSection(sectionId) {
     document.querySelectorAll(`.mobile-more-link[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
 
     const moreBtn = document.getElementById('mobile-more-btn');
-    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook')) {
+    if (moreBtn && (sectionId === 'mastered' || sectionId === 'import' || sectionId === 'leaderboard')) {
         moreBtn.classList.add('active');
     }
 
@@ -4089,7 +4219,14 @@ function showSection(sectionId) {
         prefetchDiscoveryWordbankForSearch();
         loadDiscovery();
     } else if (sectionId === 'textbook') {
-        loadTextbookSection();
+        const root = document.getElementById('textbook-catalog');
+        if (root) root.innerHTML = '<p class="textbook-catalog-loading"><span class="loading-dots">加载教材功能</span></p>';
+        void loadFeatureScript(FEATURE_SCRIPTS.textbook)
+            .then(() => loadTextbookSection())
+            .catch((error) => {
+                if (root) root.innerHTML = `<p class="textbook-catalog-empty">${escapeHtml(error.message || '加载失败')}</p>`;
+                showMainBanner(error.message || '教材功能加载失败');
+            });
     } else if (sectionId === 'progress') {
         if (_isSectionFresh('progress')) { _restoreScrollPos('progress'); return; }
         loadProgress();
@@ -4783,6 +4920,37 @@ async function startBonusReview() {
     }
 }
 
+function resetReviewAdvanceControls() {
+    if (reviewAdvanceTimer) {
+        clearTimeout(reviewAdvanceTimer);
+        reviewAdvanceTimer = null;
+    }
+    const submit = document.getElementById('submit-answer');
+    const next = document.getElementById('next-review-word');
+    if (submit) submit.hidden = false;
+    if (next) next.hidden = true;
+}
+
+function advanceReviewWord() {
+    if (!isAdvancing) return;
+    resetReviewAdvanceControls();
+    isSubmitting = false;
+    isAdvancing = false;
+    currentReviewIndex++;
+    showCurrentWord();
+    loadStats();
+}
+
+function scheduleReviewAdvance(delayMs) {
+    isAdvancing = true;
+    const submit = document.getElementById('submit-answer');
+    const next = document.getElementById('next-review-word');
+    if (submit) submit.hidden = true;
+    if (next) next.hidden = false;
+    if (reviewAdvanceTimer) clearTimeout(reviewAdvanceTimer);
+    reviewAdvanceTimer = setTimeout(advanceReviewWord, delayMs);
+}
+
 async function showCurrentWord() {
     if (currentReviewIndex >= currentReviewList.length) {
         onPassComplete();
@@ -4796,6 +4964,7 @@ async function showCurrentWord() {
     currentRevealedCount = 0;
     isSubmitting = false;
     isAdvancing = false;
+    resetReviewAdvanceControls();
 
     // 未勾选「考察语态」：只考词库原形；勾选：须拼例句中实际形式（与 CSV example*_form / pick 一致）
     const lemma = (word.english || '').trim();
@@ -4998,17 +5167,10 @@ async function submitAnswer() {
         
         const targetAnswer = word._targetAnswer || word.english;
         if (result.correct) {
-            // 答案正确，显示完整答案，然后进入下一个单词（多义：多留 1 秒便于读完释义+例句）
+            // 显示完整答案；用户可立即进入下一词，也保留温和的自动推进。
             document.getElementById('current-word-english').textContent = targetAnswer;
-            isAdvancing = true;
-            const advanceMs = word.review_polyseme ? 2500 : 1500;
-            setTimeout(() => {
-                isSubmitting = false;
-                isAdvancing = false;
-                currentReviewIndex++;
-                showCurrentWord();
-                loadStats();
-            }, advanceMs);
+            const advanceMs = word.review_polyseme ? 8000 : 6000;
+            scheduleReviewAdvance(advanceMs);
         } else {
             // 答案错误
             currentErrorCount++;
@@ -5025,14 +5187,7 @@ async function submitAnswer() {
                 }
                 recordWrongAttempt(word);
                 document.getElementById('current-word-english').textContent = targetAnswer;
-                isAdvancing = true;
-                setTimeout(() => {
-                    isSubmitting = false;
-                    isAdvancing = false;
-                    currentReviewIndex++;
-                    showCurrentWord();
-                    loadStats();
-                }, 1500);
+                scheduleReviewAdvance(6000);
             } else {
                 // 还有尝试机会，更新提示字符串
                 const targetAnswer = word._targetAnswer || word.english;
@@ -5331,6 +5486,7 @@ let discoverySearchMode = false;
 let discoverySearchDebounceTimer = null;
 let discoverySearchRequestSeq = 0;
 let discoverySearchAbort = null;
+let discoverySuggestionActiveIndex = -1;
 
 /** 单词学习搜索：本地前缀/子串匹配（全量 CSV），上限避免一次渲染过多 */
 const DISCOVERY_SEARCH_MAX_DECK = 280;
@@ -5346,7 +5502,9 @@ function hideDiscoverySearchSuggestions() {
     if (!box) return;
     box.hidden = true;
     box.innerHTML = '';
+    discoverySuggestionActiveIndex = -1;
     setDiscoverySearchListboxOpen(false);
+    document.getElementById('discovery-search')?.removeAttribute('aria-activedescendant');
 }
 
 function cancelDiscoverySearchRequest() {
@@ -5373,16 +5531,53 @@ function renderDiscoverySearchSuggestions(rows) {
     box.hidden = false;
     setDiscoverySearchListboxOpen(true);
     box.innerHTML = slice
-        .map((row) => {
+        .map((row, index) => {
             const en = String(row.english || '').trim();
             const zh = String(row.chinese || '').trim();
             const enc = encodeURIComponent(en);
             const zhLine = zh ? `<span class="discovery-suggest-zh">${escapeHtml(zh)}</span>` : '';
-            return `<button type="button" class="discovery-suggest-item" role="option" data-english="${enc}">
+            return `<button type="button" id="discovery-suggestion-${index}" class="discovery-suggest-item" role="option" aria-selected="false" data-english="${enc}">
       <span class="discovery-suggest-en">${escapeHtml(en)}</span>${zhLine}
     </button>`;
         })
         .join('');
+    discoverySuggestionActiveIndex = -1;
+    document.getElementById('discovery-search')?.removeAttribute('aria-activedescendant');
+}
+
+function setDiscoverySuggestionActive(index) {
+    const box = document.getElementById('discovery-search-suggestions');
+    const input = document.getElementById('discovery-search');
+    if (!box || !input || box.hidden) return;
+    const options = [...box.querySelectorAll('.discovery-suggest-item')];
+    if (!options.length) return;
+    discoverySuggestionActiveIndex = Math.max(0, Math.min(index, options.length - 1));
+    options.forEach((option, optionIndex) => {
+        option.setAttribute('aria-selected', optionIndex === discoverySuggestionActiveIndex ? 'true' : 'false');
+    });
+    const active = options[discoverySuggestionActiveIndex];
+    input.setAttribute('aria-activedescendant', active.id);
+    active.scrollIntoView({ block: 'nearest' });
+}
+
+function selectDiscoverySuggestion(btn, input, suggestions) {
+    let en = '';
+    try {
+        en = decodeURIComponent(btn.getAttribute('data-english') || '');
+    } catch (_) {
+        return;
+    }
+    if (!en) return;
+    const idx = discoveryDeck.findIndex(
+        (w) => String(w.english).toLowerCase() === en.toLowerCase(),
+    );
+    if (idx >= 0) {
+        discoveryIndex = idx;
+        renderDiscoveryCard();
+    }
+    input.value = en;
+    hideDiscoverySearchSuggestions();
+    input.focus();
 }
 
 /**
@@ -5436,22 +5631,7 @@ function initDiscoverySearchSuggestUI() {
     sug.addEventListener('click', (e) => {
         const btn = e.target.closest('.discovery-suggest-item');
         if (!btn || !sug.contains(btn)) return;
-        let en = '';
-        try {
-            en = decodeURIComponent(btn.getAttribute('data-english') || '');
-        } catch (_) {
-            return;
-        }
-        if (!en) return;
-        const idx = discoveryDeck.findIndex(
-            (w) => String(w.english).toLowerCase() === en.toLowerCase(),
-        );
-        if (idx >= 0) {
-            discoveryIndex = idx;
-            renderDiscoveryCard();
-        }
-        input.value = en;
-        hideDiscoverySearchSuggestions();
+        selectDiscoverySuggestion(btn, input, sug);
     });
     input.addEventListener('focus', () => {
         const v = input.value.trim();
@@ -5461,6 +5641,23 @@ function initDiscoverySearchSuggestUI() {
         setTimeout(() => hideDiscoverySearchSuggestions(), 200);
     });
     input.addEventListener('keydown', (e) => {
+        const options = [...sug.querySelectorAll('.discovery-suggest-item')];
+        if (!sug.hidden && options.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            const next = e.key === 'ArrowDown'
+                ? discoverySuggestionActiveIndex + 1
+                : discoverySuggestionActiveIndex <= 0
+                  ? options.length - 1
+                  : discoverySuggestionActiveIndex - 1;
+            setDiscoverySuggestionActive(next);
+            return;
+        }
+        if (!sug.hidden && e.key === 'Enter' && discoverySuggestionActiveIndex >= 0) {
+            e.preventDefault();
+            const active = options[discoverySuggestionActiveIndex];
+            if (active) selectDiscoverySuggestion(active, input, sug);
+            return;
+        }
         if (e.key === 'Escape') hideDiscoverySearchSuggestions();
     });
     document.addEventListener('click', (e) => {
@@ -6531,6 +6728,36 @@ function resetArticleImportPickUI() {
     updatePlanUI();
 }
 
+function returnArticleImportToEditor() {
+    articleImportPickMode = false;
+    articleImportBusy = false;
+    articleConfirmImportBusy = false;
+    articleImportWords = [];
+    articleImportSelectedIdx.clear();
+    const ta = document.getElementById('import-article-textarea');
+    const wrap = document.getElementById('import-article-pick-wrap');
+    const pick = document.getElementById('import-article-pick');
+    const btn = document.getElementById('import-article-btn');
+    const result = document.getElementById('article-import-result');
+    if (ta) {
+        ta.style.display = '';
+        ta.disabled = false;
+    }
+    if (wrap) wrap.hidden = true;
+    if (pick) pick.innerHTML = '';
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = '从文章提取词汇';
+    }
+    if (result) {
+        result.style.display = 'none';
+        result.innerHTML = '';
+    }
+    renderArticleUnmatched([]);
+    updatePlanUI();
+    ta?.focus();
+}
+
 function renderArticleUnmatched(lemmas) {
     const wrap = document.getElementById('import-article-unmatched-wrap');
     const el = document.getElementById('import-article-unmatched');
@@ -6618,7 +6845,6 @@ function applyArticleExtractResult(words, data) {
     articleImportWords = words;
     articleImportSelectedIdx = new Set(words.map((_, i) => i));
     if (ta) {
-        ta.value = '';
         ta.style.display = 'none';
     }
     if (vipW) vipW.hidden = true;
@@ -7000,6 +7226,7 @@ async function importVocabToCSV() {
 
 document.addEventListener('DOMContentLoaded', function() {
     mountDeferredAppShell();
+    setupModalAccessibility();
     syncReviewSectionChromeClass();
     setupVisualViewportKeyboardAvoid();
     setupWrongWordsAsideToggle();
@@ -7057,9 +7284,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (loginForm.dataset.busy === '1') return;
             const username = document.getElementById('login-username').value;
             const password = document.getElementById('login-password').value;
-            await login(username, password);
+            showError('');
+            setAuthFormBusy(loginForm, true, '登录中…');
+            try {
+                await login(username, password);
+            } finally {
+                setAuthFormBusy(loginForm, false, '');
+            }
         });
     }
     
@@ -7068,6 +7302,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (registerForm.dataset.busy === '1') return;
             const username = document.getElementById('reg-username').value;
             const password = document.getElementById('reg-password').value;
             const passwordConfirm = document.getElementById('reg-password-confirm').value;
@@ -7083,19 +7318,32 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            await register(username, password, email, inviteCode.trim());
+            showError('');
+            setAuthFormBusy(registerForm, true, '注册中…');
+            try {
+                await register(username, password, email, inviteCode.trim());
+            } finally {
+                setAuthFormBusy(registerForm, false, '');
+            }
         });
     }
     
     // Tab 切换
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => {
+                t.classList.remove('active');
+                t.setAttribute('aria-selected', 'false');
+            });
             tab.classList.add('active');
+            tab.setAttribute('aria-selected', 'true');
             
             const tabName = tab.dataset.tab;
             document.getElementById('login-form').style.display = tabName === 'login' ? 'block' : 'none';
             document.getElementById('register-form').style.display = tabName === 'register' ? 'block' : 'none';
+            showError('');
+            const targetInput = document.getElementById(tabName === 'login' ? 'login-username' : 'reg-username');
+            targetInput?.focus();
         });
     });
     
@@ -7136,6 +7384,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('mobile-open-settings')?.addEventListener('click', () => {
         closeMobileMoreSheet();
         openSettings();
+    });
+    document.getElementById('chat-side-trigger')?.addEventListener('click', () => {
+        void openChatFeature();
+    });
+    document.getElementById('mobile-open-chat')?.addEventListener('click', () => {
+        closeMobileMoreSheet();
+        void openChatFeature();
     });
 
     document.querySelectorAll('.js-pk-hub-open').forEach((btn) => {
@@ -7495,6 +7750,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         submitBtn.addEventListener('click', submitAnswer);
     }
+    document.getElementById('next-review-word')?.addEventListener('click', advanceReviewWord);
 
     const reviewBox = document.getElementById('review-box');
     if (reviewBox) {
@@ -7509,6 +7765,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initImportNceLessonSelect();
     initImportArticlePickDelegation();
     initImportArticleSelectAllCheckbox();
+    document.getElementById('import-article-back-edit')?.addEventListener('click', returnArticleImportToEditor);
     initImportResultModal();
     const importArticleBtn = document.getElementById('import-article-btn');
     if (importArticleBtn) {

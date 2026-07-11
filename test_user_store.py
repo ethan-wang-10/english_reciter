@@ -9,10 +9,12 @@ import pytest
 from user_store import (
     DEFAULT_INVITE_QUOTA,
     close_connection,
+    get_user,
     import_users_from_json,
     init_user_store,
     load_users,
     save_users,
+    update_password_hash,
     user_table_count,
 )
 
@@ -54,6 +56,26 @@ def test_save_load_roundtrip(ud: Path) -> None:
     assert got["bob_parent"]["child_username"] == "bob"
     assert got["bob_parent"]["plan"] == "paid"
     assert got["bob_parent"]["invite_quota_limit"] == 0
+
+
+def test_get_user_and_conditional_password_hash_update(ud: Path) -> None:
+    init_user_store(ud)
+    save_users(
+        {
+            "alice": {
+                "password_hash": "old",
+                "created_at": "2026-01-01T00:00:00",
+                "enabled": True,
+            }
+        }
+    )
+
+    assert get_user("missing") is None
+    assert get_user("alice")["password_hash"] == "old"
+    assert update_password_hash("alice", "stale", "new") is False
+    assert get_user("alice")["password_hash"] == "old"
+    assert update_password_hash("alice", "old", "new") is True
+    assert get_user("alice")["password_hash"] == "new"
 
 
 def test_auto_migrate_from_json(ud: Path) -> None:

@@ -213,10 +213,15 @@ class TestWordReciter(unittest.TestCase):
         """创建临时测试环境"""
         self.temp_data = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
         self.temp_data.close()
+
+        self.temp_examples = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        json.dump({}, self.temp_examples)
+        self.temp_examples.close()
         
         self.temp_config = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
         config = {
             "data_file": self.temp_data.name,
+            "example_db": self.temp_examples.name,
             "backup_enabled": False,
             "tts_enabled": False
         }
@@ -228,6 +233,7 @@ class TestWordReciter(unittest.TestCase):
     def tearDown(self):
         """清理临时文件"""
         os.unlink(self.temp_data.name)
+        os.unlink(self.temp_examples.name)
         os.unlink(self.temp_config.name)
     
     def test_initialization(self):

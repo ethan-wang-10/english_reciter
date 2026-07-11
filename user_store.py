@@ -340,6 +340,35 @@ def load_users() -> Dict[str, Any]:
         return _load_users_unlocked(conn)
 
 
+def get_user(username: str) -> Optional[Dict[str, Any]]:
+    """按用户名读取单条记录，避免鉴权热路径反复加载完整用户表。"""
+    with _lock:
+        conn = _ensure_conn_unlocked()
+        row = conn.execute(
+            "SELECT username, password_hash, email, created_at, enabled, role, child_username, plan, "
+            "invite_quota_limit, invite_quota_used FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+        return _row_to_user_dict(row) if row is not None else None
+
+
+def update_password_hash(username: str, expected_hash: str, new_hash: str) -> bool:
+    """仅在旧值仍匹配时更新目标用户密码哈希，避免覆盖并发密码修改。"""
+    with _lock:
+        conn = _ensure_conn_unlocked()
+        try:
+            cur = conn.execute(
+                "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash = ?",
+                (new_hash, username, expected_hash),
+            )
+            conn.commit()
+            return cur.rowcount == 1
+        except Exception:
+            conn.rollback()
+            logger.exception("更新用户密码哈希失败: %s", username)
+            raise
+
+
 def save_users(users: Dict[str, Any]) -> None:
     """保存用户表：与传入字典语义一致（多出的库中用户删除，其余按用户名 UPSERT）。"""
     with _lock:

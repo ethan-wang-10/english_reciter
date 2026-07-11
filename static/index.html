@@ -3,11 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#58CC02">
+    <meta name="theme-color" content="#287a24">
     <title>智能英语背诵系统</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -17,75 +14,81 @@
         <div id="login-page" class="page active">
             <div class="container">
                 <div class="login-box">
+                    <div class="login-brand-panel">
                     <div class="login-brand">
                         <span class="login-mascot" aria-hidden="true">📚</span>
                         <h1>智能英语背诵</h1>
                         <p class="login-tagline">每天一点点，单词变简单</p>
                     </div>
                     <p class="login-sub">基于艾宾浩斯遗忘曲线的单词学习</p>
-                    
-                    <div class="tabs">
-                        <button class="tab active" data-tab="login">登录</button>
-                        <button class="tab" data-tab="register">注册</button>
+                    </div>
+
+                    <div class="login-form-panel">
+                    <div class="tabs" role="tablist" aria-label="账户操作">
+                        <button type="button" id="auth-tab-login" class="tab active" data-tab="login" role="tab"
+                            aria-selected="true" aria-controls="login-form">登录</button>
+                        <button type="button" id="auth-tab-register" class="tab" data-tab="register" role="tab"
+                            aria-selected="false" aria-controls="register-form">注册</button>
                     </div>
                     
                     <!-- 登录表单 -->
-                    <form id="login-form" class="auth-form">
+                    <form id="login-form" class="auth-form" aria-labelledby="auth-tab-login" aria-describedby="auth-error">
                         <div class="form-group">
-                            <label>用户名</label>
+                            <label for="login-username">用户名</label>
                             <input type="text" id="login-username" required autocomplete="username">
                         </div>
                         <div class="form-group">
-                            <label>密码</label>
+                            <label for="login-password">密码</label>
                             <div class="password-input-wrap">
                                 <input type="password" id="login-password" required autocomplete="current-password">
-                                <button type="button" class="btn-toggle-pw" data-target="login-password" aria-label="显示密码" tabindex="-1">
-                                    <span class="pw-eye-icon">👁</span>
+                                <button type="button" class="btn-toggle-pw" data-target="login-password" aria-label="显示密码">
+                                    <span class="pw-eye-icon" aria-hidden="true">👁</span>
                                 </button>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary">登录</button>
+                        <button type="submit" class="btn btn-primary" data-idle-label="登录">登录</button>
                     </form>
                     
                     <!-- 注册表单 -->
-                    <form id="register-form" class="auth-form" style="display: none;">
+                    <form id="register-form" class="auth-form" style="display: none;" aria-labelledby="auth-tab-register" aria-describedby="auth-error">
                         <div class="form-group">
-                            <label>用户名</label>
+                            <label for="reg-username">用户名</label>
                             <input type="text" id="reg-username" required minlength="3" maxlength="32"
                                 pattern="[a-zA-Z0-9_]{3,32}"
-                                title="3-32位字母、数字或下划线">
+                                title="3-32位字母、数字或下划线" autocomplete="username">
                         </div>
                         <div class="form-group">
-                            <label>邮箱（可选）</label>
-                            <input type="email" id="reg-email">
+                            <label for="reg-email">邮箱（可选）</label>
+                            <input type="email" id="reg-email" autocomplete="email">
                         </div>
                         <div class="form-group">
-                            <label>密码</label>
+                            <label for="reg-password">密码</label>
                             <div class="password-input-wrap">
                                 <input type="password" id="reg-password" required minlength="6" autocomplete="new-password">
-                                <button type="button" class="btn-toggle-pw" data-target="reg-password" aria-label="显示密码" tabindex="-1">
-                                    <span class="pw-eye-icon">👁</span>
+                                <button type="button" class="btn-toggle-pw" data-target="reg-password" aria-label="显示密码">
+                                    <span class="pw-eye-icon" aria-hidden="true">👁</span>
                                 </button>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label>确认密码</label>
+                            <label for="reg-password-confirm">确认密码</label>
                             <div class="password-input-wrap">
                                 <input type="password" id="reg-password-confirm" required autocomplete="new-password">
-                                <button type="button" class="btn-toggle-pw" data-target="reg-password-confirm" aria-label="显示密码" tabindex="-1">
-                                    <span class="pw-eye-icon">👁</span>
+                                <button type="button" class="btn-toggle-pw" data-target="reg-password-confirm" aria-label="显示密码">
+                                    <span class="pw-eye-icon" aria-hidden="true">👁</span>
                                 </button>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label>邀请码</label>
+                            <label for="reg-invite">邀请码</label>
                             <input type="text" id="reg-invite" required autocomplete="off"
                                 placeholder="由用户或管理员生成的一次性邀请码">
                         </div>
-                        <button type="submit" class="btn btn-primary">注册</button>
+                        <button type="submit" class="btn btn-primary" data-idle-label="注册">注册</button>
                     </form>
                     
-                    <div id="auth-error" class="error-message"></div>
+                    <div id="auth-error" class="error-message" role="alert" aria-live="assertive" aria-atomic="true"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -152,8 +155,9 @@
 
             <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="主导航">
                 <button type="button" class="mobile-tab active" data-page="review">今日复习</button>
-                <button type="button" class="mobile-tab" data-page="import">导入</button>
-                <button type="button" class="mobile-tab" data-page="leaderboard">排行</button>
+                <button type="button" class="mobile-tab" data-page="discover">学单词</button>
+                <button type="button" class="mobile-tab" data-page="textbook">课文</button>
+                <button type="button" class="mobile-tab" data-page="progress">进度</button>
                 <button type="button" class="mobile-tab mobile-tab-more" id="mobile-more-btn" aria-expanded="false" aria-controls="mobile-more-sheet">更多</button>
             </nav>
             <div id="mobile-more-sheet" class="mobile-more-sheet" aria-hidden="true">
@@ -173,9 +177,8 @@
                             <span id="mobile-ng-pk-badge" class="ng-pk-badge" hidden aria-hidden="true"></span>
                         </button>
                     </div>
-                    <button type="button" class="mobile-more-link" data-page="discover">单词学习</button>
-                    <button type="button" class="mobile-more-link" data-page="textbook">课文学习</button>
-                    <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
+                    <button type="button" class="mobile-more-link" data-page="import">导入单词</button>
+                    <button type="button" class="mobile-more-link" data-page="leaderboard">排行榜</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
                     <button type="button" class="mobile-more-link js-invite-create" id="mobile-open-invite">邀请好友</button>
                     <button type="button" class="mobile-more-link" id="mobile-open-settings">用户设置</button>
@@ -250,8 +253,9 @@
                                         <div id="underline-input" class="underline-input" tabindex="-1" aria-hidden="true"></div>
                                     </div>
                                     <button id="submit-answer" class="btn btn-primary">提交</button>
+                                    <button type="button" id="next-review-word" class="btn btn-secondary" hidden>下一词</button>
                                 </div>
-                                <div class="word-message" id="word-message"></div>
+                                <div class="word-message" id="word-message" role="status" aria-live="polite" aria-atomic="true"></div>
                                 <div class="word-message-extra" id="word-message-extra" aria-live="polite"></div>
                             </div>
                         </div>
@@ -379,6 +383,7 @@
                                         <input type="checkbox" id="import-article-select-all-cb" />
                                         <span>全选</span>
                                     </label>
+                                    <button type="button" id="import-article-back-edit" class="import-article-back-edit">返回编辑</button>
                                 </div>
                                 <div id="import-article-pick" class="import-article-pick" role="group" aria-label="选择要导入的词"></div>
                             </div>
@@ -1053,8 +1058,6 @@
     
     <script src="/static/js/performance.js" defer></script>
     <script src="/static/js/app.js" defer></script>
-    <script src="/static/js/chat-sidebar.js" defer></script>
-    <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>
 </body>
 </html>
