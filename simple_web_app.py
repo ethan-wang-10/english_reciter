@@ -265,7 +265,8 @@ _SYSTEM_BROADCAST_SCHEMA = "english_reciter.system_broadcast/v1"
 _SYSTEM_BROADCAST_LOCK = threading.Lock()
 SYSTEM_BROADCAST_MAX_LEN = 8000
 _community_wb_lock = threading.Lock()
-_COMMUNITY_SCHEMA = "english_reciter.wordbank.community/v1"
+_COMMUNITY_SCHEMA = "english_reciter.wordbank.community/v2"
+_COMMUNITY_PROMOTION_STATUSES = {"pending", "failed", "promoted"}
 
 # 新 CSV 词汇表路径（STATIC_WB_DIR 见 project_paths，与 wordbank_v2 一致）
 WORDS_CSV_FILE = STATIC_WB_DIR / "words.csv"
@@ -622,17 +623,90 @@ def _empty_community_doc() -> dict:
     return {
         "schema": _COMMUNITY_SCHEMA,
         "phase": "community",
-        "label": "共享（家长贡献）",
-        "description": "全账户共享：家长通过简单格式导入且不在系统词库中的单词",
-        "version": 1,
+        "label": "社区词库（待审核）",
+        "description": "家长贡献的候选词条；通过补全和校验后提升到 words_v2.json",
+        "version": 2,
         "count": 0,
         "words": [],
     }
 
 
+def _community_word_key(value: object) -> str:
+    return wordbank_v2.normalize_english_key(str(value or ""))
+
+
+def _normalize_community_entry(raw: dict) -> dict:
+    """兼容 v1 社区词条，并补齐可重入提升所需的状态字段。"""
+    entry = dict(raw)
+    status = str(entry.get("status") or "pending").strip().lower()
+    if status not in _COMMUNITY_PROMOTION_STATUSES:
+        status = "pending"
+    try:
+        attempts = max(0, int(entry.get("promotion_attempts") or 0))
+    except (TypeError, ValueError):
+        attempts = 0
+    entry["status"] = status
+    entry["promotion_attempts"] = attempts
+    entry["last_attempt_at"] = entry.get("last_attempt_at") or None
+    entry["last_error"] = entry.get("last_error") or None
+    entry["promoted_at"] = entry.get("promoted_at") or None
+    entry["promoted_word_key"] = entry.get("promoted_word_key") or None
+    return entry
+
+
+@contextmanager
+def _community_wb_interprocess_lock() -> Generator[None, None, None]:
+    """跨进程保护社区词库；与线程锁同时使用时必须先获取本锁。"""
+    lock_path = COMMUNITY_WB_FILE.parent / ".community_wordbank.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(lock_path, "a+b", buffering=0)
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            f.seek(0, os.SEEK_END)
+            if f.tell() == 0:
+                f.write(b"\0")
+                f.flush()
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        if sys.platform == "win32":
+            import msvcrt
+
+            try:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        try:
+            f.close()
+        except OSError:
+            pass
+
+
+@contextmanager
+def _community_wb_guard() -> Generator[None, None, None]:
+    with _community_wb_interprocess_lock():
+        with _community_wb_lock:
+            yield
+
+
 def _read_community_file_unlocked() -> dict:
     """读取共享词库（调用方需已持锁或保证无并发写）。"""
-    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    COMMUNITY_WB_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not COMMUNITY_WB_FILE.exists():
         data = _empty_community_doc()
         _write_community_file_atomic(data)
@@ -641,32 +715,35 @@ def _read_community_file_unlocked() -> dict:
         with open(COMMUNITY_WB_FILE, "r", encoding="utf-8") as f:
             raw = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        logger.error("共享词库损坏，将重建空文件: %s", e)
-        data = _empty_community_doc()
-        _write_community_file_atomic(data)
-        return data
+        logger.error("社区词库无法读取，已拒绝覆盖原文件: %s", e)
+        raise RuntimeError("社区词库无法读取，已保留原文件，请先修复或恢复备份") from e
     if not isinstance(raw, dict):
-        raw = _empty_community_doc()
+        raise ValueError("社区词库根节点必须是 JSON 对象，已拒绝覆盖原文件")
     words = raw.get("words")
     if not isinstance(words, list):
-        words = []
-    raw["words"] = words
-    raw.setdefault("schema", _COMMUNITY_SCHEMA)
-    raw.setdefault("label", "共享（家长贡献）")
-    raw["count"] = len(words)
+        raise ValueError("社区词库 words 字段必须是数组，已拒绝覆盖原文件")
+    raw["words"] = [_normalize_community_entry(w) for w in words if isinstance(w, dict)]
+    raw["schema"] = _COMMUNITY_SCHEMA
+    raw["version"] = 2
+    raw["phase"] = "community"
+    raw["label"] = "社区词库（待审核）"
+    raw["description"] = "家长贡献的候选词条；通过补全和校验后提升到 words_v2.json"
+    raw["count"] = len(raw["words"])
     return raw
 
 
 def _write_community_file_atomic(data: dict) -> None:
-    SHARED_DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = COMMUNITY_WB_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
     data = dict(data)
     words = data.get("words")
     if not isinstance(words, list):
         words = []
     data["words"] = words
     data["count"] = len(words)
-    fd, tmp_name = tempfile.mkstemp(suffix=".json", dir=str(SHARED_DATA_DIR), text=True)
+    data["schema"] = _COMMUNITY_SCHEMA
+    data["version"] = 2
+    fd, tmp_name = tempfile.mkstemp(suffix=".json", dir=str(path.parent), text=True)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -677,6 +754,60 @@ def _write_community_file_atomic(data: dict) -> None:
         except OSError:
             pass
         raise
+
+
+def read_community_wordbank_snapshot() -> dict:
+    """读取社区待审区快照；返回值可在锁外用于耗时 AI 调用。"""
+    with _community_wb_guard():
+        return _read_community_file_unlocked()
+
+
+def merge_community_promotion_updates(updates: Dict[str, dict]) -> int:
+    """按规范化英文键合并提升状态，保留 AI 调用期间新导入的词条。"""
+    normalized_updates = {
+        _community_word_key(key): dict(update)
+        for key, update in updates.items()
+        if _community_word_key(key) and isinstance(update, dict)
+    }
+    if not normalized_updates:
+        return 0
+
+    changed = 0
+    with _community_wb_guard():
+        data = _read_community_file_unlocked()
+        words = list(data.get("words") or [])
+        for index, raw in enumerate(words):
+            entry = _normalize_community_entry(raw)
+            key = _community_word_key(entry.get("english"))
+            update = normalized_updates.get(key)
+            if not update:
+                words[index] = entry
+                continue
+
+            next_status = str(update.get("status") or entry["status"]).strip().lower()
+            if next_status not in _COMMUNITY_PROMOTION_STATUSES:
+                next_status = entry["status"]
+            # 两个提升进程竞态时，较晚的失败结果不得覆盖已成功的状态。
+            if entry["status"] == "promoted" and next_status != "promoted":
+                words[index] = entry
+                continue
+
+            try:
+                increment = max(0, int(update.get("attempt_increment") or 0))
+            except (TypeError, ValueError):
+                increment = 0
+            entry["promotion_attempts"] += increment
+            entry["status"] = next_status
+            for field in ("last_attempt_at", "last_error", "promoted_at", "promoted_word_key"):
+                if field in update:
+                    entry[field] = update[field] or None
+            words[index] = entry
+            changed += 1
+
+        if changed:
+            data["words"] = words
+            _write_community_file_atomic(data)
+    return changed
 
 
 # 疑难词（AI 导入失败）与管理员维护的词形映射（表面形 -> 词汇原形）
@@ -6343,14 +6474,14 @@ def wordbank_trouble_status(username):
 @app.route('/api/wordbank/community', methods=['GET'])
 @token_required
 def get_community_wordbank(username):
-    """返回全站共享词库（家长贡献），供导入页勾选。"""
-    with _community_wb_lock:
+    """返回社区待审区（家长贡献）；正式词条仍以 words_v2.json 为准。"""
+    with _community_wb_guard():
         data = _read_community_file_unlocked()
     return jsonify(
         {
             "schema": data.get("schema"),
             "phase": "community",
-            "label": data.get("label", "共享（家长贡献）"),
+            "label": data.get("label", "社区词库（待审核）"),
             "count": len(data.get("words") or []),
             "words": data.get("words") or [],
         }
@@ -6454,8 +6585,8 @@ def remove_pending_words_api(username):
 @token_required
 def community_import_simple(username):
     """
-    家长简易导入：单词 + 例句 + 译文 → 写入共享词库。
-    若英文已出现在小学/初中/高中系统词库，或已在共享词库中，则拒绝/跳过并返回明细。
+    家长简易导入：单词 + 例句 + 译文 → 写入社区待审区。
+    若英文已出现在正式/旧版系统词库，或已在社区待审区中，则拒绝/跳过并返回明细。
     可选 also_add_to_queue：同时将新词加入当前用户待复习。
     """
     if not _rate_allow(f"comm_import:{_client_ip()}", 40):
@@ -6476,10 +6607,10 @@ def community_import_simple(username):
     skipped_duplicate_community: List[str] = []
     skipped_invalid = 0
 
-    with _community_wb_lock:
+    with _community_wb_guard():
         data = _read_community_file_unlocked()
         words: List[dict] = list(data.get("words") or [])
-        comm_keys = {str(w.get("english", "")).strip().lower() for w in words if w.get("english")}
+        comm_keys = {_community_word_key(w.get("english")) for w in words if w.get("english")}
 
         for row in rows:
             en = str(row.get("english", "")).strip()[:500]
@@ -6492,7 +6623,7 @@ def community_import_simple(username):
             en = _normalize_import_english_surface(en)
             if len(en) > 500:
                 en = en[:500]
-            key = en.lower()
+            key = _community_word_key(en)
             if key in system_keys:
                 rejected_in_system.append(en)
                 continue
@@ -6505,6 +6636,12 @@ def community_import_simple(username):
                 "example": ex or None,
                 "added_by": username,
                 "added_at": china_now_iso(timespec="seconds"),
+                "status": "pending",
+                "promotion_attempts": 0,
+                "last_attempt_at": None,
+                "last_error": None,
+                "promoted_at": None,
+                "promoted_word_key": None,
             }
             words.append(entry)
             comm_keys.add(key)
