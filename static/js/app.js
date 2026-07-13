@@ -1502,6 +1502,8 @@ function renderUserSettingsPanel(s) {
 }
 
 const AVATAR_CROP_VIEW = 280;
+let currentNavAvatarUrl = '';
+let avatarViewPreviouslyFocused = null;
 let avatarCrop = {
     objectUrl: null,
     iw: 0,
@@ -1525,6 +1527,7 @@ function avatarDisplayUrl(url, w) {
 }
 
 function updateNavUserAvatar(avatarUrl) {
+    currentNavAvatarUrl = avatarUrl || '';
     const img = document.getElementById('nav-user-avatar-img');
     const ph = document.getElementById('nav-user-avatar-ph');
     if (!img || !ph) return;
@@ -1537,6 +1540,83 @@ function updateNavUserAvatar(avatarUrl) {
         img.hidden = true;
         ph.hidden = false;
     }
+}
+
+function avatarOriginalDisplayUrl(url) {
+    if (!url) return '';
+    const sep = url.indexOf('?') >= 0 ? '&' : '?';
+    return `${url}${sep}t=${Date.now()}`;
+}
+
+function closeAvatarViewModal() {
+    const modal = document.getElementById('avatar-view-modal');
+    const trigger = document.getElementById('nav-user-avatar-wrap');
+    const img = document.getElementById('avatar-view-image');
+    if (!modal || modal.style.display === 'none') return;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    trigger?.setAttribute('aria-expanded', 'false');
+    if (img) {
+        img.onload = null;
+        img.onerror = null;
+        img.removeAttribute('src');
+    }
+    if (avatarViewPreviouslyFocused instanceof HTMLElement) {
+        avatarViewPreviouslyFocused.focus();
+    }
+    avatarViewPreviouslyFocused = null;
+}
+
+function openAvatarViewModal() {
+    const modal = document.getElementById('avatar-view-modal');
+    const trigger = document.getElementById('nav-user-avatar-wrap');
+    const title = document.getElementById('avatar-view-title');
+    const img = document.getElementById('avatar-view-image');
+    const placeholder = document.getElementById('avatar-view-placeholder');
+    const actions = document.getElementById('avatar-view-actions');
+    const input = document.getElementById('avatar-view-replace-input');
+    const message = document.getElementById('avatar-view-message');
+    const closeButton = document.getElementById('avatar-view-close');
+    if (!modal || !img || !placeholder) return;
+
+    avatarViewPreviouslyFocused = document.activeElement;
+    if (title) {
+        title.textContent = isParentSession && childUsername ? `${childUsername} 的头像` : '我的头像';
+    }
+    if (actions) actions.hidden = isParentSession;
+    if (input) {
+        input.disabled = isParentSession;
+        input.value = '';
+    }
+    if (message) {
+        message.textContent = isParentSession ? '家长查看模式不能替换学生头像' : '';
+    }
+
+    img.hidden = true;
+    placeholder.hidden = false;
+    const originalUrl = avatarOriginalDisplayUrl(currentNavAvatarUrl);
+    if (originalUrl) {
+        img.onload = () => {
+            img.hidden = false;
+            placeholder.hidden = true;
+            img.onload = null;
+            img.onerror = null;
+        };
+        img.onerror = () => {
+            img.hidden = true;
+            placeholder.hidden = false;
+            img.onload = null;
+            img.onerror = null;
+        };
+        img.src = originalUrl;
+    } else {
+        img.removeAttribute('src');
+    }
+
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    trigger?.setAttribute('aria-expanded', 'true');
+    closeButton?.focus();
 }
 
 async function refreshNavUserAvatar() {
@@ -2508,11 +2588,20 @@ async function confirmAvatarCropUpload() {
     const isJpeg = uploadBlob.type === 'image/jpeg';
     closeAvatarCropModal();
     try {
-        await postAvatarFile(uploadBlob, isJpeg ? 'avatar.jpg' : 'avatar.webp');
-        setSettingsMessage('头像已更新');
-        await loadUserSettingsPanel();
+        const uploaded = await postAvatarFile(uploadBlob, isJpeg ? 'avatar.jpg' : 'avatar.webp');
+        updateNavUserAvatar(uploaded && uploaded.avatar_url);
+        if (isSettingsOverlayOpen()) {
+            await loadUserSettingsPanel();
+            setSettingsMessage('头像已更新');
+        } else {
+            showMainBanner('头像已更新');
+        }
     } catch (err) {
-        setSettingsMessage(err.message || '上传失败', true);
+        if (isSettingsOverlayOpen()) {
+            setSettingsMessage(err.message || '上传失败', true);
+        } else {
+            showMainBanner(err.message || '上传失败');
+        }
     }
 }
 
@@ -7913,6 +8002,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!f) return;
         openAvatarCropModal(f);
     });
+    document.getElementById('nav-user-avatar-wrap')?.addEventListener('click', openAvatarViewModal);
+    document.getElementById('avatar-view-backdrop')?.addEventListener('click', closeAvatarViewModal);
+    document.getElementById('avatar-view-close')?.addEventListener('click', closeAvatarViewModal);
+    document.getElementById('avatar-view-replace-input')?.addEventListener('change', (e) => {
+        const input = e.target;
+        const file = input.files && input.files[0];
+        input.value = '';
+        if (!file || isParentSession) return;
+        closeAvatarViewModal();
+        openAvatarCropModal(file);
+    });
     bindAvatarCropUi();
     document.getElementById('settings-avatar-remove')?.addEventListener('click', async () => {
         try {
@@ -8077,6 +8177,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const crop = document.getElementById('avatar-crop-overlay');
         if (crop && crop.style.display !== 'none') {
             closeAvatarCropModal();
+            return;
+        }
+        const avatarViewModal = document.getElementById('avatar-view-modal');
+        if (avatarViewModal && avatarViewModal.style.display !== 'none') {
+            closeAvatarViewModal();
             return;
         }
         const pkHubModal = document.getElementById('pk-hub-modal');

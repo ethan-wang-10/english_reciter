@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260713-logo1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260713-avatar1">
 </head>
 <body>
     <div id="app">
@@ -171,10 +171,10 @@
                         </button>
                         <button type="button" id="admin-gear-main" class="btn-gear" title="用户设置">⚙</button>
                     </div>
-                    <span class="nav-user-avatar-wrap nav-user-avatar-wrap--static" id="nav-user-avatar-wrap" aria-hidden="true">
+                    <button type="button" class="nav-user-avatar-wrap" id="nav-user-avatar-wrap" aria-label="查看头像" aria-haspopup="dialog" aria-expanded="false" aria-controls="avatar-view-modal">
                         <img id="nav-user-avatar-img" class="nav-user-avatar-img" alt="" width="32" height="32" loading="lazy" hidden />
                         <span id="nav-user-avatar-ph" class="nav-user-avatar-ph" aria-hidden="true">👤</span>
-                    </span>
+                    </button>
                     <div class="nav-user-summary-wrap" id="nav-user-summary-wrap">
                         <button type="button" class="username-inline" id="username-display" title="点击查看今日小结" aria-expanded="false" aria-haspopup="dialog" aria-controls="daily-summary-popover"></button>
                         <button type="button" class="btn-daily-summary-mobile" id="daily-summary-mobile-btn" title="今日小结" aria-label="今日小结" aria-expanded="false" aria-haspopup="dialog" aria-controls="daily-summary-popover">📋</button>
@@ -785,6 +785,26 @@
             </div>
         </div>
 
+        <!-- 头像大图与快捷替换 -->
+        <div id="avatar-view-modal" class="avatar-view-modal" style="display: none;" aria-hidden="true">
+            <div class="avatar-view-backdrop" id="avatar-view-backdrop"></div>
+            <div class="avatar-view-dialog" role="dialog" aria-modal="true" aria-labelledby="avatar-view-title">
+                <div class="avatar-view-head">
+                    <h3 id="avatar-view-title">我的头像</h3>
+                    <button type="button" class="avatar-view-close" id="avatar-view-close" aria-label="关闭">×</button>
+                </div>
+                <div class="avatar-view-image-wrap">
+                    <img id="avatar-view-image" class="avatar-view-image" alt="当前头像大图" decoding="async" hidden />
+                    <span id="avatar-view-placeholder" class="avatar-view-placeholder" aria-hidden="true">👤</span>
+                </div>
+                <div class="avatar-view-actions" id="avatar-view-actions">
+                    <input type="file" id="avatar-view-replace-input" class="avatar-view-replace-input" accept="image/jpeg,image/png,image/webp" />
+                    <label for="avatar-view-replace-input" class="btn btn-primary avatar-view-replace-label" id="avatar-view-replace-label">替换头像</label>
+                </div>
+                <p id="avatar-view-message" class="avatar-view-message" role="status"></p>
+            </div>
+        </div>
+
         <!-- 头像裁剪（上传前） -->
         <div id="avatar-crop-overlay" class="avatar-crop-overlay" style="display: none;" aria-hidden="true">
             <div class="avatar-crop-backdrop" id="avatar-crop-backdrop"></div>
@@ -1111,7 +1131,7 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20260712-invite10" defer></script>
+    <script src="/static/js/app.js?v=20260713-avatar1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>
