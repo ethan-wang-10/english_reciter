@@ -256,6 +256,50 @@ body {
     opacity: 0.85;
 }
 
+.auth-link {
+    display: block;
+    width: fit-content;
+    margin: 16px auto 0;
+    padding: 4px 2px;
+    border: 0;
+    background: transparent;
+    color: var(--secondary-dark);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.auth-link:hover,
+.auth-link:focus-visible {
+    text-decoration: underline;
+}
+
+.auth-view-heading {
+    margin: 0 0 8px;
+    font-size: 1.2rem;
+    text-align: center;
+}
+
+.auth-view-copy {
+    margin: 0 0 20px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.auth-status {
+    display: none;
+    margin-top: 20px;
+    padding: 14px 16px;
+    border: 2px solid var(--primary-color);
+    border-radius: var(--radius-md);
+    background: #f2ffea;
+    color: var(--primary-dark);
+    font-weight: 700;
+}
+
 .btn {
     padding: 14px 24px;
     border: none;
@@ -4400,6 +4444,55 @@ button.import-article-chip--selected:hover {
     font-size: 0.9rem;
     color: var(--text-secondary);
     line-height: 1.45;
+}
+
+.settings-email-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.settings-email-row input {
+    min-width: 0;
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    font: inherit;
+}
+
+.settings-email-row input:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 3px rgba(28, 176, 246, 0.2);
+}
+
+.settings-email-row .btn {
+    width: auto;
+    white-space: nowrap;
+}
+
+.settings-inline-message {
+    min-height: 1.35em;
+    margin: 8px 0 0;
+    color: var(--primary-dark);
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.settings-inline-message.is-error {
+    color: var(--error-dark);
+}
+
+@media (max-width: 480px) {
+    .settings-email-row {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-email-row .btn {
+        width: 100%;
+    }
 }
 
 .settings-avatar-upload-hint {

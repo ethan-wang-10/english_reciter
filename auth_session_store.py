@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import sqlite3
 import threading
@@ -16,6 +17,7 @@ from typing import Optional
 
 SESSION_KIND_USER = "user"
 SESSION_KIND_ADMIN = "admin"
+SESSION_KIND_PASSWORD_RESET = "password_reset"
 
 _lock = threading.Lock()
 _db_path: Optional[Path] = None
@@ -89,16 +91,24 @@ def _cleanup_expired_unlocked(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _stored_token(token: str, kind: str) -> str:
+    """密码重置令牌落库前哈希，避免数据库泄露后可直接使用重置链接。"""
+    if kind == SESSION_KIND_PASSWORD_RESET:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return token
+
+
 def create_session(kind: str, principal: str, ttl: timedelta) -> str:
     """签发新 token 并写入库。"""
     token = secrets.token_urlsafe(32)
+    stored_token = _stored_token(token, kind)
     exp = time.time() + ttl.total_seconds()
     with _lock:
         conn = _ensure_conn()
         _cleanup_expired_unlocked(conn)
         conn.execute(
             "INSERT INTO auth_sessions (token, principal, session_kind, expires_at) VALUES (?, ?, ?, ?)",
-            (token, principal, kind, exp),
+            (stored_token, principal, kind, exp),
         )
         conn.commit()
     return token
@@ -109,21 +119,49 @@ def verify_session(token: str, kind: str) -> Optional[str]:
     if not token:
         return None
     now = time.time()
+    stored_token = _stored_token(token, kind)
     with _lock:
         conn = _ensure_conn()
         cur = conn.execute(
             "SELECT principal, expires_at FROM auth_sessions WHERE token = ? AND session_kind = ?",
-            (token, kind),
+            (stored_token, kind),
         )
         row = cur.fetchone()
         if not row:
             return None
         principal, exp = row[0], float(row[1])
         if exp < now:
-            conn.execute("DELETE FROM auth_sessions WHERE token = ?", (token,))
+            conn.execute("DELETE FROM auth_sessions WHERE token = ?", (stored_token,))
             conn.commit()
             return None
         return str(principal)
+
+
+def consume_session(token: str, kind: str) -> Optional[str]:
+    """原子地校验并删除一次性 token；有效时返回 principal。"""
+    if not token:
+        return None
+    now = time.time()
+    stored_token = _stored_token(token, kind)
+    with _lock:
+        conn = _ensure_conn()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                "SELECT principal, expires_at FROM auth_sessions WHERE token = ? AND session_kind = ?",
+                (stored_token, kind),
+            )
+            row = cur.fetchone()
+            if not row or float(row[1]) < now:
+                conn.execute("DELETE FROM auth_sessions WHERE token = ?", (stored_token,))
+                conn.commit()
+                return None
+            conn.execute("DELETE FROM auth_sessions WHERE token = ?", (stored_token,))
+            conn.commit()
+            return str(row[0])
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def revoke_principal(kind: str, principal: str) -> None:
@@ -138,10 +176,11 @@ def revoke_principal(kind: str, principal: str) -> None:
 
 
 def revoke_token(kind: str, token: str) -> None:
+    stored_token = _stored_token(token, kind)
     with _lock:
         conn = _ensure_conn()
         conn.execute(
             "DELETE FROM auth_sessions WHERE session_kind = ? AND token = ?",
-            (kind, token),
+            (kind, stored_token),
         )
         conn.commit()

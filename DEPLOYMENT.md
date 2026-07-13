@@ -267,6 +267,16 @@ kubectl apply -f deployment.yaml
 |--------|------|--------|----------|
 | SECRET_KEY | Token 密钥 | 自动生成 | 否 |
 | TZ | 时区 | Asia/Shanghai | 否 |
+| PUBLIC_BASE_URL | 重置密码链接使用的公网地址，如 `https://reciter.example.com` | 当前请求地址 | 生产环境建议 |
+| SMTP_HOST | SMTP 服务器地址 | 无 | 启用密码找回时必需 |
+| SMTP_PORT | SMTP 端口 | SSL 为 465，否则 587 | 否 |
+| SMTP_USERNAME | SMTP 登录用户名 | 无 | 由邮件服务决定 |
+| SMTP_PASSWORD | SMTP 密码或邮箱授权码 | 无 | 由邮件服务决定 |
+| SMTP_FROM_EMAIL | 发件邮箱 | `SMTP_USERNAME` | 启用密码找回时必需 |
+| SMTP_FROM_NAME | 发件人名称 | 智能英语背诵 | 否 |
+| SMTP_USE_SSL | 使用 SMTP SSL | true | 否 |
+| SMTP_STARTTLS | 非 SSL 连接后启用 STARTTLS | `SMTP_USE_SSL=false` 时为 true | 否 |
+| SMTP_TIMEOUT | SMTP 连接超时秒数 | 15 | 否 |
 
 ### 端口配置
 

@@ -1,5 +1,6 @@
 // 全局状态
 let token = localStorage.getItem('token');
+let passwordResetToken = new URLSearchParams(window.location.search).get('reset_token') || '';
 /** 当前弹窗中的系统广播 id，用于确认已读 */
 let systemBroadcastPendingId = null;
 let username = localStorage.getItem('username');
@@ -2555,8 +2556,13 @@ async function loadUserSettingsPanel() {
     const studentBlocks = document.getElementById('settings-student-blocks');
     const parentBlock = document.getElementById('settings-parent-block');
     const title = document.getElementById('settings-title');
+    setSettingsMessage('');
+    try {
+        await loadAccountEmail();
+    } catch (e) {
+        setSettingsMessage(e.message || '邮箱信息加载失败', true);
+    }
     if (isParentSession) {
-        setSettingsMessage('');
         if (title) title.textContent = '配置';
         if (studentBlocks) studentBlocks.style.display = 'none';
         if (parentBlock) parentBlock.style.display = '';
@@ -2591,6 +2597,21 @@ async function loadUserSettingsPanel() {
     }
     resetSettingsPendingWordsCollapse();
     await loadSettingsPendingWordsBlock();
+}
+
+async function loadAccountEmail() {
+    const data = await apiRequest('/user/email');
+    const input = document.getElementById('settings-email');
+    if (input) input.value = data.email || '';
+    setSettingsEmailMessage('');
+    return data;
+}
+
+function setSettingsEmailMessage(message, isError = false) {
+    const el = document.getElementById('settings-email-message');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('is-error', !!isError);
 }
 
 function resetSettingsPendingWordsCollapse() {
@@ -3316,6 +3337,33 @@ function showError(message) {
     setTimeout(() => {
         errorDiv.style.display = 'none';
     }, 3000);
+}
+
+function showAuthStatus(message) {
+    const status = document.getElementById('auth-status');
+    if (!status) return;
+    status.textContent = message || '';
+    status.style.display = message ? 'block' : 'none';
+}
+
+function switchAuthView(view) {
+    const forms = {
+        login: document.getElementById('login-form'),
+        register: document.getElementById('register-form'),
+        forgot: document.getElementById('forgot-password-form'),
+        reset: document.getElementById('reset-password-form'),
+    };
+    Object.entries(forms).forEach(([name, form]) => {
+        if (form) form.style.display = name === view ? 'block' : 'none';
+    });
+    const tabs = document.querySelector('.tabs');
+    if (tabs) tabs.style.display = view === 'login' || view === 'register' ? 'flex' : 'none';
+    document.querySelectorAll('.tab').forEach((tab) => {
+        tab.classList.toggle('active', tab.dataset.tab === view);
+    });
+    const error = document.getElementById('auth-error');
+    if (error) error.style.display = 'none';
+    showAuthStatus('');
 }
 
 /** 词汇导入（VIP）接口返回拼装成可读说明（在服务端 message 基础上补充词条明细） */
@@ -4259,13 +4307,7 @@ async function logout() {
 
 function activateAuthTab(tabName) {
     const selectedTab = tabName === 'register' ? 'register' : 'login';
-    document.querySelectorAll('.tab').forEach((tab) => {
-        tab.classList.toggle('active', tab.dataset.tab === selectedTab);
-    });
-    const loginForm = document.getElementById('login-form');
-    const registerForm = document.getElementById('register-form');
-    if (loginForm) loginForm.style.display = selectedTab === 'login' ? 'block' : 'none';
-    if (registerForm) registerForm.style.display = selectedTab === 'register' ? 'block' : 'none';
+    switchAuthView(selectedTab);
 }
 
 function applyPendingInviteRegistration() {
@@ -7591,6 +7633,68 @@ document.addEventListener('DOMContentLoaded', function() {
             await register(username, password, email, inviteCode.trim());
         });
     }
+
+    document.getElementById('forgot-password-open')?.addEventListener('click', () => {
+        const loginUsername = document.getElementById('login-username')?.value?.trim() || '';
+        const forgotEmail = document.getElementById('forgot-email');
+        if (forgotEmail && loginUsername.includes('@')) forgotEmail.value = loginUsername;
+        switchAuthView('forgot');
+        forgotEmail?.focus();
+    });
+    document.querySelectorAll('.auth-back-login').forEach((button) => {
+        button.addEventListener('click', () => switchAuthView('login'));
+    });
+    document.getElementById('forgot-password-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('forgot-email')?.value?.trim() || '';
+        const submit = e.currentTarget.querySelector('button[type="submit"]');
+        if (submit) submit.disabled = true;
+        try {
+            const data = await apiRequest('/auth/forgot-password', {
+                method: 'POST',
+                body: JSON.stringify({ email }),
+            });
+            showAuthStatus(data.message || '如果该邮箱已绑定账号，重置邮件将在几分钟内发送');
+        } catch (error) {
+            showError(error.message || '发送失败');
+        } finally {
+            if (submit) submit.disabled = false;
+        }
+    });
+    document.getElementById('reset-password-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const password = document.getElementById('reset-password')?.value || '';
+        const passwordConfirm = document.getElementById('reset-password-confirm')?.value || '';
+        if (password !== passwordConfirm) {
+            showError('两次密码输入不一致');
+            return;
+        }
+        const submit = e.currentTarget.querySelector('button[type="submit"]');
+        if (submit) submit.disabled = true;
+        try {
+            const data = await apiRequest('/auth/reset-password', {
+                method: 'POST',
+                body: JSON.stringify({
+                    token: passwordResetToken,
+                    password,
+                    password_confirm: passwordConfirm,
+                }),
+            });
+            token = null;
+            username = null;
+            setSessionParentFlags(false, '');
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            passwordResetToken = '';
+            window.history.replaceState({}, '', window.location.pathname);
+            switchAuthView('login');
+            showAuthStatus(data.message || '密码已重置，请使用新密码登录');
+        } catch (error) {
+            showError(error.message || '重置失败');
+        } finally {
+            if (submit) submit.disabled = false;
+        }
+    });
     
     // Tab 切换
     document.querySelectorAll('.tab').forEach(tab => {
@@ -7782,6 +7886,24 @@ document.addEventListener('DOMContentLoaded', function() {
             if (n2) n2.value = '';
         } catch (e) {
             setSettingsMessage(e.message || '保存失败', true);
+        }
+    });
+    document.getElementById('settings-email-save')?.addEventListener('click', async () => {
+        const input = document.getElementById('settings-email');
+        const button = document.getElementById('settings-email-save');
+        const email = input?.value?.trim() || '';
+        if (button) button.disabled = true;
+        try {
+            const data = await apiRequest('/user/email', {
+                method: 'PATCH',
+                body: JSON.stringify({ email }),
+            });
+            if (input) input.value = data.email || '';
+            setSettingsEmailMessage(data.message || '邮箱已保存');
+        } catch (e) {
+            setSettingsEmailMessage(e.message || '保存失败', true);
+        } finally {
+            if (button) button.disabled = false;
         }
     });
     document.getElementById('settings-avatar-input')?.addEventListener('change', (e) => {
@@ -8268,7 +8390,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const incomingInviteCode = captureInviteRegistrationFromUrl();
 
     // 初始化页面
-    if (token && username) {
+    if (passwordResetToken) {
+        showLoginPage();
+        switchAuthView('reset');
+    } else if (token && username) {
         void showMainPage().finally(() => {
             if (token && username) {
                 clearInviteRegistrationState();

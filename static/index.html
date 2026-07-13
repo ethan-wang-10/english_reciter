@@ -45,6 +45,7 @@
                             </div>
                         </div>
                         <button type="submit" class="btn btn-primary">登录</button>
+                        <button type="button" class="auth-link" id="forgot-password-open">忘记密码？</button>
                     </form>
                     
                     <!-- 注册表单 -->
@@ -84,8 +85,45 @@
                         </div>
                         <button type="submit" class="btn btn-primary">注册</button>
                     </form>
-                    
+
+                    <form id="forgot-password-form" class="auth-form" style="display: none;">
+                        <h2 class="auth-view-heading">找回密码</h2>
+                        <p class="auth-view-copy">填写账号绑定的邮箱，我们会发送密码重置链接。</p>
+                        <div class="form-group">
+                            <label for="forgot-email">邮箱</label>
+                            <input type="email" id="forgot-email" required autocomplete="email">
+                        </div>
+                        <button type="submit" class="btn btn-primary">发送重置邮件</button>
+                        <button type="button" class="auth-link auth-back-login">返回登录</button>
+                    </form>
+
+                    <form id="reset-password-form" class="auth-form" style="display: none;">
+                        <h2 class="auth-view-heading">设置新密码</h2>
+                        <p class="auth-view-copy">新密码至少 6 个字符，提交后原有登录会话将失效。</p>
+                        <div class="form-group">
+                            <label for="reset-password">新密码</label>
+                            <div class="password-input-wrap">
+                                <input type="password" id="reset-password" required minlength="6" autocomplete="new-password">
+                                <button type="button" class="btn-toggle-pw" data-target="reset-password" aria-label="显示密码" tabindex="-1">
+                                    <span class="pw-eye-icon">👁</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="reset-password-confirm">确认新密码</label>
+                            <div class="password-input-wrap">
+                                <input type="password" id="reset-password-confirm" required autocomplete="new-password">
+                                <button type="button" class="btn-toggle-pw" data-target="reset-password-confirm" aria-label="显示密码" tabindex="-1">
+                                    <span class="pw-eye-icon">👁</span>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">重置密码</button>
+                        <button type="button" class="auth-link auth-back-login">返回登录</button>
+                    </form>
+
                     <div id="auth-error" class="error-message"></div>
+                    <div id="auth-status" class="auth-status" role="status"></div>
                 </div>
             </div>
         </div>
@@ -599,6 +637,15 @@
                     <button type="button" class="settings-close" id="settings-close" aria-label="关闭">×</button>
                 </div>
                 <div class="settings-panel-body" id="settings-panel-body">
+                    <div class="settings-block">
+                        <h3 class="settings-subtitle">账号邮箱</h3>
+                        <p class="settings-hint">用于忘记密码时接收重置邮件。</p>
+                        <div class="settings-email-row">
+                            <input type="email" id="settings-email" autocomplete="email" placeholder="name@example.com" aria-label="账号邮箱" />
+                            <button type="button" class="btn btn-primary" id="settings-email-save">保存邮箱</button>
+                        </div>
+                        <p class="settings-inline-message" id="settings-email-message" role="status"></p>
+                    </div>
                     <div id="settings-pending-words-block" class="settings-block">
                         <h3 class="settings-subtitle">待复习词汇</h3>
                         <button type="button" id="settings-pending-words-toggle" class="settings-pending-words-toggle"

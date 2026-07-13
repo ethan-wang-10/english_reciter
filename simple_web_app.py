@@ -17,6 +17,7 @@ import gzip
 import hashlib
 import secrets
 import shutil
+import smtplib
 import ssl
 import subprocess
 import threading
@@ -25,12 +26,15 @@ import urllib.request
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import timedelta
+from email.message import EmailMessage
+from email.utils import formataddr
 from io import BytesIO, StringIO
 from pathlib import Path
 from functools import wraps
 from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 from time import sleep, time
 import uuid
+from urllib.parse import quote
 
 from flask import Flask, request, jsonify, send_file, send_from_directory, Response, g, stream_with_context
 from flask_cors import CORS
@@ -50,9 +54,11 @@ import wordbank_v2
 from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
 from auth_session_store import (
     SESSION_KIND_ADMIN,
+    SESSION_KIND_PASSWORD_RESET,
     SESSION_KIND_USER,
     close_connection as close_auth_session_sqlite,
     create_session as _db_create_auth_session,
+    consume_session,
     init_auth_session_store,
     revoke_principal,
     revoke_token,
@@ -217,6 +223,7 @@ PARENT_LOGIN_SUFFIX = "_parent"
 DEFAULT_PARENT_PASSWORD = "123123"
 SESSION_KIND_CHAT_STREAM = "chat_stream"
 USER_SESSION_TTL = timedelta(days=30)
+PASSWORD_RESET_TTL = timedelta(minutes=30)
 ADMIN_SESSION_TTL = timedelta(hours=8)
 CHAT_STREAM_SESSION_TTL = timedelta(minutes=2)
 USER_INVITE_QUOTA_DEFAULT = DEFAULT_INVITE_QUOTA
@@ -1977,6 +1984,8 @@ _rate_buckets_lock = threading.Lock()
 _RATE_WINDOW_SEC = 60
 _RATE_MAX_LOGIN = 20
 _RATE_MAX_REGISTER = 10
+_RATE_MAX_FORGOT_PASSWORD = 5
+_RATE_MAX_RESET_PASSWORD = 20
 _RATE_MAX_ADMIN_LOGIN = 10
 _RATE_MAX_ADMIN_DELETE_USER = 8
 _RATE_MAX_CHAT_POST = 30
@@ -2027,6 +2036,27 @@ def _rate_allow(bucket_key: str, max_events: int) -> bool:
 
 def is_valid_username(username: str) -> bool:
     return bool(username and USERNAME_PATTERN.fullmatch(username))
+
+
+def normalize_email(value: Any) -> Optional[str]:
+    """返回可存储的规范邮箱；空值表示未填写，格式错误抛出 ValueError。"""
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if len(raw) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", raw):
+        raise ValueError("邮箱格式不正确")
+    return raw.lower()
+
+
+def _email_owner(users: Dict[str, Any], email: str, *, exclude: str = "") -> Optional[str]:
+    target = email.casefold()
+    for uname, row in users.items():
+        if uname == exclude or not isinstance(row, dict):
+            continue
+        existing = str(row.get("email") or "").strip()
+        if existing and existing.casefold() == target:
+            return str(uname)
+    return None
 
 
 def is_reserved_parent_username(username: str) -> bool:
@@ -2446,6 +2476,69 @@ def _locked_invite_storage() -> Generator[None, None, None]:
             pass
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _smtp_config() -> Dict[str, Any]:
+    host = (os.getenv("SMTP_HOST") or "").strip()
+    username = (os.getenv("SMTP_USERNAME") or "").strip()
+    password = os.getenv("SMTP_PASSWORD") or ""
+    from_email = (os.getenv("SMTP_FROM_EMAIL") or username).strip()
+    use_ssl = _env_flag("SMTP_USE_SSL", True)
+    starttls = _env_flag("SMTP_STARTTLS", not use_ssl)
+    try:
+        port = int((os.getenv("SMTP_PORT") or ("465" if use_ssl else "587")).strip())
+        timeout = float((os.getenv("SMTP_TIMEOUT") or "15").strip())
+    except ValueError as exc:
+        raise RuntimeError("SMTP_PORT 或 SMTP_TIMEOUT 配置不正确") from exc
+    if not host or not from_email:
+        raise RuntimeError("邮件服务未配置")
+    try:
+        normalize_email(from_email)
+    except ValueError as exc:
+        raise RuntimeError("SMTP_FROM_EMAIL 配置不正确") from exc
+    return {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "from_email": from_email,
+        "from_name": (os.getenv("SMTP_FROM_NAME") or "智能英语背诵").strip(),
+        "use_ssl": use_ssl,
+        "starttls": starttls,
+        "timeout": max(3.0, min(timeout, 60.0)),
+    }
+
+
+def _send_password_reset_email(to_email: str, reset_url: str) -> None:
+    cfg = _smtp_config()
+    msg = EmailMessage()
+    msg["Subject"] = "重置智能英语背诵账号密码"
+    msg["From"] = formataddr((cfg["from_name"], cfg["from_email"]))
+    msg["To"] = to_email
+    msg.set_content(
+        "你正在重置智能英语背诵账号的密码。\n\n"
+        f"请在 30 分钟内打开以下链接设置新密码：\n{reset_url}\n\n"
+        "此链接只能使用一次。如果不是你本人操作，请忽略本邮件。"
+    )
+    context = ssl.create_default_context()
+    if cfg["use_ssl"]:
+        smtp_cls = smtplib.SMTP_SSL
+        smtp = smtp_cls(cfg["host"], cfg["port"], timeout=cfg["timeout"], context=context)
+    else:
+        smtp = smtplib.SMTP(cfg["host"], cfg["port"], timeout=cfg["timeout"])
+    with smtp:
+        if cfg["starttls"] and not cfg["use_ssl"]:
+            smtp.starttls(context=context)
+        if cfg["username"]:
+            smtp.login(cfg["username"], cfg["password"])
+        smtp.send_message(msg)
+
+
 def load_invites() -> dict:
     """加载邀请码列表。"""
     try:
@@ -2518,6 +2611,8 @@ def register_user_with_invite(
                 return False, '该用户名保留给家长账户使用，请更换'
             if (DATA_DIR / username).exists():
                 return False, '用户名数据尚未清理，请稍后重试'
+            if email and _email_owner(users, email):
+                return False, '该邮箱已被其他账号使用'
             users[username] = {
                 'password_hash': hash_password(password),
                 'email': email,
@@ -3029,7 +3124,10 @@ def register():
         
         username = data.get('username', '').strip()
         password = data.get('password', '').strip()
-        email = data.get('email')
+        try:
+            email = normalize_email(data.get('email'))
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
         
         if not username or not password:
             return jsonify({'error': '用户名和密码不能为空'}), 400
@@ -3059,6 +3157,87 @@ def register():
     except Exception as e:
         logger.error(f"注册失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/auth/forgot-password', methods=['POST'])
+def forgot_password():
+    """按邮箱发送一次性重置链接；无论邮箱是否存在均返回统一结果。"""
+    if not _rate_allow(f"forgot_password:{_client_ip()}", _RATE_MAX_FORGOT_PASSWORD):
+        return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
+    data = request.get_json(silent=True) or {}
+    try:
+        email = normalize_email(data.get('email'))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    if not email:
+        return jsonify({'error': '请填写邮箱'}), 400
+
+    generic = {'message': '如果该邮箱已绑定账号，重置邮件将在几分钟内发送'}
+    try:
+        _smtp_config()
+    except RuntimeError as exc:
+        logger.error("无法发送密码重置邮件: %s", exc)
+        return jsonify({'error': '邮件服务暂不可用，请联系管理员'}), 503
+
+    users = load_users()
+    matches = [
+        uname
+        for uname, row in users.items()
+        if isinstance(row, dict)
+        and str(row.get('email') or '').strip().casefold() == email.casefold()
+        and row.get('enabled', True) is not False
+    ]
+    if len(matches) != 1:
+        if len(matches) > 1:
+            logger.error("邮箱绑定到多个账号，拒绝发送重置邮件: %s", email)
+        return jsonify(generic), 200
+
+    login_username = matches[0]
+    revoke_principal(SESSION_KIND_PASSWORD_RESET, login_username)
+    reset_token = _db_create_auth_session(
+        SESSION_KIND_PASSWORD_RESET,
+        login_username,
+        PASSWORD_RESET_TTL,
+    )
+    reset_url = f"{_public_origin()}/?reset_token={quote(reset_token, safe='')}"
+    try:
+        _send_password_reset_email(email, reset_url)
+    except Exception as exc:
+        revoke_token(SESSION_KIND_PASSWORD_RESET, reset_token)
+        logger.exception("发送密码重置邮件失败: %s", exc)
+    return jsonify(generic), 200
+
+
+@app.route('/api/auth/reset-password', methods=['POST'])
+def reset_password():
+    if not _rate_allow(f"reset_password:{_client_ip()}", _RATE_MAX_RESET_PASSWORD):
+        return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
+    data = request.get_json(silent=True) or {}
+    reset_token = str(data.get('token') or '').strip()
+    password = str(data.get('password') or '').strip()
+    password_confirm = str(data.get('password_confirm') or '').strip()
+    if len(password) < 6:
+        return jsonify({'error': '密码至少6个字符'}), 400
+    if password != password_confirm:
+        return jsonify({'error': '两次输入的密码不一致'}), 400
+
+    login_username = consume_session(reset_token, SESSION_KIND_PASSWORD_RESET)
+    if not login_username:
+        return jsonify({'error': '重置链接无效或已过期，请重新申请'}), 400
+
+    def _set_password(users: Dict[str, Any]) -> bool:
+        row = users.get(login_username)
+        if not isinstance(row, dict):
+            return False
+        row['password_hash'] = hash_password(password)
+        return True
+
+    if not mutate_users(_set_password):
+        return jsonify({'error': '重置链接无效或已过期，请重新申请'}), 400
+    revoke_principal(SESSION_KIND_PASSWORD_RESET, login_username)
+    _revoke_user_tokens(login_username)
+    logger.info("用户通过邮箱重置密码: %s", login_username)
+    return jsonify({'message': '密码已重置，请使用新密码登录'}), 200
 
 def _auth_session_payload(login_username: str) -> dict:
     """供登录与 /api/auth/session 返回家长/学生标识。"""
@@ -3441,6 +3620,44 @@ def get_user_settings(username):
     except Exception as e:
         logger.error(f"获取用户设置失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/api/user/email', methods=['GET', 'PATCH'])
+@token_required
+def user_email(username):
+    """读取或更新当前登录身份的邮箱；家长账号不会写到关联学生上。"""
+    login_username = getattr(g, 'login_username', username)
+    if request.method == 'GET':
+        row = load_users().get(login_username)
+        if not isinstance(row, dict):
+            return jsonify({'error': '用户不存在'}), 404
+        return jsonify({'email': row.get('email') or ''}), 200
+
+    data = request.get_json(silent=True) or {}
+    try:
+        email = normalize_email(data.get('email'))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    def _set_email(users: Dict[str, Any]) -> Tuple[bool, str]:
+        row = users.get(login_username)
+        if not isinstance(row, dict):
+            return False, '用户不存在'
+        if email and _email_owner(users, email, exclude=login_username):
+            return False, '该邮箱已被其他账号使用'
+        if email:
+            row['email'] = email
+        else:
+            row.pop('email', None)
+        return True, ''
+
+    ok, error = mutate_users(_set_email)
+    if not ok:
+        return jsonify({'error': error}), 404 if error == '用户不存在' else 409
+    return jsonify({
+        'email': email or '',
+        'message': '邮箱已保存' if email else '邮箱已移除',
+    }), 200
 
 
 @app.route('/api/user/avatar-meta', methods=['GET'])

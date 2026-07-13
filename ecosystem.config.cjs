@@ -75,6 +75,16 @@ module.exports = {
         GUNICORN_THREADS: threads,
         // 启动前在 shell 中 export SECRET_KEY=...，PM2 会继承 process.env.SECRET_KEY
         SECRET_KEY: process.env.SECRET_KEY || '',
+        PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || '',
+        SMTP_HOST: process.env.SMTP_HOST || '',
+        SMTP_PORT: process.env.SMTP_PORT || '',
+        SMTP_USERNAME: process.env.SMTP_USERNAME || '',
+        SMTP_PASSWORD: process.env.SMTP_PASSWORD || '',
+        SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || '',
+        SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || '智能英语背诵',
+        SMTP_USE_SSL: process.env.SMTP_USE_SSL || '',
+        SMTP_STARTTLS: process.env.SMTP_STARTTLS || '',
+        SMTP_TIMEOUT: process.env.SMTP_TIMEOUT || '15',
         // Piper：与 shell 中 export 二选一；若均不设置则走浏览器 Web Speech
         PIPER_MODEL: process.env.PIPER_MODEL || '',
         PIPER_BINARY: process.env.PIPER_BINARY || '',
