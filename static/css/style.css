@@ -2097,11 +2097,35 @@ body {
     gap: 14px;
 }
 
-.today-task-head > div {
+.today-task-head > div:first-child {
     display: flex;
     align-items: baseline;
     gap: 10px;
     min-width: 0;
+}
+
+.today-task-head-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+}
+
+.today-task-order-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.today-task-order-toggle input {
+    margin: 0;
+    cursor: pointer;
 }
 
 .today-task-kicker {
@@ -2260,10 +2284,76 @@ body {
 
 .semantic-question[hidden],
 .semantic-question-feedback[hidden],
+.new-word-study[hidden],
 .review-def-example-wrap[hidden],
 .word-input[hidden],
 .underline-input-wrapper[hidden] {
     display: none;
+}
+
+.new-word-study {
+    display: grid;
+    gap: 16px;
+    width: min(100%, 680px);
+    margin: 0 auto 18px;
+    padding: 4px 0 2px 18px;
+    border-left: 4px solid var(--primary-color);
+}
+
+.new-word-study-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.new-word-study-heading > div {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    min-width: 0;
+}
+
+.new-word-study-kicker {
+    width: 100%;
+    color: var(--primary-dark);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+#new-word-study-english {
+    color: var(--text-primary);
+    font-size: 1.8rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.new-word-study-chinese {
+    color: var(--text-primary);
+    font-size: 1.12rem;
+    font-weight: 700;
+    line-height: 1.55;
+}
+
+.new-word-study-examples {
+    display: grid;
+    gap: 8px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+}
+
+.new-word-study-example-en {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.new-word-study-example-cn {
+    font-size: 0.9rem;
+}
+
+.new-word-study .btn-primary {
+    justify-self: start;
 }
 
 .semantic-question-prompt {
@@ -2447,9 +2537,14 @@ body {
         flex-wrap: wrap;
     }
 
-    .today-task-head > div {
+    .today-task-head > div:first-child {
         display: grid;
         gap: 2px;
+    }
+
+    .today-task-head-actions {
+        width: 100%;
+        justify-content: space-between;
     }
 
     .today-task-mix {
@@ -2457,8 +2552,17 @@ body {
     }
 
     .today-task-estimate {
-        width: 100%;
+        width: auto;
         text-align: left;
+    }
+
+    .new-word-study {
+        gap: 12px;
+        padding-left: 12px;
+    }
+
+    #new-word-study-english {
+        font-size: 1.45rem;
     }
 }
 
@@ -2795,6 +2899,19 @@ body {
     padding: 2px 8px;
     border-radius: 6px;
     border: 1px solid #fbbf24;
+    vertical-align: middle;
+}
+
+.word-item-stable-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 8px;
+    border: 1px solid rgba(88, 204, 2, 0.45);
+    border-radius: 6px;
+    background: #f2fde9;
+    color: var(--primary-dark);
+    font-size: 0.75rem;
+    font-weight: 700;
     vertical-align: middle;
 }
 

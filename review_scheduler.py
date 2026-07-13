@@ -13,6 +13,13 @@ from typing import Any, Dict, Optional
 STATE_VERSION = 1
 SCHEDULER_ALGORITHM = "adaptive-sm2-v1"
 EXERCISE_TYPES = ("recognition", "context", "spelling", "listening")
+CORE_EXERCISE_TYPES = ("recognition", "context", "spelling")
+CORE_MASTERY_REQUIREMENTS = {
+    "recognition": {"attempts": 3, "score": 0.65},
+    "context": {"attempts": 3, "score": 0.65},
+    "spelling": {"attempts": 2, "score": 0.55},
+}
+MEMORY_STATUSES = ("learning", "stable", "reinforcement")
 RATINGS = ("again", "hard", "good", "easy")
 MAX_INTERVAL_DAYS = 365
 RECENT_EVENT_LIMIT = 100
@@ -144,11 +151,16 @@ def normalize_review_state(
         "spelling": _normalize_dimension(mastery_src.get("spelling"), inferred_spelling),
         "listening": _normalize_dimension(mastery_src.get("listening"), 0.0),
     })
+    memory_status = str(src.get("memory_status") or "")
+    if memory_status not in MEMORY_STATUSES:
+        memory_status = "stable" if legacy_active else "learning"
     normalized = dict(src)
     normalized.update(
         {
             "version": STATE_VERSION,
             "mastered_date": _iso_date(src.get("mastered_date")),
+            "memory_status": memory_status,
+            "reinforcement_since": _iso_date(src.get("reinforcement_since")),
             "scheduler": scheduler,
             "mastery": mastery,
             "recent_event_ids": recent_ids,
@@ -308,11 +320,59 @@ def next_review_date(state: Dict[str, Any], today: date) -> date:
     return today + timedelta(days=interval)
 
 
-def choose_exercise_type(state: Dict[str, Any]) -> str:
-    """Choose the least-practised/weakest available ability dimension."""
+def choose_exercise_type(
+    state: Dict[str, Any],
+    *,
+    listening_available: bool = False,
+) -> str:
+    """Choose the next core exercise; use listening only for stable maintenance."""
     mastery = state.get("mastery") or {}
+
+    memory_status = str(state.get("memory_status") or "learning")
+    if memory_status == "learning":
+        incomplete = []
+        for order, exercise_type in enumerate(CORE_EXERCISE_TYPES):
+            dim = mastery.get(exercise_type) if isinstance(mastery.get(exercise_type), dict) else {}
+            requirement = CORE_MASTERY_REQUIREMENTS[exercise_type]
+            attempts = _bounded_int(dim.get("attempts"), 0, 0, 1_000_000)
+            score = _bounded_float(dim.get("score"), 0.0, 0.0, 1.0)
+            if attempts < requirement["attempts"]:
+                incomplete.append((attempts, score, order, exercise_type))
+        if incomplete:
+            incomplete.sort()
+            return incomplete[0][3]
+
+        below_threshold = []
+        for order, exercise_type in enumerate(CORE_EXERCISE_TYPES):
+            dim = mastery.get(exercise_type) if isinstance(mastery.get(exercise_type), dict) else {}
+            score = _bounded_float(dim.get("score"), 0.0, 0.0, 1.0)
+            requirement = CORE_MASTERY_REQUIREMENTS[exercise_type]
+            if score < requirement["score"]:
+                below_threshold.append((score, order, exercise_type))
+        if below_threshold:
+            below_threshold.sort()
+            return below_threshold[0][2]
+
+    if memory_status == "reinforcement":
+        weakest_core = []
+        for order, exercise_type in enumerate(CORE_EXERCISE_TYPES):
+            dim = mastery.get(exercise_type) if isinstance(mastery.get(exercise_type), dict) else {}
+            weakest_core.append(
+                (
+                    _bounded_float(dim.get("score"), 0.0, 0.0, 1.0),
+                    _bounded_int(dim.get("attempts"), 0, 0, 1_000_000),
+                    order,
+                    exercise_type,
+                )
+            )
+        weakest_core.sort()
+        return weakest_core[0][3]
+
+    available_types = list(CORE_EXERCISE_TYPES)
+    if listening_available:
+        available_types.append("listening")
     ranked = []
-    for order, exercise_type in enumerate(EXERCISE_TYPES):
+    for order, exercise_type in enumerate(available_types):
         dim = mastery.get(exercise_type) if isinstance(mastery.get(exercise_type), dict) else {}
         ranked.append(
             (
@@ -332,7 +392,8 @@ def mastery_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
     for exercise_type in EXERCISE_TYPES:
         dim = state["mastery"][exercise_type]
         score = _bounded_float(dim.get("score"), 0.0, 0.0, 1.0)
-        scores.append(score)
+        if exercise_type in CORE_EXERCISE_TYPES:
+            scores.append(score)
         by_type[exercise_type] = {
             "score": round(score, 4),
             "percent": round(score * 100),
@@ -349,18 +410,12 @@ def mastery_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def mastery_ready(state: Dict[str, Any], *, require_listening: bool = True) -> bool:
-    """Use semantic abilities as the primary Gaokao mastery gate."""
+    """Return whether all required semantic and spelling abilities are ready."""
     snapshot = mastery_snapshot(state)
-    recognition = snapshot["by_type"]["recognition"]
-    context = snapshot["by_type"]["context"]
-    spelling = snapshot["by_type"]["spelling"]
-    return bool(
-        recognition["attempts"] >= 3
-        and recognition["score"] >= 0.65
-        and context["attempts"] >= 3
-        and context["score"] >= 0.65
-        and spelling["attempts"] >= 2
-        and spelling["score"] >= 0.55
+    return all(
+        snapshot["by_type"][exercise_type]["attempts"] >= requirement["attempts"]
+        and snapshot["by_type"][exercise_type]["score"] >= requirement["score"]
+        for exercise_type, requirement in CORE_MASTERY_REQUIREMENTS.items()
     )
 
 

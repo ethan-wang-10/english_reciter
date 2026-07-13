@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260713-gaokao2">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260714-learning-flow1">
 </head>
 <body>
     <div id="app">
@@ -257,7 +257,13 @@
                                 <span class="today-task-kicker">今日任务</span>
                                 <strong id="today-task-title">自适应学习</strong>
                             </div>
-                            <span id="today-task-estimate" class="today-task-estimate"></span>
+                            <div class="today-task-head-actions">
+                                <label class="today-task-order-toggle">
+                                    <input type="checkbox" id="review-new-words-first" />
+                                    <span>新词优先</span>
+                                </label>
+                                <span id="today-task-estimate" class="today-task-estimate"></span>
+                            </div>
                         </div>
                         <div class="today-task-progress-row">
                             <div id="today-task-progress" class="today-task-progress" role="progressbar" aria-label="今日任务进度" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
@@ -292,6 +298,19 @@
                             </div>
                             <div class="review-content" id="review-content-inner">
                                 <p id="review-due-hint" class="review-due-hint" hidden></p>
+                                <div id="new-word-study" class="new-word-study" hidden>
+                                    <div class="new-word-study-heading">
+                                        <div>
+                                            <span class="new-word-study-kicker">首次学习</span>
+                                            <strong id="new-word-study-english"></strong>
+                                            <span id="new-word-study-phonetic" class="word-item-phonetic"></span>
+                                        </div>
+                                        <button type="button" id="new-word-study-speak" class="btn-speak" title="朗读单词" aria-label="朗读单词">🔊</button>
+                                    </div>
+                                    <div id="new-word-study-chinese" class="new-word-study-chinese"></div>
+                                    <div id="new-word-study-examples" class="new-word-study-examples"></div>
+                                    <button type="button" id="new-word-study-start" class="btn btn-primary">开始作答</button>
+                                </div>
                                 <div class="review-def-example-wrap" id="review-def-example-wrap">
                                 <div class="word-chinese" id="current-word-chinese">苹果</div>
                                 <div class="word-example-container">
@@ -739,7 +758,7 @@
                     </div>
                     <div id="settings-parent-block" class="settings-block" style="display: none;">
                         <h3 class="settings-subtitle">每日学习任务</h3>
-                        <p class="settings-hint">系统按近 7 天正确率自动安排 20–60 个新词，新词在任务中先展示，并为复习保留至少 60% 容量。调整从下一次生成每日任务时生效。</p>
+                        <p class="settings-hint">系统综合近 7 天正确率、任务完成率、作答难度和逾期积压，自动安排 0–30 个新词，并为复习保留至少 60% 容量。调整从下一次生成每日任务时生效。</p>
                         <div class="settings-learning-limit-grid">
                             <div class="form-group">
                                 <label for="settings-daily-review-limit">每日任务上限</label>
@@ -1164,7 +1183,7 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20260713-gaokao3" defer></script>
+    <script src="/static/js/app.js?v=20260714-learning-flow1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>

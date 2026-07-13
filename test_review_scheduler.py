@@ -201,6 +201,43 @@ class TestReviewScheduler(unittest.TestCase):
         record_mastery_attempt(state, 'recognition', True, today=self.today, event_id='a')
         self.assertEqual(choose_exercise_type(state), 'context')
 
+    def test_listening_only_enters_stable_maintenance_when_available(self):
+        state = normalize_review_state({'memory_status': 'stable'})
+        self.assertEqual(choose_exercise_type(state), 'recognition')
+        self.assertEqual(
+            choose_exercise_type(state, listening_available=True),
+            'recognition',
+        )
+        for exercise_type in ('recognition', 'context', 'spelling'):
+            record_mastery_attempt(
+                state,
+                exercise_type,
+                True,
+                today=self.today,
+                event_id=f'stable-{exercise_type}',
+            )
+        self.assertEqual(
+            choose_exercise_type(state, listening_available=True),
+            'listening',
+        )
+
+    def test_core_mastery_percent_excludes_optional_listening(self):
+        state = normalize_review_state({})
+        for exercise_type in ('recognition', 'context', 'spelling'):
+            record_mastery_attempt(
+                state,
+                exercise_type,
+                True,
+                today=self.today,
+                event_id=f'core-{exercise_type}',
+            )
+        snapshot = mastery_snapshot(state)
+        core_scores = [
+            snapshot['by_type'][exercise_type]['score']
+            for exercise_type in ('recognition', 'context', 'spelling')
+        ]
+        self.assertAlmostEqual(snapshot['overall'], sum(core_scores) / 3, places=3)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -3668,6 +3668,7 @@ function initImportResultModal() {
 
 const REVIEW_PHONETIC_STORAGE_KEY = 'english_reciter_review_show_phonetic';
 const REVIEW_TEST_INFLECTION_STORAGE_KEY = 'english_reciter_review_test_inflection';
+const REVIEW_NEW_WORDS_FIRST_STORAGE_KEY = 'english_reciter_review_new_words_first';
 
 function getReviewTestInflectionEnabled() {
     const cb = document.getElementById('review-test-inflection');
@@ -5388,6 +5389,59 @@ function isSemanticExercise(exerciseType) {
     return exerciseType === 'recognition' || exerciseType === 'context';
 }
 
+function getNewWordsFirstEnabled() {
+    return localStorage.getItem(REVIEW_NEW_WORDS_FIRST_STORAGE_KEY) === '1';
+}
+
+function reviewReasonOrder(word, newWordsFirst = getNewWordsFirstEnabled()) {
+    if (word?.task_remedial) return -1;
+    const reason = String(word?.task_reason || 'due');
+    if (newWordsFirst && reason === 'new') return 0;
+    const base = {
+        overdue: 1,
+        weak: 2,
+        reinforcement: 3,
+        due: 4,
+        maintenance: 5,
+        new: 6,
+    };
+    return base[reason] ?? 4;
+}
+
+function orderReviewWords(words, newWordsFirst = getNewWordsFirstEnabled()) {
+    return (Array.isArray(words) ? words : [])
+        .map((word, index) => ({ word, index }))
+        .sort((a, b) => (
+            reviewReasonOrder(a.word, newWordsFirst) - reviewReasonOrder(b.word, newWordsFirst)
+            || a.index - b.index
+        ))
+        .map((row) => row.word);
+}
+
+function reorderRemainingReviewWords() {
+    if (reviewSessionMode !== 'daily' || wrongRoundNumber > 0) return;
+    const currentWord = currentReviewList[currentReviewIndex];
+    const canReorderCurrent = Boolean(
+        currentWord
+        && currentErrorCount === 0
+        && !currentWord._selectedOptionId
+        && !getCurrentInput()
+        && !pendingReviewSubmission
+        && !isSubmitting
+        && !isAdvancing
+    );
+    const keepThrough = Math.min(
+        currentReviewList.length,
+        currentReviewIndex + (canReorderCurrent ? 0 : 1),
+    );
+    const fixed = currentReviewList.slice(0, keepThrough);
+    const remaining = orderReviewWords(currentReviewList.slice(keepThrough));
+    currentReviewList = fixed.concat(remaining);
+    if (canReorderCurrent && currentReviewList[currentReviewIndex] !== currentWord) {
+        void showCurrentWord();
+    }
+}
+
 function reviewAudioAvailable() {
     return Boolean(
         serverPiperAvailable ||
@@ -5426,7 +5480,8 @@ function renderReviewMasteryProgress(word) {
         const context = Number(word.mastery?.by_type?.context?.percent) || 0;
         const spelling = Number(word.mastery?.by_type?.spelling?.percent) || 0;
         const listening = Number(word.mastery?.by_type?.listening?.percent) || 0;
-        progressEl.textContent = `掌握 ${masteryPercent}% · 义 ${recognition}% · 境 ${context}% · 拼 ${spelling}%`;
+        const statusPrefix = word.memory_status === 'reinforcement' ? '待巩固 · ' : '';
+        progressEl.textContent = `${statusPrefix}掌握 ${masteryPercent}% · 义 ${recognition}% · 境 ${context}% · 拼 ${spelling}%`;
         progressEl.title = `英文识义 ${recognition}% · 语境选词 ${context}% · 拼写 ${spelling}% · 听写 ${listening}%`;
         return;
     }
@@ -5481,6 +5536,7 @@ function renderTodayTaskPlan(plan) {
             ['overdue', '逾期'],
             ['due', '到期'],
             ['weak', '薄弱'],
+            ['reinforcement', '待巩固'],
             ['maintenance', '保持'],
             ['new', '新词'],
         ];
@@ -5842,7 +5898,7 @@ async function loadReviewList() {
         preloadedReviewData = null;
         adaptReviewDataToAudioCapability(data);
         renderTodayTaskPlan(data.plan || null);
-        currentReviewList = data.words;
+        currentReviewList = orderReviewWords(data.words);
         currentReviewIndex = 0;
         currentReviewList.forEach((w) => wordMap.set(w.english, w));
         sessionRestoredRemedialWords = currentReviewList.filter((word) => word.task_remedial).length;
@@ -6027,6 +6083,96 @@ function resetSemanticOptionsForRetry(word) {
     if (submit) submit.disabled = true;
 }
 
+function shouldShowNewWordStudy(word) {
+    return Boolean(
+        reviewSessionMode === 'daily'
+        && wrongRoundNumber === 0
+        && word?.task_reason === 'new'
+        && Number(word?.task_attempts || 0) === 0
+        && word?.study
+        && word._introSeen !== true
+    );
+}
+
+function renderNewWordStudy(word) {
+    const study = word.study || {};
+    const panel = document.getElementById('new-word-study');
+    const semanticPanel = document.getElementById('semantic-question');
+    const defExampleWrap = document.getElementById('review-def-example-wrap');
+    const inputRow = document.querySelector('#review-content-inner .word-input');
+    const modeEl = document.getElementById('review-exercise-type');
+    const dueHint = document.getElementById('review-due-hint');
+    if (!panel) return;
+
+    panel.hidden = false;
+    if (semanticPanel) semanticPanel.hidden = true;
+    if (defExampleWrap) defExampleWrap.hidden = true;
+    if (inputRow) inputRow.hidden = true;
+    if (modeEl) {
+        modeEl.textContent = '新词学习';
+        modeEl.classList.remove('is-listening', 'is-semantic');
+    }
+    if (dueHint) {
+        dueHint.hidden = false;
+        dueHint.className = 'review-due-hint review-due-hint-scheduled';
+        dueHint.textContent = '今日新词';
+    }
+
+    const english = String(study.english || word.english || '').trim();
+    document.getElementById('current-word-english').textContent = english;
+    const headerPhonetic = document.getElementById('current-word-phonetic');
+    if (headerPhonetic) headerPhonetic.hidden = true;
+    document.getElementById('new-word-study-english').textContent = english;
+    const phonetic = document.getElementById('new-word-study-phonetic');
+    if (phonetic) {
+        phonetic.textContent = String(study.phonetic || word.phonetic || '').trim();
+        phonetic.hidden = !phonetic.textContent;
+    }
+    document.getElementById('new-word-study-chinese').textContent = String(study.chinese || '').trim();
+
+    const examplesEl = document.getElementById('new-word-study-examples');
+    if (examplesEl) {
+        examplesEl.innerHTML = '';
+        (Array.isArray(study.examples) ? study.examples : []).slice(0, 2).forEach((example) => {
+            const row = document.createElement('div');
+            const en = String(example?.en || '').trim();
+            const cn = String(example?.cn || '').trim();
+            if (en) {
+                const enEl = document.createElement('div');
+                enEl.className = 'new-word-study-example-en';
+                enEl.textContent = en;
+                row.appendChild(enEl);
+            }
+            if (cn) {
+                const cnEl = document.createElement('div');
+                cnEl.className = 'new-word-study-example-cn';
+                cnEl.textContent = cn;
+                row.appendChild(cnEl);
+            }
+            if (row.childNodes.length) examplesEl.appendChild(row);
+        });
+        examplesEl.hidden = examplesEl.childNodes.length === 0;
+    }
+
+    const speak = document.getElementById('new-word-study-speak');
+    if (speak) {
+        speak.hidden = !reviewAudioAvailable();
+        speak.onclick = () => speakEnglishPreferred(english, () => {}, speak, { clientAudioOnly: true });
+    }
+    const start = document.getElementById('new-word-study-start');
+    if (start) {
+        start.onclick = () => {
+            word._introSeen = true;
+            panel.hidden = true;
+            void showCurrentWord();
+        };
+    }
+    renderReviewMasteryProgress(word);
+    document.getElementById('word-message').style.display = 'none';
+    clearReviewWordMessageExtra();
+    reviewQuestionStartedAt = 0;
+}
+
 async function showCurrentWord() {
     listeningPlaybackAttempt += 1;
     stopSpeakPlayback();
@@ -6044,6 +6190,13 @@ async function showCurrentWord() {
     currentRevealedCount = 0;
     isSubmitting = false;
     isAdvancing = false;
+
+    const newWordStudy = document.getElementById('new-word-study');
+    if (shouldShowNewWordStudy(word)) {
+        renderNewWordStudy(word);
+        return;
+    }
+    if (newWordStudy) newWordStudy.hidden = true;
 
     if (isSemanticExercise(word.exercise_type) && !word.question) {
         const semanticPanel = document.getElementById('semantic-question');
@@ -6118,6 +6271,10 @@ async function showCurrentWord() {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-scheduled';
             dueHint.textContent = '长期记忆保持复习';
+        } else if (word.task_reason === 'reinforcement') {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-carryover';
+            dueHint.textContent = '记忆稳定性待巩固';
         } else if (word.task_reason === 'weak') {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-scheduled';
@@ -6347,6 +6504,9 @@ async function submitAnswer() {
 
         if (result.word) {
             Object.assign(word, result.word);
+            if (Number.isFinite(Number(result.attempt_number))) {
+                word.task_attempts = Number(result.attempt_number);
+            }
             word.exercise_type = result.exercise_type || activeExerciseType;
             word.task_remedial = result.task_remedial ?? word.task_remedial;
             wordMap.set(word.english, word);
@@ -6654,6 +6814,9 @@ function _renderProgressWordItem(word) {
     const coTag = word.is_carryover
         ? `<span class="word-item-carryover-tag">遗留${word.carryover_days ? ` · 逾期${word.carryover_days}天` : ''}</span>`
         : '';
+    const reinforcementTag = word.memory_status === 'reinforcement'
+        ? '<span class="word-item-carryover-tag">待巩固</span>'
+        : '';
     const masteryPercent = Number(word.mastery?.overall_percent);
     const masteryValue = Number.isFinite(masteryPercent)
         ? `${Math.round(masteryPercent)}%`
@@ -6668,7 +6831,7 @@ function _renderProgressWordItem(word) {
         <div class="word-item-info">
             <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
             <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
-            <div class="word-item-next-review">下次复习：${nextLine} ${coTag}</div>
+            <div class="word-item-next-review">下次复习：${nextLine} ${coTag}${reinforcementTag}</div>
         </div>
         <div class="word-item-stats">
             <div class="word-stat">
@@ -6774,9 +6937,12 @@ function _renderMasteredWordItem(word) {
                 <div class="word-stat-detail">识义 ${recognition}% · 语境 ${context}% · 拼写 ${spelling}% · 听写 ${listening}%</div>
             </div>`
         : '';
+    const memoryStatusHtml = word.memory_status === 'reinforcement'
+        ? '<span class="word-item-carryover-tag">待巩固</span>'
+        : '<span class="word-item-stable-tag">稳定</span>';
     return `<div class="word-item">
         <div class="word-item-info">
-            <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
+            <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}${memoryStatusHtml}</div>
             <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
         </div>
         <div class="word-item-stats">
@@ -8530,6 +8696,18 @@ document.addEventListener('DOMContentLoaded', function() {
             localStorage.setItem(REVIEW_PHONETIC_STORAGE_KEY, phoneticCb.checked ? '1' : '0');
             const word = currentReviewList[currentReviewIndex];
             if (word) updateReviewPhoneticDisplay(word);
+        });
+    }
+
+    const newWordsFirstCb = document.getElementById('review-new-words-first');
+    if (newWordsFirstCb) {
+        newWordsFirstCb.checked = getNewWordsFirstEnabled();
+        newWordsFirstCb.addEventListener('change', () => {
+            localStorage.setItem(
+                REVIEW_NEW_WORDS_FIRST_STORAGE_KEY,
+                newWordsFirstCb.checked ? '1' : '0',
+            );
+            reorderRemainingReviewWords();
         });
     }
 

@@ -272,6 +272,30 @@ def test_review_payload_redacts_semantic_answers(monkeypatch, tmp_path) -> None:
     assert reciter.task_item['question_id'] == record['context']['question_id']
 
 
+def test_new_word_payload_includes_study_preview_before_semantic_question(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _use_private_question_bank(monkeypatch, tmp_path)
+    web.gaokao_questions.persist_generation_result({'benefit': _semantic_record()}, {})
+    reciter = _SemanticReciter('recognition')
+    reciter.task_item['reason'] = 'new'
+    task = {
+        'items': [reciter.task_item],
+        'plan': {'task_id': 'task-1'},
+    }
+    monkeypatch.setattr(web, 'lookup_csv_word', lambda word: None)
+
+    payload = web._review_words_payload(reciter, [reciter.word], task)
+    word = payload['words'][0]
+
+    assert word['chinese'] == ''
+    assert word['examples'] == []
+    assert word['study']['english'] == 'benefit'
+    assert word['study']['chinese'] == 'n. 益处；好处'
+    assert word['study']['examples'][0]['en'] == 'Exercise brings many benefits.'
+
+
 def test_question_endpoint_generates_missing_question_and_returns_public_data(
     client,
     monkeypatch,

@@ -3131,6 +3131,8 @@ def _review_words_payload(
     reciter: WordReciter,
     review_list: List[Any],
     task_bundle: Optional[dict] = None,
+    *,
+    listening_available: bool = False,
 ) -> dict:
     """复习列表序列化；供 /words/review 与 /bootstrap 复用。"""
     words = []
@@ -3145,7 +3147,13 @@ def _review_words_payload(
     for w in review_list:
         nd = w.next_review_date
         is_carryover = nd < today_d
-        state_payload = reciter.review_state_payload(w)
+        if listening_available:
+            state_payload = reciter.review_state_payload(
+                w,
+                listening_available=True,
+            )
+        else:
+            state_payload = reciter.review_state_payload(w)
         task_item = task_items.get(reciter.word_state_key(w), {})
         item = {
             'english': w.english,
@@ -3173,6 +3181,7 @@ def _review_words_payload(
             ),
             'mastery': state_payload['mastery'],
             'scheduler': state_payload['scheduler'],
+            'memory_status': str(state_payload.get('memory_status') or 'learning'),
         }
         # 优先词库（v2 或 CSV）释义与例句；多义项只展示当前槽对应的一条
         csv_row = lookup_csv_word(w.english)
@@ -3190,6 +3199,13 @@ def _review_words_payload(
                 item['examples'] = [{'en': a.strip(), 'cn': b.strip()}]
             else:
                 item['examples'] = [{'en': raw, 'cn': ''}]
+        if item['task_reason'] == 'new' and item['task_attempts'] == 0:
+            item['study'] = {
+                'english': w.english,
+                'chinese': item['chinese'],
+                'phonetic': item.get('phonetic', ''),
+                'examples': list(item.get('examples') or []),
+            }
         if item['exercise_type'] in gaokao_questions.QUESTION_TYPES:
             question = gaokao_questions.get_question(w.english, item['exercise_type'])
             if question:
@@ -3210,6 +3226,15 @@ def _review_words_payload(
     if plan is not None:
         payload['plan'] = plan
     return payload
+
+
+def _reliable_listening_available() -> bool:
+    if piper_runtime_ready is None:
+        return False
+    try:
+        return bool(piper_runtime_ready())
+    except Exception:
+        return False
 
 
 def sanitize_tts_text(text: str, max_len: int = 500) -> str:
@@ -3536,14 +3561,22 @@ def bootstrap(username):
     try:
         login = getattr(g, 'login_username', username)
         session_payload = _auth_session_payload(login)
+        listening_available = _reliable_listening_available()
         with user_reciter_session(username) as reciter:
             mastered_n = len(reciter.mastered_words)
             summary = _summary_payload_from_reciter(reciter)
             if getattr(g, "is_parent", False):
                 review = {'words': [], 'count': 0}
             else:
-                task_bundle = reciter.get_today_learning_plan()
-                review = _review_words_payload(reciter, task_bundle['words'], task_bundle)
+                task_bundle = reciter.get_today_learning_plan(
+                    listening_available=listening_available,
+                )
+                review = _review_words_payload(
+                    reciter,
+                    task_bundle['words'],
+                    task_bundle,
+                    listening_available=listening_available,
+                )
                 reciter.save_learning_data(backup=False)
 
         pkw, pkm = _pk_stats_for_gamification(username)
@@ -3566,7 +3599,7 @@ def bootstrap(username):
             "article_ai_extract_available": bool(get_deepseek_api_key()),
             "article_ai_extract_enabled": _article_ai_extract_enabled(),
             "tts_capabilities": {
-                "piper": bool(piper_runtime_ready()) if piper_runtime_ready is not None else False,
+                "piper": listening_available,
             },
         }), 200
     except Exception as e:
@@ -4313,9 +4346,17 @@ def get_words_summary(username):
 def get_review_list(username):
     """获取今日复习列表（从CSV中补充 example_form、随机选择例句）"""
     try:
+        listening_available = _reliable_listening_available()
         with user_reciter_session(username) as reciter:
-            task_bundle = reciter.get_today_learning_plan()
-            payload = _review_words_payload(reciter, task_bundle['words'], task_bundle)
+            task_bundle = reciter.get_today_learning_plan(
+                listening_available=listening_available,
+            )
+            payload = _review_words_payload(
+                reciter,
+                task_bundle['words'],
+                task_bundle,
+                listening_available=listening_available,
+            )
             reciter.save_learning_data(backup=False)
             return jsonify(payload), 200
     except Exception as e:
@@ -6369,7 +6410,9 @@ def remove_pending_words_api(username):
     try:
         with user_reciter_session(username) as reciter:
             result = reciter.remove_pending_words_by_english(keys_ordered)
-            task_bundle = reciter.get_today_learning_plan()
+            task_bundle = reciter.get_today_learning_plan(
+                listening_available=_reliable_listening_available(),
+            )
             result['plan'] = task_bundle['plan']
             reciter.save_learning_data(backup=False)
         _invalidate_user_reciter_cache(username)
@@ -6530,6 +6573,7 @@ def get_mastered_words(username):
                     'example': ex_text,
                     'review_count': w.review_count,
                     'mastered_date': review_state.get('mastered_date') or w.next_review_date.isoformat(),
+                    'memory_status': str(review_state.get('memory_status') or 'stable'),
                     **state_payload,
                 })
 
