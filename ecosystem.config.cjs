@@ -85,6 +85,8 @@ module.exports = {
         SMTP_USE_SSL: process.env.SMTP_USE_SSL || '',
         SMTP_STARTTLS: process.env.SMTP_STARTTLS || '',
         SMTP_TIMEOUT: process.env.SMTP_TIMEOUT || '15',
+        PASSWORD_RESET_TTL_MINUTES: process.env.PASSWORD_RESET_TTL_MINUTES || '30',
+        PASSWORD_RESET_COOLDOWN_SECONDS: process.env.PASSWORD_RESET_COOLDOWN_SECONDS || '60',
         // Piper：与 shell 中 export 二选一；若均不设置则走浏览器 Web Speech
         PIPER_MODEL: process.env.PIPER_MODEL || '',
         PIPER_BINARY: process.env.PIPER_BINARY || '',

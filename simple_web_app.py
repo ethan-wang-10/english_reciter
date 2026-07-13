@@ -27,7 +27,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from datetime import timedelta
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, parseaddr
 from io import BytesIO, StringIO
 from pathlib import Path
 from functools import wraps
@@ -55,9 +55,11 @@ from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
 from auth_session_store import (
     SESSION_KIND_ADMIN,
     SESSION_KIND_PASSWORD_RESET,
+    SESSION_KIND_PASSWORD_RESET_COOLDOWN,
     SESSION_KIND_USER,
     close_connection as close_auth_session_sqlite,
     create_session as _db_create_auth_session,
+    create_session_if_absent,
     consume_session,
     init_auth_session_store,
     revoke_principal,
@@ -223,7 +225,8 @@ PARENT_LOGIN_SUFFIX = "_parent"
 DEFAULT_PARENT_PASSWORD = "123123"
 SESSION_KIND_CHAT_STREAM = "chat_stream"
 USER_SESSION_TTL = timedelta(days=30)
-PASSWORD_RESET_TTL = timedelta(minutes=30)
+PASSWORD_RESET_TTL_MINUTES_DEFAULT = 30
+PASSWORD_RESET_COOLDOWN_SECONDS_DEFAULT = 60
 ADMIN_SESSION_TTL = timedelta(hours=8)
 CHAT_STREAM_SESSION_TTL = timedelta(minutes=2)
 USER_INVITE_QUOTA_DEFAULT = DEFAULT_INVITE_QUOTA
@@ -2483,11 +2486,42 @@ def _env_flag(name: str, default: bool) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} 必须是整数") from exc
+    if not minimum <= value <= maximum:
+        raise RuntimeError(f"{name} 必须在 {minimum} 到 {maximum} 之间")
+    return value
+
+
+def _password_reset_policy() -> Tuple[int, int]:
+    return (
+        _env_int(
+            "PASSWORD_RESET_TTL_MINUTES",
+            PASSWORD_RESET_TTL_MINUTES_DEFAULT,
+            1,
+            1440,
+        ),
+        _env_int(
+            "PASSWORD_RESET_COOLDOWN_SECONDS",
+            PASSWORD_RESET_COOLDOWN_SECONDS_DEFAULT,
+            0,
+            86400,
+        ),
+    )
+
+
 def _smtp_config() -> Dict[str, Any]:
     host = (os.getenv("SMTP_HOST") or "").strip()
     username = (os.getenv("SMTP_USERNAME") or "").strip()
     password = os.getenv("SMTP_PASSWORD") or ""
-    from_email = (os.getenv("SMTP_FROM_EMAIL") or username).strip()
+    raw_from_email = (os.getenv("SMTP_FROM_EMAIL") or username).strip()
+    parsed_from_name, from_email = parseaddr(raw_from_email)
     use_ssl = _env_flag("SMTP_USE_SSL", True)
     starttls = _env_flag("SMTP_STARTTLS", not use_ssl)
     try:
@@ -2495,10 +2529,10 @@ def _smtp_config() -> Dict[str, Any]:
         timeout = float((os.getenv("SMTP_TIMEOUT") or "15").strip())
     except ValueError as exc:
         raise RuntimeError("SMTP_PORT 或 SMTP_TIMEOUT 配置不正确") from exc
-    if not host or not from_email:
+    if not host or not raw_from_email or not from_email:
         raise RuntimeError("邮件服务未配置")
     try:
-        normalize_email(from_email)
+        from_email = normalize_email(from_email) or ""
     except ValueError as exc:
         raise RuntimeError("SMTP_FROM_EMAIL 配置不正确") from exc
     return {
@@ -2507,14 +2541,14 @@ def _smtp_config() -> Dict[str, Any]:
         "username": username,
         "password": password,
         "from_email": from_email,
-        "from_name": (os.getenv("SMTP_FROM_NAME") or "智能英语背诵").strip(),
+        "from_name": (os.getenv("SMTP_FROM_NAME") or parsed_from_name or "智能英语背诵").strip(),
         "use_ssl": use_ssl,
         "starttls": starttls,
         "timeout": max(3.0, min(timeout, 60.0)),
     }
 
 
-def _send_password_reset_email(to_email: str, reset_url: str) -> None:
+def _send_password_reset_email(to_email: str, reset_url: str, valid_minutes: int) -> None:
     cfg = _smtp_config()
     msg = EmailMessage()
     msg["Subject"] = "重置智能英语背诵账号密码"
@@ -2522,7 +2556,7 @@ def _send_password_reset_email(to_email: str, reset_url: str) -> None:
     msg["To"] = to_email
     msg.set_content(
         "你正在重置智能英语背诵账号的密码。\n\n"
-        f"请在 30 分钟内打开以下链接设置新密码：\n{reset_url}\n\n"
+        f"请在 {valid_minutes} 分钟内打开以下链接设置新密码：\n{reset_url}\n\n"
         "此链接只能使用一次。如果不是你本人操作，请忽略本邮件。"
     )
     context = ssl.create_default_context()
@@ -3175,6 +3209,7 @@ def forgot_password():
     generic = {'message': '如果该邮箱已绑定账号，重置邮件将在几分钟内发送'}
     try:
         _smtp_config()
+        ttl_minutes, cooldown_seconds = _password_reset_policy()
     except RuntimeError as exc:
         logger.error("无法发送密码重置邮件: %s", exc)
         return jsonify({'error': '邮件服务暂不可用，请联系管理员'}), 503
@@ -3193,17 +3228,28 @@ def forgot_password():
         return jsonify(generic), 200
 
     login_username = matches[0]
+    cooldown_token = None
+    if cooldown_seconds > 0:
+        cooldown_token = create_session_if_absent(
+            SESSION_KIND_PASSWORD_RESET_COOLDOWN,
+            login_username,
+            timedelta(seconds=cooldown_seconds),
+        )
+        if not cooldown_token:
+            return jsonify(generic), 200
     revoke_principal(SESSION_KIND_PASSWORD_RESET, login_username)
     reset_token = _db_create_auth_session(
         SESSION_KIND_PASSWORD_RESET,
         login_username,
-        PASSWORD_RESET_TTL,
+        timedelta(minutes=ttl_minutes),
     )
     reset_url = f"{_public_origin()}/?reset_token={quote(reset_token, safe='')}"
     try:
-        _send_password_reset_email(email, reset_url)
+        _send_password_reset_email(email, reset_url, ttl_minutes)
     except Exception as exc:
         revoke_token(SESSION_KIND_PASSWORD_RESET, reset_token)
+        if cooldown_token:
+            revoke_token(SESSION_KIND_PASSWORD_RESET_COOLDOWN, cooldown_token)
         logger.exception("发送密码重置邮件失败: %s", exc)
     return jsonify(generic), 200
 

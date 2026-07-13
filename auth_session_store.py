@@ -18,6 +18,7 @@ from typing import Optional
 SESSION_KIND_USER = "user"
 SESSION_KIND_ADMIN = "admin"
 SESSION_KIND_PASSWORD_RESET = "password_reset"
+SESSION_KIND_PASSWORD_RESET_COOLDOWN = "password_reset_cooldown"
 
 _lock = threading.Lock()
 _db_path: Optional[Path] = None
@@ -112,6 +113,35 @@ def create_session(kind: str, principal: str, ttl: timedelta) -> str:
         )
         conn.commit()
     return token
+
+
+def create_session_if_absent(kind: str, principal: str, ttl: timedelta) -> Optional[str]:
+    """同一 kind/principal 尚无有效记录时原子签发，用于跨进程冷却。"""
+    token = secrets.token_urlsafe(32)
+    stored_token = _stored_token(token, kind)
+    now = time.time()
+    exp = now + ttl.total_seconds()
+    with _lock:
+        conn = _ensure_conn()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM auth_sessions WHERE expires_at <= ?", (now,))
+            existing = conn.execute(
+                "SELECT 1 FROM auth_sessions WHERE session_kind = ? AND principal = ? LIMIT 1",
+                (kind, principal),
+            ).fetchone()
+            if existing:
+                conn.commit()
+                return None
+            conn.execute(
+                "INSERT INTO auth_sessions (token, principal, session_kind, expires_at) VALUES (?, ?, ?, ?)",
+                (stored_token, principal, kind, exp),
+            )
+            conn.commit()
+            return token
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def verify_session(token: str, kind: str) -> Optional[str]:

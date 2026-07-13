@@ -19,6 +19,66 @@ def client():
         yield test_client
 
 
+def test_password_reset_policy_reads_environment(monkeypatch) -> None:
+    monkeypatch.setenv("PASSWORD_RESET_TTL_MINUTES", "45")
+    monkeypatch.setenv("PASSWORD_RESET_COOLDOWN_SECONDS", "90")
+    assert web._password_reset_policy() == (45, 90)
+
+
+def test_smtp_from_email_accepts_display_name(monkeypatch) -> None:
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_PORT", "465")
+    monkeypatch.setenv("SMTP_TIMEOUT", "15")
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "English Reciter <sender@example.com>")
+    monkeypatch.delenv("SMTP_FROM_NAME", raising=False)
+    config = web._smtp_config()
+    assert config["from_email"] == "sender@example.com"
+    assert config["from_name"] == "English Reciter"
+
+
+def test_forgot_password_applies_ttl_and_cooldown(client, monkeypatch) -> None:
+    monkeypatch.setattr(web, "_rate_allow", lambda *args: True)
+    monkeypatch.setattr(web, "_smtp_config", lambda: {})
+    monkeypatch.setattr(web, "_password_reset_policy", lambda: (30, 60))
+    monkeypatch.setattr(
+        web,
+        "load_users",
+        lambda: {"alice": {"email": "alice@example.com", "enabled": True}},
+    )
+    claims = []
+    monkeypatch.setattr(
+        web,
+        "create_session_if_absent",
+        lambda kind, principal, ttl: claims.append((kind, principal, ttl)) or "cooldown",
+    )
+    monkeypatch.setattr(web, "revoke_principal", lambda *args: None)
+    reset_sessions = []
+    monkeypatch.setattr(
+        web,
+        "_db_create_auth_session",
+        lambda kind, principal, ttl: reset_sessions.append((kind, principal, ttl)) or "reset",
+    )
+    sent = []
+    monkeypatch.setattr(
+        web,
+        "_send_password_reset_email",
+        lambda email, url, minutes: sent.append((email, url, minutes)),
+    )
+
+    response = client.post(
+        "/api/auth/forgot-password",
+        json={"email": "alice@example.com"},
+    )
+
+    assert response.status_code == 200
+    assert claims[0][0] == web.SESSION_KIND_PASSWORD_RESET_COOLDOWN
+    assert claims[0][1] == "alice"
+    assert claims[0][2].total_seconds() == 60
+    assert reset_sessions[0][2].total_seconds() == 30 * 60
+    assert sent[0][0] == "alice@example.com"
+    assert sent[0][2] == 30
+
+
 def test_static_assets_use_public_cache_headers(client) -> None:
     response = client.get("/static/css/style.css")
     assert response.status_code == 200

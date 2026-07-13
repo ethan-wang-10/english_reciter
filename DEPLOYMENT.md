@@ -277,6 +277,8 @@ kubectl apply -f deployment.yaml
 | SMTP_USE_SSL | 使用 SMTP SSL | true | 否 |
 | SMTP_STARTTLS | 非 SSL 连接后启用 STARTTLS | `SMTP_USE_SSL=false` 时为 true | 否 |
 | SMTP_TIMEOUT | SMTP 连接超时秒数 | 15 | 否 |
+| PASSWORD_RESET_TTL_MINUTES | 密码重置链接有效分钟数（1–1440） | 30 | 否 |
+| PASSWORD_RESET_COOLDOWN_SECONDS | 同一账号再次发送重置邮件的冷却秒数（0–86400，0 为关闭） | 60 | 否 |
 
 ### 端口配置
 

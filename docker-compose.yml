@@ -26,6 +26,8 @@ services:
       - SMTP_USE_SSL=${SMTP_USE_SSL:-}
       - SMTP_STARTTLS=${SMTP_STARTTLS:-}
       - SMTP_TIMEOUT=${SMTP_TIMEOUT:-15}
+      - PASSWORD_RESET_TTL_MINUTES=${PASSWORD_RESET_TTL_MINUTES:-30}
+      - PASSWORD_RESET_COOLDOWN_SECONDS=${PASSWORD_RESET_COOLDOWN_SECONDS:-60}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).read()"]
