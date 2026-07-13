@@ -42,6 +42,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # 导入核心功能
 from reciter import (
+    MAX_ATTEMPTS,
     WordReciter,
     Config,
     get_logger,
@@ -51,6 +52,7 @@ import challenges as challenges_mod
 import leaderboard_periods as leaderboard_periods_mod
 import chat_room
 import wordbank_v2
+from review_scheduler import ReviewEventConflict
 from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
 from auth_session_store import (
     SESSION_KIND_ADMIN,
@@ -2975,22 +2977,80 @@ def _build_user_reciter(username: str) -> WordReciter:
 
 
 @contextmanager
+def _user_learning_interprocess_lock(username: str) -> Generator[None, None, None]:
+    """Serialize one user's learning JSON across Gunicorn workers."""
+    lock_path = DATA_DIR / username / '.learning_data.lock'
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = open(lock_path, 'a+b', buffering=0)
+    try:
+        if sys.platform == 'win32':
+            import msvcrt
+
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b'\0')
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        if sys.platform == 'win32':
+            import msvcrt
+
+            try:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        try:
+            lock_file.close()
+        except OSError:
+            pass
+
+
+def _learning_data_mtime_ns(username: str) -> int:
+    path = DATA_DIR / username / 'learning_data.json'
+    try:
+        stat = path.stat()
+        return int(getattr(stat, 'st_mtime_ns', stat.st_mtime * 1_000_000_000))
+    except OSError:
+        return 0
+
+
+@contextmanager
 def user_reciter_session(username: str) -> Generator[WordReciter, None, None]:
-    """在同用户请求间复用 WordReciter，并以互斥锁序列化读写。"""
+    """Serialize learning data and refresh stale per-worker caches."""
     lock = _user_mutex(username)
     with lock:
-        if username not in _user_reciter_cache:
-            _user_reciter_cache[username] = _build_user_reciter(username)
-        reciter = _user_reciter_cache[username]
-        reciter.refresh_for_new_day()
-        yield reciter
+        with _user_learning_interprocess_lock(username):
+            disk_mtime = _learning_data_mtime_ns(username)
+            reciter = _user_reciter_cache.get(username)
+            if reciter is None or getattr(reciter, '_source_mtime_ns', -1) != disk_mtime:
+                reciter = _build_user_reciter(username)
+                reciter._source_mtime_ns = disk_mtime
+                _user_reciter_cache[username] = reciter
+            reciter.refresh_for_new_day()
+            try:
+                yield reciter
+            finally:
+                reciter._source_mtime_ns = _learning_data_mtime_ns(username)
 
 
 def _summary_payload_from_reciter(reciter: WordReciter) -> dict:
     """首屏/导航所需轻量统计，不补查词库例句。"""
-    today_d = china_today()
     total_pending = len(reciter.all_words)
-    due_count = sum(1 for w in reciter.all_words if w.next_review_date <= today_d)
+    due_count = reciter.count_due_words()
     avg_review_count = (
         sum(w.review_count for w in reciter.all_words) / total_pending
         if total_pending
@@ -3006,13 +3066,26 @@ def _summary_payload_from_reciter(reciter: WordReciter) -> dict:
     return {"due_count": due_count, "stats": stats}
 
 
-def _review_words_payload(reciter: WordReciter, review_list: List[Any]) -> dict:
+def _review_words_payload(
+    reciter: WordReciter,
+    review_list: List[Any],
+    task_bundle: Optional[dict] = None,
+) -> dict:
     """复习列表序列化；供 /words/review 与 /bootstrap 复用。"""
     words = []
     today_d = china_today()
+    task_items = {}
+    plan = None
+    if isinstance(task_bundle, dict):
+        plan = task_bundle.get('plan') if isinstance(task_bundle.get('plan'), dict) else None
+        for task_item in task_bundle.get('items') or []:
+            if isinstance(task_item, dict) and task_item.get('word_key'):
+                task_items[str(task_item['word_key'])] = task_item
     for w in review_list:
         nd = w.next_review_date
         is_carryover = nd < today_d
+        state_payload = reciter.review_state_payload(w)
+        task_item = task_items.get(reciter.word_state_key(w), {})
         item = {
             'english': w.english,
             'chinese': w.chinese,
@@ -3025,6 +3098,20 @@ def _review_words_payload(reciter: WordReciter, review_list: List[Any]) -> dict:
             'is_carryover': is_carryover,
             'carryover_days': (today_d - nd).days if is_carryover else 0,
             'examples': [],
+            'task_id': str((plan or {}).get('task_id') or ''),
+            'task_item_id': str(task_item.get('item_id') or ''),
+            'task_reason': str(task_item.get('reason') or ('overdue' if is_carryover else 'due')),
+            'task_attempts': reciter.task_attempt_count(task_item),
+            'task_phase': str(task_item.get('phase') or 'main'),
+            'task_remedial': bool(
+                task_item.get('phase') == 'remedial'
+                or reciter.task_attempt_count(task_item) >= MAX_ATTEMPTS
+            ),
+            'exercise_type': str(
+                task_item.get('exercise_type') or state_payload['exercise_type']
+            ),
+            'mastery': state_payload['mastery'],
+            'scheduler': state_payload['scheduler'],
         }
         # 优先词库（v2 或 CSV）释义与例句；多义项只展示当前槽对应的一条
         csv_row = lookup_csv_word(w.english)
@@ -3043,7 +3130,10 @@ def _review_words_payload(reciter: WordReciter, review_list: List[Any]) -> dict:
             else:
                 item['examples'] = [{'en': raw, 'cn': ''}]
         words.append(item)
-    return {'words': words, 'count': len(words)}
+    payload = {'words': words, 'count': len(words)}
+    if plan is not None:
+        payload['plan'] = plan
+    return payload
 
 
 def sanitize_tts_text(text: str, max_len: int = 500) -> str:
@@ -3373,11 +3463,12 @@ def bootstrap(username):
         with user_reciter_session(username) as reciter:
             mastered_n = len(reciter.mastered_words)
             summary = _summary_payload_from_reciter(reciter)
-            review = (
-                {'words': [], 'count': 0}
-                if getattr(g, "is_parent", False)
-                else _review_words_payload(reciter, reciter.get_today_review_list())
-            )
+            if getattr(g, "is_parent", False):
+                review = {'words': [], 'count': 0}
+            else:
+                task_bundle = reciter.get_today_learning_plan()
+                review = _review_words_payload(reciter, task_bundle['words'], task_bundle)
+                reciter.save_learning_data(backup=False)
 
         pkw, pkm = _pk_stats_for_gamification(username)
         gam_payload = gamification_mod.public_profile(
@@ -4056,6 +4147,7 @@ def get_status(username):
                     'remaining_days': (nd - today_d).days,
                     'is_carryover': is_co,
                     'carryover_days': (today_d - nd).days if is_co else 0,
+                    **reciter.review_state_payload(w),
                 }
                 if csv_row:
                     csl = csv_row.get("chinese_sense_lines")
@@ -4067,7 +4159,12 @@ def get_status(username):
                 'total_words': len(all_words),
                 'mastered_words': len(reciter.mastered_words),
                 'current_round': reciter.current_review_round,
-                'avg_review_count': sum(w['review_count'] for w in all_words) / len(all_words) if all_words else 0
+                'avg_review_count': sum(w['review_count'] for w in all_words) / len(all_words) if all_words else 0,
+                'avg_mastery_percent': (
+                    sum(w['mastery']['overall_percent'] for w in all_words) / len(all_words)
+                    if all_words
+                    else 0
+                ),
             }
 
             return jsonify({'words': all_words, 'stats': stats}), 200
@@ -4093,8 +4190,10 @@ def get_review_list(username):
     """获取今日复习列表（从CSV中补充 example_form、随机选择例句）"""
     try:
         with user_reciter_session(username) as reciter:
-            review_list = reciter.get_today_review_list()
-            return jsonify(_review_words_payload(reciter, review_list)), 200
+            task_bundle = reciter.get_today_learning_plan()
+            payload = _review_words_payload(reciter, task_bundle['words'], task_bundle)
+            reciter.save_learning_data(backup=False)
+            return jsonify(payload), 200
     except Exception as e:
         logger.error(f"获取复习列表失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -4109,6 +4208,7 @@ def get_extra_review_list(username):
             words = []
             for w in picked:
                 nd = w.next_review_date
+                state_payload = reciter.review_state_payload(w)
                 item = {
                     'english': w.english,
                     'chinese': w.chinese,
@@ -4121,6 +4221,12 @@ def get_extra_review_list(username):
                     'is_carryover': False,
                     'carryover_days': 0,
                     'examples': [],
+                    'task_id': '',
+                    'task_item_id': '',
+                    'task_reason': 'bonus',
+                    'exercise_type': state_payload['exercise_type'],
+                    'mastery': state_payload['mastery'],
+                    'scheduler': state_payload['scheduler'],
                 }
                 csv_row = lookup_csv_word(w.english)
                 if csv_row:
@@ -4149,29 +4255,68 @@ def practice_word(username):
         word_id = data.get('word_id', '').strip()
         answer = data.get('answer', '').strip()
         # 当日错题巩固轮次：答对不计入掌握进度（success_count）与排期，见前端 wrongRoundNumber>0
-        remedial = bool(data.get('remedial'))
+        remedial = data.get('remedial') is True
         # 无今日待复习时的加练：仅计复习次数，不改变掌握进度与排期
-        bonus_practice = bool(data.get('bonus_practice'))
+        bonus_practice = data.get('bonus_practice') is True
         # True：要求拼写与例句中形式一致（如复数、时态）；False：仅词库原形（lemma）
-        test_inflection = bool(data.get('test_inflection'))
+        test_inflection = data.get('test_inflection') is True
+        task_id = str(data.get('task_id') or '').strip()
+        task_item_id = str(data.get('task_item_id') or '').strip()
+        requested_exercise_type = str(data.get('exercise_type') or 'spelling').strip()
+        review_event_id = str(data.get('review_event_id') or '').strip()[:96]
+        audio_available = data.get('audio_available') is True
+        try:
+            attempt_number = max(1, min(1000, int(data.get('attempt_number') or 1)))
+        except (TypeError, ValueError, OverflowError):
+            attempt_number = 1
+        try:
+            hint_count = max(0, min(100, int(data.get('hint_count') or 0)))
+        except (TypeError, ValueError, OverflowError):
+            hint_count = 0
+        try:
+            elapsed_ms = max(0, min(600000, int(data.get('elapsed_ms') or 0)))
+        except (TypeError, ValueError, OverflowError):
+            elapsed_ms = 0
 
         if not word_id or not answer:
             return jsonify({'error': '单词ID和答案不能为空'}), 400
+        if bool(task_id) != bool(task_item_id):
+            return jsonify({'error': '今日任务参数不完整，请刷新后重试'}), 400
+        if not review_event_id:
+            return jsonify({'error': '缺少作答事件标识，请刷新后重试'}), 400
+        if not task_id and not bonus_practice:
+            return jsonify({'error': '请从今日任务进入练习'}), 409
 
         with user_reciter_session(username) as reciter:
-            word = None
-            for w in reciter.all_words:
-                if w.english.lower() == word_id.lower():
-                    word = w
-                    break
-            if not word and bonus_practice:
-                for w in reciter.mastered_words:
-                    if w.english.lower() == word_id.lower():
-                        word = w
-                        break
+            task_item = None
+            if task_id and not bonus_practice:
+                task_item = reciter.resolve_daily_task_item(
+                    task_id,
+                    task_item_id,
+                    word_id,
+                    review_event_id,
+                )
+                if not task_item:
+                    return jsonify({'error': '今日任务已更新，请刷新后继续'}), 409
+
+            word = reciter.find_word(word_id, include_mastered=True)
+            if word in reciter.mastered_words and not (bonus_practice or task_item or remedial):
+                word = None
 
             if not word:
                 return jsonify({'error': '单词未找到'}), 404
+
+            exercise_type = (
+                str(task_item.get('exercise_type') or 'spelling')
+                if task_item
+                else requested_exercise_type
+            )
+            if exercise_type == 'listening' and not audio_available:
+                exercise_type = 'spelling'
+            if exercise_type not in ('spelling', 'listening'):
+                exercise_type = 'spelling'
+            if exercise_type == 'listening':
+                test_inflection = False
 
             submitted = answer.strip().lower()
             lemma = word.english.strip().lower()
@@ -4186,47 +4331,67 @@ def practice_word(username):
                 is_correct = submitted == expected
             else:
                 is_correct = submitted == lemma
-            old_success_count = word.success_count
-            old_mastered_count = len(reciter.mastered_words)
-
-            if bonus_practice:
-                if is_correct:
-                    message = reciter.record_bonus_answer_correct(word)
-                else:
-                    reciter.record_answer_incorrect(word)
-                    message = '❌ 错误，请继续努力！'
-            elif is_correct:
-                message = reciter.record_answer_correct(word, remedial=remedial)
-            else:
-                reciter.record_answer_incorrect(word)
-                message = '❌ 错误，请继续努力！'
+            applied = reciter.apply_scored_review_attempt(
+                word,
+                exercise_type=exercise_type,
+                correct=is_correct,
+                task_item=task_item,
+                event_id=review_event_id,
+                elapsed_ms=elapsed_ms,
+                hint_count=hint_count,
+                attempt_number=attempt_number,
+                remedial=remedial,
+                bonus_practice=bonus_practice,
+                audio_available=audio_available,
+            )
+            if task_item and applied['recorded'] and not audio_available:
+                task_item['exercise_type'] = exercise_type
             reciter.save_learning_data(backup=False)
 
-            new_success_count = word.success_count
-            mastered_now = len(reciter.mastered_words) > old_mastered_count
+            recorded = applied['recorded']
+            message = applied['message']
+            mastered_now = applied['mastered_now']
             gam_payload = None
-            if is_correct:
+            if is_correct and (recorded or review_event_id):
                 pkw, pkm = _pk_stats_for_gamification(username)
                 gam_payload = gamification_mod.award_correct_answer(
                     DATA_DIR,
                     username,
                     bonus_practice=bonus_practice,
-                    remedial=remedial,
-                    old_success_count=old_success_count,
-                    new_success_count=new_success_count,
+                    remedial=applied['remedial'],
+                    old_success_count=applied['old_success_count'],
+                    new_success_count=applied['new_success_count'],
                     mastered_now=mastered_now,
                     mastered_words=len(reciter.mastered_words),
                     pk_wins=pkw,
                     pk_matches=pkm,
+                    event_id=hashlib.sha256(
+                        f'{reciter.word_state_key(word)}\0{review_event_id}'.encode('utf-8')
+                    ).hexdigest(),
+                    event_scope=reciter.word_state_key(word),
                 )
 
             body = {
                 'correct': is_correct,
                 'message': message,
+                'recorded': recorded,
+                'mastered_now': mastered_now,
+                'remedial': applied['remedial'],
+                'task_remedial': bool(
+                    task_item
+                    and (
+                        task_item.get('phase') == 'remedial'
+                        or reciter.task_attempt_count(task_item) >= MAX_ATTEMPTS
+                    )
+                ),
+                'exercise_type': exercise_type,
+                'task_progress': reciter.daily_task_progress(),
                 'word': {
                     'english': word.english,
                     'chinese': word.chinese,
-                    'success_count': word.success_count
+                    'success_count': word.success_count,
+                    'next_review_date': word.next_review_date.isoformat(),
+                    **reciter.review_state_payload(word),
                 }
             }
             if gam_payload is not None:
@@ -4236,7 +4401,10 @@ def practice_word(username):
                 if extra_rows:
                     body['other_senses_extra'] = extra_rows
             return jsonify(body), 200
+    except ReviewEventConflict:
+        return jsonify({'error': '作答事件与原请求不一致，请重新提交'}), 409
     except Exception as e:
+        _invalidate_user_reciter_cache(username)
         logger.error(f"练习单词失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
 
@@ -5911,6 +6079,9 @@ def remove_pending_words_api(username):
     try:
         with user_reciter_session(username) as reciter:
             result = reciter.remove_pending_words_by_english(keys_ordered)
+            task_bundle = reciter.get_today_learning_plan()
+            result['plan'] = task_bundle['plan']
+            reciter.save_learning_data(backup=False)
         _invalidate_user_reciter_cache(username)
         logger.info(
             "用户 %s 待复习移除: removed=%s not_found=%s",
@@ -6053,6 +6224,8 @@ def get_mastered_words(username):
         with user_reciter_session(username) as reciter:
             words = []
             for w in reciter.mastered_words:
+                review_state = reciter.get_review_state(w)
+                state_payload = reciter.review_state_payload(w)
                 csv_row = lookup_csv_word(w.english)
                 ex_text = ''
                 if csv_row:
@@ -6066,7 +6239,8 @@ def get_mastered_words(username):
                     'phonetic': csv_row.get('phonetic', '') if csv_row else '',
                     'example': ex_text,
                     'review_count': w.review_count,
-                    'mastered_date': w.next_review_date.isoformat()
+                    'mastered_date': review_state.get('mastered_date') or w.next_review_date.isoformat(),
+                    **state_payload,
                 })
 
             return jsonify({'words': words, 'count': len(words)}), 200

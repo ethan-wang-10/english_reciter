@@ -2078,6 +2078,111 @@ body {
     margin-top: 0;
 }
 
+.today-task-panel {
+    margin: 14px 0 18px;
+    padding: 14px 4px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.today-task-panel[hidden] {
+    display: none;
+}
+
+.today-task-head,
+.today-task-progress-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.today-task-head > div {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+
+.today-task-kicker {
+    color: var(--primary-dark);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.today-task-head strong {
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.today-task-estimate {
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.today-task-progress-row {
+    margin-top: 10px;
+}
+
+.today-task-progress {
+    position: relative;
+    flex: 1;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: #e5e7eb;
+}
+
+.today-task-progress > span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--primary-color);
+    transition: width 0.2s ease;
+}
+
+.today-task-progress-row > strong {
+    min-width: 4.5em;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.today-task-mix {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    min-height: 1.2em;
+    margin-top: 9px;
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.today-task-mix span::before {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--secondary-color);
+    content: '';
+}
+
+.today-task-mix span:nth-child(2)::before {
+    background: var(--warning-color, #fbbf24);
+}
+
+.today-task-mix span:nth-child(3)::before {
+    background: var(--primary-color);
+}
+
 .review-box {
     background: linear-gradient(180deg, var(--primary-light) 0%, var(--surface) 42%);
     padding: 32px 28px 36px;
@@ -2120,6 +2225,26 @@ body {
     max-width: 100%;
 }
 
+.review-exercise-type {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 3px 10px;
+    border: 1px solid rgba(88, 204, 2, 0.45);
+    border-radius: 6px;
+    background: #f2fde9;
+    color: var(--primary-dark);
+    font-size: 0.78rem;
+    font-weight: 800;
+    box-sizing: border-box;
+}
+
+.review-exercise-type.is-listening {
+    border-color: rgba(28, 176, 246, 0.45);
+    background: #eef9ff;
+    color: #086b9c;
+}
+
 .review-phonetic-toggle {
     display: inline-flex;
     align-items: center;
@@ -2145,6 +2270,7 @@ body {
 }
 
 .word-progress {
+    max-width: 100%;
     font-size: 1rem;
     font-weight: 800;
     color: #fff;
@@ -2152,6 +2278,9 @@ body {
     padding: 6px 14px;
     border-radius: var(--radius-pill);
     box-shadow: 0 var(--tactile-depth) 0 var(--secondary-dark);
+    line-height: 1.35;
+    text-align: center;
+    white-space: normal;
 }
 
 .review-due-hint {
@@ -2192,6 +2321,41 @@ body {
     display: flex;
     flex-direction: column;
     width: 100%;
+}
+
+.review-mode-listening .word-example-container {
+    justify-content: center;
+    min-height: 64px;
+}
+
+.review-mode-listening #current-word-example[hidden] {
+    display: none;
+}
+
+@media (max-width: 600px) {
+    .today-task-panel {
+        margin: 4px 0 10px;
+        padding: 10px 2px;
+    }
+
+    .today-task-head {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .today-task-head > div {
+        display: grid;
+        gap: 2px;
+    }
+
+    .today-task-mix {
+        gap: 4px 12px;
+    }
+
+    .today-task-estimate {
+        width: 100%;
+        text-align: left;
+    }
 }
 
 /* 多义：释义独占一行，例句附在下方同一卡片流内 */
@@ -2555,6 +2719,15 @@ body {
     text-transform: uppercase;
     letter-spacing: 0;
     color: var(--text-secondary);
+}
+
+.word-stat-detail {
+    max-width: 13em;
+    margin-top: 2px;
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
 }
 
 /* 导入 */

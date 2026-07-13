@@ -6,8 +6,9 @@ import shutil
 import platform
 import subprocess
 import tempfile
+import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import date, timedelta
 from pathlib import Path
 from prettytable import PrettyTable
@@ -15,6 +16,17 @@ import readchar
 import logging
 
 from app_time import china_date_from_timestamp, china_now, china_today
+from review_scheduler import (
+    claim_review_event,
+    choose_exercise_type,
+    mastery_ready,
+    mastery_snapshot,
+    next_review_date as adaptive_next_review_date,
+    normalize_review_state,
+    record_mastery_attempt as update_mastery_attempt,
+    schedule_review,
+    scheduler_snapshot,
+)
 
 # 常量定义
 MAX_ATTEMPTS = 3  # 最大尝试次数
@@ -64,6 +76,8 @@ class Config:
             "tts_enabled": True,
             "max_review_round": 8,
             "review_interval_days": [1, 2, 4, 7, 15, 30, 60],
+            "daily_review_limit": 20,
+            "daily_new_word_limit": 5,
             "backup_enabled": True,
             "backup_interval_days": 7,
             "max_backups": 10,
@@ -88,6 +102,19 @@ class Config:
         self.TTS_ENABLED = default_config["tts_enabled"]
         self.MAX_REVIEW_ROUND = default_config["max_review_round"]
         self.REVIEW_INTERVAL_DAYS = default_config["review_interval_days"]
+        try:
+            daily_review_limit = int(default_config["daily_review_limit"])
+        except (TypeError, ValueError):
+            daily_review_limit = 20
+        try:
+            daily_new_word_limit = int(default_config["daily_new_word_limit"])
+        except (TypeError, ValueError):
+            daily_new_word_limit = 5
+        self.DAILY_REVIEW_LIMIT = max(1, min(100, daily_review_limit))
+        self.DAILY_NEW_WORD_LIMIT = max(
+            0,
+            min(self.DAILY_REVIEW_LIMIT, daily_new_word_limit),
+        )
         self.BACKUP_ENABLED = default_config["backup_enabled"]
         self.BACKUP_INTERVAL_DAYS = default_config["backup_interval_days"]
         self.MAX_BACKUPS = default_config["max_backups"]
@@ -232,7 +259,10 @@ class Word:
         d = dict(data)
         nr = d.get('next_review_date')
         if nr:
-            d['next_review_date'] = date.fromisoformat(str(nr)[:10])
+            try:
+                d['next_review_date'] = date.fromisoformat(str(nr)[:10])
+            except (TypeError, ValueError):
+                d['next_review_date'] = china_today()
         else:
             d['next_review_date'] = china_today()
         d.setdefault('success_count', 0)
@@ -240,7 +270,22 @@ class Word:
         d.setdefault('review_count', 0)
         if 'example' not in d or d.get('example') in (None, ''):
             d['example'] = None
-        return cls(**d)
+        def safe_int(value: Any, default: int = 0) -> int:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
+        # 显式读取已知字段，避免未来版本新增逐词字段时旧 reader 把整个词库读成空。
+        return cls(
+            english=str(d.get('english') or '').strip(),
+            chinese=str(d.get('chinese') or '').strip(),
+            success_count=max(0, safe_int(d.get('success_count'))),
+            next_review_date=d['next_review_date'],
+            example=d.get('example'),
+            review_round=max(0, safe_int(d.get('review_round'))),
+            review_count=max(0, safe_int(d.get('review_count'))),
+        )
 
 
 class WordRepository:
@@ -248,6 +293,43 @@ class WordRepository:
     
     def __init__(self, config: Config):
         self.config = config
+        self.learning_state_v2: Dict[str, Any] = {
+            'version': 1,
+            'review_states': {},
+            'daily_task': None,
+        }
+
+    def _learning_state_sidecar_path(self) -> Path:
+        data_path = Path(self.config.DATA_FILE)
+        return data_path.with_name(f'{data_path.stem}.learning_state_v2.json')
+
+    def _set_learning_state(self, raw: Any) -> None:
+        src = dict(raw) if isinstance(raw, dict) else {}
+        states = src.get('review_states')
+        task = src.get('daily_task')
+        src.setdefault('version', 1)
+        src['review_states'] = dict(states) if isinstance(states, dict) else {}
+        src['daily_task'] = dict(task) if isinstance(task, dict) else None
+        self.learning_state_v2 = src
+
+    @staticmethod
+    def _write_json_atomic(path: Path, data: Dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(
+            suffix='.json',
+            dir=str(path.parent),
+            text=True,
+        )
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_name, path)
+        except Exception:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
     
     def load_data(self) -> tuple[list[Word], list[Word]]:
         """
@@ -259,8 +341,24 @@ class WordRepository:
         try:
             with open(self.config.DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                all_words = [Word.from_dict(w) for w in data['all_words']]
-                mastered_words = [Word.from_dict(w) for w in data['mastered_words']]
+                pending_rows = data.get('all_words') if isinstance(data, dict) else []
+                mastered_rows = data.get('mastered_words') if isinstance(data, dict) else []
+                all_words = [
+                    Word.from_dict(w) for w in (pending_rows or []) if isinstance(w, dict)
+                ]
+                mastered_words = [
+                    Word.from_dict(w) for w in (mastered_rows or []) if isinstance(w, dict)
+                ]
+                main_state = data.get('learning_state_v2')
+                self._set_learning_state(main_state)
+                sidecar = self._learning_state_sidecar_path()
+                if not isinstance(main_state, dict) and sidecar.is_file():
+                    try:
+                        with sidecar.open('r', encoding='utf-8') as state_file:
+                            sidecar_state = json.load(state_file)
+                        self._set_learning_state(sidecar_state)
+                    except (OSError, json.JSONDecodeError) as state_error:
+                        logger.warning('学习状态 sidecar 无法读取，回退主数据: %s', state_error)
                 
                 for word in all_words + mastered_words:
                     if not hasattr(word, 'review_round'):
@@ -284,42 +382,43 @@ class WordRepository:
                 
         except FileNotFoundError:
             logger.warning(f"数据文件 {self.config.DATA_FILE} 不存在，将创建新文件")
+            self.learning_state_v2 = {'version': 1, 'review_states': {}, 'daily_task': None}
             return [], []
         except json.JSONDecodeError as e:
             logger.error(f"数据文件 {self.config.DATA_FILE} 格式错误: {e}")
             logger.warning("将重置为初始状态")
+            self.learning_state_v2 = {'version': 1, 'review_states': {}, 'daily_task': None}
             return [], []
         except Exception as e:
             logger.error(f"加载数据时发生未知错误: {e}")
+            self.learning_state_v2 = {'version': 1, 'review_states': {}, 'daily_task': None}
             return [], []
     
-    def save_data(self, all_words: list[Word], mastered_words: list[Word]) -> None:
+    def save_data(
+        self,
+        all_words: list[Word],
+        mastered_words: list[Word],
+        learning_state_v2: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """保存学习数据（原子写入，降低并发下文件损坏风险）"""
         try:
+            state_to_save = (
+                learning_state_v2
+                if learning_state_v2 is not None
+                else self.learning_state_v2
+            )
             data = {
                 'all_words': [w.to_dict() for w in all_words],
-                'mastered_words': [w.to_dict() for w in mastered_words]
+                'mastered_words': [w.to_dict() for w in mastered_words],
+                'learning_state_v2': state_to_save,
             }
             path = Path(self.config.DATA_FILE)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            fd, tmp_name = tempfile.mkstemp(
-                suffix=".json",
-                dir=str(path.parent),
-                text=True,
-            )
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                os.replace(tmp_name, path)
-            except Exception:
-                try:
-                    os.unlink(tmp_name)
-                except OSError:
-                    pass
-                raise
+            self._write_json_atomic(path, data)
+            self._write_json_atomic(self._learning_state_sidecar_path(), state_to_save)
             logger.debug("数据保存成功")
         except Exception as e:
             logger.error(f"保存数据失败: {e}")
+            raise
     
     def backup_data(self) -> Optional[str]:
         """
@@ -381,6 +480,11 @@ class WordReciter:
         
         self.all_words: List[Word] = []
         self.mastered_words: List[Word] = []
+        self.learning_state_v2: Dict[str, Any] = {
+            'version': 1,
+            'review_states': {},
+            'daily_task': None,
+        }
         self.today = china_today()
         self.current_review_round = 0
         
@@ -410,10 +514,16 @@ class WordReciter:
     def _load_data(self) -> None:
         """加载学习数据"""
         self.all_words, self.mastered_words = self.repository.load_data()
+        self.learning_state_v2 = self.repository.learning_state_v2
     
     def _save_data(self, backup: bool = True) -> None:
         """保存学习数据"""
-        self.repository.save_data(self.all_words, self.mastered_words)
+        self.repository.learning_state_v2 = self.learning_state_v2
+        self.repository.save_data(
+            self.all_words,
+            self.mastered_words,
+            self.learning_state_v2,
+        )
         if backup:
             self.repository.backup_data()
     
@@ -485,11 +595,442 @@ class WordReciter:
     
     def get_today_review_list(self) -> List[Word]:
         """获取今日待复习列表（供 Web / 外部调用）。"""
-        return self._get_today_review_list()
+        return self.get_today_learning_plan()['words']
     
     def save_learning_data(self, backup: bool = True) -> None:
         """持久化学习数据（供 Web / 外部调用）。"""
         self._save_data(backup=backup)
+
+    @staticmethod
+    def word_state_key(word_or_english: Any) -> str:
+        raw = word_or_english.english if hasattr(word_or_english, 'english') else word_or_english
+        return str(raw or '').strip().casefold()
+
+    @staticmethod
+    def task_attempt_count(item: Optional[Dict[str, Any]]) -> int:
+        if not isinstance(item, dict):
+            return 0
+        try:
+            attempts = max(0, min(1_000_000, int(item.get('attempts') or 0)))
+        except (TypeError, ValueError, OverflowError):
+            attempts = 0
+        item['attempts'] = attempts
+        return attempts
+
+    def find_word(self, english: str, *, include_mastered: bool = True) -> Optional[Word]:
+        key = self.word_state_key(english)
+        for word in self.all_words:
+            if self.word_state_key(word) == key:
+                return word
+        if include_mastered:
+            for word in self.mastered_words:
+                if self.word_state_key(word) == key:
+                    return word
+        return None
+
+    def get_review_state(self, word: Word) -> Dict[str, Any]:
+        states = self.learning_state_v2.setdefault('review_states', {})
+        key = self.word_state_key(word)
+        legacy_interval = self._calculate_review_days(max(0, word.success_count))
+        state = normalize_review_state(
+            states.get(key),
+            success_count=word.success_count,
+            max_success_count=self.config.MAX_SUCCESS_COUNT,
+            legacy_interval_days=legacy_interval,
+            legacy_active=word in self.mastered_words,
+        )
+        states[key] = state
+        return state
+
+    def review_state_payload(self, word: Word) -> Dict[str, Any]:
+        state = self.get_review_state(word)
+        return {
+            'exercise_type': choose_exercise_type(state),
+            'mastery': mastery_snapshot(state),
+            'scheduler': scheduler_snapshot(state),
+        }
+
+    def record_mastery_attempt(
+        self,
+        word: Word,
+        exercise_type: str,
+        correct: bool,
+        *,
+        event_id: str = '',
+        event_fingerprint: str = '',
+        elapsed_ms: int = 0,
+    ) -> bool:
+        state = self.get_review_state(word)
+        return update_mastery_attempt(
+            state,
+            exercise_type,
+            correct,
+            today=self.today,
+            event_id=event_id,
+            event_fingerprint=event_fingerprint,
+            elapsed_ms=elapsed_ms,
+        )
+
+    def _is_mastered_maintenance_due(self, word: Word) -> bool:
+        state = self.get_review_state(word)
+        return bool(state['scheduler'].get('active')) and word.next_review_date <= self.today
+
+    def count_due_words(self) -> int:
+        due_keys = {
+            self.word_state_key(word)
+            for word in self.all_words
+            if word.next_review_date <= self.today
+        }
+        due_keys.update(
+            self.word_state_key(word)
+            for word in self.mastered_words
+            if self._is_mastered_maintenance_due(word)
+        )
+        task = self.learning_state_v2.get('daily_task')
+        if isinstance(task, dict) and task.get('date') == self.today.isoformat():
+            due_keys.update(
+                str(item.get('word_key') or '')
+                for item in (task.get('items') or [])
+                if isinstance(item, dict) and item.get('status') == 'pending'
+            )
+        due_keys.discard('')
+        return len(due_keys)
+
+    def _today_task_candidates(self) -> List[Dict[str, Any]]:
+        candidates: List[Dict[str, Any]] = []
+        for word in self.all_words:
+            if word.next_review_date > self.today:
+                state = self.get_review_state(word)
+                weak_mastery = mastery_snapshot(state)
+                weak_attempts = sum(
+                    int(x.get('attempts') or 0)
+                    for x in weak_mastery.get('by_type', {}).values()
+                )
+                if weak_attempts < 3 or weak_mastery['overall'] >= 0.35:
+                    continue
+                candidates.append(
+                    {'word': word, 'maintenance': False, 'forced_reason': 'weak'}
+                )
+                continue
+            candidates.append({'word': word, 'maintenance': False})
+        for word in self.mastered_words:
+            if self._is_mastered_maintenance_due(word):
+                candidates.append({'word': word, 'maintenance': True})
+
+        for item in candidates:
+            word = item['word']
+            state = self.get_review_state(word)
+            mastery = mastery_snapshot(state)
+            attempted = sum(
+                int(x.get('attempts') or 0) for x in mastery.get('by_type', {}).values()
+            )
+            if item.get('forced_reason'):
+                reason = str(item['forced_reason'])
+            elif item['maintenance']:
+                reason = 'maintenance'
+            elif word.success_count <= 0 and attempted == 0 and word.review_count <= 0:
+                reason = 'new'
+            elif word.next_review_date < self.today:
+                reason = 'overdue'
+            elif attempted > 0 and mastery['overall'] < 0.5:
+                reason = 'weak'
+            else:
+                reason = 'due'
+            item.update(
+                {
+                    'reason': reason,
+                    'exercise_type': choose_exercise_type(state),
+                    'mastery_score': mastery['overall'],
+                }
+            )
+
+        rank = {'overdue': 0, 'weak': 1, 'maintenance': 2, 'due': 3, 'new': 4}
+        candidates.sort(
+            key=lambda item: (
+                rank[item['reason']],
+                item['word'].next_review_date,
+                item['mastery_score'],
+                item['word'].review_count,
+                item['word'].english.casefold(),
+            )
+        )
+        return candidates
+
+    def _create_today_task(self) -> Optional[Dict[str, Any]]:
+        candidates = self._today_task_candidates()
+        non_new = [item for item in candidates if item['reason'] != 'new']
+        new_words = [item for item in candidates if item['reason'] == 'new']
+        limit = self.config.DAILY_REVIEW_LIMIT
+        selected = non_new[:limit]
+        remaining_slots = max(0, limit - len(selected))
+        if remaining_slots:
+            selected.extend(new_words[: min(remaining_slots, self.config.DAILY_NEW_WORD_LIMIT)])
+        if not selected:
+            self.learning_state_v2['daily_task'] = None
+            return None
+
+        task_id = uuid.uuid4().hex
+        items = []
+        for candidate in selected:
+            word = candidate['word']
+            items.append(
+                {
+                    'item_id': uuid.uuid4().hex[:16],
+                    'word_key': self.word_state_key(word),
+                    'scheduled_due_date': word.next_review_date.isoformat(),
+                    'exercise_type': candidate['exercise_type'],
+                    'reason': candidate['reason'],
+                    'phase': 'main',
+                    'status': 'pending',
+                    'attempts': 0,
+                }
+            )
+        task = {
+            'version': 1,
+            'task_id': task_id,
+            'date': self.today.isoformat(),
+            'created_at': china_now().isoformat(),
+            'status': 'active',
+            'available_at_creation': len(candidates),
+            'items': items,
+        }
+        self.learning_state_v2['daily_task'] = task
+        return task
+
+    def _current_today_task(self) -> Optional[Dict[str, Any]]:
+        task = self.learning_state_v2.get('daily_task')
+        if not isinstance(task, dict) or task.get('date') != self.today.isoformat():
+            return None
+        if not str(task.get('task_id') or '').strip():
+            task['task_id'] = uuid.uuid4().hex
+        items = task.get('items')
+        if not isinstance(items, list):
+            return None
+        valid_items = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            word = self.find_word(item.get('word_key', ''))
+            if word is None:
+                continue
+            if not str(item.get('item_id') or '').strip():
+                item['item_id'] = uuid.uuid4().hex[:16]
+            if item.get('exercise_type') not in ('spelling', 'listening'):
+                item['exercise_type'] = choose_exercise_type(self.get_review_state(word))
+            if item.get('phase') not in ('main', 'remedial'):
+                item['phase'] = 'main'
+            if item.get('reason') not in ('overdue', 'weak', 'maintenance', 'due', 'new'):
+                item['reason'] = 'due'
+            if item.get('status') not in ('pending', 'completed'):
+                item['status'] = 'pending'
+            self.task_attempt_count(item)
+            # 兼容仍在运行的旧前端：它会推进排期但不会回传 task/item id。
+            # 未来薄弱词本来就排在今天之后，必须确认排期确实发生变化，避免刷新即误完成。
+            scheduled_due_date = str(item.get('scheduled_due_date') or '')
+            schedule_changed = bool(
+                scheduled_due_date
+                and word.next_review_date.isoformat() != scheduled_due_date
+            )
+            legacy_item_moved = not scheduled_due_date and item.get('reason') != 'weak'
+            if (
+                item.get('status') == 'pending'
+                and self.task_attempt_count(item) == 0
+                and word.next_review_date > self.today
+                and (schedule_changed or legacy_item_moved)
+            ):
+                item['status'] = 'completed'
+            valid_items.append(item)
+        if items and not valid_items:
+            return None
+        task['items'] = valid_items
+        pending = [item for item in valid_items if item.get('status') == 'pending']
+        if pending:
+            task['status'] = 'active'
+            return task
+        task['status'] = 'completed'
+        return task
+
+    def get_today_learning_plan(self) -> Dict[str, Any]:
+        """Return a persistent, bounded task and its remaining word objects."""
+        task = self._current_today_task() or self._create_today_task()
+        if not task:
+            return {
+                'words': [],
+                'items': [],
+                'plan': {
+                    'task_id': '',
+                    'date': self.today.isoformat(),
+                    'total': 0,
+                    'completed': 0,
+                    'remaining': 0,
+                    'estimated_minutes': 0,
+                    'backlog_after_task': 0,
+                    'buckets': {},
+                    'exercise_mix': {},
+                    'algorithm': 'adaptive-sm2-v1',
+                },
+            }
+
+        items = task['items']
+        pending_items = [item for item in items if item.get('status') == 'pending']
+        completed = len(items) - len(pending_items)
+        words: List[Word] = []
+        active_items: List[Dict[str, Any]] = []
+        for item in pending_items:
+            word = self.find_word(item.get('word_key', ''))
+            if word is None:
+                continue
+            words.append(word)
+            active_items.append(item)
+
+        buckets: Dict[str, int] = defaultdict(int)
+        exercise_mix: Dict[str, int] = defaultdict(int)
+        for item in items:
+            buckets[str(item.get('reason') or 'due')] += 1
+            exercise_mix[str(item.get('exercise_type') or 'spelling')] += 1
+        total = len(items)
+        try:
+            available_at_creation = max(
+                total,
+                int(task.get('available_at_creation') or total),
+            )
+        except (TypeError, ValueError, OverflowError):
+            available_at_creation = total
+        task['available_at_creation'] = available_at_creation
+        backlog = available_at_creation - total
+        return {
+            'words': words,
+            'items': active_items,
+            'plan': {
+                'task_id': task['task_id'],
+                'date': task['date'],
+                'total': total,
+                'completed': completed,
+                'remaining': len(active_items),
+                'estimated_minutes': max(1, round(len(active_items) * 0.6)) if active_items else 0,
+                'backlog_after_task': backlog,
+                'buckets': dict(buckets),
+                'exercise_mix': dict(exercise_mix),
+                'algorithm': 'adaptive-sm2-v1',
+            },
+        }
+
+    def resolve_daily_task_item(
+        self,
+        task_id: str,
+        item_id: str,
+        word_id: str,
+        event_id: str = '',
+    ) -> Optional[Dict[str, Any]]:
+        task = self.learning_state_v2.get('daily_task')
+        if not isinstance(task, dict) or task.get('date') != self.today.isoformat():
+            return None
+        if str(task.get('task_id') or '') != str(task_id or ''):
+            return None
+        key = self.word_state_key(word_id)
+        event_key = str(event_id or '')[:96]
+        states = self.learning_state_v2.get('review_states')
+        review_state = states.get(key) if isinstance(states, dict) else None
+        recent_ids = (
+            review_state.get('recent_event_ids')
+            if isinstance(review_state, dict)
+            and isinstance(review_state.get('recent_event_ids'), list)
+            else []
+        )
+        recent_results = (
+            review_state.get('recent_event_results')
+            if isinstance(review_state, dict)
+            and isinstance(review_state.get('recent_event_results'), dict)
+            else {}
+        )
+        known_completed_replay = bool(
+            event_key
+            and event_key in recent_ids
+            and isinstance(recent_results.get(event_key), dict)
+        )
+        for item in task.get('items') or []:
+            if (
+                isinstance(item, dict)
+                and str(item.get('item_id') or '') == str(item_id or '')
+                and item.get('word_key') == key
+                and (
+                    item.get('status') == 'pending'
+                    or (
+                        item.get('status') == 'completed'
+                        and (
+                            str(item.get('last_event_id') or '') == event_key
+                            or known_completed_replay
+                        )
+                    )
+                )
+            ):
+                return item
+        return None
+
+    def record_daily_task_attempt(
+        self,
+        item: Optional[Dict[str, Any]],
+        event_id: str = '',
+    ) -> int:
+        if not item:
+            return 0
+        item['attempts'] = min(1_000_000, self.task_attempt_count(item) + 1)
+        if event_id:
+            event_key = str(event_id)[:96]
+            if str(item.get('last_event_id') or '') != event_key:
+                item.pop('last_event_result', None)
+                item.pop('last_event_remedial', None)
+            item['last_event_id'] = event_key
+        return item['attempts']
+
+    def complete_daily_task_item(
+        self,
+        item: Optional[Dict[str, Any]],
+        event_id: str = '',
+    ) -> None:
+        if not item:
+            return
+        item['status'] = 'completed'
+        item['completed_at'] = china_now().isoformat()
+        if event_id:
+            item['last_event_id'] = str(event_id)[:96]
+
+    def daily_task_progress(self) -> Dict[str, Any]:
+        task = self.learning_state_v2.get('daily_task')
+        if not isinstance(task, dict) or task.get('date') != self.today.isoformat():
+            return {'total': 0, 'completed': 0, 'remaining': 0}
+        items = [item for item in (task.get('items') or []) if isinstance(item, dict)]
+        completed = sum(1 for item in items if item.get('status') == 'completed')
+        return {
+            'task_id': str(task.get('task_id') or ''),
+            'total': len(items),
+            'completed': completed,
+            'remaining': max(0, len(items) - completed),
+        }
+
+    def _prune_learning_state_for_words(self, english_values: List[str]) -> None:
+        keys = {self.word_state_key(value) for value in english_values if value}
+        states = self.learning_state_v2.setdefault('review_states', {})
+        for key in keys:
+            states.pop(key, None)
+        task = self.learning_state_v2.get('daily_task')
+        if isinstance(task, dict) and isinstance(task.get('items'), list):
+            before_count = len(task['items'])
+            task['items'] = [
+                item
+                for item in task['items']
+                if not isinstance(item, dict) or item.get('word_key') not in keys
+            ]
+            removed_from_task = before_count - len(task['items'])
+            if removed_from_task > 0:
+                try:
+                    available = int(task.get('available_at_creation') or before_count)
+                except (TypeError, ValueError, OverflowError):
+                    available = before_count
+                task['available_at_creation'] = max(
+                    len(task['items']),
+                    available - removed_from_task,
+                )
 
     def remove_words_by_english(self, english_candidates: List[str]) -> dict:
         """
@@ -529,6 +1070,7 @@ class WordReciter:
                 not_found.append(key)
 
         if removed_english:
+            self._prune_learning_state_for_words(removed_english)
             self._update_review_round()
             self.save_learning_data(backup=True)
             self.example_generator.save_local_db()
@@ -573,6 +1115,7 @@ class WordReciter:
                 not_found.append(key)
 
         if removed_english:
+            self._prune_learning_state_for_words(removed_english)
             self._update_review_round()
             self.save_learning_data(backup=True)
             self.example_generator.save_local_db()
@@ -587,9 +1130,13 @@ class WordReciter:
         """根据成功次数计算下次复习间隔天数。"""
         return self._calculate_review_days(success_count)
 
-    def record_answer_incorrect(self, word: Word) -> None:
-        """记录一次答错（与 Web 端每次提交错误一致）。"""
+    def record_answer_incorrect(self, word: Word, *, final_attempt: bool = False) -> None:
+        """记录答错；仅在本轮最后一次失败时结算新的排期。"""
         word.review_count += 1
+        if final_attempt:
+            state = self.get_review_state(word)
+            schedule_review(state, 'again', today=self.today)
+            word.next_review_date = adaptive_next_review_date(state, self.today)
 
     def record_bonus_answer_correct(self, word: Word) -> str:
         """加练答对：仅增加复习次数，不改变掌握进度与排期。"""
@@ -614,29 +1161,187 @@ class WordReciter:
             ordered.extend(tier)
         return ordered[:count]
 
-    def record_answer_correct(self, word: Word, *, remedial: bool = False) -> str:
+    def record_answer_correct(
+        self,
+        word: Word,
+        *,
+        remedial: bool = False,
+        rating: str = 'good',
+        require_multidimensional: bool = False,
+        require_listening: bool = True,
+    ) -> str:
         """
         答对后的持久化更新（Web / CLI 共用）。
         remedial=True：错题巩固，不增加 success_count，但排期到今日之后，避免当日重复出现。
         """
+        state = self.get_review_state(word)
+        effective_rating = 'hard' if remedial else rating
+        delta_days = schedule_review(state, effective_rating, today=self.today)
+        word.next_review_date = adaptive_next_review_date(state, self.today)
+
         if remedial:
             word.review_count += 1
-            delta_days = self._calculate_review_days(word.success_count)
-            if delta_days < 1:
-                delta_days = 1
-            word.next_review_date = self.today + timedelta(days=delta_days)
             return '✅ 正确！（错题巩固不计入掌握进度）'
 
-        word.success_count += 1
+        if word in self.mastered_words:
+            word.review_count += 1
+            return f'✅ 记忆保持良好，下次复习: +{delta_days}天'
+
+        word.success_count = min(self.config.MAX_SUCCESS_COUNT, word.success_count + 1)
         word.review_count += 1
-        if word.success_count >= self.config.MAX_SUCCESS_COUNT:
+        if word.success_count >= self.config.MAX_SUCCESS_COUNT and (
+            not require_multidimensional
+            or mastery_ready(state, require_listening=require_listening)
+        ):
+            state['mastered_date'] = self.today.isoformat()
             self.mastered_words.append(word)
             self.all_words.remove(word)
-            return '🎉 已掌握单词！'
+            return f'🎉 已掌握单词！{delta_days}天后进行保持复习'
 
-        delta_days = self._calculate_review_days(word.success_count)
-        word.next_review_date = self.today + timedelta(days=delta_days)
+        if word.success_count >= self.config.MAX_SUCCESS_COUNT and require_multidimensional:
+            if require_listening:
+                return '✅ 本次正确，继续补强拼写与听写后即可掌握'
+            return '✅ 本次正确，继续巩固拼写后即可掌握'
+
         return f'✅ 正确！下次复习: +{delta_days}天'
+
+    def apply_scored_review_attempt(
+        self,
+        word: Word,
+        *,
+        exercise_type: str,
+        correct: bool,
+        task_item: Optional[Dict[str, Any]] = None,
+        event_id: str = '',
+        elapsed_ms: int = 0,
+        hint_count: int = 0,
+        attempt_number: int = 1,
+        remedial: bool = False,
+        bonus_practice: bool = False,
+        audio_available: bool = True,
+    ) -> Dict[str, Any]:
+        """Atomically apply one server-scored answer to learning state."""
+        old_success_count = word.success_count
+        old_mastered_count = len(self.mastered_words)
+        task_requires_remedial = bool(
+            task_item
+            and (
+                task_item.get('phase') == 'remedial'
+                or self.task_attempt_count(task_item) >= MAX_ATTEMPTS
+            )
+        )
+        replayed_task_event = bool(
+            task_item
+            and event_id
+            and str(task_item.get('last_event_id') or '') == str(event_id)
+        )
+        if replayed_task_event and 'last_event_remedial' in task_item:
+            effective_remedial = bool(task_item.get('last_event_remedial'))
+        else:
+            effective_remedial = bool(remedial or task_requires_remedial)
+        try:
+            normalized_elapsed_ms = max(0, min(600_000, int(elapsed_ms or 0)))
+        except (TypeError, ValueError, OverflowError):
+            normalized_elapsed_ms = 0
+        event_fingerprint = json.dumps(
+            {
+                'word': self.word_state_key(word),
+                'exercise_type': str(exercise_type or 'spelling'),
+                'correct': bool(correct),
+                'task_item_id': str((task_item or {}).get('item_id') or ''),
+                'attempt_number': max(1, int(attempt_number or 1)),
+                'hint_count': max(0, int(hint_count or 0)),
+                'elapsed_ms': normalized_elapsed_ms,
+                'remedial': bool(remedial),
+                'bonus_practice': bool(bonus_practice),
+                'audio_available': bool(audio_available),
+            },
+            sort_keys=True,
+            separators=(',', ':'),
+        )
+        if bonus_practice or effective_remedial:
+            recorded = claim_review_event(
+                self.get_review_state(word),
+                event_id,
+                event_fingerprint,
+            )
+        else:
+            recorded = self.record_mastery_attempt(
+                word,
+                exercise_type,
+                correct,
+                event_id=event_id,
+                event_fingerprint=event_fingerprint,
+                elapsed_ms=elapsed_ms,
+            )
+        if not recorded and replayed_task_event:
+            cached_result = task_item.get('last_event_result')
+            if isinstance(cached_result, dict):
+                return dict(cached_result)
+        if not recorded and event_id:
+            state = self.get_review_state(word)
+            event_results = state.get('recent_event_results')
+            cached_result = (
+                event_results.get(str(event_id)[:96])
+                if isinstance(event_results, dict)
+                else None
+            )
+            if isinstance(cached_result, dict):
+                return dict(cached_result)
+        effective_attempt = max(1, int(attempt_number or 1))
+        if task_item and recorded:
+            effective_attempt = self.record_daily_task_attempt(task_item, event_id)
+            task_item['last_event_remedial'] = effective_remedial
+        elif task_item:
+            effective_attempt = max(1, self.task_attempt_count(task_item))
+
+        if not recorded:
+            message = '本次作答已记录'
+        elif bonus_practice:
+            if correct:
+                message = self.record_bonus_answer_correct(word)
+            else:
+                self.record_answer_incorrect(word)
+                message = '❌ 错误，请继续努力！'
+        elif correct:
+            rating = 'hard' if effective_attempt > 1 or hint_count > 0 else 'good'
+            message = self.record_answer_correct(
+                word,
+                remedial=effective_remedial,
+                rating=rating,
+                require_multidimensional=True,
+                require_listening=audio_available,
+            )
+            self.complete_daily_task_item(task_item, event_id)
+        else:
+            final_attempt = effective_attempt % MAX_ATTEMPTS == 0
+            self.record_answer_incorrect(
+                word,
+                final_attempt=final_attempt,
+            )
+            if task_item and final_attempt:
+                task_item['phase'] = 'remedial'
+            message = '❌ 错误，请继续努力！'
+
+        result = {
+            'recorded': recorded,
+            'message': message,
+            'attempt_number': effective_attempt,
+            'old_success_count': old_success_count,
+            'new_success_count': word.success_count,
+            'mastered_now': len(self.mastered_words) > old_mastered_count,
+            'remedial': effective_remedial,
+        }
+        if task_item and recorded and event_id:
+            task_item['last_event_result'] = dict(result)
+        if recorded and event_id:
+            state = self.get_review_state(word)
+            event_results = state.setdefault('recent_event_results', {})
+            if not isinstance(event_results, dict):
+                event_results = {}
+                state['recent_event_results'] = event_results
+            event_results[str(event_id)[:96]] = dict(result)
+        return result
 
     def _sort_today_review_bucket(self, words: List[Word]) -> List[Word]:
         """同一轮内排序：今日排期（符合进度）优先，其次遗留（越早到期越靠前）。"""
@@ -776,6 +1481,7 @@ class WordReciter:
     
     def _practice_word(self, word: Word, remedial: bool = False) -> bool:
         """单个单词练习流程（与 Web 一致：最多 3 次尝试；错题巩固不计入掌握进度）。"""
+        self._last_practice_wrong_attempts = 0
         print(f"\n{'━'*30}")
         print(f"🔔 当前进度: {word.success_count}/{self.config.MAX_SUCCESS_COUNT}")
         if remedial:
@@ -847,6 +1553,7 @@ class WordReciter:
             if answer == "h":
                 print(f"\n📢 正确答案: {word.english}")
                 self.record_answer_incorrect(word)
+                self._last_practice_wrong_attempts = max(1, attempt + 1)
                 return False
             if answer == "s":
                 self._text_to_speech(example)
@@ -858,6 +1565,7 @@ class WordReciter:
                 return True
             self.record_answer_incorrect(word)
             attempt += 1
+            self._last_practice_wrong_attempts = attempt
             print(f"\n❌ 错误（剩余尝试次数 {MAX_ATTEMPTS - attempt}）")
 
         print(f"\n📢 正确答案: {word.english}")
@@ -865,7 +1573,13 @@ class WordReciter:
     
     def daily_review(self) -> None:
         """执行每日复习（主轮 + 错题巩固轮，逻辑与 Web 端一致）。"""
-        review_list = self._get_today_review_list()
+        task_bundle = self.get_today_learning_plan()
+        review_list = task_bundle['words']
+        task_items = {
+            str(item.get('word_key') or ''): item
+            for item in task_bundle.get('items') or []
+            if isinstance(item, dict)
+        }
         if not review_list:
             print("\n🎉 今日没有需要复习的单词！")
             return
@@ -875,54 +1589,120 @@ class WordReciter:
         mastered_today = 0
         correct_count = 0
         wrong_count = 0
+        remedial_correct = 0
         total_words = len(review_list)
-
-        review_list.sort(key=lambda w: w.review_count)
+        main_words_total = sum(
+            1
+            for word in review_list
+            if not (
+                task_items.get(self.word_state_key(word), {}).get('phase') == 'remedial'
+                or self.task_attempt_count(task_items.get(self.word_state_key(word)))
+                >= MAX_ATTEMPTS
+            )
+        )
 
         wrong_words: List[Word] = []
         for index, word in enumerate(review_list.copy(), start=1):
             print(f"\n⏳ 剩余 {total_words - index + 1} 个单词需要复习")
-            success = self._practice_word(word, remedial=False)
+            task_item = task_items.get(self.word_state_key(word))
+            if task_item:
+                task_item['exercise_type'] = 'spelling'
+            is_task_remedial = bool(
+                task_item
+                and (
+                    task_item.get('phase') == 'remedial'
+                    or self.task_attempt_count(task_item) >= MAX_ATTEMPTS
+                )
+            )
+            success = self._practice_word(word, remedial=is_task_remedial)
+            wrong_attempts = max(0, int(getattr(self, '_last_practice_wrong_attempts', 0)))
+            for _ in range(wrong_attempts):
+                wrong_event_id = uuid.uuid4().hex
+                if is_task_remedial:
+                    claim_review_event(self.get_review_state(word), wrong_event_id)
+                else:
+                    self.record_mastery_attempt(
+                        word,
+                        'spelling',
+                        False,
+                        event_id=wrong_event_id,
+                    )
+                self.record_daily_task_attempt(task_item, wrong_event_id)
 
             if success:
-                correct_count += 1
-                mastered_before = len(self.mastered_words)
-                msg = self.record_answer_correct(word, remedial=False)
-                if len(self.mastered_words) > mastered_before:
+                result = self.apply_scored_review_attempt(
+                    word,
+                    exercise_type='spelling',
+                    correct=True,
+                    task_item=task_item,
+                    event_id=uuid.uuid4().hex,
+                    hint_count=wrong_attempts,
+                    attempt_number=wrong_attempts + 1,
+                    remedial=is_task_remedial,
+                    audio_available=False,
+                )
+                if result['remedial']:
+                    remedial_correct += 1
+                else:
+                    correct_count += 1
+                if result['mastered_now']:
                     mastered_today += 1
                     print(f"🎉 已掌握单词: {word.english}")
                 else:
-                    print(msg)
+                    print(result['message'])
             else:
-                wrong_count += 1
+                if not is_task_remedial:
+                    wrong_count += 1
                 wrong_words.append(word)
+                state = self.get_review_state(word)
+                schedule_review(state, 'again', today=self.today)
+                word.next_review_date = adaptive_next_review_date(state, self.today)
+                if task_item:
+                    task_item['phase'] = 'remedial'
                 print("⏳ 将进入错题巩固（与在线版一致）")
 
-            self._check_and_advance_round()
+            self._save_data(backup=False)
 
         remedial_round = 0
-        remedial_correct = 0
         while wrong_words:
             remedial_round += 1
             print(f"\n{'═'*30}")
             print(f"📌 错题复习 · 第 {remedial_round} 轮（{len(wrong_words)} 个单词）")
             next_wrong: List[Word] = []
             for word in wrong_words:
+                task_item = task_items.get(self.word_state_key(word))
                 success = self._practice_word(word, remedial=True)
+                wrong_attempts = max(0, int(getattr(self, '_last_practice_wrong_attempts', 0)))
+                for _ in range(wrong_attempts):
+                    wrong_event_id = uuid.uuid4().hex
+                    state = self.get_review_state(word)
+                    claim_review_event(state, wrong_event_id)
+                    attempt_count = self.record_daily_task_attempt(task_item, wrong_event_id)
+                    if attempt_count and attempt_count % MAX_ATTEMPTS == 0:
+                        schedule_review(state, 'again', today=self.today)
+                        word.next_review_date = adaptive_next_review_date(state, self.today)
                 if success:
                     remedial_correct += 1
-                    msg = self.record_answer_correct(word, remedial=True)
-                    print(msg)
+                    result = self.apply_scored_review_attempt(
+                        word,
+                        exercise_type='spelling',
+                        correct=True,
+                        task_item=task_item,
+                        event_id=uuid.uuid4().hex,
+                        remedial=True,
+                        audio_available=False,
+                    )
+                    print(result['message'])
                 else:
                     next_wrong.append(word)
                     print("⏳ 本轮未答对，将进入下一轮错题巩固")
 
-                self._check_and_advance_round()
+                self._save_data(backup=False)
             wrong_words = next_wrong
 
         accuracy = 0
-        if total_words > 0:
-            accuracy = correct_count / total_words * 100
+        if main_words_total > 0:
+            accuracy = correct_count / main_words_total * 100
 
         print("\n📊 今日复习报告:")
         report = PrettyTable()

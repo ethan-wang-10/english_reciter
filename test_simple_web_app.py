@@ -88,6 +88,45 @@ def test_static_assets_use_public_cache_headers(client) -> None:
     assert "no-cache" not in cache_control
 
 
+def test_practice_requires_review_event_id(client, monkeypatch) -> None:
+    user = {"password_hash": "unused", "enabled": True}
+    monkeypatch.setattr(web, "verify_token", lambda token: "alice")
+    monkeypatch.setattr(web, "get_user", lambda username: user)
+
+    response = client.post(
+        "/api/words/practice",
+        headers={"Authorization": "Bearer test"},
+        json={
+            "word_id": "example",
+            "answer": "example",
+            "bonus_practice": True,
+        },
+    )
+
+    assert response.status_code == 400
+    assert "事件标识" in response.get_json()["error"]
+
+
+def test_practice_does_not_treat_string_false_as_bonus(client, monkeypatch) -> None:
+    user = {"password_hash": "unused", "enabled": True}
+    monkeypatch.setattr(web, "verify_token", lambda token: "alice")
+    monkeypatch.setattr(web, "get_user", lambda username: user)
+
+    response = client.post(
+        "/api/words/practice",
+        headers={"Authorization": "Bearer test"},
+        json={
+            "word_id": "example",
+            "answer": "example",
+            "bonus_practice": "false",
+            "review_event_id": "strict-boolean-event",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "今日任务" in response.get_json()["error"]
+
+
 def test_unused_invites_are_owner_scoped_recoverable_and_removed_after_use(
     client, monkeypatch, tmp_path
 ) -> None:

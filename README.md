@@ -6,8 +6,9 @@
 
 | 能力 | 说明 |
 |------|------|
-| 间隔重复 | 按本地 `config.json`（由 `config.example.json` 复制）中的天数阶梯安排复习（默认 1→2→4→7→15→30→60 天） |
-| 掌握判定 | 连续成功达到 `max_success_count`（默认 8）后移入已掌握列表 |
+| 智能每日任务 | 默认每天最多安排 20 个词，其中新词不超过 5 个；优先处理逾期、薄弱和长期维护词 |
+| 自适应复习 | 使用可解释的 `adaptive-sm2-v1` 排期，根据答题结果动态调整间隔（不是 FSRS） |
+| 多维掌握 | Web 端同时记录拼写与听写能力；无可用音频的设备会安全降级为拼写门槛 |
 | 例句 | 本地例句库（`word_examples.json`），离线可用 |
 | Web 版 | Flask 应用、注册登录、多用户数据隔离（`user_data_simple/`）、静态前端 |
 | CLI 版 | 交互菜单：今日复习、进度、已掌握词汇与巩固 |
@@ -71,7 +72,9 @@ cp config.example.json config.json
 
 - `word_file` / `data_file`：词表与学习数据路径（CLI 默认 `words.txt`、`learning_data.json`）
 - `max_success_count`：判定「已掌握」所需连续成功次数（默认 8）
-- `review_interval_days`：各成功阶段对应的复习间隔（天）
+- `review_interval_days`：旧数据初始化与兼容流程使用的间隔阶梯（天）
+- `daily_review_limit`：每日任务总词数上限（默认 20）
+- `daily_new_word_limit`：每日任务中的新词上限（默认 5）
 - `tts_enabled`：是否启用朗读相关能力
 - `backup_enabled`、`backup_interval_days`、`max_backups`：备份策略
 
@@ -82,6 +85,7 @@ cp config.example.json config.json
 | 路径 | 含义 |
 |------|------|
 | `learning_data.json` | CLI 默认学习数据（可从 `words.txt` 初始化） |
+| `learning_data.learning_state_v2.json` | 自适应排期与每日任务兼容 sidecar；主数据已包含同一状态 |
 | `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
 | `static/wordbanks/words.csv` | 内置词库（**不随 Git 发布**；本地从 `words.csv.example` 复制或自备；线上勿被 `git pull` 覆盖，由服务器文件或管理后台「增量上传」维护） |
 | `static/wordbanks/words_v2.json` | 新版内置词库（线上运行时数据；仓库只保留空占位，部署脚本会保护服务器本地文件） |

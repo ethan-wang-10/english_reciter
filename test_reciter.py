@@ -5,6 +5,7 @@ import unittest
 import json
 import tempfile
 import os
+from unittest.mock import patch
 from pathlib import Path
 from datetime import date, timedelta
 
@@ -12,6 +13,7 @@ from app_time import china_today
 from reciter import (
     Config, Word, ExampleGenerator, WordRepository, WordReciter
 )
+from review_scheduler import ReviewEventConflict
 
 
 class TestConfig(unittest.TestCase):
@@ -28,6 +30,8 @@ class TestConfig(unittest.TestCase):
             self.assertTrue(config.TTS_ENABLED)
             self.assertTrue(config.BACKUP_ENABLED)
             self.assertEqual(config.BACKUP_INTERVAL_DAYS, 7)
+            self.assertEqual(config.DAILY_REVIEW_LIMIT, 20)
+            self.assertEqual(config.DAILY_NEW_WORD_LIMIT, 5)
         finally:
             os.unlink(config_file)
     
@@ -47,6 +51,18 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(config.MAX_SUCCESS_COUNT, 5)
             self.assertFalse(config.TTS_ENABLED)
             self.assertFalse(config.BACKUP_ENABLED)
+        finally:
+            os.unlink(config_file)
+
+    def test_invalid_daily_limits_fall_back_to_defaults(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            config_file = f.name
+            json.dump({'daily_review_limit': None, 'daily_new_word_limit': 'bad'}, f)
+
+        try:
+            config = Config(config_file)
+            self.assertEqual(config.DAILY_REVIEW_LIMIT, 20)
+            self.assertEqual(config.DAILY_NEW_WORD_LIMIT, 5)
         finally:
             os.unlink(config_file)
 
@@ -105,6 +121,19 @@ class TestWord(unittest.TestCase):
         
         self.assertEqual(word.review_round, 0)
         self.assertEqual(word.review_count, 0)
+
+    def test_word_from_dict_ignores_future_fields(self):
+        """未知逐词字段不能导致整个仓储加载失败。"""
+        word_dict = {
+            'english': 'future',
+            'chinese': '未来',
+            'next_review_date': '2026-07-13',
+            'future_scheduler': {'version': 99},
+        }
+        original = dict(word_dict)
+        word = Word.from_dict(word_dict)
+        self.assertEqual(word.english, 'future')
+        self.assertEqual(word_dict, original)
 
 
 class TestExampleGenerator(unittest.TestCase):
@@ -174,6 +203,11 @@ class TestWordRepository(unittest.TestCase):
     def tearDown(self):
         """清理临时文件"""
         os.unlink(self.temp_data.name)
+        sidecar = Path(self.temp_data.name).with_name(
+            f'{Path(self.temp_data.name).stem}.learning_state_v2.json'
+        )
+        if sidecar.exists():
+            sidecar.unlink()
         os.unlink(self.temp_config.name)
     
     def test_save_and_load_data(self):
@@ -189,6 +223,108 @@ class TestWordRepository(unittest.TestCase):
         self.assertEqual(len(mastered_words), 1)
         self.assertEqual(all_words[0].english, "apple")
         self.assertEqual(mastered_words[0].english, "cat")
+
+    def test_learning_state_v2_round_trip(self):
+        """新状态保存在根级 sidecar，不污染旧 Word 结构。"""
+        self.repository.learning_state_v2 = {
+            'version': 1,
+            'review_states': {'apple': {'scheduler': {'active': True}}},
+            'daily_task': {'task_id': 'task-1', 'items': []},
+        }
+        self.repository.save_data([Word('apple', '苹果')], [])
+        raw = json.loads(Path(self.temp_data.name).read_text(encoding='utf-8'))
+        self.assertNotIn('scheduler', raw['all_words'][0])
+
+        repository = WordRepository(self.config)
+        repository.load_data()
+        self.assertIn('apple', repository.learning_state_v2['review_states'])
+        self.assertEqual(repository.learning_state_v2['daily_task']['task_id'], 'task-1')
+
+    def test_sidecar_survives_legacy_main_file_save(self):
+        self.repository.learning_state_v2 = {
+            'version': 1,
+            'review_states': {'apple': {'future_field': 'kept'}},
+            'daily_task': None,
+            'future_root': {'enabled': True},
+        }
+        self.repository.save_data([Word('apple', '苹果')], [])
+        Path(self.temp_data.name).write_text(
+            json.dumps(
+                {
+                    'all_words': [Word('apple', '苹果').to_dict()],
+                    'mastered_words': [],
+                },
+                ensure_ascii=False,
+            ),
+            encoding='utf-8',
+        )
+
+        repository = WordRepository(self.config)
+        repository.load_data()
+        self.assertEqual(repository.learning_state_v2['future_root'], {'enabled': True})
+        self.assertEqual(
+            repository.learning_state_v2['review_states']['apple']['future_field'],
+            'kept',
+        )
+
+    def test_main_learning_state_takes_precedence_over_stale_sidecar(self):
+        sidecar = self.repository._learning_state_sidecar_path()
+        stale_state = {
+            'version': 1,
+            'review_states': {'apple': {'source': 'stale-sidecar'}},
+            'daily_task': None,
+        }
+        sidecar.write_text(json.dumps(stale_state), encoding='utf-8')
+        main_data = {
+            'all_words': [Word('apple', 'apple').to_dict()],
+            'mastered_words': [],
+            'learning_state_v2': {
+                'version': 1,
+                'review_states': {'apple': {'source': 'main'}},
+                'daily_task': None,
+            },
+        }
+        Path(self.temp_data.name).write_text(json.dumps(main_data), encoding='utf-8')
+
+        repository = WordRepository(self.config)
+        repository.load_data()
+        self.assertEqual(
+            repository.learning_state_v2['review_states']['apple']['source'],
+            'main',
+        )
+
+        del main_data['learning_state_v2']
+        Path(self.temp_data.name).write_text(json.dumps(main_data), encoding='utf-8')
+        fallback_repository = WordRepository(self.config)
+        fallback_repository.load_data()
+        self.assertEqual(
+            fallback_repository.learning_state_v2['review_states']['apple']['source'],
+            'stale-sidecar',
+        )
+
+    def test_invalid_word_fields_do_not_empty_other_rows(self):
+        Path(self.temp_data.name).write_text(
+            json.dumps(
+                {
+                    'all_words': [
+                        {
+                            'english': 'bad-fields',
+                            'chinese': '坏字段',
+                            'success_count': 'not-an-int',
+                            'next_review_date': 'not-a-date',
+                        },
+                        Word('valid', '有效').to_dict(),
+                    ],
+                    'mastered_words': [],
+                },
+                ensure_ascii=False,
+            ),
+            encoding='utf-8',
+        )
+        words, _ = self.repository.load_data()
+        self.assertEqual([word.english for word in words], ['bad-fields', 'valid'])
+        self.assertEqual(words[0].success_count, 0)
+        self.assertEqual(words[0].next_review_date, china_today())
     
     def test_load_empty_data(self):
         """测试加载空数据"""
@@ -204,6 +340,11 @@ class TestWordRepository(unittest.TestCase):
         all_words, mastered_words = self.repository.load_data()
         self.assertEqual(len(all_words), 0)
         self.assertEqual(len(mastered_words), 0)
+
+    def test_save_error_is_not_reported_as_success(self):
+        with patch('reciter.os.replace', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                self.repository.save_data([Word('a', '甲')], [])
 
 
 class TestWordReciter(unittest.TestCase):
@@ -233,6 +374,11 @@ class TestWordReciter(unittest.TestCase):
     def tearDown(self):
         """清理临时文件"""
         os.unlink(self.temp_data.name)
+        sidecar = Path(self.temp_data.name).with_name(
+            f'{Path(self.temp_data.name).stem}.learning_state_v2.json'
+        )
+        if sidecar.exists():
+            sidecar.unlink()
         os.unlink(self.temp_examples.name)
         os.unlink(self.temp_config.name)
     
@@ -415,6 +561,831 @@ class TestWordReciter(unittest.TestCase):
         picked = reciter.get_extra_review_words(5)
         self.assertEqual(len(picked), 3)
         self.assertEqual({w.english for w in picked}, {"a", "b", "c"})
+
+    def test_today_plan_prioritizes_due_and_limits_new_words(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 4
+        reciter.config.DAILY_NEW_WORD_LIMIT = 1
+        today = reciter.today
+        reciter.all_words = [
+            Word('overdue', '逾期', success_count=2, next_review_date=today - timedelta(days=3)),
+            Word('due', '到期', success_count=1, next_review_date=today),
+            Word('new-a', '新甲', next_review_date=today),
+            Word('new-b', '新乙', next_review_date=today),
+            Word('future', '未来', success_count=2, next_review_date=today + timedelta(days=2)),
+        ]
+        task = reciter.get_today_learning_plan()
+        english = [word.english for word in task['words']]
+        self.assertEqual(english[:2], ['overdue', 'due'])
+        self.assertEqual(len([x for x in english if x.startswith('new-')]), 1)
+        self.assertNotIn('future', english)
+        self.assertEqual(task['plan']['backlog_after_task'], 1)
+
+    def test_overdue_unseen_words_stay_new_while_attempted_word_is_weak(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 3
+        reciter.config.DAILY_NEW_WORD_LIMIT = 1
+        yesterday = reciter.today - timedelta(days=1)
+        attempted = Word('attempted', 'attempted', next_review_date=reciter.today)
+        reciter.all_words = [
+            Word('unseen-a', 'unseen-a', next_review_date=yesterday),
+            Word('unseen-b', 'unseen-b', next_review_date=yesterday),
+            attempted,
+        ]
+        reciter.record_mastery_attempt(
+            attempted,
+            'spelling',
+            False,
+            event_id='attempted-once',
+        )
+
+        reasons = {
+            item['word'].english: item['reason']
+            for item in reciter._today_task_candidates()
+        }
+        self.assertEqual(reasons['unseen-a'], 'new')
+        self.assertEqual(reasons['unseen-b'], 'new')
+        self.assertEqual(reasons['attempted'], 'weak')
+
+        task = reciter.get_today_learning_plan()
+        task_reasons = [item['reason'] for item in task['items']]
+        self.assertIn('weak', task_reasons)
+        self.assertEqual(task_reasons.count('new'), 1)
+        self.assertEqual(task['plan']['backlog_after_task'], 1)
+
+    def test_daily_limit_does_not_create_unlimited_second_batch(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 1
+        reciter.config.DAILY_NEW_WORD_LIMIT = 1
+        reciter.all_words = [
+            Word('new-a', '新甲', next_review_date=reciter.today),
+            Word('new-b', '新乙', next_review_date=reciter.today),
+            Word('new-c', '新丙', next_review_date=reciter.today),
+        ]
+        task = reciter.get_today_learning_plan()
+        word = task['words'][0]
+        item = task['items'][0]
+        reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='daily-limit',
+        )
+        after = reciter.get_today_learning_plan()
+        self.assertEqual(after['plan']['task_id'], task['plan']['task_id'])
+        self.assertEqual(after['words'], [])
+        self.assertEqual(after['plan']['backlog_after_task'], 2)
+
+    def test_completed_daily_limit_survives_reload_without_second_batch(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 1
+        reciter.config.DAILY_NEW_WORD_LIMIT = 1
+        reciter.all_words = [
+            Word('new-a', '新甲', next_review_date=reciter.today),
+            Word('new-b', '新乙', next_review_date=reciter.today),
+        ]
+        task = reciter.get_today_learning_plan()
+        word = task['words'][0]
+        item = task['items'][0]
+        reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='daily-limit-reload',
+        )
+        reciter.save_learning_data(backup=False)
+
+        reloaded = WordReciter(self.config)
+        after = reloaded.get_today_learning_plan()
+        self.assertEqual(after['plan']['task_id'], task['plan']['task_id'])
+        self.assertEqual(after['words'], [])
+        self.assertEqual(after['plan']['total'], 1)
+        self.assertEqual(after['plan']['completed'], 1)
+        self.assertEqual(after['plan']['remaining'], 0)
+        self.assertEqual(after['plan']['backlog_after_task'], 1)
+
+    def test_corrupt_today_task_items_are_rebuilt(self):
+        for corrupt_items in ({'not': 'a list'}, [{'word_key': 'missing-word'}, None]):
+            with self.subTest(corrupt_items=corrupt_items):
+                reciter = WordReciter(self.config)
+                reciter.all_words = [
+                    Word('recover-task', '恢复任务', next_review_date=reciter.today)
+                ]
+                reciter.learning_state_v2['daily_task'] = {
+                    'version': 1,
+                    'task_id': 'corrupt-task',
+                    'date': reciter.today.isoformat(),
+                    'status': 'active',
+                    'items': corrupt_items,
+                }
+
+                rebuilt = reciter.get_today_learning_plan()
+
+                self.assertNotEqual(rebuilt['plan']['task_id'], 'corrupt-task')
+                self.assertEqual([word.english for word in rebuilt['words']], ['recover-task'])
+
+    def test_completed_empty_task_does_not_create_another_same_day_batch(self):
+        reciter = WordReciter(self.config)
+        reciter.all_words = [Word('later-import', '稍后导入', next_review_date=reciter.today)]
+        reciter.learning_state_v2['daily_task'] = {
+            'version': 1,
+            'task_id': 'completed-empty-task',
+            'date': reciter.today.isoformat(),
+            'status': 'completed',
+            'available_at_creation': 0,
+            'items': [],
+        }
+
+        plan = reciter.get_today_learning_plan()
+
+        self.assertEqual(plan['plan']['task_id'], 'completed-empty-task')
+        self.assertEqual(plan['words'], [])
+
+    def test_future_weak_word_can_enter_today_plan(self):
+        reciter = WordReciter(self.config)
+        word = Word(
+            'weak',
+            '薄弱',
+            success_count=2,
+            next_review_date=reciter.today + timedelta(days=5),
+        )
+        reciter.all_words = [word]
+        for index in range(3):
+            reciter.record_mastery_attempt(
+                word,
+                'listening',
+                False,
+                event_id=f'weak-{index}',
+            )
+        task = reciter.get_today_learning_plan()
+        self.assertEqual([w.english for w in task['words']], ['weak'])
+        self.assertEqual(task['items'][0]['reason'], 'weak')
+
+    def test_pending_future_weak_item_survives_reload_before_answering(self):
+        reciter = WordReciter(self.config)
+        word = Word(
+            'weak-refresh',
+            '刷新薄弱',
+            success_count=2,
+            next_review_date=reciter.today + timedelta(days=5),
+        )
+        reciter.all_words = [word]
+        for index in range(3):
+            reciter.record_mastery_attempt(
+                word,
+                'listening',
+                False,
+                event_id=f'weak-refresh-{index}',
+            )
+        task = reciter.get_today_learning_plan()
+        reciter.save_learning_data(backup=False)
+
+        reloaded = WordReciter(self.config)
+        restored = reloaded.get_today_learning_plan()
+        self.assertEqual(restored['plan']['task_id'], task['plan']['task_id'])
+        self.assertEqual([w.english for w in restored['words']], ['weak-refresh'])
+        self.assertEqual(restored['items'][0]['reason'], 'weak')
+        self.assertEqual(restored['items'][0]['attempts'], 0)
+        self.assertEqual(restored['plan']['remaining'], 1)
+
+    def test_today_task_survives_save_and_reload(self):
+        reciter = WordReciter(self.config)
+        reciter.all_words = [Word('persist', '持久', next_review_date=reciter.today)]
+        task = reciter.get_today_learning_plan()
+        task_id = task['plan']['task_id']
+        reciter.save_learning_data(backup=False)
+
+        reloaded = WordReciter(self.config)
+        restored = reloaded.get_today_learning_plan()
+        self.assertEqual(restored['plan']['task_id'], task_id)
+        self.assertEqual([w.english for w in restored['words']], ['persist'])
+
+    def test_completed_task_item_does_not_return_after_reload(self):
+        reciter = WordReciter(self.config)
+        word = Word('done', '完成', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        event_id = 'done-event'
+        self.assertTrue(
+            reciter.record_mastery_attempt(
+                word,
+                item['exercise_type'],
+                True,
+                event_id=event_id,
+            )
+        )
+        reciter.record_daily_task_attempt(item, event_id)
+        reciter.record_answer_correct(word)
+        reciter.complete_daily_task_item(item, event_id)
+        reciter.save_learning_data(backup=False)
+
+        reloaded = WordReciter(self.config)
+        restored = reloaded.get_today_learning_plan()
+        self.assertEqual(restored['words'], [])
+        self.assertGreater(reloaded.find_word('done').next_review_date, reloaded.today)
+
+    def test_scored_task_attempt_is_idempotent(self):
+        reciter = WordReciter(self.config)
+        word = Word('once', '一次', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='same-event',
+        )
+        duplicate = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='same-event',
+        )
+        self.assertTrue(first['recorded'])
+        self.assertEqual(duplicate, first)
+        self.assertEqual(word.success_count, 1)
+        self.assertEqual(word.review_count, 1)
+        self.assertEqual(item['attempts'], 1)
+        self.assertEqual(item['status'], 'completed')
+
+    def test_completed_event_replays_exactly_after_reload(self):
+        reciter = WordReciter(self.config)
+        word = Word('reload-replay', '重载重放', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='reload-replay-event',
+        )
+        reciter.save_learning_data(backup=False)
+
+        reloaded = WordReciter(self.config)
+        restored_word = reloaded.find_word('reload-replay')
+        restored_item = reloaded.learning_state_v2['daily_task']['items'][0]
+        replay = reloaded.apply_scored_review_attempt(
+            restored_word,
+            exercise_type=restored_item['exercise_type'],
+            correct=True,
+            task_item=restored_item,
+            event_id='reload-replay-event',
+        )
+
+        self.assertEqual(replay, first)
+        self.assertEqual(restored_word.success_count, 1)
+        self.assertEqual(restored_word.review_count, 1)
+        self.assertEqual(restored_item['attempts'], 1)
+
+    def test_bonus_event_replays_exactly_after_reload(self):
+        reciter = WordReciter(self.config)
+        word = Word('bonus-reload', '加练重放', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type='spelling',
+            correct=True,
+            event_id='bonus-reload-event',
+            bonus_practice=True,
+        )
+        reciter.save_learning_data(backup=False)
+
+        reloaded = WordReciter(self.config)
+        restored_word = reloaded.find_word('bonus-reload')
+        replay = reloaded.apply_scored_review_attempt(
+            restored_word,
+            exercise_type='spelling',
+            correct=True,
+            event_id='bonus-reload-event',
+            bonus_practice=True,
+        )
+
+        self.assertEqual(replay, first)
+        self.assertEqual(restored_word.review_count, 1)
+
+    def test_earlier_wrong_event_replays_original_result_after_later_attempt(self):
+        reciter = WordReciter(self.config)
+        word = Word('older-replay', '较早重放', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        item = reciter.get_today_learning_plan()['items'][0]
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='older-wrong-event',
+        )
+        reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='newer-wrong-event',
+        )
+
+        replay = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='older-wrong-event',
+        )
+
+        self.assertEqual(replay, first)
+        self.assertEqual(item['attempts'], 2)
+        self.assertEqual(word.review_count, 2)
+
+    def test_cli_daily_review_uses_persistent_daily_task_limit(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 1
+        reciter.config.DAILY_NEW_WORD_LIMIT = 1
+        reciter.all_words = [
+            Word('cli-a', '甲', next_review_date=reciter.today),
+            Word('cli-b', '乙', next_review_date=reciter.today),
+        ]
+
+        class FakeTable:
+            field_names = []
+
+            def add_row(self, _row):
+                return None
+
+        def answer_correct(_word, remedial=False):
+            self.assertFalse(remedial)
+            reciter._last_practice_wrong_attempts = 0
+            return True
+
+        with (
+            patch.object(reciter, '_practice_word', side_effect=answer_correct),
+            patch('reciter.PrettyTable', FakeTable),
+            patch('builtins.print'),
+        ):
+            reciter.daily_review()
+            reciter.daily_review()
+
+        task = reciter.learning_state_v2['daily_task']
+        self.assertEqual(len(task['items']), 1)
+        self.assertEqual(task['items'][0]['status'], 'completed')
+        self.assertEqual(sum(word.success_count for word in reciter.all_words), 1)
+        untouched = reciter.find_word('cli-b')
+        self.assertEqual(untouched.success_count, 0)
+
+    def test_cli_remedial_round_reschedules_each_three_failed_attempts(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 1
+        reciter.config.DAILY_NEW_WORD_LIMIT = 1
+        word = Word('cli-remedial', '命令行巩固', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        outcomes = iter(((False, 3), (False, 3), (True, 0)))
+
+        class FakeTable:
+            field_names = []
+
+            def add_row(self, _row):
+                return None
+
+        def practice(_word, remedial=False):
+            success, wrong_attempts = next(outcomes)
+            reciter._last_practice_wrong_attempts = wrong_attempts
+            if success:
+                self.assertTrue(remedial)
+            return success
+
+        with (
+            patch.object(reciter, '_practice_word', side_effect=practice),
+            patch('reciter.PrettyTable', FakeTable),
+            patch('builtins.print'),
+        ):
+            reciter.daily_review()
+
+        state = reciter.get_review_state(word)
+        item = reciter.learning_state_v2['daily_task']['items'][0]
+        self.assertEqual(item['attempts'], 7)
+        self.assertEqual(item['status'], 'completed')
+        self.assertEqual(state['scheduler']['lapses'], 2)
+        self.assertGreater(word.next_review_date, reciter.today)
+
+    def test_same_task_event_with_different_outcome_conflicts_without_mutation(self):
+        reciter = WordReciter(self.config)
+        word = Word('conflict', 'conflict', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='same-id-different-answer',
+        )
+        before_word = (word.success_count, word.review_count, word.next_review_date)
+        before_item = json.loads(json.dumps(item))
+        before_state = json.loads(json.dumps(reciter.get_review_state(word)))
+
+        with self.assertRaises(ReviewEventConflict):
+            reciter.apply_scored_review_attempt(
+                word,
+                exercise_type=item['exercise_type'],
+                correct=True,
+                task_item=item,
+                event_id='same-id-different-answer',
+            )
+
+        self.assertEqual(
+            (word.success_count, word.review_count, word.next_review_date),
+            before_word,
+        )
+        self.assertEqual(item, before_item)
+        self.assertEqual(reciter.get_review_state(word), before_state)
+
+    def test_same_event_with_changed_elapsed_time_conflicts(self):
+        reciter = WordReciter(self.config)
+        word = Word('elapsed-conflict', '耗时冲突', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        item = reciter.get_today_learning_plan()['items'][0]
+        reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='elapsed-conflict-event',
+            elapsed_ms=100,
+        )
+
+        with self.assertRaises(ReviewEventConflict):
+            reciter.apply_scored_review_attempt(
+                word,
+                exercise_type=item['exercise_type'],
+                correct=False,
+                task_item=item,
+                event_id='elapsed-conflict-event',
+                elapsed_ms=200,
+            )
+
+    def test_non_finite_elapsed_time_is_normalized(self):
+        reciter = WordReciter(self.config)
+        word = Word('elapsed-infinity', '无限耗时', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        item = reciter.get_today_learning_plan()['items'][0]
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='elapsed-infinity-event',
+            elapsed_ms=float('inf'),
+        )
+        replay = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='elapsed-infinity-event',
+            elapsed_ms=0,
+        )
+
+        self.assertEqual(replay, first)
+        self.assertEqual(item['attempts'], 1)
+
+    def test_completed_task_accepts_cached_earlier_event_replay(self):
+        reciter = WordReciter(self.config)
+        word = Word('completed-replay', '完成后重放', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='completed-earlier-event',
+        )
+        reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='completed-latest-event',
+        )
+        before = (item['attempts'], word.success_count, word.review_count)
+
+        resolved = reciter.resolve_daily_task_item(
+            task['plan']['task_id'],
+            item['item_id'],
+            word.english,
+            'completed-earlier-event',
+        )
+        replay = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=resolved,
+            event_id='completed-earlier-event',
+        )
+
+        self.assertIs(resolved, item)
+        self.assertEqual(replay, first)
+        self.assertEqual((item['attempts'], word.success_count, word.review_count), before)
+
+    def test_exact_retry_of_third_correct_attempt_returns_cached_result(self):
+        reciter = WordReciter(self.config)
+        word = Word('third-correct', 'third-correct', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        for index in range(2):
+            reciter.apply_scored_review_attempt(
+                word,
+                exercise_type=item['exercise_type'],
+                correct=False,
+                task_item=item,
+                event_id=f'third-correct-wrong-{index}',
+            )
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='third-correct-event',
+        )
+        before = (item['attempts'], word.success_count, word.review_count)
+
+        replay = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='third-correct-event',
+        )
+
+        self.assertEqual(replay, first)
+        self.assertEqual(before, (3, 1, 3))
+        self.assertEqual((item['attempts'], word.success_count, word.review_count), before)
+
+    def test_exact_retry_of_third_incorrect_attempt_does_not_repeat_lapse(self):
+        reciter = WordReciter(self.config)
+        word = Word('third-wrong', 'third-wrong', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        for index in range(2):
+            reciter.apply_scored_review_attempt(
+                word,
+                exercise_type=item['exercise_type'],
+                correct=False,
+                task_item=item,
+                event_id=f'third-wrong-{index}',
+            )
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='third-wrong-event',
+        )
+        state = reciter.get_review_state(word)
+        before = (item['attempts'], word.review_count, state['scheduler']['lapses'])
+
+        replay = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type=item['exercise_type'],
+            correct=False,
+            task_item=item,
+            event_id='third-wrong-event',
+        )
+
+        self.assertEqual(replay, first)
+        self.assertEqual(before, (3, 3, 1))
+        self.assertEqual(
+            (item['attempts'], word.review_count, state['scheduler']['lapses']),
+            before,
+        )
+
+    def test_third_failed_attempt_schedules_again_but_keeps_task_pending(self):
+        reciter = WordReciter(self.config)
+        word = Word('retry', '重试', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        for index in range(3):
+            reciter.apply_scored_review_attempt(
+                word,
+                exercise_type=item['exercise_type'],
+                correct=False,
+                task_item=item,
+                event_id=f'wrong-{index}',
+            )
+        state = reciter.get_review_state(word)
+        self.assertEqual(item['attempts'], 3)
+        self.assertEqual(item['status'], 'pending')
+        self.assertEqual(item['phase'], 'remedial')
+        self.assertEqual(state['scheduler']['lapses'], 1)
+        self.assertEqual(word.next_review_date, reciter.today + timedelta(days=1))
+
+    def test_reloaded_remedial_item_cannot_advance_main_progress(self):
+        reciter = WordReciter(self.config)
+        word = Word('refresh-remedial', '刷新巩固', success_count=3, next_review_date=reciter.today)
+        reciter.all_words = [word]
+        task = reciter.get_today_learning_plan()
+        item = task['items'][0]
+        for index in range(3):
+            reciter.apply_scored_review_attempt(
+                word,
+                exercise_type=item['exercise_type'],
+                correct=False,
+                task_item=item,
+                event_id=f'refresh-wrong-{index}',
+            )
+        reciter.save_learning_data(backup=False)
+
+        reloaded = WordReciter(self.config)
+        restored = reloaded.get_today_learning_plan()
+        restored_word = restored['words'][0]
+        restored_item = restored['items'][0]
+        result = reloaded.apply_scored_review_attempt(
+            restored_word,
+            exercise_type=restored_item['exercise_type'],
+            correct=True,
+            task_item=restored_item,
+            event_id='refresh-correct',
+            remedial=False,
+        )
+        self.assertTrue(result['remedial'])
+        self.assertEqual(restored_word.success_count, 3)
+
+    def test_bonus_and_remedial_do_not_change_multidimensional_mastery(self):
+        reciter = WordReciter(self.config)
+        bonus_word = Word('bonus', '加练', next_review_date=reciter.today)
+        reciter.all_words = [bonus_word]
+        before_bonus = json.loads(json.dumps(reciter.get_review_state(bonus_word)['mastery']))
+        reciter.apply_scored_review_attempt(
+            bonus_word,
+            exercise_type='spelling',
+            correct=True,
+            event_id='bonus-event',
+            bonus_practice=True,
+        )
+        self.assertEqual(reciter.get_review_state(bonus_word)['mastery'], before_bonus)
+
+        remedial_word = Word('remedial', '巩固', next_review_date=reciter.today)
+        reciter.all_words.append(remedial_word)
+        task = reciter._create_today_task()
+        item = next(x for x in task['items'] if x['word_key'] == 'remedial')
+        item['phase'] = 'remedial'
+        item['attempts'] = 3
+        before_remedial = json.loads(json.dumps(reciter.get_review_state(remedial_word)['mastery']))
+        result = reciter.apply_scored_review_attempt(
+            remedial_word,
+            exercise_type=item['exercise_type'],
+            correct=True,
+            task_item=item,
+            event_id='remedial-event',
+        )
+        self.assertTrue(result['remedial'])
+        self.assertEqual(reciter.get_review_state(remedial_word)['mastery'], before_remedial)
+
+    def test_multidimensional_threshold_controls_mastery(self):
+        reciter = WordReciter(self.config)
+        not_ready = Word(
+            'not-ready',
+            '未准备',
+            success_count=reciter.config.MAX_SUCCESS_COUNT - 1,
+            next_review_date=reciter.today,
+        )
+        reciter.all_words = [not_ready]
+        for index in range(2):
+            reciter.record_mastery_attempt(
+                not_ready,
+                'spelling',
+                True,
+                event_id=f'spelling-only-{index}',
+            )
+        reciter.apply_scored_review_attempt(
+            not_ready,
+            exercise_type='spelling',
+            correct=True,
+            event_id='still-no-listening',
+        )
+        self.assertIn(not_ready, reciter.all_words)
+        self.assertNotIn(not_ready, reciter.mastered_words)
+
+        ready = Word(
+            'ready',
+            '准备',
+            success_count=reciter.config.MAX_SUCCESS_COUNT - 1,
+            next_review_date=reciter.today,
+        )
+        reciter.all_words.append(ready)
+        for exercise_type in ('spelling', 'listening'):
+            for index in range(2):
+                reciter.record_mastery_attempt(
+                    ready,
+                    exercise_type,
+                    True,
+                    event_id=f'{exercise_type}-{index}',
+                )
+        result = reciter.apply_scored_review_attempt(
+            ready,
+            exercise_type='listening',
+            correct=True,
+            event_id='master-ready',
+        )
+        self.assertTrue(result['mastered_now'])
+        self.assertIn(ready, reciter.mastered_words)
+
+    def test_audio_capability_controls_listening_mastery_requirement(self):
+        reciter = WordReciter(self.config)
+        no_audio = Word(
+            'no-audio',
+            'no-audio',
+            success_count=reciter.config.MAX_SUCCESS_COUNT - 1,
+            next_review_date=reciter.today,
+        )
+        with_audio = Word(
+            'with-audio',
+            'with-audio',
+            success_count=reciter.config.MAX_SUCCESS_COUNT - 1,
+            next_review_date=reciter.today,
+        )
+        reciter.all_words = [no_audio, with_audio]
+        for word, prefix in ((no_audio, 'no-audio'), (with_audio, 'with-audio')):
+            for index in range(2):
+                reciter.record_mastery_attempt(
+                    word,
+                    'spelling',
+                    True,
+                    event_id=f'{prefix}-warmup-{index}',
+                )
+
+        no_audio_result = reciter.apply_scored_review_attempt(
+            no_audio,
+            exercise_type='spelling',
+            correct=True,
+            event_id='no-audio-spelling',
+            audio_available=False,
+        )
+        with_audio_result = reciter.apply_scored_review_attempt(
+            with_audio,
+            exercise_type='spelling',
+            correct=True,
+            event_id='with-audio-spelling',
+            audio_available=True,
+        )
+
+        self.assertTrue(no_audio_result['mastered_now'])
+        self.assertIn(no_audio, reciter.mastered_words)
+        self.assertFalse(with_audio_result['mastered_now'])
+        self.assertIn(with_audio, reciter.all_words)
+        self.assertEqual(
+            reciter.review_state_payload(with_audio)['mastery']['by_type']['listening']['attempts'],
+            0,
+        )
+
+    def test_due_mastered_word_returns_for_maintenance(self):
+        reciter = WordReciter(self.config)
+        word = Word(
+            'remember',
+            '记住',
+            success_count=reciter.config.MAX_SUCCESS_COUNT,
+            next_review_date=reciter.today,
+        )
+        reciter.mastered_words = [word]
+        task = reciter.get_today_learning_plan()
+        self.assertEqual([w.english for w in task['words']], ['remember'])
+        self.assertEqual(task['items'][0]['reason'], 'maintenance')
+
+    def test_legacy_mastered_word_loaded_from_disk_enters_maintenance(self):
+        word = Word(
+            'legacy-remember',
+            '旧版记住',
+            success_count=self.config.MAX_SUCCESS_COUNT,
+            next_review_date=china_today(),
+        )
+        Path(self.temp_data.name).write_text(
+            json.dumps(
+                {
+                    'all_words': [],
+                    'mastered_words': [word.to_dict()],
+                },
+                ensure_ascii=False,
+            ),
+            encoding='utf-8',
+        )
+
+        reciter = WordReciter(self.config)
+        task = reciter.get_today_learning_plan()
+        restored_word = task['words'][0]
+        self.assertEqual(restored_word.english, 'legacy-remember')
+        self.assertTrue(reciter.get_review_state(restored_word)['scheduler']['active'])
+        self.assertEqual(task['items'][0]['reason'], 'maintenance')
 
 
 def run_tests():

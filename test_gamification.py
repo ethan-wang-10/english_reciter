@@ -114,6 +114,218 @@ class TestCheckinCompletionBonus(unittest.TestCase):
             self.assertTrue(outs[-1]["check_in_done_today"])
 
 
+class TestPracticeAwardIdempotency(unittest.TestCase):
+    def test_raw_scope_cannot_alias_an_encoded_scope(self):
+        encoded_apple = gm._practice_event_scope_key('apple')
+        self.assertNotEqual(
+            gm._practice_event_scope_key(encoded_apple),
+            encoded_apple,
+        )
+
+    def test_legacy_plaintext_scope_still_replays(self):
+        with temp_data_dir() as data_dir:
+            state = gm.default_state()
+            legacy_payload = {'xp_gained': 7, 'total_xp': 7, 'legacy': True}
+            state['practice_events'] = [
+                {
+                    'event_id': 'legacy-scoped-event',
+                    'scope': 'Legacy-Word',
+                    'payload': legacy_payload,
+                }
+            ]
+            gm.save_state(data_dir, 'legacy-scope-user', state)
+
+            replay = gm.award_correct_answer(
+                data_dir,
+                'legacy-scope-user',
+                bonus_practice=False,
+                remedial=False,
+                old_success_count=0,
+                new_success_count=1,
+                mastered_now=False,
+                mastered_words=0,
+                event_id='legacy-scoped-event',
+                event_scope='legacy-word',
+            )
+
+            self.assertEqual(replay, legacy_payload)
+            self.assertEqual(gm.load_state(data_dir, 'legacy-scope-user')['total_correct'], 0)
+
+    def test_legacy_sha_looking_plaintext_scope_still_replays(self):
+        with temp_data_dir() as data_dir:
+            raw_scope = gm._practice_event_scope_key('apple')
+            state = gm.default_state()
+            legacy_payload = {'xp_gained': 5, 'legacy_sha_looking': True}
+            state['practice_events'] = [
+                {
+                    'event_id': 'legacy-sha-looking-event',
+                    'scope': raw_scope,
+                    'payload': legacy_payload,
+                }
+            ]
+            gm.save_state(data_dir, 'legacy-sha-looking-user', state)
+
+            replay = gm.award_correct_answer(
+                data_dir,
+                'legacy-sha-looking-user',
+                bonus_practice=False,
+                remedial=False,
+                old_success_count=0,
+                new_success_count=1,
+                mastered_now=False,
+                mastered_words=0,
+                event_id='legacy-sha-looking-event',
+                event_scope=raw_scope,
+            )
+
+            self.assertEqual(replay, legacy_payload)
+            self.assertEqual(
+                gm.load_state(data_dir, 'legacy-sha-looking-user')['total_correct'],
+                0,
+            )
+
+    def test_same_review_event_awards_xp_once(self):
+        with temp_data_dir() as data_dir:
+            kwargs = {
+                'bonus_practice': False,
+                'remedial': False,
+                'old_success_count': 0,
+                'new_success_count': 1,
+                'mastered_now': False,
+                'mastered_words': 0,
+                'event_id': 'review-event-1',
+            }
+            first = gm.award_correct_answer(data_dir, 'idempotent-user', **kwargs)
+            second = gm.award_correct_answer(data_dir, 'idempotent-user', **kwargs)
+            state = gm.load_state(data_dir, 'idempotent-user')
+            self.assertEqual(second, first)
+            self.assertEqual(state['total_correct'], 1)
+            self.assertEqual(state['total_xp'], first['total_xp'])
+
+    def test_bonus_event_replays_original_payload_after_reload(self):
+        with temp_data_dir() as data_dir:
+            kwargs = {
+                'bonus_practice': True,
+                'remedial': False,
+                'old_success_count': 0,
+                'new_success_count': 0,
+                'mastered_now': False,
+                'mastered_words': 0,
+                'event_id': 'bonus-reload-event',
+            }
+            first = gm.award_correct_answer(data_dir, 'bonus-reload-user', **kwargs)
+            reloaded = gm.load_state(data_dir, 'bonus-reload-user')
+            second = gm.award_correct_answer(data_dir, 'bonus-reload-user', **kwargs)
+            final = gm.load_state(data_dir, 'bonus-reload-user')
+
+            self.assertEqual(second, first)
+            self.assertEqual(reloaded['total_correct'], 1)
+            self.assertEqual(final['total_correct'], 1)
+            self.assertEqual(final['total_xp'], first['total_xp'])
+
+    def test_earlier_event_replays_its_original_payload(self):
+        with temp_data_dir() as data_dir:
+            common = {
+                'bonus_practice': False,
+                'remedial': False,
+                'old_success_count': 0,
+                'new_success_count': 1,
+                'mastered_now': False,
+                'mastered_words': 0,
+            }
+            first = gm.award_correct_answer(
+                data_dir,
+                'older-event-user',
+                event_id='older-event',
+                **common,
+            )
+            latest = gm.award_correct_answer(
+                data_dir,
+                'older-event-user',
+                event_id='newer-event',
+                **common,
+            )
+            replay = gm.award_correct_answer(
+                data_dir,
+                'older-event-user',
+                event_id='older-event',
+                **common,
+            )
+            state = gm.load_state(data_dir, 'older-event-user')
+
+            self.assertEqual(replay, first)
+            self.assertGreater(latest['total_xp'], first['total_xp'])
+            self.assertEqual(state['total_correct'], 2)
+
+    def test_other_word_events_do_not_evict_replay_payload(self):
+        with temp_data_dir() as data_dir:
+            first_scope = 'x' * 160 + 'A'
+            other_scope = 'x' * 160 + 'B'
+            common = {
+                'bonus_practice': False,
+                'remedial': False,
+                'old_success_count': 0,
+                'new_success_count': 1,
+                'mastered_now': False,
+                'mastered_words': 0,
+            }
+            first = gm.award_correct_answer(
+                data_dir,
+                'scoped-event-user',
+                event_id='first-word-event',
+                event_scope=first_scope,
+                **common,
+            )
+            for index in range(100):
+                gm.award_correct_answer(
+                    data_dir,
+                    'scoped-event-user',
+                    event_id=f'other-word-event-{index}',
+                    event_scope=other_scope,
+                    **common,
+                )
+
+            replay = gm.award_correct_answer(
+                data_dir,
+                'scoped-event-user',
+                event_id='first-word-event',
+                event_scope=first_scope,
+                **common,
+            )
+            state = gm.load_state(data_dir, 'scoped-event-user')
+
+            self.assertEqual(replay, first)
+            self.assertEqual(state['total_correct'], 101)
+
+    def test_practice_event_results_are_bounded_per_word_scope(self):
+        with temp_data_dir() as data_dir:
+            common = {
+                'bonus_practice': True,
+                'remedial': False,
+                'old_success_count': 0,
+                'new_success_count': 0,
+                'mastered_now': False,
+                'mastered_words': 0,
+                'event_scope': 'bounded-word',
+            }
+            for index in range(gm.PRACTICE_EVENT_LIMIT + 1):
+                gm.award_correct_answer(
+                    data_dir,
+                    'bounded-event-user',
+                    event_id=f'bounded-event-{index}',
+                    **common,
+                )
+
+            state = gm.load_state(data_dir, 'bounded-event-user')
+            scoped = [
+                event
+                for event in state['practice_events']
+                if event.get('scope') == gm._practice_event_scope_key('bounded-word')
+            ]
+            self.assertEqual(len(scoped), gm.PRACTICE_EVENT_LIMIT)
+            self.assertNotIn('bounded-event-0', {event['event_id'] for event in scoped})
+
+
 class TestStreakDisplayV2(unittest.TestCase):
     @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
     def test_effective_zero_when_gap_before_today(self):

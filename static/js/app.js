@@ -46,6 +46,8 @@ let ttsPlaybackGeneration = 0;
 let ttsFetchAbort = null;
 let ttsPiperAudio = null;
 let ttsPiperObjectUrl = null;
+const LISTENING_PLAYBACK_START_TIMEOUT_MS = 10000;
+const WEB_SPEECH_START_TIMEOUT_MS = 4000;
 
 /** 朗读进行中：禁用所有 .btn-speak；triggerButton 显示加载样式 */
 function beginTtsSpeakUi(triggerButton) {
@@ -84,8 +86,41 @@ let sessionInitialMainWords = 0;
 let sessionMainCorrect = 0;
 let sessionMainFailedThree = 0;
 let sessionRemedialCorrect = 0;
+let sessionRestoredRemedialWords = 0;
 let sessionTotalWrongAttempts = 0;
 let sessionNewMastered = [];
+let sessionExerciseStats = {};
+let currentTodayTaskPlan = null;
+let reviewQuestionStartedAt = 0;
+let pendingReviewSubmission = null;
+let reviewSessionGeneration = 0;
+let reviewDataRequestSequence = 0;
+let listeningPlaybackAttempt = 0;
+
+function captureReviewContext() {
+    return {
+        token,
+        username,
+        generation: reviewSessionGeneration,
+    };
+}
+
+function captureAccountContext() {
+    return { token, username };
+}
+
+function isAccountContextCurrent(context) {
+    return Boolean(context && context.token === token && context.username === username);
+}
+
+function isReviewContextCurrent(context) {
+    return Boolean(
+        context &&
+        context.token === token &&
+        context.username === username &&
+        context.generation === reviewSessionGeneration
+    );
+}
 
 /** daily=今日待复习；bonus=无待复习时的随机加练 */
 let reviewSessionMode = 'daily';
@@ -917,9 +952,10 @@ function setupWrongWordsAsideToggle() {
     syncWrongWordsAsideExpandedState();
 }
 
-async function refreshGamification() {
+async function refreshGamification(accountContext = captureAccountContext()) {
     try {
         const g = await apiRequest('/gamification');
+        if (!isAccountContextCurrent(accountContext)) return null;
         lastGamificationProfile = g;
         updateGamificationNav(g);
         const opt = document.getElementById('leaderboard-opt-in');
@@ -1542,6 +1578,19 @@ function updateNavUserAvatar(avatarUrl) {
     }
 }
 
+function resetGamificationNav() {
+    lastGamificationProfile = null;
+    updateGamificationNav({
+        level: 1,
+        total_xp: 0,
+        streak: 0,
+        today_correct_count: 0,
+        check_in_min_correct: 5,
+        check_in_done_today: false,
+        makeup_checkin: { available: false },
+    });
+}
+
 function avatarOriginalDisplayUrl(url) {
     if (!url) return '';
     const sep = url.indexOf('?') >= 0 ? '&' : '?';
@@ -1619,16 +1668,17 @@ function openAvatarViewModal() {
     closeButton?.focus();
 }
 
-async function refreshNavUserAvatar() {
+async function refreshNavUserAvatar(accountContext = captureAccountContext()) {
     if (!token || !username) {
-        updateNavUserAvatar(null);
+        if (isAccountContextCurrent(accountContext)) updateNavUserAvatar(null);
         return;
     }
     try {
         const s = await apiRequest('/user/avatar-meta');
+        if (!isAccountContextCurrent(accountContext)) return;
         updateNavUserAvatar(s && s.avatar_url);
     } catch (_) {
-        updateNavUserAvatar(null);
+        if (isAccountContextCurrent(accountContext)) updateNavUserAvatar(null);
     }
 }
 
@@ -3611,7 +3661,12 @@ function updateReviewPhoneticDisplay(word) {
     const phEl = document.getElementById('current-word-phonetic');
     const cb = document.getElementById('review-show-phonetic');
     if (!phEl) return;
-    const show = cb && cb.checked && word && String(word.phonetic || '').trim();
+    const show =
+        cb &&
+        cb.checked &&
+        word &&
+        word.exercise_type !== 'listening' &&
+        String(word.phonetic || '').trim();
     if (show) {
         phEl.textContent = String(word.phonetic).trim();
         phEl.hidden = false;
@@ -3688,6 +3743,12 @@ function initializeUnderlineInputForTarget(word, target) {
     container.dataset.currentInput = '';
 
     capture.value = '';
+    capture.readOnly = false;
+    capture.setAttribute(
+        'aria-label',
+        word.exercise_type === 'listening' ? '输入听写的英文单词' : '输入英文单词',
+    );
+    capture.setAttribute('aria-describedby', 'review-exercise-type');
 
     const syncFromCapture = () => {
         let v = capture.value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
@@ -3843,7 +3904,7 @@ function resumeTtsPlayback() {
 // 浏览器端朗读（远程访问时服务端 say 只在服务器出声，用户听不到）
 // Android Chrome：语音列表异步加载、合成队列常处于 paused，需 resume + voiceschanged 后再 speak
 /** @param {string} text @param {(() => void) | undefined} onEnd 朗读结束回调；省略时恢复复习输入框焦点 @param {number} [gen] 与 ttsPlaybackGeneration 对齐，防连点混音 */
-function speakEnglishInBrowser(text, onEnd, gen) {
+function speakEnglishInBrowser(text, onEnd, gen, playbackCallbacks = {}) {
     const raw = String(text || '').trim().slice(0, 500);
     if (!raw) return false;
     if (typeof window.speechSynthesis === 'undefined') {
@@ -3871,6 +3932,15 @@ function speakEnglishInBrowser(text, onEnd, gen) {
         );
     };
 
+    let speechSettled = false;
+    let startWatchdog = null;
+    const clearStartWatchdog = () => {
+        if (startWatchdog !== null) {
+            clearTimeout(startWatchdog);
+            startWatchdog = null;
+        }
+    };
+
     const doSpeak = () => {
         if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
         try {
@@ -3891,19 +3961,63 @@ function speakEnglishInBrowser(text, onEnd, gen) {
         u.rate = 0.95;
         const baseDone = typeof onEnd === 'function' ? onEnd : () => focusWordCapture(0);
         const onDone = () => {
+            if (speechSettled) return;
+            speechSettled = true;
+            clearStartWatchdog();
             if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
             baseDone();
         };
         u.onend = onDone;
-        u.onerror = onDone;
+        u.onerror = () => {
+            if (speechSettled) return;
+            if (gen !== undefined && gen !== ttsPlaybackGeneration) {
+                speechSettled = true;
+                clearStartWatchdog();
+                return;
+            }
+            if (typeof playbackCallbacks.onError === 'function') {
+                playbackCallbacks.onError();
+            }
+            onDone();
+        };
         u.onstart = () => {
+            if (speechSettled) return;
+            if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
+            clearStartWatchdog();
+            if (typeof playbackCallbacks.onStart === 'function') {
+                playbackCallbacks.onStart();
+            }
             try {
                 synth.resume();
             } catch (_) {
                 /* ignore */
             }
         };
-        synth.speak(u);
+        startWatchdog = setTimeout(() => {
+            if (speechSettled) return;
+            if (gen !== undefined && gen !== ttsPlaybackGeneration) {
+                speechSettled = true;
+                return;
+            }
+            try {
+                synth.cancel();
+            } catch (_) {
+                /* ignore */
+            }
+            if (typeof playbackCallbacks.onError === 'function') {
+                playbackCallbacks.onError();
+            }
+            onDone();
+        }, WEB_SPEECH_START_TIMEOUT_MS);
+        try {
+            synth.speak(u);
+        } catch (_) {
+            if (typeof playbackCallbacks.onError === 'function') {
+                playbackCallbacks.onError();
+            }
+            onDone();
+            return;
+        }
         [50, 200].forEach((ms) => {
             setTimeout(() => {
                 try {
@@ -3919,7 +4033,11 @@ function speakEnglishInBrowser(text, onEnd, gen) {
     if (voices.length === 0) {
         let settled = false;
         const runOnce = () => {
-            if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
+            if (gen !== undefined && gen !== ttsPlaybackGeneration) {
+                settled = true;
+                synth.removeEventListener('voiceschanged', runOnce);
+                return;
+            }
             if (settled) return;
             settled = true;
             synth.removeEventListener('voiceschanged', runOnce);
@@ -3965,7 +4083,7 @@ async function fetchPiperAudioBlob(text, signal) {
 }
 
 /** 播放已拿到的 Piper WAV Blob；失败返回 false（不调用 onEnd） */
-async function playPiperBlob(blob, onEnd, gen) {
+async function playPiperBlob(blob, onEnd, gen, onPlaybackError) {
     if (!blob || blob.size < 100) return false;
     const url = URL.createObjectURL(blob);
     if (gen !== undefined && gen !== ttsPlaybackGeneration) {
@@ -3979,7 +4097,7 @@ async function playPiperBlob(blob, onEnd, gen) {
     const audio = new Audio(url);
     ttsPiperObjectUrl = url;
     ttsPiperAudio = audio;
-    const cleanup = () => {
+    const cleanup = (notifyEnd = true) => {
         try {
             URL.revokeObjectURL(url);
         } catch (_) {
@@ -3988,10 +4106,14 @@ async function playPiperBlob(blob, onEnd, gen) {
         if (ttsPiperAudio === audio) ttsPiperAudio = null;
         if (ttsPiperObjectUrl === url) ttsPiperObjectUrl = null;
         if (gen !== undefined && gen !== ttsPlaybackGeneration) return;
-        if (typeof onEnd === 'function') onEnd();
+        if (notifyEnd && typeof onEnd === 'function') onEnd();
     };
-    audio.onended = cleanup;
-    audio.onerror = cleanup;
+    audio.onended = () => cleanup(true);
+    audio.onerror = () => {
+        const isCurrent = gen === undefined || gen === ttsPlaybackGeneration;
+        cleanup(false);
+        if (isCurrent && typeof onPlaybackError === 'function') onPlaybackError();
+    };
     try {
         await audio.play();
     } catch (_) {
@@ -4008,7 +4130,7 @@ async function playPiperBlob(blob, onEnd, gen) {
 }
 
 /** 使用服务端 Piper 返回的 WAV；失败返回 false（不调用 onEnd） */
-async function speakEnglishViaPiperApi(text, onEnd, gen) {
+async function speakEnglishViaPiperApi(text, onEnd, gen, onPlaybackError) {
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const ac = new AbortController();
@@ -4038,14 +4160,14 @@ async function speakEnglishViaPiperApi(text, onEnd, gen) {
     }
     if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
     if (!blob || blob.size < 100) return false;
-    return playPiperBlob(blob, onEnd, gen);
+    return playPiperBlob(blob, onEnd, gen, onPlaybackError);
 }
 
 /** 优先 Piper，其次 Web Speech，最后服务端 say（仅服务器本机扬声器）
  * @param {string} text
  * @param {(() => void) | undefined} onEnd
  * @param {HTMLElement | null | undefined} triggerButton 触发朗读的 .btn-speak，用于加载态
- * @param {{ piperBlob?: Blob } | undefined} opts 可选：课文全文预取的 Piper Blob，跳过网络请求 */
+ * @param {{ piperBlob?: Blob, clientAudioOnly?: boolean, onPlaybackStart?: () => void, onPlaybackError?: () => void } | undefined} opts 播放选项 */
 async function speakEnglishPreferred(text, onEnd, triggerButton, opts = {}) {
     stopSpeakPlayback();
     endTtsSpeakUi();
@@ -4065,14 +4187,30 @@ async function speakEnglishPreferred(text, onEnd, triggerButton, opts = {}) {
     if (serverPiperAvailable) {
         const pre = opts && opts.piperBlob;
         if (pre && pre.size > 100) {
-            const okPre = await playPiperBlob(pre, done, myGen);
-            if (okPre) return true;
+            const okPre = await playPiperBlob(pre, done, myGen, opts.onPlaybackError);
+            if (myGen !== ttsPlaybackGeneration) return false;
+            if (okPre) {
+                if (typeof opts.onPlaybackStart === 'function') opts.onPlaybackStart();
+                return true;
+            }
         }
-        const ok = await speakEnglishViaPiperApi(raw, done, myGen);
-        if (ok) return true;
+        const ok = await speakEnglishViaPiperApi(raw, done, myGen, opts.onPlaybackError);
+        if (myGen !== ttsPlaybackGeneration) return false;
+        if (ok) {
+            if (typeof opts.onPlaybackStart === 'function') opts.onPlaybackStart();
+            return true;
+        }
     }
-    if (speakEnglishInBrowser(raw, done, myGen)) {
+    if (myGen !== ttsPlaybackGeneration) return false;
+    if (speakEnglishInBrowser(raw, done, myGen, {
+        onStart: opts.onPlaybackStart,
+        onError: opts.onPlaybackError,
+    })) {
         return true;
+    }
+    if (opts.clientAudioOnly) {
+        if (myGen === ttsPlaybackGeneration) endTtsSpeakUi();
+        return false;
     }
     try {
         await apiRequest('/words/speak', {
@@ -4089,22 +4227,106 @@ async function speakEnglishPreferred(text, onEnd, triggerButton, opts = {}) {
     }
 }
 
-async function refreshTtsCapabilities() {
-    serverPiperAvailable = false;
-    if (!token) return;
+async function refreshTtsCapabilities(accountContext = captureAccountContext()) {
+    if (!isAccountContextCurrent(accountContext)) return;
+    if (!token) {
+        serverPiperAvailable = false;
+        return;
+    }
     try {
         const data = await apiRequest('/tts/capabilities');
+        if (!isAccountContextCurrent(accountContext)) return;
         serverPiperAvailable = data && data.piper === true;
     } catch (_) {
-        serverPiperAvailable = false;
+        if (isAccountContextCurrent(accountContext)) serverPiperAvailable = false;
     }
+}
+
+function downgradeListeningSession(failedWord) {
+    if (
+        !failedWord ||
+        currentReviewList[currentReviewIndex] !== failedWord ||
+        failedWord.exercise_type !== 'listening' ||
+        isSubmitting ||
+        isAdvancing
+    ) return;
+    listeningPlaybackAttempt += 1;
+    stopSpeakPlayback();
+    endTtsSpeakUi();
+    let downgraded = 0;
+    for (let index = currentReviewIndex; index < currentReviewList.length; index += 1) {
+        const word = currentReviewList[index];
+        word._audioAvailableAtRender = false;
+        word._listeningAudioPlayed = false;
+        if (word.exercise_type === 'listening') {
+            word.exercise_type = 'spelling';
+            downgraded += 1;
+        }
+    }
+    if (downgraded && currentTodayTaskPlan?.exercise_mix) {
+        const mix = { ...currentTodayTaskPlan.exercise_mix };
+        mix.listening = Math.max(0, (Number(mix.listening) || 0) - downgraded);
+        mix.spelling = (Number(mix.spelling) || 0) + downgraded;
+        currentTodayTaskPlan.exercise_mix = mix;
+        renderTodayTaskPlan(currentTodayTaskPlan);
+    }
+    showMainBanner('当前设备无法播放听写音频，已切换为拼写');
+    void showCurrentWord();
 }
 
 // 朗读例句
 async function speakExample() {
     const word = currentReviewList[currentReviewIndex];
     if (!word) return;
-    
+
+    if (word.exercise_type === 'listening') {
+        const playbackAttempt = ++listeningPlaybackAttempt;
+        let playbackFailed = false;
+        let startWatchdog = null;
+        const clearWatchdog = () => {
+            if (startWatchdog !== null) {
+                clearTimeout(startWatchdog);
+                startWatchdog = null;
+            }
+        };
+        const isCurrentPlaybackAttempt = () => Boolean(
+            playbackAttempt === listeningPlaybackAttempt &&
+            currentReviewList[currentReviewIndex] === word &&
+            word.exercise_type === 'listening'
+        );
+        const handlePlaybackFailure = () => {
+            if (!isCurrentPlaybackAttempt()) {
+                clearWatchdog();
+                return;
+            }
+            if (playbackFailed) return;
+            playbackFailed = true;
+            clearWatchdog();
+            downgradeListeningSession(word);
+        };
+        startWatchdog = setTimeout(
+            handlePlaybackFailure,
+            LISTENING_PLAYBACK_START_TIMEOUT_MS,
+        );
+        const accepted = await speakEnglishPreferred(
+            word.english,
+            () => focusWordCapture(0),
+            document.getElementById('speak-example-btn'),
+            {
+                clientAudioOnly: true,
+                onPlaybackStart: () => {
+                    clearWatchdog();
+                    if (isCurrentPlaybackAttempt()) {
+                        word._listeningAudioPlayed = true;
+                    }
+                },
+                onPlaybackError: handlePlaybackFailure,
+            },
+        );
+        if (!accepted) handlePlaybackFailure();
+        return;
+    }
+
     // 使用原始例句，而不是隐藏后的版本
     const exampleText = word.example;
     if (!exampleText || exampleText === '暂无例句') {
@@ -4134,14 +4356,15 @@ function parseApiJsonBody(text) {
 
 // API 请求
 async function apiRequest(endpoint, options = {}) {
+    const requestToken = token;
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const headers = {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...options.headers
     };
     
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+    if (requestToken) {
+        headers['Authorization'] = `Bearer ${requestToken}`;
     }
     
     const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -4155,7 +4378,7 @@ async function apiRequest(endpoint, options = {}) {
     if (!response.ok) {
         const error = data && typeof data === 'object' ? data : {};
 
-        if (response.status === 401) {
+        if (response.status === 401 && token === requestToken) {
             token = null;
             username = null;
             setSessionParentFlags(false, '');
@@ -4165,7 +4388,10 @@ async function apiRequest(endpoint, options = {}) {
             showLoginPage();
         }
 
-        throw new Error(error.error || error.detail || '请求失败');
+        const requestError = new Error(error.error || error.detail || '请求失败');
+        requestError.status = response.status;
+        requestError.code = error.code || '';
+        throw requestError;
     }
     
     return data;
@@ -4422,11 +4648,13 @@ function handleInviteRegistrationNavigation() {
 function showLoginPage() {
     resetInviteCardState();
     preloadedReviewData = null;
+    resetActiveReviewSession();
     document.getElementById('login-page').classList.add('active');
     document.getElementById('main-page').classList.remove('active');
     const gl = document.getElementById('admin-gear-login');
     if (gl) gl.style.display = '';
     document.querySelector('#main-page .nav-user')?.removeAttribute('aria-label');
+    resetGamificationNav();
     updateNavUserAvatar(null);
     updatePkNavBadgesFromDuels([]);
     closePkHubModal();
@@ -4536,6 +4764,8 @@ function applyBootstrapPayload(boot) {
 }
 
 async function showMainPage() {
+    const accountContext = captureAccountContext();
+    const reviewContext = captureReviewContext();
     document.getElementById('login-page').classList.remove('active');
     document.getElementById('main-page').classList.add('active');
     const gl = document.getElementById('admin-gear-login');
@@ -4545,10 +4775,13 @@ async function showMainPage() {
     if (token) {
         try {
             boot = await apiRequest('/bootstrap');
+            if (!isReviewContextCurrent(reviewContext)) return;
             applyBootstrapPayload(boot);
         } catch (bootErr) {
+            if (!isReviewContextCurrent(reviewContext)) return;
             try {
                 const d = await apiRequest('/auth/session');
+                if (!isReviewContextCurrent(reviewContext)) return;
                 setSessionParentFlags(!!d.is_parent, d.child_username || '');
                 maybeShowSystemBroadcast(d.system_broadcast);
             } catch (_) {
@@ -4556,6 +4789,7 @@ async function showMainPage() {
             }
         }
     }
+    if (!isReviewContextCurrent(reviewContext)) return;
     const udisp = document.getElementById('username-display');
     if (udisp) {
         udisp.textContent =
@@ -4576,12 +4810,15 @@ async function showMainPage() {
         loadStats();
     }
     if (!boot || !('avatar_url' in boot)) {
-        refreshNavUserAvatar();
+        refreshNavUserAvatar(accountContext);
     }
     startPkInvitePolling();
     if (!boot || !boot.plan) {
-        loadUserPlan();
+        await loadUserPlan(accountContext);
+    } else if (!boot.tts_capabilities) {
+        await refreshTtsCapabilities(accountContext);
     }
+    if (!isReviewContextCurrent(reviewContext)) return;
     if (isParentSession) {
         showSection('progress');
     } else {
@@ -4593,18 +4830,20 @@ async function showMainPage() {
     }, 5000);
 }
 
-async function loadUserPlan() {
+async function loadUserPlan(accountContext = captureAccountContext()) {
     try {
         const data = await apiRequest('/user/plan');
+        if (!isAccountContextCurrent(accountContext)) return;
         userPlan = data.plan || 'free';
         articleAiExtractAvailable = data.article_ai_extract_available === true;
         articleAiExtractEnabled = data.article_ai_extract_enabled === true;
         updatePlanUI();
     } catch (_) {
+        if (!isAccountContextCurrent(accountContext)) return;
         userPlan = 'free';
         articleAiExtractEnabled = false;
     }
-    await refreshTtsCapabilities();
+    await refreshTtsCapabilities(accountContext);
 }
 
 function updatePlanUI() {
@@ -4744,17 +4983,21 @@ function showSection(sectionId) {
 // ==================== 统计功能 ====================
 
 async function loadStats() {
+    const accountContext = captureAccountContext();
     _invalidateSectionCache('progress');
     _invalidateSectionCache('mastered');
     _invalidateSectionCache('leaderboard');
     try {
         const data = await apiRequest('/words/summary');
+        if (!isAccountContextCurrent(accountContext)) return;
         applySummaryStats(data);
     } catch (error) {
+        if (!isAccountContextCurrent(accountContext)) return;
         showMainBanner('加载统计失败，请稍后重试');
     }
     try {
-        await refreshGamification();
+        await refreshGamification(accountContext);
+        if (!isAccountContextCurrent(accountContext)) return;
         if (isSettingsOverlayOpen() && lastGamificationProfile) {
             updateSettingsCheckinHintFromProfile(lastGamificationProfile);
             updateSettingsMonthlyGoalBonusNotice(lastGamificationProfile);
@@ -4938,13 +5181,14 @@ function applyPendingRemovalToReviewSession(removedEnglishList) {
  * 待复习队列在服务端减少后，同步导航统计与当前页中依赖该队列的视图（否则需整页刷新才一致）。
  * @param {string[]} [removedEnglishList] 服务端实际移除的词，用于复习页就地抠词；不传则仅刷新统计与其它页。
  */
-async function syncMainPageAfterPendingWordsRemoved(removedCount, removedEnglishList) {
+async function syncMainPageAfterPendingWordsRemoved(removedCount, removedEnglishList, plan = null) {
     try {
         await loadStats();
     } catch (_) {
         /* loadStats 内部已提示 */
     }
     if (!(removedCount > 0)) return;
+    if (plan) renderTodayTaskPlan(plan);
     try {
         if (document.getElementById('review-section')?.classList.contains('active')) {
             if (Array.isArray(removedEnglishList) && removedEnglishList.length > 0) {
@@ -5075,8 +5319,166 @@ function resetSessionReviewStats() {
     sessionMainCorrect = 0;
     sessionMainFailedThree = 0;
     sessionRemedialCorrect = 0;
+    sessionRestoredRemedialWords = 0;
     sessionTotalWrongAttempts = 0;
     sessionNewMastered = [];
+    sessionExerciseStats = {};
+}
+
+function resetActiveReviewSession() {
+    listeningPlaybackAttempt += 1;
+    stopSpeakPlayback();
+    endTtsSpeakUi();
+    reviewSessionGeneration += 1;
+    reviewDataRequestSequence += 1;
+    currentReviewList = [];
+    currentReviewIndex = 0;
+    currentErrorCount = 0;
+    currentRevealedCount = 0;
+    isSubmitting = false;
+    isAdvancing = false;
+    wrongWordsInThisPass = new Set();
+    wrongWordsOrder = [];
+    wordMap = new Map();
+    wrongRoundNumber = 0;
+    reviewSessionMode = 'daily';
+    sessionSkippedRemedialAfterMain = false;
+    currentTodayTaskPlan = null;
+    reviewQuestionStartedAt = 0;
+    pendingReviewSubmission = null;
+    const capture = document.getElementById('mobile-word-capture');
+    if (capture) capture.readOnly = false;
+    document.getElementById('submit-answer')?.classList.remove('btn-submit-loading');
+    const inflectionInput = document.getElementById('review-test-inflection');
+    if (inflectionInput) inflectionInput.disabled = false;
+    resetSessionReviewStats();
+    closeRemedialOfferModal();
+    const panel = document.getElementById('today-task-panel');
+    if (panel) panel.hidden = true;
+}
+
+function reviewExerciseLabel(exerciseType) {
+    return exerciseType === 'listening' ? '听写' : '拼写';
+}
+
+function reviewAudioAvailable() {
+    return Boolean(
+        serverPiperAvailable ||
+        (
+            typeof window.speechSynthesis !== 'undefined' &&
+            typeof window.SpeechSynthesisUtterance === 'function'
+        )
+    );
+}
+
+function adaptReviewDataToAudioCapability(data) {
+    if (!data) return;
+    const audioAvailable = reviewAudioAvailable();
+    let downgraded = 0;
+    (data.words || []).forEach((word) => {
+        word._audioAvailableAtRender = audioAvailable;
+        if (!audioAvailable && word.exercise_type === 'listening') {
+            word.exercise_type = 'spelling';
+            downgraded += 1;
+        }
+    });
+    if (downgraded && data.plan?.exercise_mix) {
+        const mix = { ...data.plan.exercise_mix };
+        mix.listening = Math.max(0, (Number(mix.listening) || 0) - downgraded);
+        mix.spelling = (Number(mix.spelling) || 0) + downgraded;
+        data.plan = { ...data.plan, exercise_mix: mix };
+    }
+}
+
+function renderReviewMasteryProgress(word) {
+    const progressEl = document.getElementById('current-word-progress');
+    if (!progressEl || !word) return;
+    const masteryPercent = Number(word.mastery?.overall_percent);
+    if (Number.isFinite(masteryPercent)) {
+        const spelling = Number(word.mastery?.by_type?.spelling?.percent) || 0;
+        const listening = Number(word.mastery?.by_type?.listening?.percent) || 0;
+        progressEl.textContent = `掌握 ${masteryPercent}% · 拼 ${spelling}% · 听 ${listening}%`;
+        progressEl.title = `拼写 ${spelling}% · 听写 ${listening}%`;
+        return;
+    }
+    const maxSuccess = word.max_success_count != null ? word.max_success_count : 8;
+    progressEl.textContent = `${word.success_count}/${maxSuccess}`;
+    progressEl.removeAttribute('title');
+}
+
+function createReviewEventId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function renderTodayTaskPlan(plan) {
+    currentTodayTaskPlan = plan && typeof plan === 'object' ? { ...plan } : null;
+    const panel = document.getElementById('today-task-panel');
+    if (!panel) return;
+    const total = Number(currentTodayTaskPlan?.total) || 0;
+    if (reviewSessionMode === 'bonus' || total <= 0) {
+        panel.hidden = true;
+        return;
+    }
+
+    const completed = Math.max(0, Math.min(total, Number(currentTodayTaskPlan.completed) || 0));
+    const remaining = Math.max(0, Number(currentTodayTaskPlan.remaining) || total - completed);
+    const estimate = Math.max(0, Number(currentTodayTaskPlan.estimated_minutes) || 0);
+    const backlog = Math.max(0, Number(currentTodayTaskPlan.backlog_after_task) || 0);
+    const progress = document.getElementById('today-task-progress');
+    const bar = document.getElementById('today-task-progress-bar');
+    const progressText = document.getElementById('today-task-progress-text');
+    const estimateEl = document.getElementById('today-task-estimate');
+    const mixEl = document.getElementById('today-task-mix');
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    panel.hidden = false;
+    if (progress) {
+        progress.setAttribute('aria-valuemax', String(total));
+        progress.setAttribute('aria-valuenow', String(completed));
+    }
+    if (bar) bar.style.width = `${percent}%`;
+    if (progressText) progressText.textContent = `${completed}/${total}`;
+    if (estimateEl) {
+        estimateEl.textContent = `${remaining} 词 · 约 ${estimate} 分钟${backlog ? ` · 待后续安排 ${backlog} 词` : ''}`;
+    }
+    if (mixEl) {
+        mixEl.innerHTML = '';
+        const buckets = currentTodayTaskPlan.buckets || {};
+        const exerciseMix = currentTodayTaskPlan.exercise_mix || {};
+        const bucketLabels = [
+            ['overdue', '逾期'],
+            ['due', '到期'],
+            ['weak', '薄弱'],
+            ['maintenance', '保持'],
+            ['new', '新词'],
+        ];
+        const rows = bucketLabels
+            .map(([key, label]) => [label, Math.max(0, Number(buckets[key]) || 0)])
+            .filter(([, count]) => count > 0)
+            .map(([label, count]) => `${label} ${count}`);
+        const listeningCount = Math.max(0, Number(exerciseMix.listening) || 0);
+        if (listeningCount > 0) rows.push(`听写 ${listeningCount}`);
+        rows.forEach((text) => {
+            const span = document.createElement('span');
+            span.textContent = text;
+            mixEl.appendChild(span);
+        });
+    }
+}
+
+function updateTodayTaskProgress(progress) {
+    if (!currentTodayTaskPlan || !progress) return;
+    const total = Number(progress.total);
+    const completed = Number(progress.completed);
+    const remaining = Number(progress.remaining);
+    if (Number.isFinite(total)) currentTodayTaskPlan.total = total;
+    if (Number.isFinite(completed)) currentTodayTaskPlan.completed = completed;
+    if (Number.isFinite(remaining)) currentTodayTaskPlan.remaining = remaining;
+    currentTodayTaskPlan.estimated_minutes = remaining > 0 ? Math.max(1, Math.round(remaining * 0.6)) : 0;
+    renderTodayTaskPlan(currentTodayTaskPlan);
 }
 
 function hideReviewSessionSummary() {
@@ -5113,7 +5515,7 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
             `<div class="review-summary-section"><strong>加练主轮</strong>：本轮共 ${n} 个词；` +
             `答对 ${mainOk} 个；${mainFailed} 个曾 3 次均未答对并进入错题巩固。（答对仅计复习次数）</div>`
         );
-    } else {
+    } else if (n > 0) {
         parts.push(
             `<div class="review-summary-section"><strong>主轮</strong>：今日待复习共 ${n} 个词；` +
             `在本轮流程中答对 ${mainOk} 个；${mainFailed} 个曾 3 次均未答对并进入错题巩固。</div>`
@@ -5125,11 +5527,16 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
             `<div class="review-summary-section"><strong>错题巩固</strong>：共完成 ${remedialRoundsDone} 轮；` +
             `错题轮累计答对 ${remedialOk} 次（含同一词多次练习）。</div>`
         );
+    } else if (sessionRestoredRemedialWords > 0 || remedialOk > 0) {
+        parts.push(
+            `<div class="review-summary-section"><strong>错题巩固</strong>：继续完成 ${sessionRestoredRemedialWords} 个待巩固词；` +
+            `本次答对 ${remedialOk} 个。</div>`
+        );
     } else if (mainFailed > 0 && sessionSkippedRemedialAfterMain) {
         parts.push(
             `<div class="review-summary-section"><strong>错题巩固</strong>：主轮有 ${mainFailed} 个词 3 次均未答对，你已选择「稍后再说」，本次未进行错题巩固。</div>`
         );
-    } else {
+    } else if (n > 0 || isBonus) {
         parts.push(
             `<div class="review-summary-section"><strong>错题巩固</strong>：未触发，所有词在主轮已过关。</div>`
         );
@@ -5139,6 +5546,18 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
     if (masteredUnique.length > 0) {
         const names = masteredUnique.map((en) => escapeHtml(en)).join('、');
         parts.push(`<div class="review-summary-section"><strong>新掌握</strong>：${names}</div>`);
+    }
+
+    const abilityRows = Object.entries(sessionExerciseStats)
+        .filter(([, value]) => value && value.attempts > 0)
+        .map(([exerciseType, value]) => {
+            const pct = Math.round((value.correct / value.attempts) * 100);
+            return `${reviewExerciseLabel(exerciseType)} ${pct}%`;
+        });
+    if (abilityRows.length) {
+        parts.push(
+            `<div class="review-summary-section"><strong>能力表现</strong>：${abilityRows.map(escapeHtml).join(' · ')}</div>`
+        );
     }
 
     parts.push(
@@ -5298,9 +5717,14 @@ function showFinalComplete() {
     const descEl = document.getElementById('review-complete-desc');
     const summaryEl = document.getElementById('review-session-summary');
     const isBonus = reviewSessionMode === 'bonus';
+    const backlogAfterTask = isBonus
+        ? 0
+        : Math.max(0, Number(currentTodayTaskPlan?.backlog_after_task) || 0);
     if (titleEl) {
         if (!isBonus && sessionSkippedRemedialAfterMain) {
             titleEl.textContent = '今日主轮复习完成';
+        } else if (backlogAfterTask > 0) {
+            titleEl.textContent = '今日任务完成！';
         } else {
             titleEl.textContent = isBonus ? '加练完成！' : '今日复习完成！';
         }
@@ -5308,6 +5732,8 @@ function showFinalComplete() {
     if (descEl) {
         if (!isBonus && sessionSkippedRemedialAfterMain) {
             descEl.textContent = '你已选择暂不进行错题巩固，可随时点击「继续学习」再次进入复习。';
+        } else if (backlogAfterTask > 0) {
+            descEl.textContent = `今日任务已完成，另有 ${backlogAfterTask} 个到期词将按后续任务安排。`;
         } else {
             descEl.textContent = isBonus
                 ? '本次随机加练已完成（含错题巩固）。'
@@ -5334,9 +5760,16 @@ function showInitialEmptyReview() {
     document.getElementById('review-complete').style.display = 'block';
     const titleEl = document.getElementById('review-complete-title');
     const descEl = document.getElementById('review-complete-desc');
-    if (titleEl) titleEl.textContent = '今日暂无待复习';
+    const completedToday =
+        Number(currentTodayTaskPlan?.total) > 0 && Number(currentTodayTaskPlan?.remaining) === 0;
+    const backlog = Math.max(0, Number(currentTodayTaskPlan?.backlog_after_task) || 0);
+    if (titleEl) titleEl.textContent = completedToday ? '今日任务已完成' : '今日暂无待复习';
     if (descEl) {
-        descEl.textContent = '目前没有到期的复习任务。你可以随机加练 5 个词保持手感，或去导入新词。';
+        descEl.textContent = completedToday
+            ? backlog > 0
+                ? `今天的计划已完成，另有 ${backlog} 个到期词将按后续任务安排。`
+                : '今天的计划已完成，可以随机加练 5 个词保持手感。'
+            : '目前没有到期的复习任务。你可以随机加练 5 个词保持手感，或去导入新词。';
     }
     hideReviewSessionSummary();
     reviewSessionMode = 'daily';
@@ -5351,6 +5784,13 @@ function showInitialEmptyReview() {
 }
 
 async function loadReviewList() {
+    reviewSessionGeneration += 1;
+    pendingReviewSubmission = null;
+    const captureInput = document.getElementById('mobile-word-capture');
+    if (captureInput) captureInput.readOnly = false;
+    document.getElementById('submit-answer')?.classList.remove('btn-submit-loading');
+    const reviewContext = captureReviewContext();
+    const requestSequence = ++reviewDataRequestSequence;
     try {
         sessionSkippedRemedialAfterMain = false;
         wrongWordsInThisPass = new Set();
@@ -5364,11 +5804,18 @@ async function loadReviewList() {
         reviewSessionMode = 'daily';
 
         const data = preloadedReviewData || await apiRequest('/words/review');
+        if (
+            !isReviewContextCurrent(reviewContext) ||
+            requestSequence !== reviewDataRequestSequence
+        ) return;
         preloadedReviewData = null;
+        adaptReviewDataToAudioCapability(data);
+        renderTodayTaskPlan(data.plan || null);
         currentReviewList = data.words;
         currentReviewIndex = 0;
         currentReviewList.forEach((w) => wordMap.set(w.english, w));
-        sessionInitialMainWords = currentReviewList.length;
+        sessionRestoredRemedialWords = currentReviewList.filter((word) => word.task_remedial).length;
+        sessionInitialMainWords = currentReviewList.length - sessionRestoredRemedialWords;
 
         if (currentReviewList.length === 0) {
             showInitialEmptyReview();
@@ -5381,17 +5828,33 @@ async function loadReviewList() {
             showCurrentWord();
         }
     } catch (error) {
+        if (
+            !isReviewContextCurrent(reviewContext) ||
+            requestSequence !== reviewDataRequestSequence
+        ) return;
         showMainBanner('加载复习列表失败，请稍后重试');
     }
 }
 
 async function startBonusReview() {
+    reviewSessionGeneration += 1;
+    pendingReviewSubmission = null;
+    const captureInput = document.getElementById('mobile-word-capture');
+    if (captureInput) captureInput.readOnly = false;
+    document.getElementById('submit-answer')?.classList.remove('btn-submit-loading');
+    const reviewContext = captureReviewContext();
+    const requestSequence = ++reviewDataRequestSequence;
     try {
         const data = await apiRequest('/words/extra-review');
+        if (
+            !isReviewContextCurrent(reviewContext) ||
+            requestSequence !== reviewDataRequestSequence
+        ) return;
         if (!data.words || data.words.length === 0) {
             showMainBanner('词库为空，请先导入单词');
             return;
         }
+        adaptReviewDataToAudioCapability(data);
         sessionSkippedRemedialAfterMain = false;
         wrongWordsInThisPass = new Set();
         wrongWordsOrder = [];
@@ -5402,6 +5865,7 @@ async function startBonusReview() {
         resetSessionReviewStats();
         hideReviewSessionSummary();
         reviewSessionMode = 'bonus';
+        renderTodayTaskPlan(null);
 
         currentReviewList = data.words;
         currentReviewIndex = 0;
@@ -5415,17 +5879,25 @@ async function startBonusReview() {
         updateWrongRoundLabel();
         showCurrentWord();
     } catch (error) {
+        if (
+            !isReviewContextCurrent(reviewContext) ||
+            requestSequence !== reviewDataRequestSequence
+        ) return;
         showMainBanner('加载加练列表失败，请稍后重试');
     }
 }
 
 async function showCurrentWord() {
+    listeningPlaybackAttempt += 1;
+    stopSpeakPlayback();
+    endTtsSpeakUi();
     if (currentReviewIndex >= currentReviewList.length) {
         onPassComplete();
         return;
     }
     
     const word = currentReviewList[currentReviewIndex];
+    pendingReviewSubmission = null;
     
     // 重置状态
     currentErrorCount = 0;
@@ -5436,8 +5908,23 @@ async function showCurrentWord() {
     // 未勾选「考察语态」：只考词库原形；勾选：须拼例句中实际形式（与 CSV example*_form / pick 一致）
     const lemma = (word.english || '').trim();
     const inflected = (word.example_form || '').trim() || lemma;
-    const targetAnswer = getReviewTestInflectionEnabled() ? inflected : lemma;
+    const targetAnswer =
+        word.exercise_type !== 'listening' && getReviewTestInflectionEnabled()
+            ? inflected
+            : lemma;
     word._targetAnswer = targetAnswer;
+
+    const isListening = word.exercise_type === 'listening';
+    if (isListening) word._listeningAudioPlayed = false;
+    const modeEl = document.getElementById('review-exercise-type');
+    if (modeEl) {
+        modeEl.textContent = reviewExerciseLabel(word.exercise_type);
+        modeEl.classList.toggle('is-listening', isListening);
+    }
+    const inflectionInput = document.getElementById('review-test-inflection');
+    const inflectionToggle = inflectionInput?.closest('label');
+    if (inflectionInput) inflectionInput.disabled = isListening;
+    if (inflectionToggle) inflectionToggle.style.display = isListening ? 'none' : '';
     
     const dueHint = document.getElementById('review-due-hint');
     if (dueHint) {
@@ -5445,6 +5932,22 @@ async function showCurrentWord() {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-bonus';
             dueHint.textContent = '随机加练（不改变掌握进度与排期）';
+        } else if (word.task_remedial) {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-carryover';
+            dueHint.textContent = '错题巩固';
+        } else if (word.task_reason === 'new') {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-scheduled';
+            dueHint.textContent = '今日新词';
+        } else if (word.task_reason === 'maintenance') {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-scheduled';
+            dueHint.textContent = '长期记忆保持复习';
+        } else if (word.task_reason === 'weak') {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-scheduled';
+            dueHint.textContent = '薄弱能力巩固';
         } else if (word.is_carryover) {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-carryover';
@@ -5460,11 +5963,11 @@ async function showCurrentWord() {
     // 显示中文意思；多义词条：释义单独一行，例句在下方（见 .review-content--polyseme）
     const rcInner = document.getElementById('review-content-inner');
     if (rcInner) {
-        rcInner.classList.toggle('review-content--polyseme', !!word.review_polyseme);
+        rcInner.classList.toggle('review-content--polyseme', !!word.review_polyseme && !isListening);
+        rcInner.classList.toggle('review-mode-listening', isListening);
     }
     document.getElementById('current-word-chinese').textContent = word.chinese;
-    const maxSucc = word.max_success_count != null ? word.max_success_count : 8;
-    document.getElementById('current-word-progress').textContent = `${word.success_count}/${maxSucc}`;
+    renderReviewMasteryProgress(word);
     
     const exEl = document.getElementById('current-word-example');
     const multiHtml = buildReviewExamplesDisplayHtml(word);
@@ -5473,6 +5976,7 @@ async function showCurrentWord() {
     } else {
         exEl.textContent = formatReviewQuizExampleDisplay(word);
     }
+    exEl.hidden = isListening;
     
     // 提示字符串基于本题目标词长度（原形或句中形式）
     const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
@@ -5483,6 +5987,8 @@ async function showCurrentWord() {
     const speakBtn = document.getElementById('speak-example-btn');
     if (speakBtn) {
         speakBtn.onclick = speakExample;
+        speakBtn.title = isListening ? '朗读单词' : '朗读例句';
+        speakBtn.setAttribute('aria-label', isListening ? '朗读单词' : '朗读例句');
     }
     
     // 初始化下划线输入框（基于 targetAnswer 的长度）
@@ -5492,6 +5998,7 @@ async function showCurrentWord() {
     // 清空消息
     document.getElementById('word-message').style.display = 'none';
     clearReviewWordMessageExtra();
+    reviewQuestionStartedAt = performance.now();
 }
 
 /** 根据 target（变形或原形）生成提示字符串 */
@@ -5550,8 +6057,23 @@ function renderReviewOtherSensesExtra(items) {
 
 async function submitAnswer() {
     if (isSubmitting || isAdvancing) return;
-    const answer = getCurrentInput();
     const word = currentReviewList[currentReviewIndex];
+    if (word?.exercise_type === 'listening' && word._listeningAudioPlayed !== true) {
+        const messageDiv = document.getElementById('word-message');
+        if (messageDiv) {
+            messageDiv.textContent = '请先播放本题音频';
+            messageDiv.className = 'word-message error';
+            messageDiv.style.display = 'block';
+        }
+        void speakExample();
+        return;
+    }
+    const existingSubmission =
+        pendingReviewSubmission &&
+        pendingReviewSubmission.wordKey === (word?.task_item_id || word?.english)
+            ? pendingReviewSubmission
+            : null;
+    const answer = existingSubmission ? existingSubmission.answer : getCurrentInput();
     
     if (!answer) {
         focusWordCapture(0);
@@ -5561,34 +6083,88 @@ async function submitAnswer() {
     isSubmitting = true;
     const submitBtn = document.getElementById('submit-answer');
     if (submitBtn) submitBtn.classList.add('btn-submit-loading');
+    const inflectionInput = document.getElementById('review-test-inflection');
+    if (inflectionInput) inflectionInput.disabled = true;
+    const captureInput = document.getElementById('mobile-word-capture');
+    if (captureInput) captureInput.readOnly = true;
+    const reviewContext = captureReviewContext();
+    const submissionIndex = currentReviewIndex;
     
     try {
+        const activeExerciseType = word.exercise_type || 'spelling';
+        if (!existingSubmission) {
+            const reviewEventId = createReviewEventId();
+            const elapsedMs = reviewQuestionStartedAt > 0
+                ? Math.max(0, Math.round(performance.now() - reviewQuestionStartedAt))
+                : 0;
+            pendingReviewSubmission = {
+                wordKey: word.task_item_id || word.english,
+                answer,
+                sendCount: 0,
+                body: {
+                    word_id: word.english,
+                    answer,
+                    remedial:
+                        reviewSessionMode !== 'bonus' &&
+                        (wrongRoundNumber > 0 || word.task_remedial === true),
+                    bonus_practice: reviewSessionMode === 'bonus',
+                    test_inflection: getReviewTestInflectionEnabled(),
+                    task_id: word.task_id || '',
+                    task_item_id: word.task_item_id || '',
+                    exercise_type: activeExerciseType,
+                    attempt_number: currentErrorCount + 1,
+                    hint_count: currentRevealedCount,
+                    elapsed_ms: elapsedMs,
+                    review_event_id: reviewEventId,
+                    audio_available: Boolean(word._audioAvailableAtRender),
+                },
+            };
+        }
+        pendingReviewSubmission.sendCount += 1;
+        const isSubmissionRetry = pendingReviewSubmission.sendCount > 1;
+        const submission = pendingReviewSubmission;
         const result = await apiRequest('/words/practice', {
             method: 'POST',
-            body: JSON.stringify({
-                word_id: word.english,
-                answer: answer,
-                remedial: wrongRoundNumber > 0 && reviewSessionMode !== 'bonus',
-                bonus_practice: reviewSessionMode === 'bonus',
-                test_inflection: getReviewTestInflectionEnabled(),
-            })
+            body: JSON.stringify(submission.body),
         });
+        if (
+            !isReviewContextCurrent(reviewContext) ||
+            currentReviewIndex !== submissionIndex ||
+            currentReviewList[submissionIndex] !== word
+        ) return;
+        pendingReviewSubmission = null;
+        if (captureInput) captureInput.readOnly = false;
 
         if (result.word) {
             Object.assign(word, result.word);
+            word.exercise_type = result.exercise_type || activeExerciseType;
+            word.task_remedial = result.task_remedial ?? word.task_remedial;
             wordMap.set(word.english, word);
+            renderReviewMasteryProgress(word);
         }
 
-        if (!result.correct) {
-            sessionTotalWrongAttempts += 1;
-        } else {
-            if (wrongRoundNumber === 0) {
-                sessionMainCorrect += 1;
+        if (result.task_progress) updateTodayTaskProgress(result.task_progress);
+
+        if (result.recorded !== false || isSubmissionRetry || result.replayed === true) {
+            const exerciseType = result.exercise_type || word.exercise_type || 'spelling';
+            const typeStats = sessionExerciseStats[exerciseType] || { attempts: 0, correct: 0 };
+            typeStats.attempts += 1;
+            if (result.correct) typeStats.correct += 1;
+            sessionExerciseStats[exerciseType] = typeStats;
+        }
+
+        if (result.recorded !== false || isSubmissionRetry || result.replayed === true) {
+            if (!result.correct) {
+                sessionTotalWrongAttempts += 1;
             } else {
-                sessionRemedialCorrect += 1;
-            }
-            if (result.message && String(result.message).includes('已掌握')) {
-                sessionNewMastered.push(word.english);
+                if (!result.remedial) {
+                    sessionMainCorrect += 1;
+                } else {
+                    sessionRemedialCorrect += 1;
+                }
+                if (result.mastered_now) {
+                    sessionNewMastered.push(word.english);
+                }
             }
         }
 
@@ -5639,6 +6215,11 @@ async function submitAnswer() {
             isAdvancing = true;
             const advanceMs = word.review_polyseme ? 2500 : 1500;
             setTimeout(() => {
+                if (
+                    !isReviewContextCurrent(reviewContext) ||
+                    currentReviewIndex !== submissionIndex ||
+                    currentReviewList[submissionIndex] !== word
+                ) return;
                 isSubmitting = false;
                 isAdvancing = false;
                 currentReviewIndex++;
@@ -5656,13 +6237,18 @@ async function submitAnswer() {
             
             if (currentErrorCount >= 3) {
                 // 3 次尝试均错：记入本轮错题栏
-                if (wrongRoundNumber === 0) {
+                if (wrongRoundNumber === 0 && !word.task_remedial) {
                     sessionMainFailedThree += 1;
                 }
                 recordWrongAttempt(word);
                 document.getElementById('current-word-english').textContent = targetAnswer;
                 isAdvancing = true;
                 setTimeout(() => {
+                    if (
+                        !isReviewContextCurrent(reviewContext) ||
+                        currentReviewIndex !== submissionIndex ||
+                        currentReviewList[submissionIndex] !== word
+                    ) return;
                     isSubmitting = false;
                     isAdvancing = false;
                     currentReviewIndex++;
@@ -5679,18 +6265,42 @@ async function submitAnswer() {
                 messageDiv.textContent = `${result.message} (还剩 ${3 - currentErrorCount} 次尝试机会)`;
                 // 清空下划线输入框，让用户重新输入
                 clearUnderlineInput();
+                const inflectionInput = document.getElementById('review-test-inflection');
+                if (inflectionInput) inflectionInput.disabled = true;
+                reviewQuestionStartedAt = performance.now();
                 isSubmitting = false;
                 focusWordCapture(0);
                 focusWordCapture(100);
             }
         }
     } catch (error) {
+        if (
+            !isReviewContextCurrent(reviewContext) ||
+            currentReviewIndex !== submissionIndex ||
+            currentReviewList[submissionIndex] !== word
+        ) return;
         isSubmitting = false;
         isAdvancing = false;
         if (submitBtn) submitBtn.classList.remove('btn-submit-loading');
-        const msg = error.message || '提交失败，请重试';
+        const keepForRetry =
+            !Number.isFinite(Number(error.status)) ||
+            Number(error.status) >= 500 ||
+            error.status === 408 ||
+            error.status === 429;
+        if (!keepForRetry) pendingReviewSubmission = null;
+        if (captureInput) captureInput.readOnly = keepForRetry;
+        const baseMessage = error.message || '提交失败，请重试';
+        const msg = keepForRetry
+            ? `${baseMessage}；再次提交将确认上次作答结果`
+            : baseMessage;
         const reviewSection = document.getElementById('review-section');
         const messageDiv = document.getElementById('word-message');
+        if (inflectionInput) {
+            inflectionInput.disabled =
+                Boolean(pendingReviewSubmission) ||
+                word.exercise_type === 'listening' ||
+                currentErrorCount > 0;
+        }
         if (reviewSection && reviewSection.classList.contains('active') && messageDiv) {
             clearReviewWordMessageExtra();
             messageDiv.textContent = msg;
@@ -5821,6 +6431,16 @@ function _renderProgressWordItem(word) {
     const coTag = word.is_carryover
         ? `<span class="word-item-carryover-tag">遗留${word.carryover_days ? ` · 逾期${word.carryover_days}天` : ''}</span>`
         : '';
+    const masteryPercent = Number(word.mastery?.overall_percent);
+    const masteryValue = Number.isFinite(masteryPercent)
+        ? `${Math.round(masteryPercent)}%`
+        : `${word.success_count}/${word.max_success_count}`;
+    const masteryTitle = Number.isFinite(masteryPercent)
+        ? `拼写 ${Number(word.mastery?.by_type?.spelling?.percent) || 0}% · 听写 ${Number(word.mastery?.by_type?.listening?.percent) || 0}%`
+        : '';
+    const masteryDetail = Number.isFinite(masteryPercent)
+        ? `<div class="word-stat-detail">${escapeHtml(masteryTitle)}</div>`
+        : '';
     return `<div class="word-item">
         <div class="word-item-info">
             <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
@@ -5829,8 +6449,9 @@ function _renderProgressWordItem(word) {
         </div>
         <div class="word-item-stats">
             <div class="word-stat">
-                <div class="word-stat-value">${escapeHtml(word.success_count)}/${escapeHtml(word.max_success_count)}</div>
-                <div class="word-stat-label">掌握进度</div>
+                <div class="word-stat-value"${masteryTitle ? ` title="${escapeHtml(masteryTitle)}"` : ''}>${escapeHtml(masteryValue)}</div>
+                <div class="word-stat-label">多维掌握</div>
+                ${masteryDetail}
             </div>
             <div class="word-stat">
                 <div class="word-stat-value">${escapeHtml(word.review_count)}</div>
@@ -5893,8 +6514,8 @@ async function loadProgress() {
             <div class="stat-card">
                 <div class="stat-icon">📊</div>
                 <div class="stat-content">
-                    <div class="stat-label">平均复习次数</div>
-                    <div class="stat-value">${data.stats.avg_review_count.toFixed(1)}</div>
+                    <div class="stat-label">平均掌握度</div>
+                    <div class="stat-value">${Math.round(Number(data.stats.avg_mastery_percent) || 0)}%</div>
                 </div>
             </div>
         `;
@@ -5918,12 +6539,23 @@ async function loadProgress() {
 
 function _renderMasteredWordItem(word) {
     const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
+    const masteryPercent = Number(word.mastery?.overall_percent);
+    const spelling = Number(word.mastery?.by_type?.spelling?.percent) || 0;
+    const listening = Number(word.mastery?.by_type?.listening?.percent) || 0;
+    const masteryHtml = Number.isFinite(masteryPercent)
+        ? `<div class="word-stat">
+                <div class="word-stat-value">${Math.round(masteryPercent)}%</div>
+                <div class="word-stat-label">多维掌握</div>
+                <div class="word-stat-detail">拼写 ${spelling}% · 听写 ${listening}%</div>
+            </div>`
+        : '';
     return `<div class="word-item">
         <div class="word-item-info">
             <div class="word-item-english">${escapeHtml(word.english)}${phoneticHtml}</div>
             <div class="word-item-chinese">${escapeHtml(word.chinese)}</div>
         </div>
         <div class="word-item-stats">
+            ${masteryHtml}
             <div class="word-stat">
                 <div class="word-stat-value">${escapeHtml(word.review_count)}</div>
                 <div class="word-stat-label">复习次数</div>
@@ -7680,6 +8312,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (inflectionCb) {
         inflectionCb.checked = localStorage.getItem(REVIEW_TEST_INFLECTION_STORAGE_KEY) === '1';
         inflectionCb.addEventListener('change', () => {
+            if (isSubmitting || isAdvancing || pendingReviewSubmission) {
+                inflectionCb.checked = localStorage.getItem(REVIEW_TEST_INFLECTION_STORAGE_KEY) === '1';
+                return;
+            }
             localStorage.setItem(REVIEW_TEST_INFLECTION_STORAGE_KEY, inflectionCb.checked ? '1' : '0');
             const word = currentReviewList[currentReviewIndex];
             if (word && document.getElementById('review-section')?.classList.contains('active')) {
@@ -7906,6 +8542,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             let totalRemoved = 0;
             const removedEnglishAcc = [];
+            let latestPlan = null;
             for (let i = 0; i < selected.length; i += pendingRmBatch) {
                 const chunk = selected.slice(i, i + pendingRmBatch);
                 if (btn && selected.length > pendingRmBatch) {
@@ -7919,6 +8556,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 totalRemoved += n;
                 const part = res && Array.isArray(res.removed_english) ? res.removed_english : [];
                 removedEnglishAcc.push(...part);
+                if (res && res.plan) latestPlan = res.plan;
             }
             setSettingsMessage(
                 totalRemoved > 0
@@ -7928,7 +8566,7 @@ document.addEventListener('DOMContentLoaded', function() {
             );
             document.getElementById('settings-message')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             await loadSettingsPendingWordsBlock();
-            await syncMainPageAfterPendingWordsRemoved(totalRemoved, removedEnglishAcc);
+            await syncMainPageAfterPendingWordsRemoved(totalRemoved, removedEnglishAcc, latestPlan);
         } catch (err) {
             setSettingsMessage(err.message || '移除失败', true);
             document.getElementById('settings-message')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });

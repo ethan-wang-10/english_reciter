@@ -6,6 +6,8 @@
   "tts_enabled": true,
   "max_review_round": 8,
   "review_interval_days": [1, 2, 4, 7, 15, 30, 60],
+  "daily_review_limit": 20,
+  "daily_new_word_limit": 5,
   "backup_enabled": true,
   "backup_interval_days": 7,
   "max_backups": 10,

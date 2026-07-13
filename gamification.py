@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import calendar
@@ -27,10 +28,34 @@ XP_REMEDIAL = 4
 XP_BONUS_PRACTICE = 3
 
 DAILY_XP_SOFT_CAP = 1000
+PRACTICE_EVENT_LIMIT = 100
 # Soft-cap 后仍给少量收益，避免高强度学习完全没有反馈。
 OVER_CAP_MULTIPLIER = 0.2
 
 MAX_LEVEL = 99
+
+
+def _practice_event_scope_key(value: Any) -> str:
+    raw = str(value or '').strip().casefold()
+    if not raw:
+        return ''
+    return f"sha256:{hashlib.sha256(raw.encode('utf-8')).hexdigest()}"
+
+
+def _stored_practice_event_scope_key(value: Any, encoding: Any = '') -> str:
+    raw = str(value or '').strip().casefold()
+    if not raw:
+        return ''
+    if str(encoding or '').strip().casefold() == 'sha256-v1':
+        digest = raw[7:]
+        if (
+            len(raw) == 71
+            and raw.startswith('sha256:')
+            and all(char in '0123456789abcdef' for char in digest)
+        ):
+            return raw
+        return ''
+    return _practice_event_scope_key(raw)
 
 # 当日答对次数 ≥ 此值才算「有效打卡」，并参与连续打卡统计
 CHECKIN_MIN_CORRECT = 5
@@ -189,6 +214,7 @@ def default_state() -> Dict[str, Any]:
         MAKEUP_CHECKINS_KEY: {},
         "daily_xp": {},
         "xp_gain_history": {},
+        "practice_events": [],
         "achievements": {},
         "leaderboard_opt_in": True,
         # 本月打卡天数目标：与 mcheckin_goal_month 同时有效
@@ -218,6 +244,28 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
             base[k] = raw[k]
     if "achievements" in raw and isinstance(raw["achievements"], dict):
         base["achievements"] = dict(raw["achievements"])
+    if "practice_events" in raw and isinstance(raw["practice_events"], list):
+        events_reversed: List[Dict[str, Any]] = []
+        scope_counts: Dict[str, int] = {}
+        for event in reversed(raw["practice_events"]):
+            if not isinstance(event, dict) or not isinstance(event.get("payload"), dict):
+                continue
+            event_id = str(event.get("event_id") or "").strip()[:96]
+            if not event_id:
+                continue
+            event_scope = _stored_practice_event_scope_key(
+                event.get("scope"),
+                event.get("scope_encoding"),
+            )
+            if scope_counts.get(event_scope, 0) >= PRACTICE_EVENT_LIMIT:
+                continue
+            normalized_event = {"event_id": event_id, "payload": dict(event["payload"])}
+            if event_scope:
+                normalized_event["scope"] = event_scope
+                normalized_event["scope_encoding"] = "sha256-v1"
+            events_reversed.append(normalized_event)
+            scope_counts[event_scope] = scope_counts.get(event_scope, 0) + 1
+        base["practice_events"] = list(reversed(events_reversed))
     if "daily_xp" in raw and isinstance(raw["daily_xp"], dict):
         base["daily_xp"] = {str(k): int(v) for k, v in raw["daily_xp"].items()}
     if "xp_gain_history" in raw and isinstance(raw["xp_gain_history"], dict):
@@ -1302,6 +1350,8 @@ def award_correct_answer(
     mastered_words: int,
     pk_wins: int = 0,
     pk_matches: int = 0,
+    event_id: str = '',
+    event_scope: str = '',
 ) -> Dict[str, Any]:
     """
     答对后加分、更新 streak、解锁成就。在同一用户锁内调用。
@@ -1309,6 +1359,27 @@ def award_correct_answer(
     """
     with _locked_user_state(data_dir, username):
         state = load_state(data_dir, username)
+        event_key = str(event_id or '').strip()[:96]
+        event_scope_key = _practice_event_scope_key(event_scope)
+        practice_events = state.setdefault('practice_events', [])
+        if not isinstance(practice_events, list):
+            practice_events = []
+            state['practice_events'] = practice_events
+        if event_key:
+            for event in practice_events:
+                if not isinstance(event, dict) or event.get('event_id') != event_key:
+                    continue
+                stored_scope = _stored_practice_event_scope_key(
+                    event.get('scope'),
+                    event.get('scope_encoding'),
+                )
+                if event_scope_key and stored_scope not in ('', event_scope_key):
+                    continue
+                if not event_scope_key and stored_scope:
+                    continue
+                payload = event.get('payload')
+                if isinstance(payload, dict):
+                    return dict(payload)
         today = china_today()
         day_key = today.isoformat()
         ym = today.strftime("%Y-%m")
@@ -1370,14 +1441,12 @@ def award_correct_answer(
             pk_wins=pk_wins,
             pk_matches=pk_matches,
         )
-        _save_state_unlocked(data_dir, username, state)
-
         lv = level_from_xp(int(state["total_xp"]))
         _, need_next = xp_to_next_level(int(state["total_xp"]))
         today_correct = int(sbd.get(day_key, 0))
         check_in_done = today_correct >= CHECKIN_MIN_CORRECT
 
-        return {
+        payload = {
             "xp_gained": xp_gain,
             "answer_xp_gained": answer_xp_gain,
             "checkin_bonus_xp": checkin_bonus_xp,
@@ -1395,6 +1464,31 @@ def award_correct_answer(
             "check_in_min_correct": CHECKIN_MIN_CORRECT,
             "makeup_checkin": makeup_checkin_offer(state, today),
         }
+        if event_key:
+            event_record = {'event_id': event_key, 'payload': payload}
+            if event_scope_key:
+                event_record['scope'] = event_scope_key
+                event_record['scope_encoding'] = 'sha256-v1'
+            practice_events.append(event_record)
+            matching_seen = 0
+            retained_reversed = []
+            for event in reversed(practice_events):
+                stored_scope = (
+                    _stored_practice_event_scope_key(
+                        event.get('scope'),
+                        event.get('scope_encoding'),
+                    )
+                    if isinstance(event, dict)
+                    else ''
+                )
+                if stored_scope == event_scope_key:
+                    matching_seen += 1
+                    if matching_seen > PRACTICE_EVENT_LIMIT:
+                        continue
+                retained_reversed.append(event)
+            practice_events[:] = reversed(retained_reversed)
+        _save_state_unlocked(data_dir, username, state)
+        return payload
 
 
 def sync_achievements_only(
