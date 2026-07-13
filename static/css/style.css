@@ -127,17 +127,11 @@ body {
 }
 
 .login-mascot {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 72px;
-    height: 72px;
-    margin-bottom: 12px;
-    font-size: 40px;
-    background: linear-gradient(145deg, var(--primary-light), #fff);
-    border-radius: 50%;
-    border: 2px solid var(--primary-color);
-    box-shadow: 0 var(--tactile-depth) 0 var(--primary-dark);
+    display: block;
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 12px;
+    object-fit: contain;
 }
 
 .login-brand h1 {
@@ -402,7 +396,7 @@ body {
     flex-shrink: 0;
 }
 
-/* 顶栏：始终只显示 📚 图标，完整名称由 .nav-brand[aria-label] 提供（读屏 / 悬停） */
+/* 顶栏始终只显示品牌标志，完整名称由 .nav-brand[aria-label] 提供（读屏 / 悬停）。 */
 .navbar .nav-brand {
     gap: 0;
     margin-inline-end: 16px;
@@ -413,8 +407,10 @@ body {
 }
 
 .logo {
-    font-size: 32px;
-    line-height: 1;
+    display: block;
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
     flex-shrink: 0;
 }
 
@@ -3093,8 +3089,8 @@ button.import-article-chip--selected:hover {
 
     .nav-brand .logo {
         display: block;
-        font-size: 1.45rem;
-        line-height: 1;
+        width: 30px;
+        height: 30px;
     }
 
     .nav-item {
@@ -3231,7 +3227,8 @@ button.import-article-chip--selected:hover {
     }
 
     html.is-review-section .navbar .nav-brand .logo {
-        font-size: 1.2rem;
+        width: 26px;
+        height: 26px;
     }
 
     html.is-review-section .nav-user {
