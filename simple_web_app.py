@@ -3112,6 +3112,17 @@ def _summary_payload_from_reciter(reciter: WordReciter) -> dict:
     """首屏/导航所需轻量统计，不补查词库例句。"""
     total_pending = len(reciter.all_words)
     due_count = reciter.count_due_words()
+    task_progress = reciter.daily_task_progress()
+    task_remaining = int(task_progress.get('remaining') or 0)
+    review_states = reciter.learning_state_v2.get('review_states')
+    state_rows = review_states if isinstance(review_states, dict) else {}
+    reinforcement_count = sum(
+        1
+        for word in reciter.mastered_words
+        if isinstance(state_rows.get(reciter.word_state_key(word)), dict)
+        and state_rows[reciter.word_state_key(word)].get('memory_status') == 'reinforcement'
+    )
+    stable_count = max(0, len(reciter.mastered_words) - reinforcement_count)
     avg_review_count = (
         sum(w.review_count for w in reciter.all_words) / total_pending
         if total_pending
@@ -3120,9 +3131,19 @@ def _summary_payload_from_reciter(reciter: WordReciter) -> dict:
     stats = {
         "total_words": total_pending,
         "mastered_words": len(reciter.mastered_words),
+        "mastered_stable": stable_count,
+        "mastered_reinforcement": reinforcement_count,
         "current_round": reciter.current_review_round,
         "avg_review_count": avg_review_count,
         "due_count": due_count,
+        "today_task": {
+            "total": int(task_progress.get('total') or 0),
+            "completed": int(task_progress.get('completed') or 0),
+            "remaining": task_remaining,
+            "estimated_minutes": (
+                max(1, round(task_remaining * 0.6)) if task_remaining else 0
+            ),
+        },
     }
     return {"due_count": due_count, "stats": stats}
 
@@ -3564,7 +3585,6 @@ def bootstrap(username):
         listening_available = _reliable_listening_available()
         with user_reciter_session(username) as reciter:
             mastered_n = len(reciter.mastered_words)
-            summary = _summary_payload_from_reciter(reciter)
             if getattr(g, "is_parent", False):
                 review = {'words': [], 'count': 0}
             else:
@@ -3578,6 +3598,7 @@ def bootstrap(username):
                     listening_available=listening_available,
                 )
                 reciter.save_learning_data(backup=False)
+            summary = _summary_payload_from_reciter(reciter)
 
         pkw, pkm = _pk_stats_for_gamification(username)
         gam_payload = gamification_mod.public_profile(
@@ -4312,10 +4333,11 @@ def get_status(username):
                         row_payload["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
                 all_words.append(row_payload)
 
+            overview_stats = _summary_payload_from_reciter(reciter)['stats']
             stats = {
+                **overview_stats,
                 'total_words': len(all_words),
                 'mastered_words': len(reciter.mastered_words),
-                'current_round': reciter.current_review_round,
                 'avg_review_count': sum(w['review_count'] for w in all_words) / len(all_words) if all_words else 0,
                 'avg_mastery_percent': (
                     sum(w['mastery']['overall_percent'] for w in all_words) / len(all_words)

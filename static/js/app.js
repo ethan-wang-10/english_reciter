@@ -481,11 +481,14 @@ function renderDailySummaryBody(g, statusData) {
               return nd <= today;
           }).length
         : Number(statusData.due_count ?? statusData.stats?.due_count ?? 0);
-    const round =
-        statusData.stats && statusData.stats.current_round != null
-            ? statusData.stats.current_round + 1
-            : '—';
-    const mastered = statusData.stats ? statusData.stats.mastered_words : 0;
+    const stats = statusData.stats || {};
+    const mastered = Number(stats.mastered_words) || 0;
+    const stable = Number(stats.mastered_stable) || 0;
+    const reinforcement = Number(stats.mastered_reinforcement) || 0;
+    const task = stats.today_task || {};
+    const taskTotal = Number(task.total) || 0;
+    const taskCompleted = Number(task.completed) || 0;
+    const taskRemaining = Number(task.remaining) || 0;
 
     const goal = g.monthly_checkin_goal;
     const goalMonth = g.monthly_checkin_goal_month;
@@ -512,9 +515,9 @@ function renderDailySummaryBody(g, statusData) {
             ? `<li>历史最高连续打卡 <strong>${formatNumber(streakMax)}</strong> 天</li>`
             : '') +
         monthLine +
-        `<li>当前复习轮次 <strong>第 ${escapeHtml(String(round))} 轮</strong></li>` +
+        `<li>今日任务 <strong>${formatNumber(taskCompleted)} / ${formatNumber(taskTotal)}</strong>（剩余 ${formatNumber(taskRemaining)} 词）</li>` +
         `<li>今日仍待复习（含逾期）<strong>${formatNumber(dueToday)}</strong> 词</li>` +
-        `<li>累计已掌握 <strong>${formatNumber(mastered)}</strong> 词</li>` +
+        `<li>累计已掌握 <strong>${formatNumber(mastered)}</strong> 词（稳定 ${formatNumber(stable)} · 待巩固 ${formatNumber(reinforcement)}）</li>` +
         '</ul>';
 }
 
@@ -4740,12 +4743,40 @@ function applySummaryStats(summary) {
               : 0;
     const reviewEl = document.getElementById('review-count');
     const masteredEl = document.getElementById('mastered-count');
-    const roundEl = document.getElementById('round-count');
+    const masteredDetailEl = document.getElementById('mastered-status-detail');
     if (reviewEl) reviewEl.textContent = String(due);
     if (masteredEl) masteredEl.textContent = String(stats.mastered_words || 0);
-    if (roundEl) roundEl.textContent = String((Number(stats.current_round) || 0) + 1);
+    if (masteredDetailEl) {
+        const mastered = Number(stats.mastered_words) || 0;
+        const reinforcement = Number(stats.mastered_reinforcement) || 0;
+        const stable = Number.isFinite(Number(stats.mastered_stable))
+            ? Number(stats.mastered_stable)
+            : Math.max(0, mastered - reinforcement);
+        masteredDetailEl.textContent = `稳定 ${stable} · 待巩固 ${reinforcement}`;
+    }
+    renderTodayProgressStat(stats.today_task || {});
     if (document.getElementById('progress-section')?.classList.contains('active')) {
         renderLearningMap(stats.mastered_words || 0);
+    }
+}
+
+function renderTodayProgressStat(progress) {
+    const valueEl = document.getElementById('today-progress-count');
+    const detailEl = document.getElementById('today-progress-detail');
+    const total = Math.max(0, Number(progress?.total) || 0);
+    const completed = Math.max(0, Math.min(total, Number(progress?.completed) || 0));
+    const remaining = Math.max(0, Number(progress?.remaining) || total - completed);
+    const estimate = Math.max(
+        0,
+        Number(progress?.estimated_minutes) || (remaining ? Math.max(1, Math.round(remaining * 0.6)) : 0),
+    );
+    if (valueEl) valueEl.textContent = `${completed}/${total}`;
+    if (detailEl) {
+        detailEl.textContent = remaining
+            ? `剩余 ${remaining} 词 · 约 ${estimate} 分钟`
+            : total > 0
+              ? '今日任务已完成'
+              : '今日暂无任务';
     }
 }
 
@@ -5565,6 +5596,7 @@ function updateTodayTaskProgress(progress) {
     if (Number.isFinite(completed)) currentTodayTaskPlan.completed = completed;
     if (Number.isFinite(remaining)) currentTodayTaskPlan.remaining = remaining;
     currentTodayTaskPlan.estimated_minutes = remaining > 0 ? Math.max(1, Math.round(remaining * 0.6)) : 0;
+    renderTodayProgressStat(currentTodayTaskPlan);
     renderTodayTaskPlan(currentTodayTaskPlan);
 }
 

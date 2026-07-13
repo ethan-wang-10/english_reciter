@@ -211,6 +211,48 @@ def test_static_assets_use_public_cache_headers(client) -> None:
     assert "no-cache" not in cache_control
 
 
+def test_summary_payload_exposes_today_progress_and_memory_status_counts() -> None:
+    pending = SimpleNamespace(english='pending', review_count=2)
+    stable = SimpleNamespace(english='stable')
+    reinforcement = SimpleNamespace(english='reinforcement')
+
+    class SummaryReciter:
+        all_words = [pending]
+        mastered_words = [stable, reinforcement]
+        current_review_round = 0
+        learning_state_v2 = {
+            'review_states': {
+                'stable': {'memory_status': 'stable'},
+                'reinforcement': {'memory_status': 'reinforcement'},
+            },
+        }
+
+        @staticmethod
+        def word_state_key(word):
+            return word.english
+
+        @staticmethod
+        def count_due_words():
+            return 3
+
+        @staticmethod
+        def daily_task_progress():
+            return {'total': 10, 'completed': 4, 'remaining': 6}
+
+    payload = web._summary_payload_from_reciter(SummaryReciter())
+    stats = payload['stats']
+
+    assert stats['mastered_words'] == 2
+    assert stats['mastered_stable'] == 1
+    assert stats['mastered_reinforcement'] == 1
+    assert stats['today_task'] == {
+        'total': 10,
+        'completed': 4,
+        'remaining': 6,
+        'estimated_minutes': 4,
+    }
+
+
 def test_practice_requires_review_event_id(client, monkeypatch) -> None:
     user = {"password_hash": "unused", "enabled": True}
     monkeypatch.setattr(web, "verify_token", lambda token: "alice")

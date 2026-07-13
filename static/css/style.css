@@ -1226,6 +1226,10 @@ body {
     line-height: 1;
 }
 
+.stat-content {
+    min-width: 0;
+}
+
 .stat-value {
     font-size: 2rem;
     font-weight: 800;
@@ -1239,6 +1243,15 @@ body {
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0;
+}
+
+.stat-detail {
+    margin-top: 3px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 
 /* 复习区：主栏 + 右侧错题（顶对齐：统一用 review-layout 上内边距，勿给主栏单独 margin-top） */
@@ -3591,6 +3604,12 @@ button.import-article-chip--selected:hover {
     .stat-label {
         font-size: 0.6rem;
         line-height: 1.15;
+    }
+
+    .stat-detail {
+        margin-top: 2px;
+        font-size: 0.55rem;
+        line-height: 1.2;
     }
 
     .review-layout {
