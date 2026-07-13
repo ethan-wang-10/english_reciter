@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 
 STATE_VERSION = 1
 SCHEDULER_ALGORITHM = "adaptive-sm2-v1"
-EXERCISE_TYPES = ("spelling", "listening")
+EXERCISE_TYPES = ("recognition", "context", "spelling", "listening")
 RATINGS = ("again", "hard", "good", "easy")
 MAX_INTERVAL_DAYS = 365
 RECENT_EVENT_LIMIT = 100
@@ -138,12 +138,12 @@ def normalize_review_state(
         }
     )
     mastery = dict(mastery_src)
-    mastery.update(
-        {
-            "spelling": _normalize_dimension(mastery_src.get("spelling"), inferred_spelling),
-            "listening": _normalize_dimension(mastery_src.get("listening"), 0.0),
-        }
-    )
+    mastery.update({
+        "recognition": _normalize_dimension(mastery_src.get("recognition"), 0.0),
+        "context": _normalize_dimension(mastery_src.get("context"), 0.0),
+        "spelling": _normalize_dimension(mastery_src.get("spelling"), inferred_spelling),
+        "listening": _normalize_dimension(mastery_src.get("listening"), 0.0),
+    })
     normalized = dict(src)
     normalized.update(
         {
@@ -349,14 +349,18 @@ def mastery_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def mastery_ready(state: Dict[str, Any], *, require_listening: bool = True) -> bool:
-    """Require demonstrated ability in every exercise the client can perform."""
+    """Use semantic abilities as the primary Gaokao mastery gate."""
     snapshot = mastery_snapshot(state)
-    required_types = EXERCISE_TYPES if require_listening else ("spelling",)
-    dimensions = [snapshot["by_type"][name] for name in required_types]
-    overall = sum(float(dim["score"]) for dim in dimensions) / len(dimensions)
-    return (
-        overall >= 0.6
-        and all(dim["attempts"] >= 1 and dim["score"] >= 0.55 for dim in dimensions)
+    recognition = snapshot["by_type"]["recognition"]
+    context = snapshot["by_type"]["context"]
+    spelling = snapshot["by_type"]["spelling"]
+    return bool(
+        recognition["attempts"] >= 3
+        and recognition["score"] >= 0.65
+        and context["attempts"] >= 3
+        and context["score"] >= 0.65
+        and spelling["attempts"] >= 2
+        and spelling["score"] >= 0.55
     )
 
 

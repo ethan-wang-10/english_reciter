@@ -2245,6 +2245,101 @@ body {
     color: #086b9c;
 }
 
+.review-exercise-type.is-semantic {
+    border-color: rgba(255, 151, 0, 0.48);
+    background: #fff7e6;
+    color: #8a4b00;
+}
+
+.semantic-question {
+    display: grid;
+    gap: 16px;
+    width: min(100%, 760px);
+    margin: 0 auto 18px;
+}
+
+.semantic-question[hidden],
+.semantic-question-feedback[hidden],
+.review-def-example-wrap[hidden],
+.word-input[hidden],
+.underline-input-wrapper[hidden] {
+    display: none;
+}
+
+.semantic-question-prompt {
+    min-height: 1.6em;
+    color: var(--text-primary);
+    font-size: 1.08rem;
+    font-weight: 700;
+    line-height: 1.65;
+    text-align: center;
+}
+
+.semantic-question-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.semantic-option {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+    min-height: 52px;
+    padding: 10px 14px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-primary);
+    font: inherit;
+    font-weight: 700;
+    line-height: 1.45;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.semantic-option:hover:not(:disabled),
+.semantic-option.is-selected {
+    border-color: var(--secondary-color);
+    background: #eef9ff;
+}
+
+.semantic-option.is-correct {
+    border-color: var(--primary-color);
+    background: #f2fde9;
+}
+
+.semantic-option.is-wrong {
+    border-color: var(--danger-color, #e53838);
+    background: #fff1f1;
+}
+
+.semantic-option:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+.semantic-question-feedback {
+    min-height: 1.5em;
+    padding: 11px 13px;
+    border-left: 4px solid var(--secondary-color);
+    background: #f5fbff;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+.semantic-question-retry {
+    justify-self: center;
+}
+
+.review-mode-semantic .word-input {
+    justify-content: center;
+}
+
 .review-phonetic-toggle {
     display: inline-flex;
     align-items: center;
@@ -2333,6 +2428,15 @@ body {
 }
 
 @media (max-width: 600px) {
+    .semantic-question-options {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .semantic-question-prompt {
+        font-size: 0.98rem;
+        text-align: left;
+    }
+
     .today-task-panel {
         margin: 4px 0 10px;
         padding: 10px 2px;
@@ -4626,6 +4730,23 @@ button.import-article-chip--selected:hover {
     font-size: 0.9rem;
     color: var(--text-secondary);
     line-height: 1.45;
+}
+
+.settings-learning-limit-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+}
+
+.settings-learning-limit-grid input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.settings-parent-divider {
+    height: 1px;
+    margin: 22px 0;
+    background: var(--border);
 }
 
 .settings-email-row {

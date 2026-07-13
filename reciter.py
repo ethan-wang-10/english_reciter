@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import math
 import random
 import shutil
 import platform
@@ -17,6 +18,7 @@ import logging
 
 from app_time import china_date_from_timestamp, china_now, china_today
 from review_scheduler import (
+    EXERCISE_TYPES,
     claim_review_event,
     choose_exercise_type,
     mastery_ready,
@@ -30,6 +32,11 @@ from review_scheduler import (
 
 # 常量定义
 MAX_ATTEMPTS = 3  # 最大尝试次数
+DEFAULT_DAILY_REVIEW_LIMIT = 120
+MAX_DAILY_REVIEW_LIMIT = 300
+MIN_DAILY_REVIEW_SHARE = 0.6
+DEFAULT_DAILY_NEW_WORD_TARGET = 30
+DAILY_PERFORMANCE_HISTORY_DAYS = 30
 
 def get_logger(name: str = __name__) -> logging.Logger:
     """获取日志记录器（单例模式）"""
@@ -76,8 +83,7 @@ class Config:
             "tts_enabled": True,
             "max_review_round": 8,
             "review_interval_days": [1, 2, 4, 7, 15, 30, 60],
-            "daily_review_limit": 20,
-            "daily_new_word_limit": 5,
+            "daily_review_limit": DEFAULT_DAILY_REVIEW_LIMIT,
             "backup_enabled": True,
             "backup_interval_days": 7,
             "max_backups": 10,
@@ -105,15 +111,10 @@ class Config:
         try:
             daily_review_limit = int(default_config["daily_review_limit"])
         except (TypeError, ValueError):
-            daily_review_limit = 20
-        try:
-            daily_new_word_limit = int(default_config["daily_new_word_limit"])
-        except (TypeError, ValueError):
-            daily_new_word_limit = 5
-        self.DAILY_REVIEW_LIMIT = max(1, min(100, daily_review_limit))
-        self.DAILY_NEW_WORD_LIMIT = max(
-            0,
-            min(self.DAILY_REVIEW_LIMIT, daily_new_word_limit),
+            daily_review_limit = DEFAULT_DAILY_REVIEW_LIMIT
+        self.DAILY_REVIEW_LIMIT = max(
+            1,
+            min(MAX_DAILY_REVIEW_LIMIT, daily_review_limit),
         )
         self.BACKUP_ENABLED = default_config["backup_enabled"]
         self.BACKUP_INTERVAL_DAYS = default_config["backup_interval_days"]
@@ -671,6 +672,74 @@ class WordReciter:
             elapsed_ms=elapsed_ms,
         )
 
+    def _daily_performance_history(self) -> Dict[str, Dict[str, int]]:
+        raw = self.learning_state_v2.get('daily_performance')
+        source = raw if isinstance(raw, dict) else {}
+        oldest = self.today - timedelta(days=DAILY_PERFORMANCE_HISTORY_DAYS - 1)
+        history: Dict[str, Dict[str, int]] = {}
+        for day_key, values in source.items():
+            try:
+                day = date.fromisoformat(str(day_key)[:10])
+            except (TypeError, ValueError):
+                continue
+            if day < oldest or day > self.today or not isinstance(values, dict):
+                continue
+            try:
+                attempts = max(0, min(1_000_000, int(values.get('attempts') or 0)))
+                correct = max(0, min(attempts, int(values.get('correct') or 0)))
+            except (TypeError, ValueError, OverflowError):
+                continue
+            history[day.isoformat()] = {'attempts': attempts, 'correct': correct}
+        self.learning_state_v2['daily_performance'] = history
+        return history
+
+    def _record_daily_performance(self, correct: bool) -> None:
+        history = self._daily_performance_history()
+        day_key = self.today.isoformat()
+        row = history.setdefault(day_key, {'attempts': 0, 'correct': 0})
+        row['attempts'] = min(1_000_000, int(row['attempts']) + 1)
+        if correct:
+            row['correct'] = min(row['attempts'], int(row['correct']) + 1)
+
+    def recent_performance_snapshot(self, days: int = 7) -> Dict[str, Any]:
+        window_days = max(1, min(DAILY_PERFORMANCE_HISTORY_DAYS, int(days or 7)))
+        oldest = self.today - timedelta(days=window_days - 1)
+        attempts = 0
+        correct = 0
+        for day_key, row in self._daily_performance_history().items():
+            if date.fromisoformat(day_key) < oldest:
+                continue
+            attempts += int(row.get('attempts') or 0)
+            correct += int(row.get('correct') or 0)
+        accuracy = (correct / attempts) if attempts else None
+        return {
+            'days': window_days,
+            'attempts': attempts,
+            'correct': correct,
+            'accuracy': round(accuracy, 4) if accuracy is not None else None,
+        }
+
+    def automatic_new_word_target(self, overdue_count: int = 0) -> int:
+        recent = self.recent_performance_snapshot(7)
+        accuracy = recent['accuracy']
+        if recent['attempts'] < 20 or accuracy is None:
+            target = DEFAULT_DAILY_NEW_WORD_TARGET
+        elif accuracy >= 0.9:
+            target = 60
+        elif accuracy >= 0.8:
+            target = 45
+        elif accuracy >= 0.7:
+            target = 30
+        else:
+            target = 20
+
+        limit = self.config.DAILY_REVIEW_LIMIT
+        if overdue_count >= limit:
+            target = min(target, 20)
+        elif overdue_count >= max(1, (limit + 1) // 2):
+            target = min(target, 30)
+        return max(0, min(limit, target))
+
     def _is_mastered_maintenance_due(self, word: Word) -> bool:
         state = self.get_review_state(word)
         return bool(state['scheduler'].get('active')) and word.next_review_date <= self.today
@@ -761,10 +830,14 @@ class WordReciter:
         non_new = [item for item in candidates if item['reason'] != 'new']
         new_words = [item for item in candidates if item['reason'] == 'new']
         limit = self.config.DAILY_REVIEW_LIMIT
-        selected = non_new[:limit]
+        review_reserve = min(len(non_new), math.ceil(limit * MIN_DAILY_REVIEW_SHARE))
+        new_capacity = max(0, limit - review_reserve)
+        overdue_count = sum(1 for item in non_new if item['reason'] == 'overdue')
+        new_word_target = self.automatic_new_word_target(overdue_count)
+        selected = new_words[: min(new_capacity, new_word_target)]
         remaining_slots = max(0, limit - len(selected))
         if remaining_slots:
-            selected.extend(new_words[: min(remaining_slots, self.config.DAILY_NEW_WORD_LIMIT)])
+            selected.extend(non_new[:remaining_slots])
         if not selected:
             self.learning_state_v2['daily_task'] = None
             return None
@@ -792,6 +865,9 @@ class WordReciter:
             'created_at': china_now().isoformat(),
             'status': 'active',
             'available_at_creation': len(candidates),
+            'new_word_target': new_word_target,
+            'review_reserve': review_reserve,
+            'recent_performance': self.recent_performance_snapshot(7),
             'items': items,
         }
         self.learning_state_v2['daily_task'] = task
@@ -815,7 +891,7 @@ class WordReciter:
                 continue
             if not str(item.get('item_id') or '').strip():
                 item['item_id'] = uuid.uuid4().hex[:16]
-            if item.get('exercise_type') not in ('spelling', 'listening'):
+            if item.get('exercise_type') not in EXERCISE_TYPES:
                 item['exercise_type'] = choose_exercise_type(self.get_review_state(word))
             if item.get('phase') not in ('main', 'remedial'):
                 item['phase'] = 'main'
@@ -868,6 +944,9 @@ class WordReciter:
                     'buckets': {},
                     'exercise_mix': {},
                     'algorithm': 'adaptive-sm2-v1',
+                    'new_word_target': self.automatic_new_word_target(),
+                    'review_reserve': 0,
+                    'recent_accuracy_percent': None,
                 },
             }
 
@@ -898,6 +977,12 @@ class WordReciter:
             available_at_creation = total
         task['available_at_creation'] = available_at_creation
         backlog = available_at_creation - total
+        recent = (
+            task.get('recent_performance')
+            if isinstance(task.get('recent_performance'), dict)
+            else {}
+        )
+        recent_accuracy = recent.get('accuracy')
         return {
             'words': words,
             'items': active_items,
@@ -912,6 +997,13 @@ class WordReciter:
                 'buckets': dict(buckets),
                 'exercise_mix': dict(exercise_mix),
                 'algorithm': 'adaptive-sm2-v1',
+                'new_word_target': int(task.get('new_word_target') or 0),
+                'review_reserve': int(task.get('review_reserve') or 0),
+                'recent_accuracy_percent': (
+                    round(float(recent_accuracy) * 100)
+                    if recent_accuracy is not None
+                    else None
+                ),
             },
         }
 
@@ -927,7 +1019,7 @@ class WordReciter:
             return None
         if str(task.get('task_id') or '') != str(task_id or ''):
             return None
-        key = self.word_state_key(word_id)
+        key = self.word_state_key(word_id) if str(word_id or '').strip() else ''
         event_key = str(event_id or '')[:96]
         states = self.learning_state_v2.get('review_states')
         review_state = states.get(key) if isinstance(states, dict) else None
@@ -952,7 +1044,7 @@ class WordReciter:
             if (
                 isinstance(item, dict)
                 and str(item.get('item_id') or '') == str(item_id or '')
-                and item.get('word_key') == key
+                and (not key or item.get('word_key') == key)
                 and (
                     item.get('status') == 'pending'
                     or (
@@ -1200,8 +1292,8 @@ class WordReciter:
 
         if word.success_count >= self.config.MAX_SUCCESS_COUNT and require_multidimensional:
             if require_listening:
-                return '✅ 本次正确，继续补强拼写与听写后即可掌握'
-            return '✅ 本次正确，继续巩固拼写后即可掌握'
+                return '✅ 本次正确，继续补强识义、语境与拼写能力后即可掌握'
+            return '✅ 本次正确，继续巩固识义、语境与拼写能力后即可掌握'
 
         return f'✅ 正确！下次复习: +{delta_days}天'
 
@@ -1219,6 +1311,7 @@ class WordReciter:
         remedial: bool = False,
         bonus_practice: bool = False,
         audio_available: bool = True,
+        submission_fingerprint: str = '',
     ) -> Dict[str, Any]:
         """Atomically apply one server-scored answer to learning state."""
         old_success_count = word.success_count
@@ -1255,6 +1348,7 @@ class WordReciter:
                 'remedial': bool(remedial),
                 'bonus_practice': bool(bonus_practice),
                 'audio_available': bool(audio_available),
+                'submission_fingerprint': str(submission_fingerprint or '')[:160],
             },
             sort_keys=True,
             separators=(',', ':'),
@@ -1322,6 +1416,9 @@ class WordReciter:
             if task_item and final_attempt:
                 task_item['phase'] = 'remedial'
             message = '❌ 错误，请继续努力！'
+
+        if recorded and not bonus_practice and not effective_remedial:
+            self._record_daily_performance(correct)
 
         result = {
             'recorded': recorded,

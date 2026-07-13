@@ -42,6 +42,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # 导入核心功能
 from reciter import (
+    DEFAULT_DAILY_REVIEW_LIMIT,
+    MAX_DAILY_REVIEW_LIMIT,
     MAX_ATTEMPTS,
     WordReciter,
     Config,
@@ -52,7 +54,8 @@ import challenges as challenges_mod
 import leaderboard_periods as leaderboard_periods_mod
 import chat_room
 import wordbank_v2
-from review_scheduler import ReviewEventConflict
+import gaokao_questions
+from review_scheduler import EXERCISE_TYPES, ReviewEventConflict
 from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
 from auth_session_store import (
     SESSION_KIND_ADMIN,
@@ -2967,12 +2970,59 @@ def _user_mutex(username: str) -> threading.Lock:
         return _user_reciter_locks[username]
 
 
-def _build_user_reciter(username: str) -> WordReciter:
+def _user_learning_settings_path(username: str) -> Path:
+    return DATA_DIR / username / "learning_settings.json"
+
+
+def _read_user_learning_settings(username: str) -> dict:
+    path = _user_learning_settings_path(username)
+    if not path.is_file():
+        return {}
+    try:
+        with path.open('r', encoding='utf-8') as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("读取用户学习设置失败: user=%s error=%s", username, exc)
+        return {}
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _write_user_learning_settings(username: str, settings: dict) -> None:
+    path = _user_learning_settings_path(username)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(suffix='.json', dir=str(path.parent), text=True)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def _build_user_config(username: str) -> Config:
     user_dir = DATA_DIR / username
     config_file = user_dir / "config.json"
     config = Config(str(config_file)) if config_file.exists() else Config()
+    settings = _read_user_learning_settings(username)
+    try:
+        daily_review_limit = int(settings.get('daily_review_limit'))
+    except (TypeError, ValueError, OverflowError):
+        daily_review_limit = config.DAILY_REVIEW_LIMIT
+    config.DAILY_REVIEW_LIMIT = max(
+        1,
+        min(MAX_DAILY_REVIEW_LIMIT, daily_review_limit),
+    )
     config.DATA_FILE = str(user_dir / "learning_data.json")
     config.EXAMPLE_DB = str(user_dir / "word_examples.json")
+    return config
+
+
+def _build_user_reciter(username: str) -> WordReciter:
+    config = _build_user_config(username)
     return WordReciter(config)
 
 
@@ -3028,23 +3078,34 @@ def _learning_data_mtime_ns(username: str) -> int:
         return 0
 
 
+def _user_reciter_source_signature(username: str) -> Tuple[int, int]:
+    try:
+        settings_mtime = _user_learning_settings_path(username).stat().st_mtime_ns
+    except OSError:
+        settings_mtime = 0
+    return _learning_data_mtime_ns(username), settings_mtime
+
+
 @contextmanager
 def user_reciter_session(username: str) -> Generator[WordReciter, None, None]:
     """Serialize learning data and refresh stale per-worker caches."""
     lock = _user_mutex(username)
     with lock:
         with _user_learning_interprocess_lock(username):
-            disk_mtime = _learning_data_mtime_ns(username)
+            source_signature = _user_reciter_source_signature(username)
             reciter = _user_reciter_cache.get(username)
-            if reciter is None or getattr(reciter, '_source_mtime_ns', -1) != disk_mtime:
+            if (
+                reciter is None
+                or getattr(reciter, '_source_signature', None) != source_signature
+            ):
                 reciter = _build_user_reciter(username)
-                reciter._source_mtime_ns = disk_mtime
+                reciter._source_signature = source_signature
                 _user_reciter_cache[username] = reciter
             reciter.refresh_for_new_day()
             try:
                 yield reciter
             finally:
-                reciter._source_mtime_ns = _learning_data_mtime_ns(username)
+                reciter._source_signature = _user_reciter_source_signature(username)
 
 
 def _summary_payload_from_reciter(reciter: WordReciter) -> dict:
@@ -3129,6 +3190,21 @@ def _review_words_payload(
                 item['examples'] = [{'en': a.strip(), 'cn': b.strip()}]
             else:
                 item['examples'] = [{'en': raw, 'cn': ''}]
+        if item['exercise_type'] in gaokao_questions.QUESTION_TYPES:
+            question = gaokao_questions.get_question(w.english, item['exercise_type'])
+            if question:
+                item['question'] = gaokao_questions.public_question(question)
+                item['question_required'] = False
+                task_item['question_id'] = question['question_id']
+            else:
+                item['question_required'] = True
+            item['chinese'] = ''
+            item['example'] = ''
+            item['example_form'] = ''
+            item['examples'] = []
+            item.pop('chinese_sense_lines', None)
+            if item['exercise_type'] == 'context':
+                item['english'] = f"question:{item['task_item_id']}"
         words.append(item)
     payload = {'words': words, 'count': len(words)}
     if plan is not None:
@@ -3542,6 +3618,54 @@ def patch_parent_password(username):
         return jsonify({'error': '用户不存在'}), 404
     logger.info("家长账户修改密码: login=%s", login)
     return jsonify({'message': '密码已更新'}), 200
+
+
+@app.route('/api/user/learning-settings', methods=['GET', 'PATCH'])
+@token_required
+def user_learning_settings(username):
+    """家长读取或调整关联学生的每日学习任务上限。"""
+    if not getattr(g, 'is_parent', False):
+        return jsonify({'error': '仅家长账户可调整学习任务上限'}), 403
+
+    if request.method == 'PATCH':
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'error': '无效的JSON数据'}), 400
+        try:
+            daily_review_limit = data['daily_review_limit']
+        except KeyError:
+            return jsonify({'error': '请填写每日任务上限'}), 400
+        if (
+            not isinstance(daily_review_limit, int)
+            or isinstance(daily_review_limit, bool)
+        ):
+            return jsonify({'error': '学习任务上限须为整数'}), 400
+        if not 1 <= daily_review_limit <= MAX_DAILY_REVIEW_LIMIT:
+            return jsonify({
+                'error': f'每日任务上限须在 1–{MAX_DAILY_REVIEW_LIMIT} 之间',
+            }), 400
+        with _user_mutex(username):
+            with _user_learning_interprocess_lock(username):
+                settings = _read_user_learning_settings(username)
+                settings['daily_review_limit'] = daily_review_limit
+                settings.pop('daily_new_word_limit', None)
+                _write_user_learning_settings(username, settings)
+        _invalidate_user_reciter_cache(username)
+        logger.info(
+            "家长更新学生学习任务上限: student=%s daily=%s",
+            username,
+            daily_review_limit,
+        )
+
+    config = _build_user_config(username)
+    return jsonify({
+        'daily_review_limit': config.DAILY_REVIEW_LIMIT,
+        'default_daily_review_limit': DEFAULT_DAILY_REVIEW_LIMIT,
+        'max_daily_review_limit': MAX_DAILY_REVIEW_LIMIT,
+        'new_words_are_automatic': True,
+        'minimum_review_share_percent': 60,
+        'applies_from_next_task': True,
+    }), 200
 
 
 def _pk_stats_for_gamification(username: str) -> Tuple[int, int]:
@@ -4224,7 +4348,7 @@ def get_extra_review_list(username):
                     'task_id': '',
                     'task_item_id': '',
                     'task_reason': 'bonus',
-                    'exercise_type': state_payload['exercise_type'],
+                    'exercise_type': 'spelling',
                     'mastery': state_payload['mastery'],
                     'scheduler': state_payload['scheduler'],
                 }
@@ -4242,6 +4366,127 @@ def get_extra_review_list(username):
         logger.error(f"获取加练列表失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
 
+def _runtime_question_source(word: Any) -> Optional[dict]:
+    row = lookup_csv_word(word.english)
+    if not row:
+        return None
+    return gaokao_questions.source_from_wordbank_row(row)
+
+
+def _generate_one_runtime_question(source: dict) -> dict:
+    return gaokao_questions.generate_and_persist(
+        [source],
+        lambda messages, max_tokens: _deepseek_chat(
+            messages,
+            max_tokens=max_tokens,
+        ),
+    )
+
+
+def _spelling_fallback_word_payload(word: Any) -> dict:
+    item = {
+        'english': word.english,
+        'chinese': word.chinese,
+        'example': word.example,
+        'example_form': '',
+        'examples': [],
+    }
+    row = lookup_csv_word(word.english)
+    if row:
+        if (row.get('chinese') or '').strip():
+            item['chinese'] = (row.get('chinese') or '').strip()
+        apply_review_display_from_wordbank(item, row, word.english)
+    if not item['examples'] and (getattr(word, 'example', None) or '').strip():
+        raw = (word.example or '').strip()
+        if '_' in raw:
+            english, chinese = raw.split('_', 1)
+            item['examples'] = [{'en': english.strip(), 'cn': chinese.strip()}]
+        else:
+            item['examples'] = [{'en': raw, 'cn': ''}]
+    return item
+
+
+@app.route('/api/words/question', methods=['POST'])
+@token_required
+@parent_forbidden
+def get_or_generate_word_question(username):
+    """Load a private-bank question, generating one when this task first needs it."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': '无效的JSON数据'}), 400
+    word_id = str(data.get('word_id') or '').strip()
+    task_id = str(data.get('task_id') or '').strip()
+    task_item_id = str(data.get('task_item_id') or '').strip()
+    requested_type = str(data.get('exercise_type') or '').strip()
+    if not word_id or not task_id or not task_item_id:
+        return jsonify({'error': '今日任务参数不完整，请刷新后重试'}), 400
+    if requested_type not in gaokao_questions.QUESTION_TYPES:
+        return jsonify({'error': '当前题型不需要加载选择题'}), 400
+
+    try:
+        with user_reciter_session(username) as reciter:
+            task_item = reciter.resolve_daily_task_item(task_id, task_item_id, '')
+            if not task_item:
+                return jsonify({'error': '今日任务已更新，请刷新后继续'}), 409
+            exercise_type = str(task_item.get('exercise_type') or '')
+            if exercise_type != requested_type:
+                return jsonify({'error': '当前任务题型已更新，请刷新后继续'}), 409
+            word = reciter.find_word(task_item.get('word_key', ''), include_mastered=True)
+            if not word:
+                return jsonify({'error': '单词未找到'}), 404
+
+            question = gaokao_questions.get_question(word.english, exercise_type)
+            generated = False
+            if not question:
+                source = _runtime_question_source(word)
+                if source:
+                    try:
+                        generated_result = _generate_one_runtime_question(source)
+                        generated = bool(generated_result.get('generated'))
+                        question = gaokao_questions.get_question(word.english, exercise_type)
+                    except Exception as exc:
+                        logger.warning(
+                            "在线生成高考选择题失败，降级为拼写: word=%s error=%s",
+                            word.english,
+                            exc,
+                        )
+                        gaokao_questions.persist_generation_result(
+                            {},
+                            {source['english']: f'runtime exception: {exc}'},
+                        )
+
+            if not question:
+                task_item['exercise_type'] = 'spelling'
+                task_item.pop('question_id', None)
+                task_item['question_fallback_reason'] = 'question_generation_failed'
+                reciter.save_learning_data(backup=False)
+                return jsonify({
+                    'fallback': True,
+                    'exercise_type': 'spelling',
+                    'message': '选择题暂时不可用，已自动切换为拼写练习',
+                    'word': _spelling_fallback_word_payload(word),
+                }), 200
+
+            task_item['question_id'] = question['question_id']
+            task_item.pop('question_fallback_reason', None)
+            reciter.save_learning_data(backup=False)
+            return jsonify({
+                'fallback': False,
+                'generated': generated,
+                'exercise_type': exercise_type,
+                'question': gaokao_questions.public_question(question),
+            }), 200
+    except Exception as exc:
+        _invalidate_user_reciter_cache(username)
+        logger.error(
+            "加载高考选择题失败: user=%s word=%s error=%s",
+            username,
+            word_id,
+            exc,
+        )
+        return jsonify({'error': '题目加载失败，请稍后重试'}), 500
+
+
 @app.route('/api/words/practice', methods=['POST'])
 @token_required
 @parent_forbidden
@@ -4252,8 +4497,10 @@ def practice_word(username):
         if not data:
             return jsonify({'error': '无效的JSON数据'}), 400
         
-        word_id = data.get('word_id', '').strip()
-        answer = data.get('answer', '').strip()
+        word_id = str(data.get('word_id') or '').strip()
+        answer = str(data.get('answer') or '').strip()
+        selected_option_id = str(data.get('selected_option_id') or '').strip()
+        question_id = str(data.get('question_id') or '').strip()
         # 当日错题巩固轮次：答对不计入掌握进度（success_count）与排期，见前端 wrongRoundNumber>0
         remedial = data.get('remedial') is True
         # 无今日待复习时的加练：仅计复习次数，不改变掌握进度与排期
@@ -4278,8 +4525,8 @@ def practice_word(username):
         except (TypeError, ValueError, OverflowError):
             elapsed_ms = 0
 
-        if not word_id or not answer:
-            return jsonify({'error': '单词ID和答案不能为空'}), 400
+        if not word_id:
+            return jsonify({'error': '单词ID不能为空'}), 400
         if bool(task_id) != bool(task_item_id):
             return jsonify({'error': '今日任务参数不完整，请刷新后重试'}), 400
         if not review_event_id:
@@ -4293,13 +4540,16 @@ def practice_word(username):
                 task_item = reciter.resolve_daily_task_item(
                     task_id,
                     task_item_id,
-                    word_id,
+                    '' if requested_exercise_type in gaokao_questions.QUESTION_TYPES else word_id,
                     review_event_id,
                 )
                 if not task_item:
                     return jsonify({'error': '今日任务已更新，请刷新后继续'}), 409
 
-            word = reciter.find_word(word_id, include_mastered=True)
+            word = reciter.find_word(
+                task_item.get('word_key', '') if task_item else word_id,
+                include_mastered=True,
+            )
             if word in reciter.mastered_words and not (bonus_practice or task_item or remedial):
                 word = None
 
@@ -4313,24 +4563,61 @@ def practice_word(username):
             )
             if exercise_type == 'listening' and not audio_available:
                 exercise_type = 'spelling'
-            if exercise_type not in ('spelling', 'listening'):
+            if exercise_type not in EXERCISE_TYPES:
                 exercise_type = 'spelling'
+            if (
+                task_item
+                and exercise_type not in gaokao_questions.QUESTION_TYPES
+                and reciter.word_state_key(word_id) != reciter.word_state_key(word)
+            ):
+                return jsonify({'error': '当前任务单词已更新，请刷新后继续'}), 409
             if exercise_type == 'listening':
                 test_inflection = False
 
-            submitted = answer.strip().lower()
-            lemma = word.english.strip().lower()
-            if test_inflection:
-                csv_row = lookup_csv_word(word.english)
-                if csv_row:
-                    picked = pick_example_for_word(csv_row, word.english)
-                    eff = (picked.get('example_form') or '').strip().lower()
-                    expected = eff if eff else lemma
-                else:
-                    expected = lemma
-                is_correct = submitted == expected
+            answer_feedback = None
+            if exercise_type in gaokao_questions.QUESTION_TYPES:
+                if not task_item or not question_id or not selected_option_id:
+                    return jsonify({'error': '选择题作答参数不完整，请重新加载题目'}), 400
+                question = gaokao_questions.get_question(word.english, exercise_type)
+                bound_question_id = str(task_item.get('question_id') or '')
+                if (
+                    not question
+                    or question.get('question_id') != question_id
+                    or bound_question_id != question_id
+                ):
+                    return jsonify({'error': '题目版本已更新，请重新加载题目'}), 409
+                valid_option_ids = {
+                    str(option.get('id') or '')
+                    for option in question.get('options') or []
+                    if isinstance(option, dict)
+                }
+                if selected_option_id not in valid_option_ids:
+                    return jsonify({'error': '所选答案无效，请重新选择'}), 400
+                is_correct = gaokao_questions.check_answer(question, selected_option_id)
+                answer_feedback = gaokao_questions.answer_explanation(question)
+                submission_fingerprint = hashlib.sha256(
+                    f'{question_id}\0{selected_option_id}'.encode('utf-8')
+                ).hexdigest()
+                test_inflection = False
             else:
-                is_correct = submitted == lemma
+                if not answer:
+                    return jsonify({'error': '答案不能为空'}), 400
+                submitted = answer.strip().lower()
+                lemma = word.english.strip().lower()
+                if test_inflection:
+                    csv_row = lookup_csv_word(word.english)
+                    if csv_row:
+                        picked = pick_example_for_word(csv_row, word.english)
+                        eff = (picked.get('example_form') or '').strip().lower()
+                        expected = eff if eff else lemma
+                    else:
+                        expected = lemma
+                    is_correct = submitted == expected
+                else:
+                    is_correct = submitted == lemma
+                submission_fingerprint = hashlib.sha256(
+                    submitted.encode('utf-8')
+                ).hexdigest()
             applied = reciter.apply_scored_review_attempt(
                 word,
                 exercise_type=exercise_type,
@@ -4343,6 +4630,7 @@ def practice_word(username):
                 remedial=remedial,
                 bonus_practice=bonus_practice,
                 audio_available=audio_available,
+                submission_fingerprint=submission_fingerprint,
             )
             if task_item and applied['recorded'] and not audio_available:
                 task_item['exercise_type'] = exercise_type
@@ -4396,6 +4684,8 @@ def practice_word(username):
             }
             if gam_payload is not None:
                 body['gamification'] = gam_payload
+            if answer_feedback is not None:
+                body['answer_feedback'] = answer_feedback
             if is_correct:
                 extra_rows = other_v2_sense_extra_for_review_slot(word.english)
                 if extra_rows:

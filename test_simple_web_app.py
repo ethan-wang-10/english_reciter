@@ -2,6 +2,9 @@
 
 import os
 import tempfile
+from contextlib import contextmanager
+from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,6 +13,126 @@ _WEB_DATA_DIR = tempfile.TemporaryDirectory(prefix="english-reciter-web-test-")
 os.environ["ENGLISH_RECITER_DATA_DIR"] = _WEB_DATA_DIR.name
 
 import simple_web_app as web  # noqa: E402
+
+
+class _SemanticReciter:
+    def __init__(self, exercise_type='context'):
+        self.config = SimpleNamespace(MAX_SUCCESS_COUNT=8)
+        self.word = SimpleNamespace(
+            english='benefit',
+            chinese='n. 益处；好处',
+            example='Exercise brings many benefits._锻炼带来许多好处。',
+            success_count=0,
+            review_count=0,
+            next_review_date=date.today(),
+        )
+        self.task_item = {
+            'item_id': 'item-1',
+            'word_key': 'benefit',
+            'exercise_type': exercise_type,
+            'status': 'pending',
+            'phase': 'main',
+            'attempts': 0,
+        }
+        self.mastered_words = []
+        self.saved = 0
+        self.last_apply = None
+
+    def resolve_daily_task_item(self, task_id, item_id, word_id, event_id=''):
+        if task_id != 'task-1' or item_id != 'item-1':
+            return None
+        if word_id and self.word_state_key(word_id) != self.task_item['word_key']:
+            return None
+        return self.task_item
+
+    def find_word(self, word_id, include_mastered=True):
+        return self.word if self.word_state_key(word_id) == 'benefit' else None
+
+    def word_state_key(self, value):
+        return str(getattr(value, 'english', value) or '').strip().casefold()
+
+    def save_learning_data(self, backup=False):
+        self.saved += 1
+
+    def task_attempt_count(self, item):
+        return int((item or {}).get('attempts') or 0)
+
+    def apply_scored_review_attempt(self, word, **kwargs):
+        self.last_apply = kwargs
+        return {
+            'recorded': True,
+            'message': '已判分',
+            'mastered_now': False,
+            'remedial': False,
+            'old_success_count': 0,
+            'new_success_count': 0,
+        }
+
+    def daily_task_progress(self):
+        return {'total': 1, 'completed': 0, 'remaining': 1}
+
+    def review_state_payload(self, word):
+        empty = {
+            key: {'score': 0, 'percent': 0, 'attempts': 0, 'correct': 0, 'streak': 0}
+            for key in ('recognition', 'context', 'spelling', 'listening')
+        }
+        return {
+            'exercise_type': self.task_item['exercise_type'],
+            'mastery': {'overall': 0, 'overall_percent': 0, 'by_type': empty},
+            'scheduler': {},
+        }
+
+
+def _semantic_source():
+    return {
+        'english': 'benefit',
+        'chinese': 'n. 益处；好处',
+        'level': '高中',
+        'phonetic': '/benefit/',
+        'pos': 'n',
+        'context_sentence': 'Exercise brings many ____ to our health.',
+        'context_answer': 'benefits',
+        'context_cn': '锻炼给健康带来很多益处。',
+        'source_hash': 'benefit-source',
+    }
+
+
+def _semantic_record():
+    record, error = web.gaokao_questions.finalize_generated_questions(
+        _semantic_source(),
+        {
+            'english': 'benefit',
+            'recognition_distractors': ['负担', '挑战', '限制'],
+            'recognition_explanation_zh': 'benefit 表示益处或好处。',
+            'context_distractors': ['burdens', 'limits', 'risks'],
+            'context_explanation_zh': 'many 后接复数名词，语义需要“益处”。',
+        },
+    )
+    assert error == ''
+    return record
+
+
+def _mock_student_session(monkeypatch, reciter):
+    monkeypatch.setattr(web, 'verify_token', lambda token: 'alice')
+    monkeypatch.setattr(
+        web,
+        'get_user',
+        lambda username: {'password_hash': 'unused', 'enabled': True},
+    )
+
+    @contextmanager
+    def session(username):
+        yield reciter
+
+    monkeypatch.setattr(web, 'user_reciter_session', session)
+
+
+def _use_private_question_bank(monkeypatch, tmp_path):
+    questions = web.gaokao_questions
+    monkeypatch.setattr(questions, 'QUESTION_BANK_FILE', tmp_path / 'questions.json')
+    monkeypatch.setattr(questions, 'QUESTION_BANK_LOCK_FILE', tmp_path / '.questions.lock')
+    monkeypatch.setattr(questions, '_cache', None)
+    monkeypatch.setattr(questions, '_cache_mtime_ns', -1)
 
 
 @pytest.fixture
@@ -125,6 +248,251 @@ def test_practice_does_not_treat_string_false_as_bonus(client, monkeypatch) -> N
 
     assert response.status_code == 409
     assert "今日任务" in response.get_json()["error"]
+
+
+def test_review_payload_redacts_semantic_answers(monkeypatch, tmp_path) -> None:
+    _use_private_question_bank(monkeypatch, tmp_path)
+    record = _semantic_record()
+    web.gaokao_questions.persist_generation_result({'benefit': record}, {})
+    reciter = _SemanticReciter('context')
+    task = {
+        'items': [reciter.task_item],
+        'plan': {'task_id': 'task-1'},
+    }
+    monkeypatch.setattr(web, 'lookup_csv_word', lambda word: None)
+
+    payload = web._review_words_payload(reciter, [reciter.word], task)
+
+    item = payload['words'][0]
+    assert item['english'] == 'question:item-1'
+    assert item['chinese'] == ''
+    assert item['examples'] == []
+    assert 'answer_option_id' not in item['question']
+    assert 'translation_zh' not in item['question']
+    assert reciter.task_item['question_id'] == record['context']['question_id']
+
+
+def test_question_endpoint_generates_missing_question_and_returns_public_data(
+    client,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _use_private_question_bank(monkeypatch, tmp_path)
+    reciter = _SemanticReciter('context')
+    _mock_student_session(monkeypatch, reciter)
+    monkeypatch.setattr(web, '_runtime_question_source', lambda word: _semantic_source())
+
+    def generate(source):
+        web.gaokao_questions.persist_generation_result({'benefit': _semantic_record()}, {})
+        return {'generated': 1}
+
+    monkeypatch.setattr(web, '_generate_one_runtime_question', generate)
+    response = client.post(
+        '/api/words/question',
+        headers={'Authorization': 'Bearer test'},
+        json={
+            'word_id': 'question:item-1',
+            'task_id': 'task-1',
+            'task_item_id': 'item-1',
+            'exercise_type': 'context',
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body['generated'] is True
+    assert body['fallback'] is False
+    assert 'answer_option_id' not in body['question']
+    assert 'translation_zh' not in body['question']
+    assert reciter.task_item['question_id'] == body['question']['question_id']
+    assert reciter.saved == 1
+
+
+def test_question_endpoint_falls_back_to_spelling_when_generation_fails(
+    client,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _use_private_question_bank(monkeypatch, tmp_path)
+    reciter = _SemanticReciter('recognition')
+    _mock_student_session(monkeypatch, reciter)
+    monkeypatch.setattr(web, '_runtime_question_source', lambda word: _semantic_source())
+    monkeypatch.setattr(web, '_generate_one_runtime_question', lambda source: {'generated': 0})
+    monkeypatch.setattr(web, 'lookup_csv_word', lambda word: None)
+
+    response = client.post(
+        '/api/words/question',
+        headers={'Authorization': 'Bearer test'},
+        json={
+            'word_id': 'benefit',
+            'task_id': 'task-1',
+            'task_item_id': 'item-1',
+            'exercise_type': 'recognition',
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body['fallback'] is True
+    assert body['exercise_type'] == 'spelling'
+    assert body['word']['english'] == 'benefit'
+    assert reciter.task_item['exercise_type'] == 'spelling'
+    assert reciter.saved == 1
+
+
+def test_practice_scores_semantic_option_server_side(client, monkeypatch, tmp_path) -> None:
+    _use_private_question_bank(monkeypatch, tmp_path)
+    record = _semantic_record()
+    web.gaokao_questions.persist_generation_result({'benefit': record}, {})
+    reciter = _SemanticReciter('context')
+    reciter.task_item['question_id'] = record['context']['question_id']
+    _mock_student_session(monkeypatch, reciter)
+    wrong_option = next(
+        option['id']
+        for option in record['context']['options']
+        if option['id'] != record['context']['answer_option_id']
+    )
+
+    response = client.post(
+        '/api/words/practice',
+        headers={'Authorization': 'Bearer test'},
+        json={
+            'word_id': 'question:item-1',
+            'task_id': 'task-1',
+            'task_item_id': 'item-1',
+            'exercise_type': 'context',
+            'question_id': record['context']['question_id'],
+            'selected_option_id': wrong_option,
+            'review_event_id': 'semantic-event-1',
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body['correct'] is False
+    assert body['answer_feedback']['correct_option_id'] == record['context']['answer_option_id']
+    assert body['answer_feedback']['translation_zh']
+    assert reciter.last_apply['exercise_type'] == 'context'
+    assert len(reciter.last_apply['submission_fingerprint']) == 64
+
+
+def test_practice_rejects_question_id_from_another_version(
+    client,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _use_private_question_bank(monkeypatch, tmp_path)
+    record = _semantic_record()
+    web.gaokao_questions.persist_generation_result({'benefit': record}, {})
+    reciter = _SemanticReciter('context')
+    reciter.task_item['question_id'] = record['context']['question_id']
+    _mock_student_session(monkeypatch, reciter)
+
+    response = client.post(
+        '/api/words/practice',
+        headers={'Authorization': 'Bearer test'},
+        json={
+            'word_id': 'question:item-1',
+            'task_id': 'task-1',
+            'task_item_id': 'item-1',
+            'exercise_type': 'context',
+            'question_id': 'benefit:context:v999',
+            'selected_option_id': 'o1',
+            'review_event_id': 'semantic-event-tampered',
+        },
+    )
+
+    assert response.status_code == 409
+    assert '题目版本' in response.get_json()['error']
+    assert reciter.last_apply is None
+
+
+def _mock_parent_session(monkeypatch) -> None:
+    users = {
+        "alice_parent": {
+            "password_hash": "unused",
+            "enabled": True,
+            "role": "parent",
+            "child_username": "alice",
+        },
+        "alice": {
+            "password_hash": "unused",
+            "enabled": True,
+        },
+    }
+    monkeypatch.setattr(web, "verify_token", lambda token: "alice_parent")
+    monkeypatch.setattr(web, "get_user", lambda username: users.get(username))
+
+
+def test_parent_can_update_student_learning_limits(client, monkeypatch, tmp_path) -> None:
+    _mock_parent_session(monkeypatch)
+    monkeypatch.setattr(web, "DATA_DIR", tmp_path)
+
+    initial = client.get(
+        "/api/user/learning-settings",
+        headers={"Authorization": "Bearer parent-test"},
+    )
+    assert initial.status_code == 200
+    assert initial.get_json()["daily_review_limit"] == 120
+    assert initial.get_json()["new_words_are_automatic"] is True
+    assert initial.get_json()["minimum_review_share_percent"] == 60
+
+    settings_path = web._user_learning_settings_path("alice")
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        '{"daily_review_limit": 300, "daily_new_word_limit": 100}',
+        encoding="utf-8",
+    )
+
+    updated = client.patch(
+        "/api/user/learning-settings",
+        headers={"Authorization": "Bearer parent-test"},
+        json={"daily_review_limit": 240},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["daily_review_limit"] == 240
+
+    saved = web._read_user_learning_settings("alice")
+    assert saved == {"daily_review_limit": 240}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"daily_review_limit": 0},
+        {"daily_review_limit": 301},
+        {"daily_review_limit": 100.5},
+        {"daily_review_limit": True},
+    ],
+)
+def test_parent_learning_limits_validate_bounds(
+    client,
+    monkeypatch,
+    tmp_path,
+    payload,
+) -> None:
+    _mock_parent_session(monkeypatch)
+    monkeypatch.setattr(web, "DATA_DIR", tmp_path)
+
+    response = client.patch(
+        "/api/user/learning-settings",
+        headers={"Authorization": "Bearer parent-test"},
+        json=payload,
+    )
+    assert response.status_code == 400
+
+
+def test_student_cannot_update_learning_limits(client, monkeypatch) -> None:
+    student = {"password_hash": "unused", "enabled": True}
+    monkeypatch.setattr(web, "verify_token", lambda token: "alice")
+    monkeypatch.setattr(web, "get_user", lambda username: student)
+
+    response = client.patch(
+        "/api/user/learning-settings",
+        headers={"Authorization": "Bearer student-test"},
+        json={"daily_review_limit": 200},
+    )
+    assert response.status_code == 403
 
 
 def test_unused_invites_are_owner_scoped_recoverable_and_removed_after_use(

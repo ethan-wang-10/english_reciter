@@ -1537,6 +1537,16 @@ function renderUserSettingsPanel(s) {
     renderInviteSettingsPanel(s);
 }
 
+async function loadParentLearningSettings() {
+    const settings = await apiRequest('/user/learning-settings');
+    const dailyInput = document.getElementById('settings-daily-review-limit');
+    if (dailyInput) {
+        dailyInput.max = String(settings.max_daily_review_limit || 300);
+        dailyInput.value = String(settings.daily_review_limit ?? 120);
+    }
+    return settings;
+}
+
 const AVATAR_CROP_VIEW = 280;
 let currentNavAvatarUrl = '';
 let avatarViewPreviouslyFocused = null;
@@ -2716,7 +2726,14 @@ async function loadUserSettingsPanel() {
         if (n1) n1.value = '';
         if (n2) n2.value = '';
         resetSettingsPendingWordsCollapse();
-        await loadSettingsPendingWordsBlock();
+        try {
+            await Promise.all([
+                loadParentLearningSettings(),
+                loadSettingsPendingWordsBlock(),
+            ]);
+        } catch (e) {
+            setSettingsMessage(e.message || '配置加载失败', true);
+        }
         return;
     }
     if (title) title.textContent = '用户设置';
@@ -5358,7 +5375,17 @@ function resetActiveReviewSession() {
 }
 
 function reviewExerciseLabel(exerciseType) {
-    return exerciseType === 'listening' ? '听写' : '拼写';
+    const labels = {
+        recognition: '英文识义',
+        context: '语境选词',
+        spelling: '拼写',
+        listening: '听写',
+    };
+    return labels[exerciseType] || '拼写';
+}
+
+function isSemanticExercise(exerciseType) {
+    return exerciseType === 'recognition' || exerciseType === 'context';
 }
 
 function reviewAudioAvailable() {
@@ -5395,10 +5422,12 @@ function renderReviewMasteryProgress(word) {
     if (!progressEl || !word) return;
     const masteryPercent = Number(word.mastery?.overall_percent);
     if (Number.isFinite(masteryPercent)) {
+        const recognition = Number(word.mastery?.by_type?.recognition?.percent) || 0;
+        const context = Number(word.mastery?.by_type?.context?.percent) || 0;
         const spelling = Number(word.mastery?.by_type?.spelling?.percent) || 0;
         const listening = Number(word.mastery?.by_type?.listening?.percent) || 0;
-        progressEl.textContent = `掌握 ${masteryPercent}% · 拼 ${spelling}% · 听 ${listening}%`;
-        progressEl.title = `拼写 ${spelling}% · 听写 ${listening}%`;
+        progressEl.textContent = `掌握 ${masteryPercent}% · 义 ${recognition}% · 境 ${context}% · 拼 ${spelling}%`;
+        progressEl.title = `英文识义 ${recognition}% · 语境选词 ${context}% · 拼写 ${spelling}% · 听写 ${listening}%`;
         return;
     }
     const maxSuccess = word.max_success_count != null ? word.max_success_count : 8;
@@ -5459,8 +5488,10 @@ function renderTodayTaskPlan(plan) {
             .map(([key, label]) => [label, Math.max(0, Number(buckets[key]) || 0)])
             .filter(([, count]) => count > 0)
             .map(([label, count]) => `${label} ${count}`);
-        const listeningCount = Math.max(0, Number(exerciseMix.listening) || 0);
-        if (listeningCount > 0) rows.push(`听写 ${listeningCount}`);
+        ['recognition', 'context', 'spelling', 'listening'].forEach((type) => {
+            const count = Math.max(0, Number(exerciseMix[type]) || 0);
+            if (count > 0) rows.push(`${reviewExerciseLabel(type)} ${count}`);
+        });
         rows.forEach((text) => {
             const span = document.createElement('span');
             span.textContent = text;
@@ -5579,7 +5610,7 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
     } else if (mainFailed > 0 || remedialRoundsDone > 1) {
         tip = '错题已巩固完成；不熟悉的词可在「学习进度」里查看下次复习时间。';
     } else if (wrongTries > 0) {
-        tip = '有拼写失误属正常，间隔复习会帮助巩固。';
+        tip = '偶尔答错很正常，间隔复习会帮助巩固。';
     }
 
     if (tip) {
@@ -5887,6 +5918,115 @@ async function startBonusReview() {
     }
 }
 
+async function loadSemanticQuestionForWord(word) {
+    if (word.question || !isSemanticExercise(word.exercise_type)) return;
+    if (!word._questionPromise) {
+        word._questionPromise = apiRequest('/words/question', {
+            method: 'POST',
+            body: JSON.stringify({
+                word_id: word.english,
+                task_id: word.task_id || '',
+                task_item_id: word.task_item_id || '',
+                exercise_type: word.exercise_type,
+            }),
+        }).finally(() => {
+            word._questionPromise = null;
+        });
+    }
+    const result = await word._questionPromise;
+    if (result.fallback) {
+        const previousType = word.exercise_type;
+        word.exercise_type = result.exercise_type || 'spelling';
+        word.question_required = false;
+        if (result.word) {
+            Object.assign(word, result.word);
+            wordMap.set(word.english, word);
+        }
+        word._questionFallbackMessage = result.message || '';
+        if (currentTodayTaskPlan?.exercise_mix) {
+            const mix = { ...currentTodayTaskPlan.exercise_mix };
+            mix[previousType] = Math.max(0, (Number(mix[previousType]) || 0) - 1);
+            mix[word.exercise_type] = (Number(mix[word.exercise_type]) || 0) + 1;
+            currentTodayTaskPlan.exercise_mix = mix;
+            renderTodayTaskPlan(currentTodayTaskPlan);
+        }
+        return;
+    }
+    word.question = result.question;
+    word.question_required = false;
+}
+
+function renderSemanticQuestion(word) {
+    const question = word.question || {};
+    const panel = document.getElementById('semantic-question');
+    const prompt = document.getElementById('semantic-question-prompt');
+    const options = document.getElementById('semantic-question-options');
+    const feedback = document.getElementById('semantic-question-feedback');
+    if (!panel || !prompt || !options || !feedback) return;
+
+    panel.hidden = false;
+    prompt.textContent = word.exercise_type === 'recognition'
+        ? '选择最准确的中文释义'
+        : String(question.prompt || '请选择最符合语境的词');
+    options.innerHTML = '';
+    feedback.textContent = '';
+    feedback.hidden = true;
+    word._selectedOptionId = '';
+    (question.options || []).forEach((option) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'semantic-option';
+        button.dataset.optionId = String(option.id || '');
+        button.setAttribute('role', 'radio');
+        button.setAttribute('aria-checked', 'false');
+        button.textContent = String(option.text || '');
+        button.addEventListener('click', () => {
+            if (isSubmitting || isAdvancing || button.disabled) return;
+            word._selectedOptionId = button.dataset.optionId || '';
+            options.querySelectorAll('.semantic-option').forEach((row) => {
+                const selected = row === button;
+                row.classList.toggle('is-selected', selected);
+                row.setAttribute('aria-checked', selected ? 'true' : 'false');
+            });
+            const submit = document.getElementById('submit-answer');
+            if (submit) submit.disabled = !word._selectedOptionId;
+        });
+        options.appendChild(button);
+    });
+}
+
+function renderSemanticAnswerFeedback(word, result) {
+    const panel = document.getElementById('semantic-question');
+    const feedback = document.getElementById('semantic-question-feedback');
+    const answerFeedback = result.answer_feedback || {};
+    if (!panel || !feedback) return;
+    panel.querySelectorAll('.semantic-option').forEach((button) => {
+        const optionId = button.dataset.optionId || '';
+        button.disabled = true;
+        button.classList.toggle('is-correct', optionId === answerFeedback.correct_option_id);
+        button.classList.toggle(
+            'is-wrong',
+            optionId === word._selectedOptionId && optionId !== answerFeedback.correct_option_id,
+        );
+    });
+    const lines = [];
+    if (answerFeedback.translation_zh) lines.push(`译文：${answerFeedback.translation_zh}`);
+    if (answerFeedback.explanation_zh) lines.push(answerFeedback.explanation_zh);
+    feedback.textContent = lines.join('\n');
+    feedback.hidden = lines.length === 0;
+}
+
+function resetSemanticOptionsForRetry(word) {
+    word._selectedOptionId = '';
+    document.querySelectorAll('#semantic-question-options .semantic-option').forEach((button) => {
+        button.disabled = false;
+        button.classList.remove('is-selected', 'is-wrong');
+        button.setAttribute('aria-checked', 'false');
+    });
+    const submit = document.getElementById('submit-answer');
+    if (submit) submit.disabled = true;
+}
+
 async function showCurrentWord() {
     listeningPlaybackAttempt += 1;
     stopSpeakPlayback();
@@ -5905,6 +6045,35 @@ async function showCurrentWord() {
     isSubmitting = false;
     isAdvancing = false;
 
+    if (isSemanticExercise(word.exercise_type) && !word.question) {
+        const semanticPanel = document.getElementById('semantic-question');
+        const semanticPrompt = document.getElementById('semantic-question-prompt');
+        const semanticOptions = document.getElementById('semantic-question-options');
+        const inputRow = document.querySelector('#review-content-inner .word-input');
+        if (semanticPanel) semanticPanel.hidden = false;
+        if (semanticPrompt) semanticPrompt.textContent = '正在准备题目…';
+        if (semanticOptions) semanticOptions.innerHTML = '';
+        if (inputRow) inputRow.hidden = true;
+        document.getElementById('review-def-example-wrap').hidden = true;
+        document.getElementById('current-word-english').textContent = '正在准备题目';
+        try {
+            await loadSemanticQuestionForWord(word);
+        } catch (error) {
+            if (currentReviewList[currentReviewIndex] !== word) return;
+            if (semanticPrompt) semanticPrompt.textContent = error.message || '题目加载失败';
+            if (semanticOptions) {
+                const retry = document.createElement('button');
+                retry.type = 'button';
+                retry.className = 'btn btn-secondary semantic-question-retry';
+                retry.textContent = '重试加载';
+                retry.addEventListener('click', () => showCurrentWord());
+                semanticOptions.appendChild(retry);
+            }
+            return;
+        }
+        if (currentReviewList[currentReviewIndex] !== word) return;
+    }
+
     // 未勾选「考察语态」：只考词库原形；勾选：须拼例句中实际形式（与 CSV example*_form / pick 一致）
     const lemma = (word.english || '').trim();
     const inflected = (word.example_form || '').trim() || lemma;
@@ -5915,16 +6084,21 @@ async function showCurrentWord() {
     word._targetAnswer = targetAnswer;
 
     const isListening = word.exercise_type === 'listening';
+    const isSemantic = isSemanticExercise(word.exercise_type);
     if (isListening) word._listeningAudioPlayed = false;
     const modeEl = document.getElementById('review-exercise-type');
     if (modeEl) {
         modeEl.textContent = reviewExerciseLabel(word.exercise_type);
         modeEl.classList.toggle('is-listening', isListening);
+        modeEl.classList.toggle('is-semantic', isSemantic);
     }
     const inflectionInput = document.getElementById('review-test-inflection');
     const inflectionToggle = inflectionInput?.closest('label');
-    if (inflectionInput) inflectionInput.disabled = isListening;
-    if (inflectionToggle) inflectionToggle.style.display = isListening ? 'none' : '';
+    const phoneticInput = document.getElementById('review-show-phonetic');
+    const phoneticToggle = phoneticInput?.closest('label');
+    if (inflectionInput) inflectionInput.disabled = isListening || isSemantic;
+    if (inflectionToggle) inflectionToggle.style.display = (isListening || isSemantic) ? 'none' : '';
+    if (phoneticToggle) phoneticToggle.style.display = word.exercise_type === 'context' ? 'none' : '';
     
     const dueHint = document.getElementById('review-due-hint');
     if (dueHint) {
@@ -5963,10 +6137,13 @@ async function showCurrentWord() {
     // 显示中文意思；多义词条：释义单独一行，例句在下方（见 .review-content--polyseme）
     const rcInner = document.getElementById('review-content-inner');
     if (rcInner) {
-        rcInner.classList.toggle('review-content--polyseme', !!word.review_polyseme && !isListening);
+        rcInner.classList.toggle('review-content--polyseme', !!word.review_polyseme && !isListening && !isSemantic);
         rcInner.classList.toggle('review-mode-listening', isListening);
+        rcInner.classList.toggle('review-mode-semantic', isSemantic);
     }
-    document.getElementById('current-word-chinese').textContent = word.chinese;
+    const chineseEl = document.getElementById('current-word-chinese');
+    chineseEl.textContent = word.chinese;
+    chineseEl.hidden = isSemantic;
     renderReviewMasteryProgress(word);
     
     const exEl = document.getElementById('current-word-example');
@@ -5976,28 +6153,56 @@ async function showCurrentWord() {
     } else {
         exEl.textContent = formatReviewQuizExampleDisplay(word);
     }
-    exEl.hidden = isListening;
+    exEl.hidden = isListening || isSemantic;
     
     // 提示字符串基于本题目标词长度（原形或句中形式）
     const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
-    document.getElementById('current-word-english').textContent = hintString;
+    document.getElementById('current-word-english').textContent = isSemantic
+        ? (word.exercise_type === 'recognition' ? (word.question?.prompt || word.english) : '语境选词')
+        : hintString;
     updateReviewPhoneticDisplay(word);
+    if (word.exercise_type === 'context') {
+        const phonetic = document.getElementById('current-word-phonetic');
+        if (phonetic) phonetic.hidden = true;
+    }
     
     // 绑定朗读按钮事件
     const speakBtn = document.getElementById('speak-example-btn');
     if (speakBtn) {
         speakBtn.onclick = speakExample;
+        speakBtn.hidden = isSemantic;
         speakBtn.title = isListening ? '朗读单词' : '朗读例句';
         speakBtn.setAttribute('aria-label', isListening ? '朗读单词' : '朗读例句');
     }
     
     // 初始化下划线输入框（基于 targetAnswer 的长度）
-    initializeUnderlineInputForTarget(word, targetAnswer);
-    focusWordCapture(0);
+    const semanticPanel = document.getElementById('semantic-question');
+    const defExampleWrap = document.getElementById('review-def-example-wrap');
+    const inputRow = document.querySelector('#review-content-inner .word-input');
+    const underlineWrapper = document.querySelector('#review-content-inner .underline-input-wrapper');
+    const submitBtn = document.getElementById('submit-answer');
+    if (semanticPanel) semanticPanel.hidden = !isSemantic;
+    if (defExampleWrap) defExampleWrap.hidden = isSemantic;
+    if (inputRow) inputRow.hidden = false;
+    if (underlineWrapper) underlineWrapper.hidden = isSemantic;
+    if (submitBtn) submitBtn.disabled = isSemantic;
+    if (isSemantic) {
+        renderSemanticQuestion(word);
+    } else {
+        initializeUnderlineInputForTarget(word, targetAnswer);
+        focusWordCapture(0);
+    }
 
     // 清空消息
     document.getElementById('word-message').style.display = 'none';
     clearReviewWordMessageExtra();
+    if (word._questionFallbackMessage) {
+        const message = document.getElementById('word-message');
+        message.textContent = word._questionFallbackMessage;
+        message.className = 'word-message';
+        message.style.display = 'block';
+        word._questionFallbackMessage = '';
+    }
     reviewQuestionStartedAt = performance.now();
 }
 
@@ -6073,7 +6278,10 @@ async function submitAnswer() {
         pendingReviewSubmission.wordKey === (word?.task_item_id || word?.english)
             ? pendingReviewSubmission
             : null;
-    const answer = existingSubmission ? existingSubmission.answer : getCurrentInput();
+    const isSemantic = isSemanticExercise(word?.exercise_type);
+    const answer = existingSubmission
+        ? existingSubmission.answer
+        : (isSemantic ? String(word?._selectedOptionId || '') : getCurrentInput());
     
     if (!answer) {
         focusWordCapture(0);
@@ -6104,6 +6312,8 @@ async function submitAnswer() {
                 body: {
                     word_id: word.english,
                     answer,
+                    question_id: isSemantic ? String(word.question?.question_id || '') : '',
+                    selected_option_id: isSemantic ? answer : '',
                     remedial:
                         reviewSessionMode !== 'bonus' &&
                         (wrongRoundNumber > 0 || word.task_remedial === true),
@@ -6171,6 +6381,7 @@ async function submitAnswer() {
         const messageDiv = document.getElementById('word-message');
         let msgText = result.message;
         clearReviewWordMessageExtra();
+        if (isSemantic) renderSemanticAnswerFeedback(word, result);
         if (result.correct && result.gamification) {
             const gm = result.gamification;
             const gainedXp = Number(gm.xp_gained) || 0;
@@ -6211,9 +6422,11 @@ async function submitAnswer() {
         const targetAnswer = word._targetAnswer || word.english;
         if (result.correct) {
             // 答案正确，显示完整答案，然后进入下一个单词（多义：多留 1 秒便于读完释义+例句）
-            document.getElementById('current-word-english').textContent = targetAnswer;
+            if (!isSemantic) {
+                document.getElementById('current-word-english').textContent = targetAnswer;
+            }
             isAdvancing = true;
-            const advanceMs = word.review_polyseme ? 2500 : 1500;
+            const advanceMs = isSemantic ? 3200 : (word.review_polyseme ? 2500 : 1500);
             setTimeout(() => {
                 if (
                     !isReviewContextCurrent(reviewContext) ||
@@ -6231,7 +6444,7 @@ async function submitAnswer() {
             currentErrorCount++;
             
             // 每次错误多揭示一个字母
-            if (currentRevealedCount < targetAnswer.length) {
+            if (!isSemantic && currentRevealedCount < targetAnswer.length) {
                 currentRevealedCount++;
             }
             
@@ -6241,7 +6454,9 @@ async function submitAnswer() {
                     sessionMainFailedThree += 1;
                 }
                 recordWrongAttempt(word);
-                document.getElementById('current-word-english').textContent = targetAnswer;
+                if (!isSemantic) {
+                    document.getElementById('current-word-english').textContent = targetAnswer;
+                }
                 isAdvancing = true;
                 setTimeout(() => {
                     if (
@@ -6257,20 +6472,28 @@ async function submitAnswer() {
                 }, 1500);
             } else {
                 // 还有尝试机会，更新提示字符串
-                const targetAnswer = word._targetAnswer || word.english;
-                const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
-                document.getElementById('current-word-english').textContent = hintString;
+                if (!isSemantic) {
+                    const targetAnswer = word._targetAnswer || word.english;
+                    const hintString = getHintStringForTarget(targetAnswer, currentRevealedCount);
+                    document.getElementById('current-word-english').textContent = hintString;
+                }
                 
                 // 显示剩余次数
                 messageDiv.textContent = `${result.message} (还剩 ${3 - currentErrorCount} 次尝试机会)`;
                 // 清空下划线输入框，让用户重新输入
-                clearUnderlineInput();
+                if (isSemantic) {
+                    resetSemanticOptionsForRetry(word);
+                } else {
+                    clearUnderlineInput();
+                }
                 const inflectionInput = document.getElementById('review-test-inflection');
                 if (inflectionInput) inflectionInput.disabled = true;
                 reviewQuestionStartedAt = performance.now();
                 isSubmitting = false;
-                focusWordCapture(0);
-                focusWordCapture(100);
+                if (!isSemantic) {
+                    focusWordCapture(0);
+                    focusWordCapture(100);
+                }
             }
         }
     } catch (error) {
@@ -6306,7 +6529,7 @@ async function submitAnswer() {
             messageDiv.textContent = msg;
             messageDiv.className = 'word-message error';
             messageDiv.style.display = 'block';
-            focusWordCapture(0);
+            if (!isSemantic) focusWordCapture(0);
         } else {
             showError(msg);
         }
@@ -6436,7 +6659,7 @@ function _renderProgressWordItem(word) {
         ? `${Math.round(masteryPercent)}%`
         : `${word.success_count}/${word.max_success_count}`;
     const masteryTitle = Number.isFinite(masteryPercent)
-        ? `拼写 ${Number(word.mastery?.by_type?.spelling?.percent) || 0}% · 听写 ${Number(word.mastery?.by_type?.listening?.percent) || 0}%`
+        ? `识义 ${Number(word.mastery?.by_type?.recognition?.percent) || 0}% · 语境 ${Number(word.mastery?.by_type?.context?.percent) || 0}% · 拼写 ${Number(word.mastery?.by_type?.spelling?.percent) || 0}% · 听写 ${Number(word.mastery?.by_type?.listening?.percent) || 0}%`
         : '';
     const masteryDetail = Number.isFinite(masteryPercent)
         ? `<div class="word-stat-detail">${escapeHtml(masteryTitle)}</div>`
@@ -6540,13 +6763,15 @@ async function loadProgress() {
 function _renderMasteredWordItem(word) {
     const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
     const masteryPercent = Number(word.mastery?.overall_percent);
+    const recognition = Number(word.mastery?.by_type?.recognition?.percent) || 0;
+    const context = Number(word.mastery?.by_type?.context?.percent) || 0;
     const spelling = Number(word.mastery?.by_type?.spelling?.percent) || 0;
     const listening = Number(word.mastery?.by_type?.listening?.percent) || 0;
     const masteryHtml = Number.isFinite(masteryPercent)
         ? `<div class="word-stat">
                 <div class="word-stat-value">${Math.round(masteryPercent)}%</div>
                 <div class="word-stat-label">多维掌握</div>
-                <div class="word-stat-detail">拼写 ${spelling}% · 听写 ${listening}%</div>
+                <div class="word-stat-detail">识义 ${recognition}% · 语境 ${context}% · 拼写 ${spelling}% · 听写 ${listening}%</div>
             </div>`
         : '';
     return `<div class="word-item">
@@ -8613,6 +8838,29 @@ document.addEventListener('DOMContentLoaded', function() {
             if (n2) n2.value = '';
         } catch (e) {
             setSettingsMessage(e.message || '保存失败', true);
+        }
+    });
+    document.getElementById('settings-learning-limits-save')?.addEventListener('click', async () => {
+        const dailyInput = document.getElementById('settings-daily-review-limit');
+        const dailyLimit = Number(dailyInput?.value);
+        if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 300) {
+            setSettingsMessage('每日任务上限须为 1–300 的整数', true);
+            return;
+        }
+        const button = document.getElementById('settings-learning-limits-save');
+        if (button) button.disabled = true;
+        try {
+            const settings = await apiRequest('/user/learning-settings', {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    daily_review_limit: dailyLimit,
+                }),
+            });
+            setSettingsMessage('学习设置已保存，将从下一次生成每日任务时生效');
+        } catch (e) {
+            setSettingsMessage(e.message || '学习设置保存失败', true);
+        } finally {
+            if (button) button.disabled = false;
         }
     });
     document.getElementById('settings-email-save')?.addEventListener('click', async () => {

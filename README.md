@@ -6,9 +6,10 @@
 
 | 能力 | 说明 |
 |------|------|
-| 智能每日任务 | 默认每天最多安排 20 个词，其中新词不超过 5 个；优先处理逾期、薄弱和长期维护词 |
+| 智能每日任务 | 默认每天最多安排 120 个词；新词先展示，至少 60% 容量保留给复习，新词量按近 7 天正确率自动调整 |
 | 自适应复习 | 使用可解释的 `adaptive-sm2-v1` 排期，根据答题结果动态调整间隔（不是 FSRS） |
-| 多维掌握 | Web 端同时记录拼写与听写能力；无可用音频的设备会安全降级为拼写门槛 |
+| 高考多维掌握 | Web 端依次训练英文识义、语境选词、拼写与听写；识义和语境是主要掌握门槛，听写为增强项 |
+| 私有选择题库 | 英文识义与语境选词由服务端判分；支持离线批量生成、断点续跑和缺题时在线补题 |
 | 例句 | 本地例句库（`word_examples.json`），离线可用 |
 | Web 版 | Flask 应用、注册登录、多用户数据隔离（`user_data_simple/`）、静态前端 |
 | CLI 版 | 交互菜单：今日复习、进度、已掌握词汇与巩固 |
@@ -73,8 +74,7 @@ cp config.example.json config.json
 - `word_file` / `data_file`：词表与学习数据路径（CLI 默认 `words.txt`、`learning_data.json`）
 - `max_success_count`：判定「已掌握」所需连续成功次数（默认 8）
 - `review_interval_days`：旧数据初始化与兼容流程使用的间隔阶梯（天）
-- `daily_review_limit`：每日任务总词数上限（默认 20）
-- `daily_new_word_limit`：每日任务中的新词上限（默认 5）
+- `daily_review_limit`：每日任务总词数上限（默认 120，家长可调整，最大 300）
 - `tts_enabled`：是否启用朗读相关能力
 - `backup_enabled`、`backup_interval_days`、`max_backups`：备份策略
 
@@ -89,11 +89,25 @@ cp config.example.json config.json
 | `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
 | `static/wordbanks/words.csv` | 内置词库（**不随 Git 发布**；本地从 `words.csv.example` 复制或自备；线上勿被 `git pull` 覆盖，由服务器文件或管理后台「增量上传」维护） |
 | `static/wordbanks/words_v2.json` | 新版内置词库（线上运行时数据；仓库只保留空占位，部署脚本会保护服务器本地文件） |
+| `user_data_simple/_shared/gaokao_questions_v1.json` | 服务端私有的版本化高考选择题库，包含答案，不得放入 `static/` |
 | `user_data_simple/_shared/performance/` | Web 性能采集 JSONL 日志（见 [docs/performance-monitoring.md](docs/performance-monitoring.md)） |
 | `backups/` | 学习数据自动备份（若开启） |
 | `reciter.log` | 运行日志 |
 
 **已有服务器升级到此版本时**：拉取前请先备份 `static/wordbanks/words.csv` 和 `static/wordbanks/words_v2.json`。`words_v2.json` 若已在服务器由后台生成大量词条，首次部署前可执行 `git update-index --skip-worktree static/wordbanks/words_v2.json`，后续 `scripts/deploy.sh` 会自动保护该本地词库文件，避免 `git pull` 因本地词库变更中断。
+
+## 高考选择题库生成
+
+先配置 `DEEPSEEK_API_KEY` 或 `config.json` 中的 `deepseek_api_key`，在服务器项目根目录执行：
+
+```bash
+python3 scripts/generate_gaokao_questions.py --level 高中 --dry-run
+python3 scripts/generate_gaokao_questions.py --level 高中 --batch-size 5 --pause 1
+```
+
+脚本每个批次都会原子保存到 `user_data_simple/_shared/gaokao_questions_v1.json`。网络中断、进程退出或部分单词生成失败后，直接执行同一命令即可续跑：已同时具备识义题和语境题的单词会跳过，失败词会重试，之前成功的题不会丢失。可用 `--limit 100` 控制单次处理量；只有明确需要重做已有题目时才使用 `--force`。
+
+批处理尚未覆盖到的单词，在学生首次遇到相应题型时会由线上服务即时生成并写回同一题库；若 AI 或网络不可用，该任务会持久降级为拼写，不阻断当天学习。脚本出现未完成词时返回退出码 `2`，方便定时任务或监控发现后再次执行。
 
 ## 依赖说明
 

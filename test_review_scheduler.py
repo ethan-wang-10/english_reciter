@@ -197,9 +197,9 @@ class TestReviewScheduler(unittest.TestCase):
 
     def test_exercise_selection_moves_to_unseen_dimension(self):
         state = normalize_review_state({})
-        self.assertEqual(choose_exercise_type(state), 'spelling')
-        record_mastery_attempt(state, 'spelling', True, today=self.today, event_id='a')
-        self.assertEqual(choose_exercise_type(state), 'listening')
+        self.assertEqual(choose_exercise_type(state), 'recognition')
+        record_mastery_attempt(state, 'recognition', True, today=self.today, event_id='a')
+        self.assertEqual(choose_exercise_type(state), 'context')
 
 
 if __name__ == '__main__':

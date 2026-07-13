@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260713-adaptive1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260713-gaokao2">
 </head>
 <body>
     <div id="app">
@@ -298,6 +298,11 @@
                                     <div id="current-word-example" class="review-example-root">This is an example.</div>
                                     <button id="speak-example-btn" class="btn-speak" title="朗读例句">🔊</button>
                                 </div>
+                                </div>
+                                <div id="semantic-question" class="semantic-question" hidden>
+                                    <div id="semantic-question-prompt" class="semantic-question-prompt"></div>
+                                    <div id="semantic-question-options" class="semantic-question-options" role="radiogroup" aria-label="请选择答案"></div>
+                                    <div id="semantic-question-feedback" class="semantic-question-feedback" hidden></div>
                                 </div>
                                 <div class="word-input">
                                     <div class="underline-input-wrapper">
@@ -733,6 +738,16 @@
                     </div>
                     </div>
                     <div id="settings-parent-block" class="settings-block" style="display: none;">
+                        <h3 class="settings-subtitle">每日学习任务</h3>
+                        <p class="settings-hint">系统按近 7 天正确率自动安排 20–60 个新词，新词在任务中先展示，并为复习保留至少 60% 容量。调整从下一次生成每日任务时生效。</p>
+                        <div class="settings-learning-limit-grid">
+                            <div class="form-group">
+                                <label for="settings-daily-review-limit">每日任务上限</label>
+                                <input type="number" id="settings-daily-review-limit" min="1" max="300" inputmode="numeric" />
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="settings-learning-limits-save">保存学习设置</button>
+                        <div class="settings-parent-divider" aria-hidden="true"></div>
                         <h3 class="settings-subtitle">家长密码</h3>
                         <p class="settings-hint" id="settings-parent-login-hint">—</p>
                         <div class="form-group">
@@ -1149,7 +1164,7 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20260713-adaptive1" defer></script>
+    <script src="/static/js/app.js?v=20260713-gaokao3" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>
