@@ -3322,6 +3322,7 @@ def _review_words_payload(
             'task_id': str((plan or {}).get('task_id') or ''),
             'task_item_id': str(task_item.get('item_id') or ''),
             'task_reason': str(task_item.get('reason') or ('overdue' if is_carryover else 'due')),
+            'task_calibration': str(task_item.get('calibration_reason') or ''),
             'task_attempts': reciter.task_attempt_count(task_item),
             'task_phase': str(task_item.get('phase') or 'main'),
             'task_remedial': bool(

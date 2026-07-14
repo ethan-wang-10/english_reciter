@@ -308,6 +308,7 @@ def test_review_payload_redacts_semantic_answers(monkeypatch, tmp_path) -> None:
     record = _semantic_record()
     web.gaokao_questions.persist_generation_result({'benefit': record}, {})
     reciter = _SemanticReciter('context')
+    reciter.task_item['calibration_reason'] = 'legacy'
     task = {
         'items': [reciter.task_item],
         'plan': {'task_id': 'task-1'},
@@ -322,6 +323,7 @@ def test_review_payload_redacts_semantic_answers(monkeypatch, tmp_path) -> None:
     assert item['examples'] == []
     assert 'answer_option_id' not in item['question']
     assert 'translation_zh' not in item['question']
+    assert item['task_calibration'] == 'legacy'
     assert reciter.task_item['question_id'] == record['context']['question_id']
 
 

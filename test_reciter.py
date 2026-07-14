@@ -617,6 +617,128 @@ class TestWordReciter(unittest.TestCase):
         self.assertEqual(task['plan']['review_reserve'], 6)
         self.assertEqual(task['plan']['new_word_target'], 10)
 
+    def test_legacy_cold_start_task_balances_core_exercises(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 10
+        reciter.all_words = [
+            Word(
+                f'legacy-{index:02d}',
+                f'旧词{index}',
+                success_count=2,
+                review_count=3,
+                next_review_date=reciter.today,
+            )
+            for index in range(10)
+        ]
+
+        task = reciter.get_today_learning_plan()
+
+        exercise_types = [item['exercise_type'] for item in task['items']]
+        self.assertEqual(
+            exercise_types,
+            ['recognition', 'context', 'spelling', 'recognition', 'context'] * 2,
+        )
+        self.assertEqual(
+            task['plan']['exercise_mix'],
+            {'recognition': 4, 'context': 4, 'spelling': 2},
+        )
+        self.assertEqual(task['plan']['calibrations'], {'legacy': 10})
+        self.assertTrue(
+            all(item.get('calibration_reason') == 'legacy' for item in task['items'])
+        )
+
+    def test_new_words_still_start_with_recognition(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 5
+        reciter.all_words = [
+            Word(f'new-{index}', f'新词{index}', next_review_date=reciter.today)
+            for index in range(5)
+        ]
+
+        task = reciter.get_today_learning_plan()
+
+        self.assertEqual(
+            [item['exercise_type'] for item in task['items']],
+            ['recognition'] * 5,
+        )
+        self.assertEqual(task['plan']['calibrations'], {})
+
+    def test_existing_today_task_only_rebalances_untouched_legacy_items(self):
+        reciter = WordReciter(self.config)
+        reciter.all_words = [
+            Word(
+                f'legacy-pending-{index}',
+                f'旧词{index}',
+                success_count=2,
+                review_count=2,
+                next_review_date=reciter.today,
+            )
+            for index in range(6)
+        ]
+        items = [
+            {
+                'item_id': f'item-{index}',
+                'word_key': reciter.word_state_key(word),
+                'scheduled_due_date': reciter.today.isoformat(),
+                'exercise_type': 'recognition',
+                'question_id': f'question-{index}',
+                'reason': 'due',
+                'phase': 'main',
+                'status': 'pending',
+                'attempts': 1 if index == 0 else 0,
+            }
+            for index, word in enumerate(reciter.all_words)
+        ]
+        reciter.learning_state_v2['daily_task'] = {
+            'version': 1,
+            'task_id': 'legacy-existing-task',
+            'date': reciter.today.isoformat(),
+            'status': 'active',
+            'available_at_creation': 6,
+            'items': items,
+        }
+
+        task = reciter.get_today_learning_plan()
+
+        self.assertEqual(
+            [item['exercise_type'] for item in task['items']],
+            ['recognition', 'recognition', 'context', 'spelling', 'recognition', 'context'],
+        )
+        self.assertNotIn('calibration_reason', task['items'][0])
+        self.assertEqual(task['items'][0]['question_id'], 'question-0')
+        self.assertEqual(task['items'][1]['question_id'], 'question-1')
+        self.assertNotIn('question_id', task['items'][2])
+        self.assertNotIn('question_id', task['items'][3])
+        self.assertEqual(task['plan']['calibrations'], {'legacy': 5})
+
+        restored = reciter.get_today_learning_plan()
+        self.assertEqual(
+            [item['exercise_type'] for item in restored['items']],
+            [item['exercise_type'] for item in task['items']],
+        )
+
+    def test_real_core_attempt_disables_legacy_calibration(self):
+        reciter = WordReciter(self.config)
+        word = Word(
+            'already-measured',
+            '已测量',
+            success_count=2,
+            review_count=3,
+            next_review_date=reciter.today,
+        )
+        reciter.all_words = [word]
+        reciter.record_mastery_attempt(
+            word,
+            'spelling',
+            True,
+            event_id='real-spelling-attempt',
+        )
+
+        task = reciter.get_today_learning_plan()
+
+        self.assertEqual(task['plan']['calibrations'], {})
+        self.assertNotIn('calibration_reason', task['items'][0])
+
     def test_automatic_new_word_target_uses_recent_accuracy(self):
         reciter = WordReciter(self.config)
         reciter.config.DAILY_REVIEW_LIMIT = 120

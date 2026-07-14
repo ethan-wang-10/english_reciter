@@ -5563,6 +5563,7 @@ function renderTodayTaskPlan(plan) {
         mixEl.innerHTML = '';
         const buckets = currentTodayTaskPlan.buckets || {};
         const exerciseMix = currentTodayTaskPlan.exercise_mix || {};
+        const calibrations = currentTodayTaskPlan.calibrations || {};
         const bucketLabels = [
             ['overdue', '逾期'],
             ['due', '到期'],
@@ -5575,6 +5576,8 @@ function renderTodayTaskPlan(plan) {
             .map(([key, label]) => [label, Math.max(0, Number(buckets[key]) || 0)])
             .filter(([, count]) => count > 0)
             .map(([label, count]) => `${label} ${count}`);
+        const legacyCalibration = Math.max(0, Number(calibrations.legacy) || 0);
+        if (legacyCalibration > 0) rows.push(`历史能力校准 ${legacyCalibration}`);
         ['recognition', 'context', 'spelling', 'listening'].forEach((type) => {
             const count = Math.max(0, Number(exerciseMix[type]) || 0);
             if (count > 0) rows.push(`${reviewExerciseLabel(type)} ${count}`);
@@ -6300,6 +6303,10 @@ async function showCurrentWord() {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-carryover';
             dueHint.textContent = '错题巩固';
+        } else if (word.task_calibration === 'legacy') {
+            dueHint.hidden = false;
+            dueHint.className = 'review-due-hint review-due-hint-scheduled';
+            dueHint.textContent = '历史学习进度能力校准';
         } else if (word.task_reason === 'new') {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-scheduled';

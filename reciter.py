@@ -39,6 +39,12 @@ MAX_DAILY_REVIEW_LIMIT = 300
 MIN_DAILY_REVIEW_SHARE = 0.6
 DEFAULT_DAILY_NEW_WORD_TARGET = 15
 DAILY_PERFORMANCE_HISTORY_DAYS = 30
+LEGACY_CALIBRATION_VERSION = 1
+LEGACY_CALIBRATION_MIX = (
+    ('recognition', 2),
+    ('context', 2),
+    ('spelling', 1),
+)
 
 
 def exercise_attempt_limit(exercise_type: str) -> int:
@@ -653,6 +659,81 @@ class WordReciter:
         states[key] = state
         return state
 
+    def _needs_legacy_calibration(self, word: Word) -> bool:
+        """Return whether a previously studied word has no real core attempts yet."""
+        has_legacy_progress = any(
+            max(0, int(getattr(word, field, 0) or 0)) > 0
+            for field in ('success_count', 'review_count', 'review_round')
+        )
+        if not has_legacy_progress:
+            return False
+        mastery = self.get_review_state(word).get('mastery') or {}
+        return all(
+            int((mastery.get(exercise_type) or {}).get('attempts') or 0) == 0
+            for exercise_type, _ in LEGACY_CALIBRATION_MIX
+        )
+
+    @staticmethod
+    def _legacy_calibration_assignments(count: int) -> List[str]:
+        """Return an interleaved 40/40/20 core-exercise allocation."""
+        total = max(0, int(count or 0))
+        if total == 0:
+            return []
+
+        weight_total = sum(weight for _, weight in LEGACY_CALIBRATION_MIX)
+        targets = {
+            exercise_type: total * weight // weight_total
+            for exercise_type, weight in LEGACY_CALIBRATION_MIX
+        }
+        remaining = total - sum(targets.values())
+        remainder_order = sorted(
+            range(len(LEGACY_CALIBRATION_MIX)),
+            key=lambda index: (
+                -(total * LEGACY_CALIBRATION_MIX[index][1] % weight_total),
+                index,
+            ),
+        )
+        for index in remainder_order[:remaining]:
+            targets[LEGACY_CALIBRATION_MIX[index][0]] += 1
+
+        current = {exercise_type: 0 for exercise_type, _ in LEGACY_CALIBRATION_MIX}
+        assignments: List[str] = []
+        for _ in range(total):
+            for exercise_type in current:
+                current[exercise_type] += targets[exercise_type]
+            selected = max(
+                range(len(LEGACY_CALIBRATION_MIX)),
+                key=lambda index: (
+                    current[LEGACY_CALIBRATION_MIX[index][0]],
+                    -index,
+                ),
+            )
+            exercise_type = LEGACY_CALIBRATION_MIX[selected][0]
+            assignments.append(exercise_type)
+            current[exercise_type] -= total
+        return assignments
+
+    def _apply_legacy_calibration_mix(self, task: Dict[str, Any]) -> None:
+        calibration_items: List[Dict[str, Any]] = []
+        for item in task.get('items') or []:
+            if not isinstance(item, dict):
+                continue
+            if item.get('status') != 'pending' or item.get('phase') != 'main':
+                continue
+            if self.task_attempt_count(item) > 0 or item.get('last_event_id'):
+                continue
+            word = self.find_word(item.get('word_key', ''))
+            if word is None or not self._needs_legacy_calibration(word):
+                continue
+            calibration_items.append(item)
+
+        assignments = self._legacy_calibration_assignments(len(calibration_items))
+        for item, exercise_type in zip(calibration_items, assignments):
+            if item.get('exercise_type') != exercise_type:
+                item.pop('question_id', None)
+            item['exercise_type'] = exercise_type
+            item['calibration_reason'] = 'legacy'
+
     def review_state_payload(
         self,
         word: Word,
@@ -1018,6 +1099,8 @@ class WordReciter:
             'recent_learning_load': self.recent_learning_load_snapshot(7),
             'items': items,
         }
+        self._apply_legacy_calibration_mix(task)
+        task['legacy_calibration_version'] = LEGACY_CALIBRATION_VERSION
         self.learning_state_v2['daily_task'] = task
         return task
 
@@ -1086,6 +1169,13 @@ class WordReciter:
         if items and not valid_items:
             return None
         task['items'] = valid_items
+        try:
+            calibration_version = int(task.get('legacy_calibration_version') or 0)
+        except (TypeError, ValueError, OverflowError):
+            calibration_version = 0
+        if calibration_version < LEGACY_CALIBRATION_VERSION:
+            self._apply_legacy_calibration_mix(task)
+            task['legacy_calibration_version'] = LEGACY_CALIBRATION_VERSION
         pending = [item for item in valid_items if item.get('status') == 'pending']
         if pending:
             task['status'] = 'active'
@@ -1118,6 +1208,7 @@ class WordReciter:
                     'backlog_after_task': 0,
                     'buckets': {},
                     'exercise_mix': {},
+                    'calibrations': {},
                     'algorithm': 'adaptive-sm2-v1',
                     'new_word_target': self.automatic_new_word_target(),
                     'review_reserve': 0,
@@ -1141,9 +1232,13 @@ class WordReciter:
 
         buckets: Dict[str, int] = defaultdict(int)
         exercise_mix: Dict[str, int] = defaultdict(int)
+        calibrations: Dict[str, int] = defaultdict(int)
         for item in items:
             buckets[str(item.get('reason') or 'due')] += 1
             exercise_mix[str(item.get('exercise_type') or 'spelling')] += 1
+            calibration_reason = str(item.get('calibration_reason') or '')
+            if calibration_reason:
+                calibrations[calibration_reason] += 1
         total = len(items)
         try:
             available_at_creation = max(
@@ -1180,6 +1275,7 @@ class WordReciter:
                 'backlog_after_task': backlog,
                 'buckets': dict(buckets),
                 'exercise_mix': dict(exercise_mix),
+                'calibrations': dict(calibrations),
                 'algorithm': 'adaptive-sm2-v1',
                 'new_word_target': int(task.get('new_word_target') or 0),
                 'review_reserve': int(task.get('review_reserve') or 0),
