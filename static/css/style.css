@@ -2279,12 +2279,12 @@ body {
 .review-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     flex-wrap: wrap;
     gap: 12px 16px;
     margin-bottom: 24px;
     padding-bottom: 18px;
-    border-bottom: 2px dashed var(--border);
+    border-bottom: 1px solid var(--border);
 }
 
 .review-word-row {
@@ -2292,7 +2292,8 @@ body {
     align-items: baseline;
     flex-wrap: wrap;
     gap: 10px 12px;
-    flex: 1 1 220px;
+    flex: 1 1 100%;
+    width: 100%;
     min-width: 0;
 }
 
@@ -2304,12 +2305,12 @@ body {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 10px 12px;
-    flex: 0 1 auto;
+    flex: 1 1 100%;
+    width: 100%;
     min-width: 0;
     max-width: 100%;
-    margin-left: auto;
 }
 
 .review-exercise-type {
@@ -2595,13 +2596,14 @@ body {
 
 .word-progress {
     max-width: 100%;
-    font-size: 1rem;
+    margin-left: auto;
+    border: 1px solid #8ed8f8;
+    border-radius: 6px;
+    background: #eef9ff;
+    color: #086b9c;
+    font-size: 0.88rem;
     font-weight: 800;
-    color: #fff;
-    background: var(--secondary-color);
-    padding: 6px 14px;
-    border-radius: var(--radius-pill);
-    box-shadow: 0 var(--tactile-depth) 0 var(--secondary-dark);
+    padding: 5px 10px;
     line-height: 1.35;
     text-align: center;
     white-space: normal;
@@ -2657,6 +2659,14 @@ body {
 }
 
 @media (max-width: 600px) {
+    .review-header-right {
+        gap: 8px 10px;
+    }
+
+    .word-progress {
+        margin-left: 0;
+    }
+
     .semantic-question-options {
         grid-template-columns: minmax(0, 1fr);
     }
