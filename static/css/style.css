@@ -1064,7 +1064,7 @@ body {
 .nav-gamification .ng-xp,
 .mobile-more-gamification .ng-xp {
     font: inherit;
-    line-height: 1.2;
+    line-height: inherit;
     appearance: none;
     cursor: pointer;
 }
