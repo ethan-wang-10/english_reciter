@@ -2220,6 +2220,54 @@ body {
     background: var(--primary-color);
 }
 
+/* 宽屏学习状态区：保留扫读层级，减少首屏纵向占用。 */
+@media (min-width: 1200px) {
+    #review-section > .container > .stats-grid {
+        gap: 12px;
+        margin: 16px 0 14px;
+    }
+
+    #review-section > .container > .stats-grid .stat-card {
+        gap: 14px;
+        padding: 15px 20px;
+    }
+
+    #review-section > .container > .stats-grid .stat-icon {
+        font-size: 2.1rem;
+    }
+
+    #review-section > .container > .stats-grid .stat-value {
+        font-size: 1.65rem;
+    }
+
+    #review-section > .container > .stats-grid .stat-label {
+        font-size: 0.8rem;
+    }
+
+    #review-section > .container > .stats-grid .stat-detail {
+        margin-top: 2px;
+        font-size: 0.66rem;
+    }
+
+    #review-section > .container > .today-task-panel {
+        margin: 10px 0 14px;
+        padding: 10px 4px;
+    }
+
+    #review-section > .container > .today-task-panel .today-task-progress-row {
+        margin-top: 8px;
+    }
+
+    #review-section > .container > .today-task-panel .today-task-progress {
+        height: 7px;
+    }
+
+    #review-section > .container > .today-task-panel .today-task-mix {
+        gap: 5px 14px;
+        margin-top: 7px;
+    }
+}
+
 .review-box {
     background: linear-gradient(180deg, var(--primary-light) 0%, var(--surface) 42%);
     padding: 32px 28px 36px;

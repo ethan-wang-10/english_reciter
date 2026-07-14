@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -69,6 +70,20 @@ def promote_community_words(
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> dict:
     """执行一次提升；依赖以参数传入，便于用临时文件做隔离测试。"""
+    community_file = Path(web.COMMUNITY_WB_FILE)
+    print_fn(f"社区文件={community_file}")
+    print_fn(f"正式词库={wordbank_v2.WORDS_V2_FILE}")
+    if not community_file.exists():
+        print_fn("社区文件不存在：当前没有可提升的社区候选词条。")
+        return {
+            "selected": 0,
+            "promoted_existing": 0,
+            "promoted_generated": 0,
+            "failed": 0,
+            "source_missing": True,
+            "exit_code": 0,
+        }
+
     snapshot = web.read_community_wordbank_snapshot()
     candidates: list[tuple[str, dict]] = []
     seen: set[str] = set()
@@ -86,10 +101,7 @@ def promote_community_words(
 
     if limit > 0:
         candidates = candidates[:limit]
-    print_fn(
-        f"社区词条={len(snapshot.get('words') or [])} 本次候选={len(candidates)} "
-        f"正式词库={wordbank_v2.WORDS_V2_FILE}"
-    )
+    print_fn(f"社区词条={len(snapshot.get('words') or [])} 本次候选={len(candidates)}")
     if dry_run:
         for key, _ in candidates[:50]:
             print_fn(key)
@@ -252,11 +264,19 @@ def main() -> int:
     parser.add_argument("--batch-size", type=int, default=5, help="每次 AI 请求词数，默认 5")
     parser.add_argument("--pause", type=float, default=0.0, help="批次之间暂停秒数")
     parser.add_argument(
+        "--data-dir",
+        default="",
+        help="Web 服务使用的用户数据目录；默认读取 ENGLISH_RECITER_DATA_DIR 或 ./user_data_simple",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="也检查已标记 promoted 的社区词条；不会覆盖 words_v2.json 同键",
     )
     args = parser.parse_args()
+
+    if args.data_dir:
+        os.environ["ENGLISH_RECITER_DATA_DIR"] = str(Path(args.data_dir).expanduser().resolve())
 
     import simple_web_app as web
     import wordbank_v2

@@ -44,9 +44,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from reciter import (
     DEFAULT_DAILY_REVIEW_LIMIT,
     MAX_DAILY_REVIEW_LIMIT,
-    MAX_ATTEMPTS,
     WordReciter,
     Config,
+    exercise_attempt_limit,
     get_logger,
 )
 import gamification as gamification_mod
@@ -3326,7 +3326,9 @@ def _review_words_payload(
             'task_phase': str(task_item.get('phase') or 'main'),
             'task_remedial': bool(
                 task_item.get('phase') == 'remedial'
-                or reciter.task_attempt_count(task_item) >= MAX_ATTEMPTS
+                or reciter.task_attempt_count(task_item) >= exercise_attempt_limit(
+                    str(task_item.get('exercise_type') or state_payload['exercise_type'])
+                )
             ),
             'exercise_type': str(
                 task_item.get('exercise_type') or state_payload['exercise_type']
@@ -4788,7 +4790,6 @@ def practice_word(username):
                 if selected_option_id not in valid_option_ids:
                     return jsonify({'error': '所选答案无效，请重新选择'}), 400
                 is_correct = gaokao_questions.check_answer(question, selected_option_id)
-                answer_feedback = gaokao_questions.answer_explanation(question)
                 submission_fingerprint = hashlib.sha256(
                     f'{question_id}\0{selected_option_id}'.encode('utf-8')
                 ).hexdigest()
@@ -4833,6 +4834,11 @@ def practice_word(username):
             recorded = applied['recorded']
             message = applied['message']
             mastered_now = applied['mastered_now']
+            if exercise_type in gaokao_questions.QUESTION_TYPES:
+                if not is_correct and not applied['final_attempt']:
+                    message = '答案不正确'
+                if is_correct or applied['final_attempt']:
+                    answer_feedback = gaokao_questions.answer_explanation(question)
             gam_payload = None
             if is_correct and (recorded or review_event_id):
                 pkw, pkm = _pk_stats_for_gamification(username)
@@ -4859,11 +4865,14 @@ def practice_word(username):
                 'recorded': recorded,
                 'mastered_now': mastered_now,
                 'remedial': applied['remedial'],
+                'attempt_number': applied['attempt_number'],
+                'attempt_limit': applied['attempt_limit'],
+                'final_attempt': applied['final_attempt'],
                 'task_remedial': bool(
                     task_item
                     and (
                         task_item.get('phase') == 'remedial'
-                        or reciter.task_attempt_count(task_item) >= MAX_ATTEMPTS
+                        or reciter.task_attempt_count(task_item) >= applied['attempt_limit']
                     )
                 ),
                 'exercise_type': exercise_type,

@@ -31,12 +31,22 @@ from review_scheduler import (
 )
 
 # 常量定义
-MAX_ATTEMPTS = 3  # 最大尝试次数
+MAX_ATTEMPTS = 3  # 拼写、听写等题型的最大尝试次数
+SEMANTIC_EXERCISE_TYPES = frozenset({'recognition', 'context'})
+SEMANTIC_MAX_ATTEMPTS = 2
 DEFAULT_DAILY_REVIEW_LIMIT = 120
 MAX_DAILY_REVIEW_LIMIT = 300
 MIN_DAILY_REVIEW_SHARE = 0.6
 DEFAULT_DAILY_NEW_WORD_TARGET = 15
 DAILY_PERFORMANCE_HISTORY_DAYS = 30
+
+
+def exercise_attempt_limit(exercise_type: str) -> int:
+    """Return the attempt limit for one pass of an exercise."""
+    if str(exercise_type or '').strip().lower() in SEMANTIC_EXERCISE_TYPES:
+        return SEMANTIC_MAX_ATTEMPTS
+    return MAX_ATTEMPTS
+
 
 def get_logger(name: str = __name__) -> logging.Logger:
     """获取日志记录器（单例模式）"""
@@ -773,7 +783,9 @@ class WordReciter:
             'difficult': sum(
                 1
                 for item in items
-                if self.task_attempt_count(item) >= MAX_ATTEMPTS
+                if self.task_attempt_count(item) >= exercise_attempt_limit(
+                    str(item.get('exercise_type') or 'spelling')
+                )
                 or item.get('phase') == 'remedial'
             ),
         }
@@ -1504,11 +1516,12 @@ class WordReciter:
         """Atomically apply one server-scored answer to learning state."""
         old_success_count = word.success_count
         old_mastered_count = len(self.mastered_words)
+        attempt_limit = exercise_attempt_limit(exercise_type)
         task_requires_remedial = bool(
             task_item
             and (
                 task_item.get('phase') == 'remedial'
-                or self.task_attempt_count(task_item) >= MAX_ATTEMPTS
+                or self.task_attempt_count(task_item) >= attempt_limit
             )
         )
         replayed_task_event = bool(
@@ -1576,6 +1589,9 @@ class WordReciter:
             task_item['last_event_remedial'] = effective_remedial
         elif task_item:
             effective_attempt = max(1, self.task_attempt_count(task_item))
+        final_attempt = bool(
+            not correct and effective_attempt % attempt_limit == 0
+        )
 
         if not recorded:
             message = '本次作答已记录'
@@ -1596,7 +1612,6 @@ class WordReciter:
             )
             self.complete_daily_task_item(task_item, event_id)
         else:
-            final_attempt = effective_attempt % MAX_ATTEMPTS == 0
             self.record_answer_incorrect(
                 word,
                 final_attempt=final_attempt,
@@ -1612,6 +1627,8 @@ class WordReciter:
             'recorded': recorded,
             'message': message,
             'attempt_number': effective_attempt,
+            'attempt_limit': attempt_limit,
+            'final_attempt': final_attempt,
             'old_success_count': old_success_count,
             'new_success_count': word.success_count,
             'mastered_now': len(self.mastered_words) > old_mastered_count,

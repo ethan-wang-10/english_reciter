@@ -111,6 +111,31 @@ def test_malformed_community_file_is_never_overwritten(isolated_wordbanks) -> No
     assert community_file.read_text(encoding="utf-8") == malformed
 
 
+def test_missing_community_file_is_reported_without_creating_it(
+    isolated_wordbanks, monkeypatch
+) -> None:
+    community_file, _ = isolated_wordbanks
+    community_file.unlink(missing_ok=True)
+    monkeypatch.setattr(
+        web,
+        "read_community_wordbank_snapshot",
+        lambda: pytest.fail("文件不存在时不应创建空社区文件"),
+    )
+    output = []
+
+    result = promoter.promote_community_words(
+        web,
+        wordbank_v2,
+        dry_run=True,
+        print_fn=lambda message, **kwargs: output.append(str(message)),
+    )
+
+    assert result["source_missing"] is True
+    assert not community_file.exists()
+    assert any(str(community_file) in line for line in output)
+    assert any("不存在" in line for line in output)
+
+
 def test_valid_entry_is_appended_once_and_marked_promoted(
     isolated_wordbanks, monkeypatch
 ) -> None:

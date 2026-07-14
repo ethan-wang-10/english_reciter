@@ -73,7 +73,7 @@ function endTtsSpeakUi() {
     });
 }
 
-/** 本轮 3 次尝试均错的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
+/** 本轮达到题型尝试上限仍未答对的单词（去重顺序）；一轮结束后用于生成下一轮错题复习 */
 let wrongWordsInThisPass = new Set();
 let wrongWordsOrder = [];
 /** 当前会话中见过的单词对象，供错题轮从内存取词 */
@@ -5357,7 +5357,7 @@ function updateWrongRoundLabel() {
     const el = document.getElementById('wrong-round-label');
     if (!el) return;
     if (wrongRoundNumber === 0) {
-        el.textContent = '同一单词 3 次尝试均错后会出现在这里';
+        el.textContent = '同一单词达到本题尝试上限仍未答对后会出现在这里';
     } else {
         el.textContent = `错题复习 · 第 ${wrongRoundNumber} 轮`;
     }
@@ -5632,12 +5632,12 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
     if (isBonus) {
         parts.push(
             `<div class="review-summary-section"><strong>加练主轮</strong>：本轮共 ${n} 个词；` +
-            `答对 ${mainOk} 个；${mainFailed} 个曾 3 次均未答对并进入错题巩固。（答对仅计复习次数）</div>`
+            `答对 ${mainOk} 个；${mainFailed} 个达到尝试上限仍未答对并进入错题巩固。（答对仅计复习次数）</div>`
         );
     } else if (n > 0) {
         parts.push(
             `<div class="review-summary-section"><strong>主轮</strong>：今日待复习共 ${n} 个词；` +
-            `在本轮流程中答对 ${mainOk} 个；${mainFailed} 个曾 3 次均未答对并进入错题巩固。</div>`
+            `在本轮流程中答对 ${mainOk} 个；${mainFailed} 个达到尝试上限仍未答对并进入错题巩固。</div>`
         );
     }
 
@@ -5653,7 +5653,7 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
         );
     } else if (mainFailed > 0 && sessionSkippedRemedialAfterMain) {
         parts.push(
-            `<div class="review-summary-section"><strong>错题巩固</strong>：主轮有 ${mainFailed} 个词 3 次均未答对，你已选择「稍后再说」，本次未进行错题巩固。</div>`
+            `<div class="review-summary-section"><strong>错题巩固</strong>：主轮有 ${mainFailed} 个词达到尝试上限仍未答对，你已选择「稍后再说」，本次未进行错题巩固。</div>`
         );
     } else if (n > 0 || isBonus) {
         parts.push(
@@ -5753,7 +5753,7 @@ function enterRemedialRound() {
     wrongRoundNumber += 1;
     const n = wrongWordsOrder.length;
     const msg = wrongRoundNumber === 1
-        ? `本轮有 ${n} 个单词 3 次均未答对，即将开始错题复习`
+        ? `本轮有 ${n} 个单词达到尝试上限仍未答对，即将开始错题复习`
         : `进入第 ${wrongRoundNumber} 轮错题复习（${n} 个单词）`;
     showMainBanner(msg);
 
@@ -6108,9 +6108,14 @@ function resetSemanticOptionsForRetry(word) {
     word._selectedOptionId = '';
     document.querySelectorAll('#semantic-question-options .semantic-option').forEach((button) => {
         button.disabled = false;
-        button.classList.remove('is-selected', 'is-wrong');
+        button.classList.remove('is-selected', 'is-wrong', 'is-correct');
         button.setAttribute('aria-checked', 'false');
     });
+    const feedback = document.getElementById('semantic-question-feedback');
+    if (feedback) {
+        feedback.textContent = '';
+        feedback.hidden = true;
+    }
     const submit = document.getElementById('submit-answer');
     if (submit) submit.disabled = true;
 }
@@ -6573,7 +6578,9 @@ async function submitAnswer() {
         const messageDiv = document.getElementById('word-message');
         let msgText = result.message;
         clearReviewWordMessageExtra();
-        if (isSemantic) renderSemanticAnswerFeedback(word, result);
+        if (isSemantic && (result.correct || result.final_attempt === true)) {
+            renderSemanticAnswerFeedback(word, result);
+        }
         if (result.correct && result.gamification) {
             const gm = result.gamification;
             const gainedXp = Number(gm.xp_gained) || 0;
@@ -6634,15 +6641,22 @@ async function submitAnswer() {
         } else {
             // 答案错误
             currentErrorCount++;
+            const rawAttemptLimit = Number(result.attempt_limit);
+            const attemptLimit = Number.isFinite(rawAttemptLimit) && rawAttemptLimit > 0
+                ? Math.floor(rawAttemptLimit)
+                : (isSemantic ? 2 : 3);
+            const finalAttempt = typeof result.final_attempt === 'boolean'
+                ? result.final_attempt
+                : currentErrorCount >= attemptLimit;
             
             // 每次错误多揭示一个字母
             if (!isSemantic && currentRevealedCount < targetAnswer.length) {
                 currentRevealedCount++;
             }
             
-            if (currentErrorCount >= 3) {
-                // 3 次尝试均错：记入本轮错题栏
-                if (wrongRoundNumber === 0 && !word.task_remedial) {
+            if (finalAttempt) {
+                // 达到当前题型尝试上限：记入本轮错题栏
+                if (wrongRoundNumber === 0 && !result.remedial) {
                     sessionMainFailedThree += 1;
                 }
                 recordWrongAttempt(word);
@@ -6661,7 +6675,7 @@ async function submitAnswer() {
                     currentReviewIndex++;
                     showCurrentWord();
                     loadStats();
-                }, 1500);
+                }, isSemantic ? 3200 : 1500);
             } else {
                 // 还有尝试机会，更新提示字符串
                 if (!isSemantic) {
@@ -6670,8 +6684,15 @@ async function submitAnswer() {
                     document.getElementById('current-word-english').textContent = hintString;
                 }
                 
-                // 显示剩余次数
-                messageDiv.textContent = `${result.message} (还剩 ${3 - currentErrorCount} 次尝试机会)`;
+                // 选择题首次答错只提示错误，不泄露答案；其他题型继续显示剩余次数。
+                const rawAttemptNumber = Number(result.attempt_number);
+                const attemptInCycle = Number.isFinite(rawAttemptNumber) && rawAttemptNumber > 0
+                    ? ((Math.floor(rawAttemptNumber) - 1) % attemptLimit) + 1
+                    : currentErrorCount;
+                const remainingAttempts = Math.max(0, attemptLimit - attemptInCycle);
+                messageDiv.textContent = isSemantic
+                    ? result.message
+                    : `${result.message} (还剩 ${remainingAttempts} 次尝试机会)`;
                 // 清空下划线输入框，让用户重新输入
                 if (isSemantic) {
                     resetSemanticOptionsForRetry(word);

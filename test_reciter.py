@@ -1201,17 +1201,18 @@ class TestWordReciter(unittest.TestCase):
         reciter.all_words = [word]
         task = reciter.get_today_learning_plan()
         item = task['items'][0]
+        item['exercise_type'] = 'spelling'
         for index in range(2):
             reciter.apply_scored_review_attempt(
                 word,
-                exercise_type=item['exercise_type'],
+                exercise_type='spelling',
                 correct=False,
                 task_item=item,
                 event_id=f'third-correct-wrong-{index}',
             )
         first = reciter.apply_scored_review_attempt(
             word,
-            exercise_type=item['exercise_type'],
+            exercise_type='spelling',
             correct=True,
             task_item=item,
             event_id='third-correct-event',
@@ -1220,7 +1221,7 @@ class TestWordReciter(unittest.TestCase):
 
         replay = reciter.apply_scored_review_attempt(
             word,
-            exercise_type=item['exercise_type'],
+            exercise_type='spelling',
             correct=True,
             task_item=item,
             event_id='third-correct-event',
@@ -1236,17 +1237,18 @@ class TestWordReciter(unittest.TestCase):
         reciter.all_words = [word]
         task = reciter.get_today_learning_plan()
         item = task['items'][0]
+        item['exercise_type'] = 'spelling'
         for index in range(2):
             reciter.apply_scored_review_attempt(
                 word,
-                exercise_type=item['exercise_type'],
+                exercise_type='spelling',
                 correct=False,
                 task_item=item,
                 event_id=f'third-wrong-{index}',
             )
         first = reciter.apply_scored_review_attempt(
             word,
-            exercise_type=item['exercise_type'],
+            exercise_type='spelling',
             correct=False,
             task_item=item,
             event_id='third-wrong-event',
@@ -1256,7 +1258,7 @@ class TestWordReciter(unittest.TestCase):
 
         replay = reciter.apply_scored_review_attempt(
             word,
-            exercise_type=item['exercise_type'],
+            exercise_type='spelling',
             correct=False,
             task_item=item,
             event_id='third-wrong-event',
@@ -1269,21 +1271,60 @@ class TestWordReciter(unittest.TestCase):
             before,
         )
 
-    def test_third_failed_attempt_schedules_again_but_keeps_task_pending(self):
+    def test_second_failed_semantic_attempt_schedules_again(self):
+        reciter = WordReciter(self.config)
+        word = Word('semantic-retry', '语义重试', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        item = reciter.get_today_learning_plan()['items'][0]
+        item['exercise_type'] = 'context'
+
+        first = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type='context',
+            correct=False,
+            task_item=item,
+            event_id='semantic-wrong-1',
+        )
+        state = reciter.get_review_state(word)
+        self.assertEqual(first['attempt_limit'], 2)
+        self.assertFalse(first['final_attempt'])
+        self.assertEqual(item['phase'], 'main')
+        self.assertEqual(state['scheduler']['lapses'], 0)
+
+        second = reciter.apply_scored_review_attempt(
+            word,
+            exercise_type='context',
+            correct=False,
+            task_item=item,
+            event_id='semantic-wrong-2',
+        )
+
+        self.assertEqual(second['attempt_number'], 2)
+        self.assertTrue(second['final_attempt'])
+        self.assertEqual(item['phase'], 'remedial')
+        state = reciter.get_review_state(word)
+        self.assertEqual(state['scheduler']['lapses'], 1)
+        self.assertEqual(word.next_review_date, reciter.today + timedelta(days=1))
+
+    def test_third_failed_spelling_attempt_schedules_again_but_keeps_task_pending(self):
         reciter = WordReciter(self.config)
         word = Word('retry', '重试', next_review_date=reciter.today)
         reciter.all_words = [word]
         task = reciter.get_today_learning_plan()
         item = task['items'][0]
+        item['exercise_type'] = 'spelling'
+        results = []
         for index in range(3):
-            reciter.apply_scored_review_attempt(
+            results.append(reciter.apply_scored_review_attempt(
                 word,
-                exercise_type=item['exercise_type'],
+                exercise_type='spelling',
                 correct=False,
                 task_item=item,
                 event_id=f'wrong-{index}',
-            )
+            ))
         state = reciter.get_review_state(word)
+        self.assertEqual([result['final_attempt'] for result in results], [False, False, True])
+        self.assertTrue(all(result['attempt_limit'] == 3 for result in results))
         self.assertEqual(item['attempts'], 3)
         self.assertEqual(item['status'], 'pending')
         self.assertEqual(item['phase'], 'remedial')

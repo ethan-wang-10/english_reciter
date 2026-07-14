@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260714-learning-flow2">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260714-learning-flow4">
 </head>
 <body>
     <div id="app">
@@ -361,7 +361,7 @@
                             </button>
                             <h3 class="wrong-words-title wrong-words-title-desktop">本轮错题</h3>
                             <div id="wrong-words-collapsible" class="wrong-words-collapsible">
-                                <p class="wrong-words-sub" id="wrong-round-label">同一单词 3 次尝试均错后会出现在这里</p>
+                                <p class="wrong-words-sub" id="wrong-round-label">同一单词达到本题尝试上限仍未答对后会出现在这里</p>
                                 <ul class="wrong-words-list" id="wrong-words-list"></ul>
                                 <p class="wrong-words-empty" id="wrong-words-empty">暂无错题，继续加油！</p>
                                 <div class="wrong-order-control" id="wrong-order-control">
@@ -386,7 +386,7 @@
                         <div class="remedial-offer-backdrop"></div>
                         <div class="remedial-offer-card" role="dialog" aria-modal="true" aria-labelledby="remedial-offer-title">
                             <h3 id="remedial-offer-title">错题巩固</h3>
-                            <p class="remedial-offer-body">本轮有 <strong id="remedial-offer-count">0</strong> 个单词 3 次均未答对，是否现在开始错题巩固？</p>
+                            <p class="remedial-offer-body">本轮有 <strong id="remedial-offer-count">0</strong> 个单词达到本题尝试上限仍未答对，是否现在开始错题巩固？</p>
                             <div class="remedial-offer-words" id="remedial-offer-words" hidden>
                                 <div class="remedial-offer-words-head">
                                     <span>本轮错题</span>
@@ -1185,7 +1185,7 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20260714-learning-flow2" defer></script>
+    <script src="/static/js/app.js?v=20260714-learning-flow3" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>

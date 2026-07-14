@@ -59,9 +59,20 @@ class _SemanticReciter:
 
     def apply_scored_review_attempt(self, word, **kwargs):
         self.last_apply = kwargs
+        attempt_limit = web.exercise_attempt_limit(kwargs.get('exercise_type', 'spelling'))
+        attempt_number = self.task_attempt_count(self.task_item) + 1
+        self.task_item['attempts'] = attempt_number
+        final_attempt = bool(
+            not kwargs.get('correct') and attempt_number % attempt_limit == 0
+        )
+        if final_attempt:
+            self.task_item['phase'] = 'remedial'
         return {
             'recorded': True,
             'message': '已判分',
+            'attempt_number': attempt_number,
+            'attempt_limit': attempt_limit,
+            'final_attempt': final_attempt,
             'mastered_now': False,
             'remedial': False,
             'old_success_count': 0,
@@ -436,10 +447,37 @@ def test_practice_scores_semantic_option_server_side(client, monkeypatch, tmp_pa
     assert response.status_code == 200
     body = response.get_json()
     assert body['correct'] is False
-    assert body['answer_feedback']['correct_option_id'] == record['context']['answer_option_id']
-    assert body['answer_feedback']['translation_zh']
+    assert body['message'] == '答案不正确'
+    assert body['attempt_number'] == 1
+    assert body['attempt_limit'] == 2
+    assert body['final_attempt'] is False
+    assert 'answer_feedback' not in body
     assert reciter.last_apply['exercise_type'] == 'context'
     assert len(reciter.last_apply['submission_fingerprint']) == 64
+
+    second_response = client.post(
+        '/api/words/practice',
+        headers={'Authorization': 'Bearer test'},
+        json={
+            'word_id': 'question:item-1',
+            'task_id': 'task-1',
+            'task_item_id': 'item-1',
+            'exercise_type': 'context',
+            'question_id': record['context']['question_id'],
+            'selected_option_id': wrong_option,
+            'review_event_id': 'semantic-event-2',
+        },
+    )
+
+    assert second_response.status_code == 200
+    second_body = second_response.get_json()
+    assert second_body['correct'] is False
+    assert second_body['attempt_number'] == 2
+    assert second_body['attempt_limit'] == 2
+    assert second_body['final_attempt'] is True
+    assert second_body['task_remedial'] is True
+    assert second_body['answer_feedback']['correct_option_id'] == record['context']['answer_option_id']
+    assert second_body['answer_feedback']['translation_zh']
 
 
 def test_practice_rejects_question_id_from_another_version(
