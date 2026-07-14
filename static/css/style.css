@@ -2436,6 +2436,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: flex-start;
+    gap: 12px;
     width: 100%;
     min-height: 52px;
     padding: 10px 14px;
@@ -2451,10 +2452,57 @@ body {
     box-sizing: border-box;
 }
 
+.semantic-option-shortcut {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #f3f4f6;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.semantic-option-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.semantic-option-status {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 3px 7px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.semantic-option-status[hidden] {
+    display: none;
+}
+
 .semantic-option:hover:not(:disabled),
+.semantic-option:focus-visible,
 .semantic-option.is-selected {
     border-color: var(--secondary-color);
     background: #eef9ff;
+}
+
+.semantic-option:focus-visible {
+    outline: 3px solid rgba(28, 176, 246, 0.24);
+    outline-offset: 2px;
+}
+
+.semantic-option.is-selected .semantic-option-shortcut {
+    border-color: var(--secondary-color);
+    background: var(--secondary-color);
+    color: #fff;
 }
 
 .semantic-option.is-correct {
@@ -2462,9 +2510,31 @@ body {
     background: #f2fde9;
 }
 
+.semantic-option.is-correct .semantic-option-shortcut {
+    border-color: var(--primary-dark);
+    background: var(--primary-color);
+    color: #fff;
+}
+
+.semantic-option.is-correct .semantic-option-status {
+    background: #dcfce7;
+    color: #166534;
+}
+
 .semantic-option.is-wrong {
     border-color: var(--danger-color, #e53838);
     background: #fff1f1;
+}
+
+.semantic-option.is-wrong .semantic-option-shortcut {
+    border-color: var(--danger-color, #e53838);
+    background: var(--danger-color, #e53838);
+    color: #fff;
+}
+
+.semantic-option.is-wrong .semantic-option-status {
+    background: #fee2e2;
+    color: #b91c1c;
 }
 
 .semantic-option:disabled {
@@ -2501,6 +2571,10 @@ body {
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
+}
+
+.review-phonetic-toggle[hidden] {
+    display: none;
 }
 
 .review-phonetic-toggle input {
@@ -2586,6 +2660,16 @@ body {
     .semantic-question-prompt {
         font-size: 0.98rem;
         text-align: left;
+    }
+
+    .semantic-option {
+        gap: 10px;
+    }
+
+    .semantic-option-shortcut {
+        flex-basis: 26px;
+        width: 26px;
+        height: 26px;
     }
 
     .today-task-panel {
@@ -2805,6 +2889,97 @@ body {
     border-radius: var(--radius-lg);
     border: 2px solid var(--border);
     box-shadow: 0 8px 0 var(--accent-yellow-dark);
+}
+
+.review-section-break {
+    padding: 38px 28px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 8px 0 var(--accent-yellow-dark);
+    text-align: center;
+}
+
+.review-section-break[hidden] {
+    display: none;
+}
+
+.review-section-break-kicker {
+    margin: 0 0 8px;
+    color: #9a6700;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.review-section-break h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    line-height: 1.3;
+}
+
+.review-section-break-desc {
+    margin: 10px auto 0;
+    max-width: 520px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    line-height: 1.55;
+}
+
+.review-section-break-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 520px;
+    margin: 24px auto;
+    padding: 16px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+
+.review-section-break-metrics > div {
+    min-width: 0;
+    padding: 0 14px;
+}
+
+.review-section-break-metrics > div + div {
+    border-left: 1px solid var(--border);
+}
+
+.review-section-break-metrics dt {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.review-section-break-metrics dd {
+    margin: 6px 0 0;
+    color: var(--primary-dark);
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.review-section-break-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+    .review-section-break {
+        padding: 30px 18px;
+    }
+
+    .review-section-break-metrics > div {
+        padding: 0 8px;
+    }
+
+    .review-section-break-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 .complete-icon {

@@ -30,6 +30,14 @@ let currentErrorCount = 0; // 当前单词错误次数
 let currentRevealedCount = 0; // 当前单词已揭示字母数
 let isSubmitting = false; // 防止重复提交（修复一闪而过bug）
 let isAdvancing = false;  // 防止重复推进到下一题
+let reviewAdvanceTimer = null;
+let pendingReviewAdvance = null;
+const REVIEW_SECTION_SIZE = 20;
+let reviewSectionStartIndex = 0;
+let reviewSectionStartCorrectAttempts = 0;
+let reviewSectionStartWrongAttempts = 0;
+let reviewSectionStartMasteredCount = 0;
+let reviewSectionCompletedCount = 0;
 
 /** 用户套餐类型: 'free' | 'paid'（paid 对应 VIP 权益，展示文案统一为 VIP） */
 let userPlan = 'free';
@@ -3672,10 +3680,15 @@ function initImportResultModal() {
 const REVIEW_PHONETIC_STORAGE_KEY = 'english_reciter_review_show_phonetic';
 const REVIEW_TEST_INFLECTION_STORAGE_KEY = 'english_reciter_review_test_inflection';
 const REVIEW_NEW_WORDS_FIRST_STORAGE_KEY = 'english_reciter_review_new_words_first';
+const REVIEW_NUMBER_DIRECT_SUBMIT_STORAGE_KEY = 'english_reciter_review_number_direct_submit';
 
 function getReviewTestInflectionEnabled() {
     const cb = document.getElementById('review-test-inflection');
     return Boolean(cb && cb.checked);
+}
+
+function getReviewNumberDirectSubmitEnabled() {
+    return localStorage.getItem(REVIEW_NUMBER_DIRECT_SUBMIT_STORAGE_KEY) === '1';
 }
 
 function updateReviewPhoneticDisplay(word) {
@@ -3785,7 +3798,18 @@ function initializeUnderlineInputForTarget(word, target) {
     capture.onkeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            submitAnswer();
+            if (!finishPendingReviewAdvance()) void submitAnswer();
+            return;
+        }
+        const activeWord = currentReviewList[currentReviewIndex];
+        if (
+            e.code === 'Space'
+            && activeWord?.exercise_type === 'listening'
+            && !isSubmitting
+            && !isAdvancing
+        ) {
+            e.preventDefault();
+            void speakExample();
         }
     };
 
@@ -5338,6 +5362,13 @@ function restoreActiveReviewSession() {
         return true;
     }
 
+    if (isReviewSectionBreakOpen()) {
+        if (reviewBox) reviewBox.style.display = 'none';
+        if (reviewComplete) reviewComplete.style.display = 'none';
+        setTimeout(() => document.getElementById('review-section-continue')?.focus(), 0);
+        return true;
+    }
+
     if (currentReviewList.length > 0 && currentReviewIndex < currentReviewList.length) {
         if (reviewBox) reviewBox.style.display = 'block';
         if (reviewComplete) reviewComplete.style.display = 'none';
@@ -5384,6 +5415,7 @@ function resetActiveReviewSession() {
     currentReviewIndex = 0;
     currentErrorCount = 0;
     currentRevealedCount = 0;
+    cancelPendingReviewAdvance();
     isSubmitting = false;
     isAdvancing = false;
     wrongWordsInThisPass = new Set();
@@ -5401,6 +5433,7 @@ function resetActiveReviewSession() {
     const inflectionInput = document.getElementById('review-test-inflection');
     if (inflectionInput) inflectionInput.disabled = false;
     resetSessionReviewStats();
+    resetReviewSectionProgress();
     closeRemedialOfferModal();
     const panel = document.getElementById('today-task-panel');
     if (panel) panel.hidden = true;
@@ -5418,6 +5451,244 @@ function reviewExerciseLabel(exerciseType) {
 
 function isSemanticExercise(exerciseType) {
     return exerciseType === 'recognition' || exerciseType === 'context';
+}
+
+function selectSemanticOption(word, button, { focus = false } = {}) {
+    const options = document.getElementById('semantic-question-options');
+    if (!word || !options || !button || button.disabled || isSubmitting || isAdvancing) return false;
+    word._selectedOptionId = button.dataset.optionId || '';
+    options.querySelectorAll('.semantic-option').forEach((row) => {
+        const selected = row === button;
+        row.classList.toggle('is-selected', selected);
+        row.setAttribute('aria-checked', selected ? 'true' : 'false');
+        row.tabIndex = selected ? 0 : -1;
+    });
+    const submit = document.getElementById('submit-answer');
+    if (submit && submit.dataset.reviewAction !== 'next') {
+        submit.disabled = !word._selectedOptionId;
+    }
+    if (focus) button.focus({ preventScroll: true });
+    return Boolean(word._selectedOptionId);
+}
+
+function setReviewSubmitButtonState(action = 'submit', { disabled = false } = {}) {
+    const submit = document.getElementById('submit-answer');
+    if (!submit) return;
+    const isNext = action === 'next';
+    submit.dataset.reviewAction = isNext ? 'next' : 'submit';
+    submit.textContent = isNext ? '下一题' : '提交';
+    submit.disabled = isNext ? false : Boolean(disabled);
+    submit.setAttribute('aria-keyshortcuts', 'Enter');
+}
+
+function sessionCorrectAttemptCount() {
+    return sessionMainCorrect + sessionRemedialCorrect;
+}
+
+function isReviewSectionBreakOpen() {
+    const panel = document.getElementById('review-section-break');
+    return Boolean(panel && !panel.hidden);
+}
+
+function resetReviewSectionProgress() {
+    reviewSectionStartIndex = currentReviewIndex;
+    reviewSectionStartCorrectAttempts = sessionCorrectAttemptCount();
+    reviewSectionStartWrongAttempts = sessionTotalWrongAttempts;
+    reviewSectionStartMasteredCount = sessionNewMastered.length;
+    reviewSectionCompletedCount = 0;
+    const panel = document.getElementById('review-section-break');
+    if (panel) panel.hidden = true;
+}
+
+function showReviewSectionBreak() {
+    const completedWords = currentReviewIndex - reviewSectionStartIndex;
+    if (
+        completedWords < REVIEW_SECTION_SIZE
+        || currentReviewIndex >= currentReviewList.length
+    ) return false;
+
+    reviewSectionCompletedCount += 1;
+    const correctAttempts = sessionCorrectAttemptCount() - reviewSectionStartCorrectAttempts;
+    const wrongAttempts = sessionTotalWrongAttempts - reviewSectionStartWrongAttempts;
+    const totalAttempts = correctAttempts + wrongAttempts;
+    const accuracy = totalAttempts > 0 ? Math.round((correctAttempts / totalAttempts) * 100) : 0;
+    const mastered = new Set(sessionNewMastered.slice(reviewSectionStartMasteredCount)).size;
+    const remaining = Math.max(0, currentReviewList.length - currentReviewIndex);
+    const scope = wrongRoundNumber > 0
+        ? '错题巩固'
+        : (reviewSessionMode === 'bonus' ? '随机加练' : '今日复习');
+
+    const title = document.getElementById('review-section-break-title');
+    const desc = document.getElementById('review-section-break-desc');
+    if (title) title.textContent = `第 ${reviewSectionCompletedCount} 小节完成`;
+    if (desc) desc.textContent = `${scope}已暂停，休息一下再继续；本轮还剩 ${remaining} 词。`;
+    const words = document.getElementById('review-section-break-words');
+    const accuracyEl = document.getElementById('review-section-break-accuracy');
+    const masteredEl = document.getElementById('review-section-break-mastered');
+    if (words) words.textContent = String(completedWords);
+    if (accuracyEl) accuracyEl.textContent = `${accuracy}%`;
+    if (masteredEl) masteredEl.textContent = String(mastered);
+
+    const reviewBox = document.getElementById('review-box');
+    const reviewComplete = document.getElementById('review-complete');
+    const panel = document.getElementById('review-section-break');
+    if (reviewBox) reviewBox.style.display = 'none';
+    if (reviewComplete) reviewComplete.style.display = 'none';
+    if (panel) panel.hidden = false;
+    setTimeout(() => document.getElementById('review-section-continue')?.focus(), 0);
+    return true;
+}
+
+function continueReviewSection() {
+    if (!isReviewSectionBreakOpen()) return false;
+    const panel = document.getElementById('review-section-break');
+    const reviewBox = document.getElementById('review-box');
+    if (panel) panel.hidden = true;
+    if (reviewBox) reviewBox.style.display = 'block';
+    reviewSectionStartIndex = currentReviewIndex;
+    reviewSectionStartCorrectAttempts = sessionCorrectAttemptCount();
+    reviewSectionStartWrongAttempts = sessionTotalWrongAttempts;
+    reviewSectionStartMasteredCount = sessionNewMastered.length;
+    void showCurrentWord();
+    return true;
+}
+
+function cancelPendingReviewAdvance() {
+    if (reviewAdvanceTimer !== null) clearTimeout(reviewAdvanceTimer);
+    reviewAdvanceTimer = null;
+    pendingReviewAdvance = null;
+}
+
+function finishPendingReviewAdvance() {
+    const pending = pendingReviewAdvance;
+    if (!pending) return false;
+    cancelPendingReviewAdvance();
+    if (
+        !isReviewContextCurrent(pending.reviewContext)
+        || currentReviewIndex !== pending.submissionIndex
+        || currentReviewList[pending.submissionIndex] !== pending.word
+    ) return false;
+    isSubmitting = false;
+    isAdvancing = false;
+    currentReviewIndex += 1;
+    if (!showReviewSectionBreak()) void showCurrentWord();
+    void loadStats();
+    return true;
+}
+
+function scheduleReviewAdvance(reviewContext, submissionIndex, word, delayMs) {
+    cancelPendingReviewAdvance();
+    isAdvancing = true;
+    pendingReviewAdvance = { reviewContext, submissionIndex, word };
+    setReviewSubmitButtonState('next');
+    reviewAdvanceTimer = setTimeout(
+        () => finishPendingReviewAdvance(),
+        Math.max(0, Number(delayMs) || 0),
+    );
+}
+
+function reviewFeedbackDelayMs(word, result, { isSemantic = false } = {}) {
+    const feedback = result?.answer_feedback || {};
+    const semanticDetailLength = [feedback.translation_zh, feedback.explanation_zh]
+        .map((value) => String(value || '').trim().length)
+        .reduce((total, length) => total + length, 0);
+    const detailSteps = Math.min(3, Math.ceil(semanticDetailLength / 70));
+    if (isSemantic) {
+        const base = result?.correct ? 1400 : 2600;
+        const maximum = result?.correct ? 3000 : 4200;
+        return Math.min(maximum, base + detailSteps * 350);
+    }
+
+    const answerLength = String(word?._targetAnswer || word?.english || '').length;
+    const longAnswerExtra = answerLength > 10 ? 300 : 0;
+    if (!result?.correct) return 1800 + longAnswerExtra;
+    const hasExtendedMeaning = Boolean(
+        word?.review_polyseme
+        || (Array.isArray(result?.other_senses_extra) && result.other_senses_extra.length > 0),
+    );
+    return 1000 + longAnswerExtra + (hasExtendedMeaning ? 1100 : 0);
+}
+
+function handleSemanticQuestionKeydown(event) {
+    if (
+        event.defaultPrevented
+        || event.isComposing
+        || event.ctrlKey
+        || event.metaKey
+        || event.altKey
+    ) return;
+    const reviewSection = document.getElementById('review-section');
+    if (
+        !reviewSection?.classList.contains('active')
+        || isSettingsOverlayOpen()
+        || xpHistoryModalOpen
+        || isRemedialOfferModalOpen()
+    ) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+    if (event.key === 'Enter' && isReviewSectionBreakOpen()) {
+        event.preventDefault();
+        continueReviewSection();
+        return;
+    }
+
+    const word = currentReviewList[currentReviewIndex];
+    if (!word) return;
+    if (event.key === 'Enter' && isAdvancing && pendingReviewAdvance) {
+        event.preventDefault();
+        finishPendingReviewAdvance();
+        return;
+    }
+    if (
+        event.code === 'Space'
+        && word.exercise_type === 'listening'
+        && !isSubmitting
+        && !isAdvancing
+    ) {
+        event.preventDefault();
+        void speakExample();
+        return;
+    }
+
+    const panel = document.getElementById('semantic-question');
+    if (!isSemanticExercise(word.exercise_type) || !panel || panel.hidden) return;
+    const buttons = Array.from(panel.querySelectorAll('.semantic-option'));
+    if (!buttons.length) return;
+
+    if (/^[1-4]$/.test(event.key)) {
+        if (event.repeat) return;
+        const button = buttons[Number(event.key) - 1];
+        if (!button || button.disabled) return;
+        event.preventDefault();
+        const selected = selectSemanticOption(word, button);
+        if (selected && getReviewNumberDirectSubmitEnabled()) void submitAnswer();
+        return;
+    }
+
+    if (['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].includes(event.key)) {
+        if (isSubmitting || isAdvancing) return;
+        const enabledButtons = buttons.filter((button) => !button.disabled);
+        if (!enabledButtons.length) return;
+        const selectedIndex = enabledButtons.findIndex(
+            (button) => button.dataset.optionId === word._selectedOptionId,
+        );
+        const direction = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+        const nextIndex = selectedIndex < 0
+            ? (direction > 0 ? 0 : enabledButtons.length - 1)
+            : (selectedIndex + direction + enabledButtons.length) % enabledButtons.length;
+        const button = enabledButtons[nextIndex];
+        if (!button) return;
+        event.preventDefault();
+        selectSemanticOption(word, button, { focus: true });
+        return;
+    }
+
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        if (!word._selectedOptionId || isSubmitting || isAdvancing) return;
+        void submitAnswer();
+    }
 }
 
 function getNewWordsFirstEnabled() {
@@ -5775,6 +6046,7 @@ function enterRemedialRound() {
     }
 
     currentReviewIndex = 0;
+    resetReviewSectionProgress();
     document.getElementById('review-box').style.display = 'block';
     document.getElementById('review-complete').style.display = 'none';
     renderWrongPanel();
@@ -5833,6 +6105,8 @@ function onPassComplete() {
 }
 
 function showFinalComplete() {
+    const sectionBreak = document.getElementById('review-section-break');
+    if (sectionBreak) sectionBreak.hidden = true;
     document.getElementById('review-box').style.display = 'none';
     document.getElementById('review-complete').style.display = 'block';
     const titleEl = document.getElementById('review-complete-title');
@@ -5878,6 +6152,8 @@ function showFinalComplete() {
 }
 
 function showInitialEmptyReview() {
+    const sectionBreak = document.getElementById('review-section-break');
+    if (sectionBreak) sectionBreak.hidden = true;
     document.getElementById('review-box').style.display = 'none';
     document.getElementById('review-complete').style.display = 'block';
     const titleEl = document.getElementById('review-complete-title');
@@ -5907,6 +6183,7 @@ function showInitialEmptyReview() {
 
 async function loadReviewList() {
     reviewSessionGeneration += 1;
+    cancelPendingReviewAdvance();
     pendingReviewSubmission = null;
     const captureInput = document.getElementById('mobile-word-capture');
     if (captureInput) captureInput.readOnly = false;
@@ -5935,6 +6212,7 @@ async function loadReviewList() {
         renderTodayTaskPlan(data.plan || null);
         currentReviewList = orderReviewWords(data.words);
         currentReviewIndex = 0;
+        resetReviewSectionProgress();
         currentReviewList.forEach((w) => wordMap.set(w.english, w));
         sessionRestoredRemedialWords = currentReviewList.filter((word) => word.task_remedial).length;
         sessionInitialMainWords = currentReviewList.length - sessionRestoredRemedialWords;
@@ -5960,6 +6238,7 @@ async function loadReviewList() {
 
 async function startBonusReview() {
     reviewSessionGeneration += 1;
+    cancelPendingReviewAdvance();
     pendingReviewSubmission = null;
     const captureInput = document.getElementById('mobile-word-capture');
     if (captureInput) captureInput.readOnly = false;
@@ -5991,6 +6270,7 @@ async function startBonusReview() {
 
         currentReviewList = data.words;
         currentReviewIndex = 0;
+        resetReviewSectionProgress();
         currentReviewList.forEach((w) => wordMap.set(w.english, w));
         sessionInitialMainWords = currentReviewList.length;
 
@@ -6063,24 +6343,37 @@ function renderSemanticQuestion(word) {
     feedback.textContent = '';
     feedback.hidden = true;
     word._selectedOptionId = '';
-    (question.options || []).forEach((option) => {
+    word._eliminatedOptionIds = [];
+    const capture = document.getElementById('mobile-word-capture');
+    if (capture && document.activeElement === capture) capture.blur();
+    (question.options || []).forEach((option, index) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'semantic-option';
         button.dataset.optionId = String(option.id || '');
+        button.dataset.optionIndex = String(index);
         button.setAttribute('role', 'radio');
         button.setAttribute('aria-checked', 'false');
-        button.textContent = String(option.text || '');
+        button.setAttribute('aria-keyshortcuts', String(index + 1));
+        const optionText = String(option.text || '');
+        button.dataset.optionLabel = optionText;
+        button.setAttribute('aria-label', `选项 ${index + 1}：${optionText}`);
+        button.tabIndex = index === 0 ? 0 : -1;
+
+        const shortcut = document.createElement('span');
+        shortcut.className = 'semantic-option-shortcut';
+        shortcut.setAttribute('aria-hidden', 'true');
+        shortcut.textContent = String(index + 1);
+        const text = document.createElement('span');
+        text.className = 'semantic-option-text';
+        text.textContent = optionText;
+        const status = document.createElement('span');
+        status.className = 'semantic-option-status';
+        status.setAttribute('aria-hidden', 'true');
+        status.hidden = true;
+        button.append(shortcut, text, status);
         button.addEventListener('click', () => {
-            if (isSubmitting || isAdvancing || button.disabled) return;
-            word._selectedOptionId = button.dataset.optionId || '';
-            options.querySelectorAll('.semantic-option').forEach((row) => {
-                const selected = row === button;
-                row.classList.toggle('is-selected', selected);
-                row.setAttribute('aria-checked', selected ? 'true' : 'false');
-            });
-            const submit = document.getElementById('submit-answer');
-            if (submit) submit.disabled = !word._selectedOptionId;
+            selectSemanticOption(word, button);
         });
         options.appendChild(button);
     });
@@ -6091,14 +6384,25 @@ function renderSemanticAnswerFeedback(word, result) {
     const feedback = document.getElementById('semantic-question-feedback');
     const answerFeedback = result.answer_feedback || {};
     if (!panel || !feedback) return;
-    panel.querySelectorAll('.semantic-option').forEach((button) => {
+    panel.querySelectorAll('.semantic-option').forEach((button, index) => {
         const optionId = button.dataset.optionId || '';
+        const isCorrect = optionId === answerFeedback.correct_option_id;
+        const isWrong = optionId === word._selectedOptionId && !isCorrect;
+        const wasEliminated = Array.isArray(word._eliminatedOptionIds)
+            && word._eliminatedOptionIds.includes(optionId);
         button.disabled = true;
-        button.classList.toggle('is-correct', optionId === answerFeedback.correct_option_id);
-        button.classList.toggle(
-            'is-wrong',
-            optionId === word._selectedOptionId && optionId !== answerFeedback.correct_option_id,
-        );
+        button.classList.toggle('is-correct', isCorrect);
+        button.classList.toggle('is-wrong', isWrong || wasEliminated);
+        const status = button.querySelector('.semantic-option-status');
+        if (status) {
+            status.textContent = isCorrect ? '正确' : (isWrong ? '错误' : (wasEliminated ? '已排除' : ''));
+            status.hidden = !status.textContent;
+        }
+        const optionText = button.dataset.optionLabel || '';
+        const stateText = isCorrect
+            ? '，正确答案'
+            : (isWrong ? '，你的答案，错误' : (wasEliminated ? '，已排除' : ''));
+        button.setAttribute('aria-label', `选项 ${index + 1}：${optionText}${stateText}`);
     });
     const lines = [];
     if (answerFeedback.translation_zh) lines.push(`译文：${answerFeedback.translation_zh}`);
@@ -6108,19 +6412,42 @@ function renderSemanticAnswerFeedback(word, result) {
 }
 
 function resetSemanticOptionsForRetry(word) {
+    const eliminatedIds = new Set(
+        Array.isArray(word._eliminatedOptionIds) ? word._eliminatedOptionIds : [],
+    );
+    if (word._selectedOptionId) eliminatedIds.add(word._selectedOptionId);
+    word._eliminatedOptionIds = [...eliminatedIds];
     word._selectedOptionId = '';
-    document.querySelectorAll('#semantic-question-options .semantic-option').forEach((button) => {
-        button.disabled = false;
-        button.classList.remove('is-selected', 'is-wrong', 'is-correct');
+    let firstEnabled = null;
+    document.querySelectorAll('#semantic-question-options .semantic-option').forEach((button, index) => {
+        const eliminated = eliminatedIds.has(button.dataset.optionId || '');
+        button.disabled = eliminated;
+        button.classList.remove('is-selected', 'is-correct');
+        button.classList.toggle('is-wrong', eliminated);
         button.setAttribute('aria-checked', 'false');
+        button.tabIndex = -1;
+        const status = button.querySelector('.semantic-option-status');
+        if (status) {
+            status.textContent = eliminated ? '已排除' : '';
+            status.hidden = !eliminated;
+        }
+        const optionText = button.dataset.optionLabel || '';
+        button.setAttribute(
+            'aria-label',
+            `选项 ${index + 1}：${optionText}${eliminated ? '，已排除' : ''}`,
+        );
+        if (!eliminated && !firstEnabled) firstEnabled = button;
     });
+    if (firstEnabled) {
+        firstEnabled.tabIndex = 0;
+        firstEnabled.focus({ preventScroll: true });
+    }
     const feedback = document.getElementById('semantic-question-feedback');
     if (feedback) {
         feedback.textContent = '';
         feedback.hidden = true;
     }
-    const submit = document.getElementById('submit-answer');
-    if (submit) submit.disabled = true;
+    setReviewSubmitButtonState('submit', { disabled: true });
 }
 
 function shouldShowNewWordStudy(word) {
@@ -6230,6 +6557,9 @@ async function showCurrentWord() {
     currentRevealedCount = 0;
     isSubmitting = false;
     isAdvancing = false;
+    setReviewSubmitButtonState('submit', {
+        disabled: isSemanticExercise(word.exercise_type),
+    });
 
     const newWordStudy = document.getElementById('new-word-study');
     if (shouldShowNewWordStudy(word)) {
@@ -6289,9 +6619,11 @@ async function showCurrentWord() {
     const inflectionToggle = inflectionInput?.closest('label');
     const phoneticInput = document.getElementById('review-show-phonetic');
     const phoneticToggle = phoneticInput?.closest('label');
+    const directSubmitToggle = document.getElementById('review-number-direct-submit-toggle');
     if (inflectionInput) inflectionInput.disabled = isListening || isSemantic;
     if (inflectionToggle) inflectionToggle.style.display = (isListening || isSemantic) ? 'none' : '';
     if (phoneticToggle) phoneticToggle.style.display = word.exercise_type === 'context' ? 'none' : '';
+    if (directSubmitToggle) directSubmitToggle.hidden = !isSemantic;
     
     const dueHint = document.getElementById('review-due-hint');
     if (dueHint) {
@@ -6381,12 +6713,11 @@ async function showCurrentWord() {
     const defExampleWrap = document.getElementById('review-def-example-wrap');
     const inputRow = document.querySelector('#review-content-inner .word-input');
     const underlineWrapper = document.querySelector('#review-content-inner .underline-input-wrapper');
-    const submitBtn = document.getElementById('submit-answer');
     if (semanticPanel) semanticPanel.hidden = !isSemantic;
     if (defExampleWrap) defExampleWrap.hidden = isSemantic;
     if (inputRow) inputRow.hidden = false;
     if (underlineWrapper) underlineWrapper.hidden = isSemantic;
-    if (submitBtn) submitBtn.disabled = isSemantic;
+    setReviewSubmitButtonState('submit', { disabled: isSemantic });
     if (isSemantic) {
         renderSemanticQuestion(word);
     } else {
@@ -6631,20 +6962,12 @@ async function submitAnswer() {
             if (!isSemantic) {
                 document.getElementById('current-word-english').textContent = targetAnswer;
             }
-            isAdvancing = true;
-            const advanceMs = isSemantic ? 3200 : (word.review_polyseme ? 2500 : 1500);
-            setTimeout(() => {
-                if (
-                    !isReviewContextCurrent(reviewContext) ||
-                    currentReviewIndex !== submissionIndex ||
-                    currentReviewList[submissionIndex] !== word
-                ) return;
-                isSubmitting = false;
-                isAdvancing = false;
-                currentReviewIndex++;
-                showCurrentWord();
-                loadStats();
-            }, advanceMs);
+            scheduleReviewAdvance(
+                reviewContext,
+                submissionIndex,
+                word,
+                reviewFeedbackDelayMs(word, result, { isSemantic }),
+            );
         } else {
             // 答案错误
             currentErrorCount++;
@@ -6670,19 +6993,12 @@ async function submitAnswer() {
                 if (!isSemantic) {
                     document.getElementById('current-word-english').textContent = targetAnswer;
                 }
-                isAdvancing = true;
-                setTimeout(() => {
-                    if (
-                        !isReviewContextCurrent(reviewContext) ||
-                        currentReviewIndex !== submissionIndex ||
-                        currentReviewList[submissionIndex] !== word
-                    ) return;
-                    isSubmitting = false;
-                    isAdvancing = false;
-                    currentReviewIndex++;
-                    showCurrentWord();
-                    loadStats();
-                }, isSemantic ? 3200 : 1500);
+                scheduleReviewAdvance(
+                    reviewContext,
+                    submissionIndex,
+                    word,
+                    reviewFeedbackDelayMs(word, result, { isSemantic }),
+                );
             } else {
                 // 还有尝试机会，更新提示字符串
                 if (!isSemantic) {
@@ -6725,6 +7041,9 @@ async function submitAnswer() {
         isSubmitting = false;
         isAdvancing = false;
         if (submitBtn) submitBtn.classList.remove('btn-submit-loading');
+        setReviewSubmitButtonState('submit', {
+            disabled: isSemantic && !word._selectedOptionId,
+        });
         const keepForRetry =
             !Number.isFinite(Number(error.status)) ||
             Number(error.status) >= 500 ||
@@ -8787,6 +9106,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const directSubmitCb = document.getElementById('review-number-direct-submit');
+    if (directSubmitCb) {
+        directSubmitCb.checked = getReviewNumberDirectSubmitEnabled();
+        directSubmitCb.addEventListener('change', () => {
+            localStorage.setItem(
+                REVIEW_NUMBER_DIRECT_SUBMIT_STORAGE_KEY,
+                directSubmitCb.checked ? '1' : '0',
+            );
+        });
+    }
+
     // 登录表单
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -9357,8 +9687,17 @@ document.addEventListener('DOMContentLoaded', function() {
         submitBtn.addEventListener('mousedown', (e) => {
             e.preventDefault();
         });
-        submitBtn.addEventListener('click', submitAnswer);
+        submitBtn.addEventListener('click', () => {
+            if (!finishPendingReviewAdvance()) void submitAnswer();
+        });
     }
+    document.addEventListener('keydown', handleSemanticQuestionKeydown);
+    document.getElementById('review-section-continue')?.addEventListener('click', () => {
+        continueReviewSection();
+    });
+    document.getElementById('review-section-progress')?.addEventListener('click', () => {
+        showSection('progress');
+    });
 
     const reviewBox = document.getElementById('review-box');
     if (reviewBox) {

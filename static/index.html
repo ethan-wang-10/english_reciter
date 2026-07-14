@@ -295,6 +295,10 @@
                                         <input type="checkbox" id="review-test-inflection" />
                                         <span>考察语态</span>
                                     </label>
+                                    <label id="review-number-direct-submit-toggle" class="review-phonetic-toggle" hidden>
+                                        <input type="checkbox" id="review-number-direct-submit" />
+                                        <span>数字即提交</span>
+                                    </label>
                                     <span class="word-progress" id="current-word-progress">3/8</span>
                                 </div>
                             </div>
@@ -338,6 +342,30 @@
                                 <div class="word-message-extra" id="word-message-extra" aria-live="polite"></div>
                             </div>
                         </div>
+
+                        <section id="review-section-break" class="review-section-break" aria-labelledby="review-section-break-title" hidden>
+                            <p class="review-section-break-kicker">阶段小结</p>
+                            <h2 id="review-section-break-title">第 1 小节完成</h2>
+                            <p id="review-section-break-desc" class="review-section-break-desc"></p>
+                            <dl class="review-section-break-metrics" aria-label="本节学习表现">
+                                <div>
+                                    <dt>完成词数</dt>
+                                    <dd id="review-section-break-words">20</dd>
+                                </div>
+                                <div>
+                                    <dt>答对率</dt>
+                                    <dd id="review-section-break-accuracy">0%</dd>
+                                </div>
+                                <div>
+                                    <dt>新掌握</dt>
+                                    <dd id="review-section-break-mastered">0</dd>
+                                </div>
+                            </dl>
+                            <div class="review-section-break-actions">
+                                <button type="button" id="review-section-continue" class="btn btn-primary">继续下一节</button>
+                                <button type="button" id="review-section-progress" class="btn btn-secondary">查看学习进度</button>
+                            </div>
+                        </section>
                         
                         <div id="review-complete" class="review-complete" style="display: none;">
                             <div class="complete-icon">🎉</div>

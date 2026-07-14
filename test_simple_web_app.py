@@ -222,6 +222,57 @@ def test_static_assets_use_public_cache_headers(client) -> None:
     assert "no-cache" not in cache_control
 
 
+def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
+    html_response = client.get("/")
+    js_response = client.get("/static/js/app.js")
+    css_response = client.get("/static/css/style.css")
+
+    assert html_response.status_code == 200
+    assert js_response.status_code == 200
+    assert css_response.status_code == 200
+    html = html_response.get_data(as_text=True)
+    javascript = js_response.get_data(as_text=True)
+    stylesheet = css_response.get_data(as_text=True)
+    assert "handleSemanticQuestionKeydown" in javascript
+    assert "aria-keyshortcuts" in javascript
+    assert "['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']" in javascript
+    assert "event.key === 'Enter'" in javascript
+    assert "event.code === 'Space'" in javascript
+    assert "finishPendingReviewAdvance" in javascript
+    assert "reviewFeedbackDelayMs" in javascript
+    assert "REVIEW_NUMBER_DIRECT_SUBMIT_STORAGE_KEY" in javascript
+    assert "word._eliminatedOptionIds" in javascript
+    assert "enabledButtons = buttons.filter" in javascript
+    assert "setReviewSubmitButtonState('next')" in javascript
+    assert 'id="review-number-direct-submit"' in html
+    assert "数字即提交" in html
+    assert ".semantic-option-shortcut" in stylesheet
+    assert ".semantic-option-status" in stylesheet
+    assert ".semantic-option:focus-visible" in stylesheet
+
+
+def test_review_flow_exposes_twenty_word_section_breaks(client) -> None:
+    html_response = client.get("/")
+    js_response = client.get("/static/js/app.js")
+    css_response = client.get("/static/css/style.css")
+
+    assert html_response.status_code == 200
+    assert js_response.status_code == 200
+    assert css_response.status_code == 200
+    html = html_response.get_data(as_text=True)
+    javascript = js_response.get_data(as_text=True)
+    stylesheet = css_response.get_data(as_text=True)
+    assert "const REVIEW_SECTION_SIZE = 20" in javascript
+    assert "showReviewSectionBreak" in javascript
+    assert "continueReviewSection" in javascript
+    assert "if (!showReviewSectionBreak()) void showCurrentWord()" in javascript
+    assert 'id="review-section-break"' in html
+    assert 'id="review-section-continue"' in html
+    assert 'id="review-section-progress"' in html
+    assert "阶段小结" in html
+    assert ".review-section-break-metrics" in stylesheet
+
+
 def test_summary_payload_exposes_today_progress_and_memory_status_counts() -> None:
     pending = SimpleNamespace(english='pending', review_count=2)
     stable = SimpleNamespace(english='stable')
