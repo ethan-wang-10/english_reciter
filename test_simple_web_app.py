@@ -246,9 +246,12 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
+    assert "/static/js/app.js?v=20260714-review-controls1" in html
+    assert "/static/css/style.css?v=20260714-review-controls1" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
+    assert "flex: 1 1 220px" in stylesheet
 
 
 def test_review_flow_exposes_twenty_word_section_breaks(client) -> None:
