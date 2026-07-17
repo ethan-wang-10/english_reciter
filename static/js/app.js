@@ -1561,6 +1561,7 @@ async function loadParentLearningSettings() {
 const AVATAR_CROP_VIEW = 280;
 let currentNavAvatarUrl = '';
 let avatarViewPreviouslyFocused = null;
+let avatarViewTrigger = null;
 let avatarCrop = {
     objectUrl: null,
     iw: 0,
@@ -1620,12 +1621,12 @@ function avatarOriginalDisplayUrl(url) {
 
 function closeAvatarViewModal() {
     const modal = document.getElementById('avatar-view-modal');
-    const trigger = document.getElementById('nav-user-avatar-wrap');
     const img = document.getElementById('avatar-view-image');
     if (!modal || modal.style.display === 'none') return;
     modal.style.display = 'none';
     modal.setAttribute('aria-hidden', 'true');
-    trigger?.setAttribute('aria-expanded', 'false');
+    modal.classList.remove('is-leaderboard-view');
+    avatarViewTrigger?.setAttribute('aria-expanded', 'false');
     if (img) {
         img.onload = null;
         img.onerror = null;
@@ -1635,36 +1636,67 @@ function closeAvatarViewModal() {
         avatarViewPreviouslyFocused.focus();
     }
     avatarViewPreviouslyFocused = null;
+    avatarViewTrigger = null;
 }
 
-function openAvatarViewModal() {
+function showAvatarViewModal(options = {}) {
     const modal = document.getElementById('avatar-view-modal');
-    const trigger = document.getElementById('nav-user-avatar-wrap');
     const title = document.getElementById('avatar-view-title');
     const img = document.getElementById('avatar-view-image');
     const placeholder = document.getElementById('avatar-view-placeholder');
     const actions = document.getElementById('avatar-view-actions');
     const input = document.getElementById('avatar-view-replace-input');
     const message = document.getElementById('avatar-view-message');
+    const details = document.getElementById('avatar-view-leaderboard-details');
     const closeButton = document.getElementById('avatar-view-close');
     if (!modal || !img || !placeholder) return;
 
+    const leaderboard = options.leaderboard || null;
+    const allowReplace = options.allowReplace === true;
     avatarViewPreviouslyFocused = document.activeElement;
-    if (title) {
-        title.textContent = isParentSession && childUsername ? `${childUsername} 的头像` : '我的头像';
-    }
-    if (actions) actions.hidden = isParentSession;
+    avatarViewTrigger = options.trigger instanceof HTMLElement ? options.trigger : null;
+    if (title) title.textContent = options.title || '头像';
+    if (actions) actions.hidden = !allowReplace;
     if (input) {
-        input.disabled = isParentSession;
+        input.disabled = !allowReplace;
         input.value = '';
     }
     if (message) {
-        message.textContent = isParentSession ? '家长查看模式不能替换学生头像' : '';
+        message.textContent = options.message || '';
+        message.hidden = !options.message;
+    }
+    if (details) {
+        details.hidden = !leaderboard;
+        if (leaderboard) {
+            const rank = Math.max(1, Number(leaderboard.rank) || 1);
+            const rewardXp = Math.max(0, Number(leaderboard.rewardXp) || 0);
+            const rankEl = document.getElementById('avatar-view-rank');
+            const kindEl = document.getElementById('avatar-view-period-kind');
+            const periodXpEl = document.getElementById('avatar-view-period-xp');
+            const rewardXpEl = document.getElementById('avatar-view-reward-xp');
+            const rewardStateEl = document.getElementById('avatar-view-reward-state');
+            const periodLabelEl = document.getElementById('avatar-view-period-label');
+            if (rankEl) {
+                rankEl.className = `avatar-view-rank rank-${Math.min(rank, 3)}`;
+                rankEl.textContent = `第 ${rank} 名`;
+            }
+            if (kindEl) kindEl.textContent = leaderboard.kind || '';
+            if (periodXpEl) periodXpEl.textContent = `${formatNumber(leaderboard.periodXp || 0)} XP`;
+            if (rewardXpEl) {
+                rewardXpEl.textContent = rewardXp > 0 ? `+${formatNumber(rewardXp)} XP` : '无额外奖励';
+            }
+            if (rewardStateEl) {
+                rewardStateEl.textContent = rewardXp > 0 ? '奖励已发放' : '本期无额外奖励';
+                rewardStateEl.classList.toggle('is-empty', rewardXp <= 0);
+            }
+            if (periodLabelEl) periodLabelEl.textContent = leaderboard.periodLabel || '';
+        }
     }
 
     img.hidden = true;
     placeholder.hidden = false;
-    const originalUrl = avatarOriginalDisplayUrl(currentNavAvatarUrl);
+    img.alt = options.imageAlt || '头像大图';
+    const originalUrl = avatarOriginalDisplayUrl(options.avatarUrl || '');
     if (originalUrl) {
         img.onload = () => {
             img.hidden = false;
@@ -1683,10 +1715,39 @@ function openAvatarViewModal() {
         img.removeAttribute('src');
     }
 
+    modal.classList.toggle('is-leaderboard-view', Boolean(leaderboard));
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
-    trigger?.setAttribute('aria-expanded', 'true');
+    avatarViewTrigger?.setAttribute('aria-expanded', 'true');
     closeButton?.focus();
+}
+
+function openAvatarViewModal() {
+    const viewedUsername = isParentSession && childUsername ? childUsername : username;
+    showAvatarViewModal({
+        title: isParentSession && childUsername ? `${childUsername} 的头像` : '我的头像',
+        avatarUrl: currentNavAvatarUrl,
+        imageAlt: viewedUsername ? `${viewedUsername} 的头像大图` : '当前头像大图',
+        allowReplace: !isParentSession,
+        message: isParentSession ? '家长查看模式不能替换学生头像' : '',
+        trigger: document.getElementById('nav-user-avatar-wrap'),
+    });
+}
+
+function openLeaderboardAvatarModal(entry, podium, kind, trigger) {
+    showAvatarViewModal({
+        title: `${entry.username || '用户'} 的奖励`,
+        avatarUrl: entry.avatar_url || '',
+        imageAlt: `${entry.username || '用户'} 的头像大图`,
+        trigger,
+        leaderboard: {
+            rank: entry.rank,
+            kind: `上期${kind}`,
+            periodXp: entry.period_xp,
+            rewardXp: entry.reward_xp,
+            periodLabel: podium.period_label || podium.period_id || '',
+        },
+    });
 }
 
 async function refreshNavUserAvatar(accountContext = captureAccountContext()) {
@@ -3273,7 +3334,6 @@ function renderLeaderboardPodium(apiData) {
     }
     const p = apiData.podium_last_period;
     const kind = scope === 'week' ? '周榜' : '月榜';
-    const medals = ['🥇', '🥈', '🥉'];
     const top = Array.isArray(p.top) ? p.top : [];
     if (top.length === 0) {
         wrap.innerHTML = '';
@@ -3282,25 +3342,44 @@ function renderLeaderboardPodium(apiData) {
     const cards = top
         .map((t, i) => {
             const rx = Number(t.reward_xp) || 0;
-            const rxNote = rx > 0 ? ` · 奖励 +${rx} XP` : '';
             const av = t.avatar_url
-                ? `<img class="lb-podium-avatar" src="${escapeHtml(avatarDisplayUrl(t.avatar_url, 96))}" alt="" width="48" height="48" loading="lazy" />`
+                ? `<img class="lb-podium-avatar" src="${escapeHtml(avatarDisplayUrl(t.avatar_url, 160))}" alt="" width="80" height="80" loading="lazy" />`
                 : '<span class="lb-podium-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
             const rk = Number(t.rank) || i + 1;
-            return `<div class="leaderboard-podium-card rank-${rk}">
-                <div class="lb-podium-medal">${medals[i] || '🏅'}</div>
-                ${av}
-                <div class="lb-podium-name">${escapeHtml(t.username)}</div>
-                <div class="lb-podium-meta">${escapeHtml(formatNumber(t.period_xp))} XP${escapeHtml(rxNote)}</div>
-            </div>`;
+            const rewardText = rx > 0 ? `+${formatNumber(rx)} XP` : '无额外奖励';
+            const crown = rk === 1 ? '<span class="lb-podium-crown" aria-hidden="true">👑</span>' : '';
+            return `<article class="leaderboard-podium-entry rank-${rk}">
+                <div class="lb-podium-person">
+                    ${crown}
+                    <button type="button" class="lb-podium-avatar-button" data-lb-podium-index="${i}" aria-label="查看 ${escapeHtml(t.username)} 的头像和奖励信息" aria-haspopup="dialog" aria-expanded="false" aria-controls="avatar-view-modal">
+                        ${av}
+                    </button>
+                    <div class="lb-podium-name">${escapeHtml(t.username)}</div>
+                    <div class="lb-podium-meta">${escapeHtml(formatNumber(t.period_xp))} XP</div>
+                </div>
+                <div class="lb-podium-block">
+                    <strong class="lb-podium-place">第 ${rk} 名</strong>
+                    <span class="lb-podium-reward">${escapeHtml(rewardText)}</span>
+                </div>
+            </article>`;
         })
         .join('');
     wrap.innerHTML =
         `<div class="leaderboard-podium">` +
-        `<h3 class="leaderboard-podium-title">上期${kind}三甲</h3>` +
-        `<p class="leaderboard-podium-sub">${escapeHtml(p.period_label || p.period_id || '')}</p>` +
-        `<div class="leaderboard-podium-cards">${cards}</div>` +
+        `<div class="leaderboard-podium-head">` +
+        `<div><h3 class="leaderboard-podium-title">上期${kind}三甲</h3>` +
+        `<p class="leaderboard-podium-sub">${escapeHtml(p.period_label || p.period_id || '')}</p></div>` +
+        `<span class="leaderboard-podium-status">奖励已结算</span>` +
+        `</div>` +
+        `<div class="leaderboard-podium-stage podium-count-${Math.min(top.length, 3)}">${cards}</div>` +
         `</div>`;
+
+    wrap.querySelectorAll('[data-lb-podium-index]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const entry = top[Number(button.getAttribute('data-lb-podium-index'))];
+            if (entry) openLeaderboardAvatarModal(entry, p, kind, button);
+        });
+    });
 }
 
 function renderLeaderboardTable(rows, scope, meta, options) {

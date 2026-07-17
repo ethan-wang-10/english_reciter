@@ -251,12 +251,32 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260714-review-controls1" in html
-    assert "/static/css/style.css?v=20260714-review-header2" in html
+    assert "/static/js/app.js?v=20260717-leaderboard-podium2" in html
+    assert "/static/css/style.css?v=20260717-leaderboard-podium2" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
     assert "flex: 1 1 100%" in stylesheet
+
+
+def test_leaderboard_podium_exposes_avatar_reward_dialog(client) -> None:
+    html_response = client.get("/")
+    js_response = client.get("/static/js/app.js")
+    css_response = client.get("/static/css/style.css")
+
+    assert html_response.status_code == 200
+    assert js_response.status_code == 200
+    assert css_response.status_code == 200
+    html = html_response.get_data(as_text=True)
+    javascript = js_response.get_data(as_text=True)
+    stylesheet = css_response.get_data(as_text=True)
+    assert 'id="avatar-view-leaderboard-details"' in html
+    assert 'id="avatar-view-reward-xp"' in html
+    assert "openLeaderboardAvatarModal" in javascript
+    assert 'data-lb-podium-index="${i}"' in javascript
+    assert "leaderboard-podium-stage" in stylesheet
+    assert ".leaderboard-podium-entry.rank-1" in stylesheet
+    assert ".avatar-view-modal.is-leaderboard-view" in stylesheet
 
 
 def test_review_flow_exposes_twenty_word_section_breaks(client) -> None:

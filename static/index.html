@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260714-review-header2">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260717-leaderboard-podium2">
 </head>
 <body>
     <div id="app">
@@ -867,7 +867,7 @@
             </div>
         </div>
 
-        <!-- 头像大图与快捷替换 -->
+        <!-- 头像大图、榜单奖励与快捷替换 -->
         <div id="avatar-view-modal" class="avatar-view-modal" style="display: none;" aria-hidden="true">
             <div class="avatar-view-backdrop" id="avatar-view-backdrop"></div>
             <div class="avatar-view-dialog" role="dialog" aria-modal="true" aria-labelledby="avatar-view-title">
@@ -879,6 +879,26 @@
                     <img id="avatar-view-image" class="avatar-view-image" alt="当前头像大图" decoding="async" hidden />
                     <span id="avatar-view-placeholder" class="avatar-view-placeholder" aria-hidden="true">👤</span>
                 </div>
+                <section id="avatar-view-leaderboard-details" class="avatar-view-leaderboard-details" aria-label="榜单奖励信息" hidden>
+                    <div class="avatar-view-ranking-head">
+                        <span id="avatar-view-rank" class="avatar-view-rank">第 1 名</span>
+                        <span id="avatar-view-period-kind" class="avatar-view-period-kind">上期周榜</span>
+                    </div>
+                    <dl class="avatar-view-reward-grid">
+                        <div>
+                            <dt>榜单成绩</dt>
+                            <dd id="avatar-view-period-xp">0 XP</dd>
+                        </div>
+                        <div>
+                            <dt>上榜奖励</dt>
+                            <dd id="avatar-view-reward-xp">+0 XP</dd>
+                        </div>
+                    </dl>
+                    <div class="avatar-view-reward-foot">
+                        <span id="avatar-view-reward-state" class="avatar-view-reward-state">奖励已发放</span>
+                        <span id="avatar-view-period-label" class="avatar-view-period-label"></span>
+                    </div>
+                </section>
                 <div class="avatar-view-actions" id="avatar-view-actions">
                     <input type="file" id="avatar-view-replace-input" class="avatar-view-replace-input" accept="image/jpeg,image/png,image/webp" />
                     <label for="avatar-view-replace-input" class="btn btn-primary avatar-view-replace-label" id="avatar-view-replace-label">替换头像</label>
@@ -1213,7 +1233,7 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20260714-review-controls1" defer></script>
+    <script src="/static/js/app.js?v=20260717-leaderboard-podium2" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>
