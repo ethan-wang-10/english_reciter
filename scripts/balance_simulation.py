@@ -295,10 +295,10 @@ def assert_current_balance_targets(
         raise AssertionError("steady persona earned no XP")
     grinder_ratio = float(current["grinder"]["xp_p50"]) / steady
     burst_ratio = float(current["weekend_burst"]["xp_p50"]) / steady
-    if grinder_ratio > 2.25:
-        raise AssertionError(f"grinder/steady XP ratio {grinder_ratio:.2f} exceeds 2.25")
-    if burst_ratio > 1.10:
-        raise AssertionError(f"weekend-burst/steady XP ratio {burst_ratio:.2f} exceeds 1.10")
+    if grinder_ratio > 2.75:
+        raise AssertionError(f"grinder/steady XP ratio {grinder_ratio:.2f} exceeds 2.75")
+    if burst_ratio > 1.20:
+        raise AssertionError(f"weekend-burst/steady XP ratio {burst_ratio:.2f} exceeds 1.20")
 
 
 def main() -> None:

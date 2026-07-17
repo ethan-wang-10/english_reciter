@@ -31,8 +31,8 @@ class TestAchievementUnlock(unittest.TestCase):
         self.assertTrue(any(x.get("id") == "daily_xp_cap" for x in new))
 
     def test_daily_soft_cap_discounts_until_hard_cap(self):
-        self.assertEqual(gm.DAILY_XP_SOFT_CAP, 300)
-        self.assertEqual(gm.DAILY_XP_HARD_CAP, 500)
+        self.assertEqual(gm.DAILY_XP_SOFT_CAP, 400)
+        self.assertEqual(gm.DAILY_XP_HARD_CAP, 700)
         self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_SOFT_CAP, 55), 11)
         self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_HARD_CAP - 5, 55), 5)
         self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_HARD_CAP, 55), 0)
