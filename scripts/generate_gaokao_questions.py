@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Incrementally generate the private Gaokao question bank.
+"""Generate private candidates and centrally audit them before publication.
 
 Examples:
-  python scripts/generate_gaokao_questions.py --level 高中 --dry-run
-  python scripts/generate_gaokao_questions.py --level 高中 --batch-size 5
-  python scripts/generate_gaokao_questions.py --level 高中 --limit 100
+  python scripts/generate_gaokao_questions.py --stage generate --level 高中
+  python scripts/generate_gaokao_questions.py --stage audit --audit-batch-size 10
+  python scripts/generate_gaokao_questions.py --stage all --level 高中 --limit 100
 
-The question bank is updated atomically after every batch. Re-running skips
-words that already have both question types, so interrupted runs resume safely.
-Failed words remain pending and are retried on the next run.
+Generation stores private candidates after every batch. Audit promotes only
+candidates that pass both recognition and context checks. Interrupted or
+malformed audits keep their candidates for a later audit-only retry.
 """
 
 from __future__ import annotations
@@ -31,6 +31,10 @@ def _chat(messages: list[dict], max_tokens: int):
     return web._deepseek_chat(messages, max_tokens=max_tokens)
 
 
+def _audit_chat(messages: list[dict], max_tokens: int):
+    return web._deepseek_chat(messages, max_tokens=max_tokens, temperature=0.0)
+
+
 def _sources(level: str) -> list[dict]:
     rows, _ = web.merge_wordbank_rows_for_search(level)
     out = []
@@ -45,54 +49,28 @@ def _sources(level: str) -> list[dict]:
     return out
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="可重入地生成英文识义与语境选词题库",
-    )
-    parser.add_argument("--level", default="高中", help="词库级别，默认：高中")
-    parser.add_argument("--limit", type=int, default=0, help="本次最多处理多少个缺题单词，0 为不限")
-    parser.add_argument("--batch-size", type=int, default=5, help="每次 AI 请求包含的单词数，默认：5")
-    parser.add_argument("--pause", type=float, default=0.0, help="批次间暂停秒数")
-    parser.add_argument("--force", action="store_true", help="重新生成已有题目")
-    parser.add_argument("--dry-run", action="store_true", help="只统计，不调用 AI、不写文件")
-    args = parser.parse_args()
-
-    batch_size = max(1, min(20, args.batch_size))
-    all_sources = _sources(args.level.strip())
-    pending = questions.missing_sources(all_sources, force=args.force)
-    if args.limit > 0:
-        pending = pending[: args.limit]
-
-    bank = questions.load_bank()
-    print(
-        f"题库={questions.QUESTION_BANK_FILE} 级别={args.level or '全部'} "
-        f"可用词={len(all_sources)} 已完成={len(bank.get('questions', {}))} "
-        f"本次待生成={len(pending)}"
-    )
-    if args.dry_run:
-        for source in pending[:50]:
-            print(source["english"])
-        if len(pending) > 50:
-            print(f"... 另有 {len(pending) - 50} 个")
-        return 0
-    if not pending:
-        return 0
-    if not web.get_deepseek_api_key():
-        print("未配置 DeepSeek API Key，无法生成题库", file=sys.stderr)
-        return 2
-
+def _run_generation(
+    pending: list[dict],
+    *,
+    batch_size: int,
+    pause: float,
+    force: bool,
+) -> tuple[int, int]:
     generated = 0
     failed = 0
     for start in range(0, len(pending), batch_size):
         batch = pending[start : start + batch_size]
         try:
-            result = questions.generate_and_persist(batch, _chat, force=args.force)
+            result = questions.generate_candidates_and_persist(
+                batch,
+                _chat,
+                force=force,
+            )
         except KeyboardInterrupt:
-            print("\n已中断；此前成功批次已保存，下次执行会继续缺失项。", file=sys.stderr)
-            return 130
+            raise
         except Exception as exc:
             errors = {source["english"]: f"batch exception: {exc}" for source in batch}
-            questions.persist_generation_result({}, errors)
+            questions.persist_candidate_result({}, errors)
             result = {
                 "generated": 0,
                 "failed": len(batch),
@@ -103,17 +81,155 @@ def main() -> int:
         failed += int(result.get("failed") or 0)
         done = min(start + len(batch), len(pending))
         print(
-            f"[{done}/{len(pending)}] generated={result.get('generated', 0)} "
-            f"failed={result.get('failed', 0)} "
+            f"[generate {done}/{len(pending)}] "
+            f"saved={result.get('generated', 0)} failed={result.get('failed', 0)} "
             f"ok={','.join(result.get('generated_words') or []) or '-'} "
             f"fail={','.join(result.get('failed_words') or []) or '-'}",
             flush=True,
         )
-        if args.pause > 0 and done < len(pending):
-            time.sleep(args.pause)
+        if pause > 0 and done < len(pending):
+            time.sleep(pause)
+    return generated, failed
 
-    print(f"完成：成功 {generated}，失败 {failed}；失败项下次运行会自动重试。")
-    return 0 if failed == 0 else 2
+
+def _run_audit(
+    pending: dict[str, dict],
+    *,
+    batch_size: int,
+    pause: float,
+) -> tuple[int, int, int]:
+    approved = 0
+    rejected = 0
+    retry = 0
+    items = list(pending.items())
+    for start in range(0, len(items), batch_size):
+        batch = dict(items[start : start + batch_size])
+        try:
+            accepted_rows, rejected_rows, retry_rows = questions.audit_question_records(
+                batch,
+                _audit_chat,
+            )
+            questions.persist_audit_result(accepted_rows, rejected_rows, retry_rows)
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            accepted_rows = {}
+            rejected_rows = {}
+            retry_rows = {key: f"audit batch exception: {exc}" for key in batch}
+            questions.persist_audit_result(accepted_rows, rejected_rows, retry_rows)
+        approved += len(accepted_rows)
+        rejected += len(rejected_rows)
+        retry += len(retry_rows)
+        done = min(start + len(batch), len(items))
+        print(
+            f"[audit {done}/{len(items)}] approved={len(accepted_rows)} "
+            f"rejected={len(rejected_rows)} retry={len(retry_rows)} "
+            f"ok={','.join(sorted(accepted_rows)) or '-'} "
+            f"reject={','.join(sorted(rejected_rows)) or '-'}",
+            flush=True,
+        )
+        if pause > 0 and done < len(items):
+            time.sleep(pause)
+    return approved, rejected, retry
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="分阶段生成并集中审查英文识义与语境选词题库",
+    )
+    parser.add_argument(
+        "--stage",
+        choices=("generate", "audit", "all"),
+        default="all",
+        help="generate 只生成候选，audit 只集中审查，all 依次执行；默认 all",
+    )
+    parser.add_argument("--level", default="高中", help="词库级别，默认：高中")
+    parser.add_argument("--limit", type=int, default=0, help="本阶段最多处理多少题，0 为不限")
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=5,
+        help="每次生成请求包含的单词数，默认：5，最大：10",
+    )
+    parser.add_argument(
+        "--audit-batch-size",
+        type=int,
+        default=8,
+        help="每次集中审查的候选题数，默认：8，最大：10",
+    )
+    parser.add_argument("--pause", type=float, default=0.0, help="批次间暂停秒数")
+    parser.add_argument("--force", action="store_true", help="重新生成已有正式题或候选题")
+    parser.add_argument("--dry-run", action="store_true", help="只统计，不调用 AI、不写文件")
+    args = parser.parse_args()
+
+    batch_size = max(1, min(10, args.batch_size))
+    audit_batch_size = max(1, min(10, args.audit_batch_size))
+    all_sources = _sources(args.level.strip())
+    pending_generation = questions.missing_sources(all_sources, force=args.force)
+    pending_audit = questions.pending_candidate_records()
+    if args.limit > 0 and args.stage in {"generate", "all"}:
+        pending_generation = pending_generation[: args.limit]
+    if args.limit > 0 and args.stage == "audit":
+        pending_audit = dict(list(pending_audit.items())[: args.limit])
+    if args.stage == "generate":
+        pending_audit = {}
+    elif args.stage == "audit":
+        pending_generation = []
+
+    bank = questions.load_bank()
+    print(
+        f"题库={questions.QUESTION_BANK_FILE} 级别={args.level or '全部'} "
+        f"可用词={len(all_sources)} 已发布={questions.approved_question_count(bank)} "
+        f"候选={len(bank.get('candidates', {}))} "
+        f"本次待生成={len(pending_generation)} 本次待审查={len(pending_audit)}"
+    )
+    if args.dry_run:
+        if args.stage in {"generate", "all"}:
+            for source in pending_generation[:50]:
+                print(f"generate {source['english']}")
+        if args.stage in {"audit", "all"}:
+            for key in list(pending_audit)[:50]:
+                print(f"audit {key}")
+        return 0
+
+    generation_work = args.stage in {"generate", "all"} and bool(pending_generation)
+    audit_work = args.stage in {"audit", "all"} and bool(pending_audit)
+    if not generation_work and not audit_work:
+        return 0
+    if not web.get_deepseek_api_key():
+        print("未配置 DeepSeek API Key，无法生成或审查题库", file=sys.stderr)
+        return 2
+
+    generated = 0
+    generation_failed = 0
+    approved = 0
+    rejected = 0
+    audit_retry = 0
+    try:
+        if args.stage in {"generate", "all"}:
+            generated, generation_failed = _run_generation(
+                pending_generation,
+                batch_size=batch_size,
+                pause=args.pause,
+                force=args.force,
+            )
+        if args.stage == "all":
+            pending_audit = questions.pending_candidate_records(limit=max(0, args.limit))
+        if args.stage in {"audit", "all"}:
+            approved, rejected, audit_retry = _run_audit(
+                pending_audit,
+                batch_size=audit_batch_size,
+                pause=args.pause,
+            )
+    except KeyboardInterrupt:
+        print("\n已中断；候选和已发布题目均已原子保存，下次可继续。", file=sys.stderr)
+        return 130
+
+    print(
+        f"完成：候选生成 {generated}，生成失败 {generation_failed}，"
+        f"审查通过 {approved}，语义拒绝 {rejected}，待重试 {audit_retry}。"
+    )
+    return 0 if generation_failed == 0 and rejected == 0 and audit_retry == 0 else 2
 
 
 if __name__ == "__main__":

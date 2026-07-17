@@ -43,17 +43,46 @@ def _generated(english: str) -> dict:
     }
 
 
-def _audited(english: str, *acceptable: str) -> str:
-    allowed = set(acceptable or (english,))
+def _audited(
+    source: dict,
+    raw: dict,
+    *,
+    recognition_acceptable=None,
+    context_acceptable=None,
+) -> str:
+    record, error = questions.finalize_generated_questions(source, raw)
+    assert error == ''
+    recognition = record['recognition']
+    context = record['context']
+    recognition_answer = next(
+        option['text']
+        for option in recognition['options']
+        if option['id'] == recognition['answer_option_id']
+    )
+    context_answer = next(
+        option['text']
+        for option in context['options']
+        if option['id'] == context['answer_option_id']
+    )
+    recognition_allowed = set(recognition_acceptable or (recognition_answer,))
+    context_allowed = set(context_acceptable or (context_answer,))
     return json.dumps([{
         'item_id': 'q1',
-        'option_verdicts': [
+        'recognition_verdicts': [
             {
-                'option': option,
-                'acceptable': option in allowed,
+                'option': option['text'],
+                'acceptable': option['text'] in recognition_allowed,
                 'reason_zh': '逐项代入后的质检理由。',
             }
-            for option in [english, 'choicea', 'choiceb', 'choicec']
+            for option in recognition['options']
+        ],
+        'context_verdicts': [
+            {
+                'option': option['text'],
+                'acceptable': option['text'] in context_allowed,
+                'reason_zh': '逐项代入后的质检理由。',
+            }
+            for option in context['options']
         ],
     }], ensure_ascii=False)
 
@@ -94,7 +123,7 @@ def test_generation_is_reentrant_after_partial_batch_success(private_question_ba
 
     def partial_chat(messages, max_tokens):
         if '独立英语试题质检员' in messages[-1]['content']:
-            return _audited('apple')
+            return _audited(apple, _generated('apple'))
         calls.append(messages[-1]['content'])
         return json.dumps([_generated('apple')], ensure_ascii=False)
 
@@ -107,7 +136,7 @@ def test_generation_is_reentrant_after_partial_batch_success(private_question_ba
 
     def resumed_chat(messages, max_tokens):
         if '独立英语试题质检员' in messages[-1]['content']:
-            return _audited('book')
+            return _audited(book, _generated('book'))
         calls.append(messages[-1]['content'])
         return json.dumps([_generated('book')], ensure_ascii=False)
 
@@ -165,6 +194,19 @@ def test_short_generic_context_is_rejected_before_it_reaches_learners():
     assert 'too short to disambiguate' in error
 
 
+def test_context_with_eleven_words_is_rejected_consistently_with_prompt():
+    raw = _generated('get')
+    raw['context_sentence'] = 'Today our teacher asked everyone to get one reference book immediately.'
+
+    record, error = questions.finalize_generated_questions(
+        _source('get', 'v. 获得；得到'),
+        raw,
+    )
+
+    assert record is None
+    assert 'too short to disambiguate' in error
+
+
 def test_semantic_audit_rejects_a_long_context_with_multiple_valid_answers():
     raw = _generated('get')
     raw['context_sentence'] = (
@@ -175,15 +217,11 @@ def test_semantic_audit_rejects_a_long_context_with_multiple_valid_answers():
     def chat(messages, max_tokens):
         if '独立英语试题质检员' not in messages[-1]['content']:
             return json.dumps([raw], ensure_ascii=False)
-        return json.dumps([{
-            'item_id': 'q1',
-            'option_verdicts': [
-                {'option': 'get', 'acceptable': True, 'reason_zh': '可以表示得到书。'},
-                {'option': 'find', 'acceptable': True, 'reason_zh': '可以表示找到书。'},
-                {'option': 'buy', 'acceptable': True, 'reason_zh': '可以表示买书。'},
-                {'option': 'read', 'acceptable': True, 'reason_zh': '可以表示读书。'},
-            ],
-        }], ensure_ascii=False)
+        return _audited(
+            _source('get', 'v. 获得；得到'),
+            raw,
+            context_acceptable=('get', 'find', 'buy', 'read'),
+        )
 
     records, errors = questions.generate_question_records(
         [_source('get', 'v. 获得；得到')],
@@ -193,3 +231,108 @@ def test_semantic_audit_rejects_a_long_context_with_multiple_valid_answers():
     assert records == {}
     assert 'semantic audit rejected context' in errors['get']
     assert 'buy' in errors['get']
+
+
+def test_semantic_audit_rejects_synonymous_recognition_distractor():
+    source = _source('benefit', 'n. 益处；好处')
+    raw = _generated('benefit')
+    raw['recognition_distractors'] = ['好处', '负担', '风险']
+    record, error = questions.finalize_generated_questions(source, raw)
+    assert error == ''
+
+    approved, rejected, retry_errors = questions.audit_question_records(
+        {'benefit': record},
+        lambda messages, max_tokens: _audited(
+            source,
+            raw,
+            recognition_acceptable=('n. 益处；好处', '好处'),
+        ),
+    )
+
+    assert approved == {}
+    assert retry_errors == {}
+    assert 'semantic audit rejected recognition' in rejected['benefit']
+    assert '好处' in rejected['benefit']
+
+
+def test_central_audit_retries_without_regenerating_candidate(private_question_bank):
+    source = _source('apple', 'n. 苹果')
+    generation_calls = 0
+
+    def generate_chat(messages, max_tokens):
+        nonlocal generation_calls
+        generation_calls += 1
+        return json.dumps([_generated('apple')], ensure_ascii=False)
+
+    generated = questions.generate_candidates_and_persist([source], generate_chat)
+
+    assert generated['generated_words'] == ['apple']
+    assert generation_calls == 1
+    bank = questions.load_bank()
+    assert 'apple' in bank['candidates']
+    assert 'apple' not in bank['questions']
+    assert questions.get_question('apple', 'recognition') is None
+
+    retry = questions.audit_candidates_and_persist(
+        lambda messages, max_tokens: 'not valid json',
+    )
+
+    assert retry['retry_words'] == ['apple']
+    bank = questions.load_bank()
+    assert bank['candidates']['apple']['audit_attempts'] == 1
+    assert 'apple' not in bank['questions']
+
+    approved = questions.audit_candidates_and_persist(
+        lambda messages, max_tokens: _audited(source, _generated('apple')),
+    )
+
+    assert approved['approved_words'] == ['apple']
+    assert generation_calls == 1
+    bank = questions.load_bank()
+    assert 'apple' not in bank['candidates']
+    assert bank['questions']['apple']['audit_version'] == questions.AUDIT_VERSION
+    assert questions.get_question('apple', 'recognition') is not None
+
+
+def test_rejected_candidate_is_recorded_and_can_be_regenerated(private_question_bank):
+    source = _source('benefit', 'n. 益处；好处')
+    raw = _generated('benefit')
+    raw['recognition_distractors'] = ['好处', '负担', '风险']
+    questions.generate_candidates_and_persist(
+        [source],
+        lambda messages, max_tokens: json.dumps([raw], ensure_ascii=False),
+    )
+
+    result = questions.audit_candidates_and_persist(
+        lambda messages, max_tokens: _audited(
+            source,
+            raw,
+            recognition_acceptable=('n. 益处；好处', '好处'),
+        ),
+    )
+
+    assert result['rejected_words'] == ['benefit']
+    bank = questions.load_bank()
+    assert 'benefit' not in bank['candidates']
+    assert bank['rejections']['benefit']['record']['word_key'] == 'benefit'
+    assert questions.missing_sources([source]) == [source]
+
+
+def test_old_v2_record_without_current_audit_is_not_served(private_question_bank):
+    source = _source('apple', 'n. 苹果')
+    record, error = questions.finalize_generated_questions(source, _generated('apple'))
+    assert error == ''
+    questions.QUESTION_BANK_FILE.write_text(
+        json.dumps({
+            'schema': questions.BANK_SCHEMA,
+            'version': questions.BANK_VERSION,
+            'questions': {'apple': record},
+        }, ensure_ascii=False),
+        encoding='utf-8',
+    )
+    questions._cache = None
+    questions._cache_mtime_ns = -1
+
+    assert questions.approved_question_count() == 0
+    assert questions.get_question('apple', 'recognition') is None
+    assert questions.missing_sources([source]) == [source]

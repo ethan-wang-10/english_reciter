@@ -101,13 +101,22 @@ cp config.example.json config.json
 先配置 `DEEPSEEK_API_KEY` 或 `config.json` 中的 `deepseek_api_key`，在服务器项目根目录执行：
 
 ```bash
-python3 scripts/generate_gaokao_questions.py --level 高中 --dry-run
-python3 scripts/generate_gaokao_questions.py --level 高中 --batch-size 5 --pause 1
+python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --dry-run
+python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 5 --pause 1
+python3 scripts/generate_gaokao_questions.py --stage audit --audit-batch-size 8 --pause 1
 ```
 
-脚本先生成带唯一限定线索的候选语境，再用不含目标答案标记的独立请求逐项代入审查；存在多个合理答案或审查不完整的题不会入库。每个批次都会原子保存到 `user_data_simple/_shared/gaokao_questions_v2.json`。网络中断、进程退出或部分单词生成失败后，直接执行同一命令即可续跑：已同时具备识义题和语境题的单词会跳过，失败词会重试，之前成功的题不会丢失。可用 `--limit 100` 控制单次处理量；只有明确需要重做已有题目时才使用 `--force`。
+`generate` 只生成候选题并原子保存到题库的 `candidates` 区；`audit` 使用低随机性独立请求集中审查候选题，英文识义和语境选词都恰好只有一个可接受答案时才提升到 `questions`。语义不合格的候选进入 `rejections`，网络错误、JSON 截断或审查缺项的候选继续留在 `candidates`，再次运行 `audit` 只重试审查，不会重新调用生成请求。审查批次建议保持默认 8，最大限制为 10，避免双题型逐项理由导致输出截断。
 
-批处理尚未覆盖到的单词，在学生首次遇到相应题型时会由线上服务即时生成并写回同一题库；若 AI 或网络不可用，该任务会持久降级为拼写，不阻断当天学习。脚本出现未完成词时返回退出码 `2`，方便定时任务或监控发现后再次执行。
+也可以使用 `--stage all` 依次生成并审查；配合 `--limit 100` 可控制本次生成和审查的数量。重新运行 `all` 或 `generate` 时，已发布题和待审候选都会跳过，生成失败或被语义拒绝的词会重新生成。只有明确需要替换已有正式题时才使用 `--force`。
+
+线上服务只读取带当前审查版本的 `questions`。缺题或旧版 v2 题尚未重新审查时，当前任务会立即降级为拼写，不在学生请求中调用 AI。升级时不要让旧版 Web 进程与新脚本并行写同一个题库：推荐在维护窗口停止旧进程、拉取新代码、执行下列命令，再启动新进程；无法停机时则先重启到新版本，再执行命令，期间缺题会安全降级为拼写。
+
+```bash
+python3 scripts/generate_gaokao_questions.py --stage all --level 高中 --batch-size 5 --audit-batch-size 8 --pause 1
+```
+
+脚本出现生成失败、语义拒绝或审查待重试时返回退出码 `2`；直接再次执行同一命令即可续跑。可通过题库 JSON 中的 `questions`、`candidates`、`rejections` 和 `failures` 分别查看已发布、待审、语义拒绝和生成失败数量。
 
 ## 依赖说明
 

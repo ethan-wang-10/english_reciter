@@ -410,21 +410,16 @@ def test_new_word_payload_includes_study_preview_before_semantic_question(
     assert word['study']['examples'][0]['en'] == 'Exercise brings many benefits.'
 
 
-def test_question_endpoint_generates_missing_question_and_returns_public_data(
+def test_question_endpoint_returns_approved_question_without_runtime_generation(
     client,
     monkeypatch,
     tmp_path,
 ) -> None:
     _use_private_question_bank(monkeypatch, tmp_path)
+    record = _semantic_record()
+    web.gaokao_questions.persist_generation_result({'benefit': record}, {})
     reciter = _SemanticReciter('context')
     _mock_student_session(monkeypatch, reciter)
-    monkeypatch.setattr(web, '_runtime_question_source', lambda word: _semantic_source())
-
-    def generate(source):
-        web.gaokao_questions.persist_generation_result({'benefit': _semantic_record()}, {})
-        return {'generated': 1}
-
-    monkeypatch.setattr(web, '_generate_one_runtime_question', generate)
     response = client.post(
         '/api/words/question',
         headers={'Authorization': 'Bearer test'},
@@ -438,7 +433,7 @@ def test_question_endpoint_generates_missing_question_and_returns_public_data(
 
     assert response.status_code == 200
     body = response.get_json()
-    assert body['generated'] is True
+    assert body['generated'] is False
     assert body['fallback'] is False
     assert 'answer_option_id' not in body['question']
     assert 'translation_zh' not in body['question']
@@ -454,8 +449,11 @@ def test_question_endpoint_falls_back_to_spelling_when_generation_fails(
     _use_private_question_bank(monkeypatch, tmp_path)
     reciter = _SemanticReciter('recognition')
     _mock_student_session(monkeypatch, reciter)
-    monkeypatch.setattr(web, '_runtime_question_source', lambda word: _semantic_source())
-    monkeypatch.setattr(web, '_generate_one_runtime_question', lambda source: {'generated': 0})
+    monkeypatch.setattr(
+        web,
+        '_deepseek_chat',
+        lambda *args, **kwargs: pytest.fail('student request must not call AI'),
+    )
     monkeypatch.setattr(web, 'lookup_csv_word', lambda word: None)
 
     response = client.post(
@@ -474,6 +472,7 @@ def test_question_endpoint_falls_back_to_spelling_when_generation_fails(
     assert body['fallback'] is True
     assert body['exercise_type'] == 'spelling'
     assert body['word']['english'] == 'benefit'
+    assert reciter.task_item['question_fallback_reason'] == 'question_not_approved'
     assert reciter.task_item['exercise_type'] == 'spelling'
     assert reciter.saved == 1
 

@@ -4563,23 +4563,6 @@ def get_extra_review_list(username):
         logger.error(f"获取加练列表失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
 
-def _runtime_question_source(word: Any) -> Optional[dict]:
-    row = lookup_csv_word(word.english)
-    if not row:
-        return None
-    return gaokao_questions.source_from_wordbank_row(row)
-
-
-def _generate_one_runtime_question(source: dict) -> dict:
-    return gaokao_questions.generate_and_persist(
-        [source],
-        lambda messages, max_tokens: _deepseek_chat(
-            messages,
-            max_tokens=max_tokens,
-        ),
-    )
-
-
 def _spelling_fallback_word_payload(word: Any) -> dict:
     item = {
         'english': word.english,
@@ -4607,7 +4590,7 @@ def _spelling_fallback_word_payload(word: Any) -> dict:
 @token_required
 @parent_forbidden
 def get_or_generate_word_question(username):
-    """Load a private-bank question, generating one when this task first needs it."""
+    """Load an approved private-bank question or fall back without blocking."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({'error': '无效的JSON数据'}), 400
@@ -4633,34 +4616,15 @@ def get_or_generate_word_question(username):
                 return jsonify({'error': '单词未找到'}), 404
 
             question = gaokao_questions.get_question(word.english, exercise_type)
-            generated = False
-            if not question:
-                source = _runtime_question_source(word)
-                if source:
-                    try:
-                        generated_result = _generate_one_runtime_question(source)
-                        generated = bool(generated_result.get('generated'))
-                        question = gaokao_questions.get_question(word.english, exercise_type)
-                    except Exception as exc:
-                        logger.warning(
-                            "在线生成高考选择题失败，降级为拼写: word=%s error=%s",
-                            word.english,
-                            exc,
-                        )
-                        gaokao_questions.persist_generation_result(
-                            {},
-                            {source['english']: f'runtime exception: {exc}'},
-                        )
-
             if not question:
                 task_item['exercise_type'] = 'spelling'
                 task_item.pop('question_id', None)
-                task_item['question_fallback_reason'] = 'question_generation_failed'
+                task_item['question_fallback_reason'] = 'question_not_approved'
                 reciter.save_learning_data(backup=False)
                 return jsonify({
                     'fallback': True,
                     'exercise_type': 'spelling',
-                    'message': '选择题暂时不可用，已自动切换为拼写练习',
+                    'message': '选择题尚未通过质检，已自动切换为拼写练习',
                     'word': _spelling_fallback_word_payload(word),
                 }), 200
 
@@ -4669,7 +4633,7 @@ def get_or_generate_word_question(username):
             reciter.save_learning_data(backup=False)
             return jsonify({
                 'fallback': False,
-                'generated': generated,
+                'generated': False,
                 'exercise_type': exercise_type,
                 'question': gaokao_questions.public_question(question),
             }), 200
