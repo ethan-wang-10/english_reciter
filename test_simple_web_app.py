@@ -115,6 +115,11 @@ def _semantic_record():
             'english': 'benefit',
             'recognition_distractors': ['负担', '挑战', '限制'],
             'recognition_explanation_zh': 'benefit 表示益处或好处。',
+            'context_sentence': (
+                'Regular exercise brings many benefits to our health by reducing '
+                'stress and improving sleep.'
+            ),
+            'context_translation_zh': '规律锻炼通过减轻压力和改善睡眠给健康带来许多益处。',
             'context_distractors': ['burdens', 'limits', 'risks'],
             'context_explanation_zh': 'many 后接复数名词，语义需要“益处”。',
         },

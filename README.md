@@ -89,7 +89,7 @@ cp config.example.json config.json
 | `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
 | `static/wordbanks/words.csv` | 内置词库（**不随 Git 发布**；本地从 `words.csv.example` 复制或自备；线上勿被 `git pull` 覆盖，由服务器文件或管理后台「增量上传」维护） |
 | `static/wordbanks/words_v2.json` | 新版内置词库（线上运行时数据；仓库只保留空占位，部署脚本会保护服务器本地文件） |
-| `user_data_simple/_shared/gaokao_questions_v1.json` | 服务端私有的版本化高考选择题库，包含答案，不得放入 `static/` |
+| `user_data_simple/_shared/gaokao_questions_v2.json` | 服务端私有的版本化高考选择题库，包含答案，不得放入 `static/` |
 | `user_data_simple/_shared/performance/` | Web 性能采集 JSONL 日志（见 [docs/performance-monitoring.md](docs/performance-monitoring.md)） |
 | `backups/` | 学习数据自动备份（若开启） |
 | `reciter.log` | 运行日志 |
@@ -105,7 +105,7 @@ python3 scripts/generate_gaokao_questions.py --level 高中 --dry-run
 python3 scripts/generate_gaokao_questions.py --level 高中 --batch-size 5 --pause 1
 ```
 
-脚本每个批次都会原子保存到 `user_data_simple/_shared/gaokao_questions_v1.json`。网络中断、进程退出或部分单词生成失败后，直接执行同一命令即可续跑：已同时具备识义题和语境题的单词会跳过，失败词会重试，之前成功的题不会丢失。可用 `--limit 100` 控制单次处理量；只有明确需要重做已有题目时才使用 `--force`。
+脚本先生成带唯一限定线索的候选语境，再用不含目标答案标记的独立请求逐项代入审查；存在多个合理答案或审查不完整的题不会入库。每个批次都会原子保存到 `user_data_simple/_shared/gaokao_questions_v2.json`。网络中断、进程退出或部分单词生成失败后，直接执行同一命令即可续跑：已同时具备识义题和语境题的单词会跳过，失败词会重试，之前成功的题不会丢失。可用 `--limit 100` 控制单次处理量；只有明确需要重做已有题目时才使用 `--force`。
 
 批处理尚未覆盖到的单词，在学生首次遇到相应题型时会由线上服务即时生成并写回同一题库；若 AI 或网络不可用，该任务会持久降级为拼写，不阻断当天学习。脚本出现未完成词时返回退出码 `2`，方便定时任务或监控发现后再次执行。
 
