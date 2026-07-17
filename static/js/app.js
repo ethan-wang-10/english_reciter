@@ -416,12 +416,16 @@ function updateGamificationNav(g) {
             ? `；系统认为 ${gap} 未达到有效打卡：答对 ${formatNumber(sd.gap_before_current_correct_count || 0)}/${formatNumber(minC)}，当日 XP ${formatNumber(sd.gap_before_current_daily_xp || 0)}`
             : '';
     const makeupAvailable = !!(g.makeup_checkin && g.makeup_checkin.available === true);
+    const lifetimeXp = Number(g.lifetime_xp ?? g.total_xp) || 0;
+    const balanceXp = Number(g.xp_balance ?? g.total_xp) || 0;
+    const xpTitle = `累计经验 ${formatNumber(lifetimeXp)} XP；可用余额 ${formatNumber(balanceXp)} XP。点击查看收支历史`;
     const makeupHint = makeupAvailable
         ? `；可用 ${formatNumber(Number(g.makeup_checkin.cost_xp) || 0)} XP 补救 ${g.makeup_checkin.target_date || '断点'}`
         : '';
     if (lv && xp && st) {
         lv.textContent = `Lv.${g.level}`;
-        xp.textContent = `${formatNumber(g.total_xp)} XP`;
+        xp.textContent = `${formatNumber(lifetimeXp)} XP`;
+        xp.title = xpTitle;
         st.innerHTML = ngStreakPillInnerHtml(g.streak, makeupAvailable);
         st.classList.toggle('ng-streak--out', streakN === 0);
         st.classList.toggle('ng-streak--makeup', makeupAvailable);
@@ -439,7 +443,8 @@ function updateGamificationNav(g) {
     const mck = document.getElementById('mobile-ng-checkin');
     if (mlv && mxp && mst) {
         mlv.textContent = `Lv.${g.level}`;
-        mxp.textContent = `${formatNumber(g.total_xp)} XP`;
+        mxp.textContent = `${formatNumber(lifetimeXp)} XP`;
+        mxp.title = xpTitle;
         mst.innerHTML = ngStreakPillInnerHtml(g.streak, makeupAvailable);
         mst.classList.toggle('ng-streak--out', streakN === 0);
         mst.classList.toggle('ng-streak--makeup', makeupAvailable);
@@ -503,9 +508,9 @@ function renderDailySummaryBody(g, statusData) {
     const monthKey = g.month_key;
     let monthLine = '';
     if (goal != null && goalMonth === monthKey) {
-        const md = Number(g.month_valid_checkin_days) || 0;
+        const md = Number(g.monthly_checkin_goal_progress_days) || 0;
         const gNum = Number(goal);
-        monthLine = `<li>本月有效打卡 <strong>${formatNumber(md)}</strong> / ${formatNumber(gNum)} 天</li>`;
+        monthLine = `<li>设置目标后新增打卡 <strong>${formatNumber(md)}</strong> / ${formatNumber(gNum)} 天</li>`;
     }
 
     const checkLine = done
@@ -517,6 +522,7 @@ function renderDailySummaryBody(g, statusData) {
         '<ul class="daily-summary-list">' +
         `<li>今日答对 <strong>${formatNumber(todayC)}</strong> 词</li>` +
         `<li>今日获得 <strong>${formatNumber(xpToday)}</strong> XP</li>` +
+        `<li>可用 XP 余额 <strong>${formatNumber(Number(g.xp_balance ?? g.total_xp) || 0)}</strong></li>` +
         checkLine +
         dailySummaryStreakLineHtml(streak) +
         (streakMax > 0
@@ -647,8 +653,12 @@ function buildXpHistorySummaryHtml(data) {
     const income = Number(data?.total_income_xp ?? data?.total_xp) || 0;
     const expense = Number(data?.total_expense_xp) || 0;
     const net = Number(data?.net_xp ?? income - expense) || 0;
+    const balance = Number(data?.xp_balance) || 0;
+    const lifetime = Number(data?.lifetime_xp) || 0;
     return (
         '<div class="xp-history-summary">' +
+        `<div class="xp-history-stat"><span class="xp-history-stat-label">可用余额</span><span class="xp-history-stat-value">${formatNumber(balance)} XP</span></div>` +
+        `<div class="xp-history-stat"><span class="xp-history-stat-label">累计经验</span><span class="xp-history-stat-value">${formatNumber(lifetime)} XP</span></div>` +
         `<div class="xp-history-stat"><span class="xp-history-stat-label">收入</span><span class="xp-history-stat-value xp-history-value--positive">+${formatNumber(income)} XP</span></div>` +
         `<div class="xp-history-stat"><span class="xp-history-stat-label">支出</span><span class="xp-history-stat-value xp-history-value--negative">-${formatNumber(expense)} XP</span></div>` +
         `<div class="xp-history-stat"><span class="xp-history-stat-label">净变化</span><span class="xp-history-stat-value ${xpHistoryValueClass(net)}">${formatSignedXp(net)}</span></div>` +
@@ -1177,7 +1187,7 @@ function updateSettingsMonthlyGoalBonusNotice(s) {
         el.textContent = `本月打卡目标额外奖励（${formatNumber(bonusXp)} XP）已发放。`;
     } else {
         el.textContent =
-            `额外奖励：当月有效打卡满 ${g} 天后一次性获得 ${formatNumber(bonusXp)} XP（${g}×${per}）；若本月未达标则不发放该额外奖励；练习、奖池与 PK 等其它积分照常。`;
+            `额外奖励：从设置目标后新增 ${g} 个有效打卡日，可一次性获得 ${formatNumber(bonusXp)} XP（${g}×${per}）；设置目标前的打卡不计入该目标。`;
     }
 }
 
@@ -1472,18 +1482,20 @@ function renderUserSettingsPanel(s) {
     updateSettingsCheckinHintFromProfile(s);
     updateMakeupCheckinDialogFromProfile(s);
     updateSettingsMonthlyGoalBonusNotice(s);
-    const dim = Number(s.month_days_in_month) || 31;
+    const maxGoalDays = Math.max(0, Number(s.monthly_checkin_goal_max_days) || 0);
     const suggested = Math.min(
-        dim,
-        Math.max(1, Number(s.monthly_checkin_goal_suggested_days) || dim)
+        maxGoalDays,
+        Math.max(1, Number(s.monthly_checkin_goal_suggested_days) || maxGoalDays)
     );
-    const canEdit = s.monthly_checkin_goal_can_edit !== false;
+    const canEdit = s.monthly_checkin_goal_can_edit !== false && maxGoalDays > 0;
     const input = document.getElementById('settings-month-goal');
     const lockHint = document.getElementById('settings-month-goal-lock-hint');
     const saveGoalBtn = document.getElementById('settings-month-goal-save');
     if (input) {
-        input.max = String(dim);
-        input.placeholder = `默认 ${suggested}（今日至月末共 ${suggested} 天）`;
+        input.max = String(maxGoalDays || 1);
+        input.placeholder = maxGoalDays > 0
+            ? `最多 ${maxGoalDays} 天（只统计设置后的新打卡）`
+            : '本月已无可设置日期';
         input.disabled = !canEdit;
         const hasGoal =
             s.monthly_checkin_goal != null && s.monthly_checkin_goal !== '';
@@ -1507,7 +1519,8 @@ function renderUserSettingsPanel(s) {
     if (saveGoalBtn) {
         saveGoalBtn.disabled = !canEdit;
     }
-    const days = Number(s.month_valid_checkin_days) || 0;
+    const monthDays = Number(s.month_valid_checkin_days) || 0;
+    const days = Number(s.monthly_checkin_goal_progress_days) || 0;
     const goal = s.monthly_checkin_goal;
     const fill = document.getElementById('settings-month-goal-fill');
     const text = document.getElementById('settings-month-goal-text');
@@ -1515,10 +1528,10 @@ function renderUserSettingsPanel(s) {
         const g = Number(goal);
         const pct = g > 0 ? Math.min(100, Math.round((days / g) * 100)) : 0;
         if (fill) fill.style.width = `${pct}%`;
-        if (text) text.textContent = `本月有效打卡 ${days} / ${g} 天`;
+        if (text) text.textContent = `设置目标后新增有效打卡 ${days} / ${g} 天`;
     } else {
         if (fill) fill.style.width = '0%';
-        if (text) text.textContent = `本月有效打卡 ${days} 天（未设置目标）`;
+        if (text) text.textContent = `本月有效打卡 ${monthDays} 天（未设置目标）`;
     }
 
     const pool = s.monthly_pool || {};
@@ -1527,7 +1540,7 @@ function renderUserSettingsPanel(s) {
     if (poolHint) {
         const prepD = pool.preparation_last_day || 5;
         const stD = pool.competition_start_day || 6;
-        let t = `${pool.month || ''} 奖池共 ${formatNumber(pool.pool_xp || 0)} XP，${pool.participant_count || 0} 人参与。`;
+        let t = `${pool.month || ''} 奖池共 ${formatNumber(pool.pool_xp || 0)} XP，${pool.participant_count || 0} 人参与。可用余额 ${formatNumber(Number(s.xp_balance ?? s.total_xp) || 0)} XP。`;
         if (pool.joined) t += ' 你已加入。';
         if (pool.preparation_phase || pool.phase === 'preparation') {
             t += ` 当前为准备期（1～${prepD} 日可报名）；${stD} 日起比赛正式开始。`;
@@ -3339,7 +3352,11 @@ function renderLeaderboardPodium(apiData) {
         wrap.innerHTML = '';
         return;
     }
-    const cards = top
+    const displayTop = top.slice(0, 3);
+    const overflowHint = top.length > displayTop.length
+        ? ` · 并列获奖共 ${formatNumber(top.length)} 人`
+        : '';
+    const cards = displayTop
         .map((t, i) => {
             const rx = Number(t.reward_xp) || 0;
             const av = t.avatar_url
@@ -3368,15 +3385,15 @@ function renderLeaderboardPodium(apiData) {
         `<div class="leaderboard-podium">` +
         `<div class="leaderboard-podium-head">` +
         `<div><h3 class="leaderboard-podium-title">上期${kind}三甲</h3>` +
-        `<p class="leaderboard-podium-sub">${escapeHtml(p.period_label || p.period_id || '')}</p></div>` +
+        `<p class="leaderboard-podium-sub">${escapeHtml(p.period_label || p.period_id || '')}${escapeHtml(overflowHint)}</p></div>` +
         `<span class="leaderboard-podium-status">奖励已结算</span>` +
         `</div>` +
-        `<div class="leaderboard-podium-stage podium-count-${Math.min(top.length, 3)}">${cards}</div>` +
+        `<div class="leaderboard-podium-stage podium-count-${displayTop.length}">${cards}</div>` +
         `</div>`;
 
     wrap.querySelectorAll('[data-lb-podium-index]').forEach((button) => {
         button.addEventListener('click', () => {
-            const entry = top[Number(button.getAttribute('data-lb-podium-index'))];
+            const entry = displayTop[Number(button.getAttribute('data-lb-podium-index'))];
             if (entry) openLeaderboardAvatarModal(entry, p, kind, button);
         });
     });
@@ -6929,6 +6946,8 @@ async function submitAnswer() {
                         reviewSessionMode !== 'bonus' &&
                         (wrongRoundNumber > 0 || word.task_remedial === true),
                     bonus_practice: reviewSessionMode === 'bonus',
+                    bonus_session_id:
+                        reviewSessionMode === 'bonus' ? String(word.bonus_session_id || '') : '',
                     test_inflection: getReviewTestInflectionEnabled(),
                     task_id: word.task_id || '',
                     task_item_id: word.task_item_id || '',

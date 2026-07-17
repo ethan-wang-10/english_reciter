@@ -1546,6 +1546,71 @@ class WordReciter:
             ordered.extend(tier)
         return ordered[:count]
 
+    def create_bonus_practice_session(self, count: int = 5) -> tuple[str, List[Word]]:
+        """Issue a server-owned bonus round after today's assigned task is complete."""
+        progress = self.daily_task_progress()
+        if int(progress.get('remaining') or 0) > 0:
+            raise ValueError('请先完成今日学习任务，再开始随机加练')
+        words = self.get_extra_review_words(count)
+        session_id = uuid.uuid4().hex
+        self.learning_state_v2['bonus_practice_session'] = {
+            'version': 1,
+            'session_id': session_id,
+            'date': self.today.isoformat(),
+            'created_at': china_now().isoformat(),
+            'word_keys': [self.word_state_key(word) for word in words],
+            'completed_events': {},
+        }
+        return session_id, words
+
+    def resolve_bonus_practice_word(
+        self,
+        session_id: str,
+        word_id: str,
+        event_id: str = '',
+    ) -> Optional[Word]:
+        session = self.learning_state_v2.get('bonus_practice_session')
+        if not isinstance(session, dict):
+            return None
+        if session.get('date') != self.today.isoformat():
+            return None
+        if str(session.get('session_id') or '') != str(session_id or ''):
+            return None
+        key = self.word_state_key(word_id)
+        if key not in {
+            str(value or '') for value in (session.get('word_keys') or [])
+        }:
+            return None
+        completed = session.get('completed_events')
+        if isinstance(completed, dict) and key in completed:
+            if str(completed.get(key) or '') != str(event_id or ''):
+                return None
+        return self.find_word(key, include_mastered=True)
+
+    def complete_bonus_practice_word(
+        self,
+        session_id: str,
+        word_id: str,
+        event_id: str,
+    ) -> bool:
+        session = self.learning_state_v2.get('bonus_practice_session')
+        if not isinstance(session, dict):
+            return False
+        if str(session.get('session_id') or '') != str(session_id or ''):
+            return False
+        key = self.word_state_key(word_id)
+        if key not in {str(value or '') for value in (session.get('word_keys') or [])}:
+            return False
+        completed = session.setdefault('completed_events', {})
+        if not isinstance(completed, dict):
+            completed = {}
+            session['completed_events'] = completed
+        prior = str(completed.get(key) or '')
+        if prior and prior != str(event_id or ''):
+            return False
+        completed[key] = str(event_id or '')[:96]
+        return True
+
     def record_answer_correct(
         self,
         word: Word,

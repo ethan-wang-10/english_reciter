@@ -9,12 +9,14 @@ import json
 import threading
 import uuid
 from calendar import monthrange
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from app_time import china_now, china_now_iso, china_today
 import gamification as gamification_mod
+from storage_utils import interprocess_file_lock, write_json_atomic
 
 MONTHLY_POOL_FEE_XP = 150
 STAKE_SAFETY_RESERVE_XP = 50
@@ -54,9 +56,14 @@ def _load_json(path: Path, default: Any) -> Any:
 
 
 def _save_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    write_json_atomic(path, data)
+
+
+@contextmanager
+def _locked_challenges_storage(data_dir: Path) -> Generator[None, None, None]:
+    with _challenges_lock:
+        with interprocess_file_lock(challenges_dir(data_dir) / ".challenges.lock"):
+            yield
 
 
 def month_key(d: date) -> str:
@@ -198,7 +205,7 @@ def _has_open_duel_between(duels: List[Dict[str, Any]], user_a: str, user_b: str
 def expire_pending_duels_if_needed(data_dir: Path) -> None:
     """pending 在邀约截止时间（第 N 个自然日 23:59）之后仍未处理则标记为 expired。"""
     now = china_now()
-    with _challenges_lock:
+    with _locked_challenges_storage(data_dir):
         data = _load_duels(data_dir)
         duels = data.get("duels") or []
         changed = False
@@ -223,7 +230,7 @@ def expire_pending_duels_if_needed(data_dir: Path) -> None:
             _save_duels(data_dir, data)
 
 
-def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
+def _settle_monthly_pool_if_needed_unlocked(data_dir: Path) -> None:
     """若存在未结算的上一自然月奖池，则瓜分。"""
     path = monthly_pool_path(data_dir)
     raw = _load_json(path, {"months": {}})
@@ -262,12 +269,20 @@ def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
         share = pool // len(winners) if winners else 0
         remainder = pool - share * len(winners)
 
+        payout_failed = False
         for w in winners:
             ok, _, _ = gamification_mod.apply_xp_delta(
-                data_dir, w, share, source="monthly_pool_reward"
+                data_dir,
+                w,
+                share,
+                source="monthly_pool_reward",
+                lifetime_delta=max(0, share - MONTHLY_POOL_FEE_XP),
+                transaction_id=f"monthly-pool:{ym}:reward:{w}",
             )
             if not ok:
-                pass
+                payout_failed = True
+        if payout_failed:
+            continue
         block["settled"] = True
         block["settled_at"] = china_now_iso(timespec="seconds")
         block["winners"] = winners
@@ -281,6 +296,11 @@ def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
     if changed:
         raw["months"] = months
         _save_json(path, raw)
+
+
+def _settle_monthly_pool_if_needed(data_dir: Path) -> None:
+    with _locked_challenges_storage(data_dir):
+        _settle_monthly_pool_if_needed_unlocked(data_dir)
 
 
 def get_monthly_pool_state(data_dir: Path, username: str) -> Dict[str, Any]:
@@ -348,29 +368,34 @@ def join_monthly_pool(data_dir: Path, username: str) -> Tuple[bool, str, Dict[st
     today = china_today()
     ym = month_key(today)
     path = monthly_pool_path(data_dir)
-    with _challenges_lock:
+    already_joined = False
+    with _locked_challenges_storage(data_dir):
         raw = _load_json(path, {"months": {}})
         months = raw.setdefault("months", {})
         block = months.get(ym) or {"pool_xp": 0, "participants": []}
         participants = list(block.get("participants") or [])
         if username in participants:
-            return False, "本月已加入", get_monthly_pool_state(data_dir, username)
+            already_joined = True
+        else:
+            ok, msg, _ = gamification_mod.spend_xp_with_reserve(
+                data_dir,
+                username,
+                MONTHLY_POOL_FEE_XP,
+                STAKE_SAFETY_RESERVE_XP,
+                source="monthly_pool_fee",
+                transaction_id=f"monthly-pool:{ym}:fee:{username}",
+            )
+            if not ok:
+                return False, msg or "积分不足", {}
 
-        ok, msg, _ = gamification_mod.spend_xp_with_reserve(
-            data_dir,
-            username,
-            MONTHLY_POOL_FEE_XP,
-            STAKE_SAFETY_RESERVE_XP,
-            source="monthly_pool_fee",
-        )
-        if not ok:
-            return False, msg or "积分不足", {}
+            participants.append(username)
+            block["participants"] = participants
+            block["pool_xp"] = int(block.get("pool_xp") or 0) + MONTHLY_POOL_FEE_XP
+            months[ym] = block
+            _save_json(path, raw)
 
-        participants.append(username)
-        block["participants"] = participants
-        block["pool_xp"] = int(block.get("pool_xp") or 0) + MONTHLY_POOL_FEE_XP
-        months[ym] = block
-        _save_json(path, raw)
+    if already_joined:
+        return False, "本月已加入", get_monthly_pool_state(data_dir, username)
 
     return True, "", get_monthly_pool_state(data_dir, username)
 
@@ -412,7 +437,7 @@ def create_duel(
         "settled": False,
         "winner": None,
     }
-    with _challenges_lock:
+    with _locked_challenges_storage(data_dir):
         data = _load_duels(data_dir)
         duels = data.setdefault("duels", [])
         if _has_open_duel_between(duels, from_user, target_user, month_key(now.date())):
@@ -429,7 +454,7 @@ def respond_duel(
     accept: bool,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     expire_pending_duels_if_needed(data_dir)
-    with _challenges_lock:
+    with _locked_challenges_storage(data_dir):
         data = _load_duels(data_dir)
         duels = data.get("duels") or []
         found = None
@@ -455,12 +480,15 @@ def respond_duel(
         accept_now = china_now()
         accept_month = month_key(accept_now.date())
         if w > 0:
+            stake_a_id = f"duel:{duel_id}:stake:{a}"
+            stake_b_id = f"duel:{duel_id}:stake:{b}"
             ok1, msg1, _ = gamification_mod.spend_xp_with_reserve(
                 data_dir,
                 str(a),
                 w,
                 STAKE_SAFETY_RESERVE_XP,
                 source="duel_stake",
+                transaction_id=stake_a_id,
             )
             if not ok1:
                 return False, f"发起方{msg1}", None
@@ -470,9 +498,17 @@ def respond_duel(
                 w,
                 STAKE_SAFETY_RESERVE_XP,
                 source="duel_stake",
+                transaction_id=stake_b_id,
             )
             if not ok2:
-                gamification_mod.apply_xp_delta(data_dir, str(a), w, source="duel_refund")
+                rolled_back, rollback_msg, _ = gamification_mod.rollback_spend_transaction(
+                    data_dir,
+                    str(a),
+                    stake_a_id,
+                    refund_source="duel_refund",
+                )
+                if not rolled_back:
+                    return False, f"应战方{msg2}；发起方扣款回退失败：{rollback_msg}", None
                 return False, f"应战方{msg2}", None
         found["month"] = accept_month
         found["status"] = "active"
@@ -486,7 +522,7 @@ def settle_due_duels(data_dir: Path) -> None:
     """结算上月及更早未处理的 active 挑战。"""
     today = china_today()
     cur_ym = month_key(today)
-    with _challenges_lock:
+    with _locked_challenges_storage(data_dir):
         data = _load_duels(data_dir)
         duels = data.get("duels") or []
         changed = False
@@ -508,11 +544,36 @@ def settle_due_duels(data_dir: Path) -> None:
                 winner = a
             elif db > da:
                 winner = b
+            payout_ok = True
             if winner and w > 0:
-                gamification_mod.apply_xp_delta(data_dir, winner, 2 * w, source="duel_reward")
+                payout_ok, _, _ = gamification_mod.apply_xp_delta(
+                    data_dir,
+                    winner,
+                    2 * w,
+                    source="duel_reward",
+                    lifetime_delta=w,
+                    transaction_id=f"duel:{d.get('id')}:settlement:{winner}",
+                )
             elif winner is None and w > 0:
-                gamification_mod.apply_xp_delta(data_dir, a, w, source="duel_refund")
-                gamification_mod.apply_xp_delta(data_dir, b, w, source="duel_refund")
+                refund_a_ok, _, _ = gamification_mod.apply_xp_delta(
+                    data_dir,
+                    a,
+                    w,
+                    source="duel_refund",
+                    lifetime_delta=0,
+                    transaction_id=f"duel:{d.get('id')}:refund:{a}",
+                )
+                refund_b_ok, _, _ = gamification_mod.apply_xp_delta(
+                    data_dir,
+                    b,
+                    w,
+                    source="duel_refund",
+                    lifetime_delta=0,
+                    transaction_id=f"duel:{d.get('id')}:refund:{b}",
+                )
+                payout_ok = refund_a_ok and refund_b_ok
+            if not payout_ok:
+                continue
             d["settled"] = True
             d["settled_at"] = china_now_iso(timespec="seconds")
             d["days_a"] = da
@@ -635,7 +696,7 @@ def purge_user_challenges_refs(data_dir: Path, username: str) -> None:
     """
     if not username:
         return
-    with _challenges_lock:
+    with _locked_challenges_storage(data_dir):
         path = monthly_pool_path(data_dir)
         raw = _load_json(path, {"months": {}})
         months = raw.setdefault("months", {})

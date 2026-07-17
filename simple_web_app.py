@@ -4009,14 +4009,15 @@ def patch_gamification_settings(username):
         return jsonify({**out, **{k: profile[k] for k in (
             'month_key', 'month_valid_checkin_days', 'month_days_in_month',
             'monthly_checkin_goal', 'monthly_checkin_goal_month',
-            'monthly_checkin_goal_suggested_days', 'monthly_checkin_goal_can_edit',
+            'monthly_checkin_goal_suggested_days', 'monthly_checkin_goal_max_days',
+            'monthly_checkin_goal_progress_days', 'monthly_checkin_goal_can_edit',
             'today_correct_count', 'check_in_done_today', 'check_in_min_correct',
-            'daily_xp_soft_cap',
+            'daily_xp_soft_cap', 'daily_xp_hard_cap',
             'checkin_completion_xp', 'checkin_streak_bonus_xp_per_day',
             'checkin_streak_bonus_cap_days',
             'monthly_goal_completion_bonus_xp',
             'monthly_goal_bonus_awarded_this_month', 'checkin_goal_xp_per_day',
-            'total_xp', 'level', 'xp_to_next_level',
+            'total_xp', 'lifetime_xp', 'xp_balance', 'level', 'xp_to_next_level',
             'makeup_checkin', 'makeup_checkin_days_this_month',
         ) if k in profile}}), 200
     except Exception as e:
@@ -4595,7 +4596,12 @@ def get_extra_review_list(username):
     """今日无待复习时：从全词库按复习次数最少优先、同层随机抽取加练词（默认 5 个）。"""
     try:
         with user_reciter_session(username) as reciter:
-            picked = reciter.get_extra_review_words(5)
+            task_bundle = reciter.get_today_learning_plan(
+                listening_available=_reliable_listening_available(),
+            )
+            if int((task_bundle.get('plan') or {}).get('remaining') or 0) > 0:
+                return jsonify({'error': '请先完成今日学习任务，再开始随机加练'}), 409
+            bonus_session_id, picked = reciter.create_bonus_practice_session(5)
             words = []
             for w in picked:
                 nd = w.next_review_date
@@ -4615,6 +4621,7 @@ def get_extra_review_list(username):
                     'task_id': '',
                     'task_item_id': '',
                     'task_reason': 'bonus',
+                    'bonus_session_id': bonus_session_id,
                     'exercise_type': 'spelling',
                     'mastery': state_payload['mastery'],
                     'scheduler': state_payload['scheduler'],
@@ -4628,7 +4635,12 @@ def get_extra_review_list(username):
                     if isinstance(csl, list) and csl:
                         item["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
                 words.append(item)
-            return jsonify({'words': words, 'count': len(words)}), 200
+            reciter.save_learning_data(backup=False)
+            return jsonify({
+                'words': words,
+                'count': len(words),
+                'bonus_session_id': bonus_session_id,
+            }), 200
     except Exception as e:
         logger.error(f"获取加练列表失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -4736,6 +4748,7 @@ def practice_word(username):
         remedial = data.get('remedial') is True
         # 无今日待复习时的加练：仅计复习次数，不改变掌握进度与排期
         bonus_practice = data.get('bonus_practice') is True
+        bonus_session_id = str(data.get('bonus_session_id') or '').strip()[:96]
         # True：要求拼写与例句中形式一致（如复数、时态）；False：仅词库原形（lemma）
         test_inflection = data.get('test_inflection') is True
         task_id = str(data.get('task_id') or '').strip()
@@ -4764,6 +4777,8 @@ def practice_word(username):
             return jsonify({'error': '缺少作答事件标识，请刷新后重试'}), 400
         if not task_id and not bonus_practice:
             return jsonify({'error': '请从今日任务进入练习'}), 409
+        if bonus_practice and not bonus_session_id:
+            return jsonify({'error': '加练会话已失效，请重新获取随机加练'}), 409
 
         with user_reciter_session(username) as reciter:
             task_item = None
@@ -4777,10 +4792,19 @@ def practice_word(username):
                 if not task_item:
                     return jsonify({'error': '今日任务已更新，请刷新后继续'}), 409
 
-            word = reciter.find_word(
-                task_item.get('word_key', '') if task_item else word_id,
-                include_mastered=True,
-            )
+            if bonus_practice:
+                word = reciter.resolve_bonus_practice_word(
+                    bonus_session_id,
+                    word_id,
+                    review_event_id,
+                )
+                if not word:
+                    return jsonify({'error': '加练题目不属于当前会话，请重新获取随机加练'}), 409
+            else:
+                word = reciter.find_word(
+                    task_item.get('word_key', '') if task_item else word_id,
+                    include_mastered=True,
+                )
             if word in reciter.mastered_words and not (bonus_practice or task_item or remedial):
                 word = None
 
@@ -4864,6 +4888,13 @@ def practice_word(username):
             )
             if task_item and applied['recorded'] and not audio_available:
                 task_item['exercise_type'] = exercise_type
+            if bonus_practice and is_correct:
+                if not reciter.complete_bonus_practice_word(
+                    bonus_session_id,
+                    word_id,
+                    review_event_id,
+                ):
+                    return jsonify({'error': '加练题目已完成，请重新获取随机加练'}), 409
             reciter.save_learning_data(backup=False)
 
             recorded = applied['recorded']

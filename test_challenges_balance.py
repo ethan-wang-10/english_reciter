@@ -25,6 +25,8 @@ def temp_data_dir():
 
 def _save_xp(data_dir: Path, username: str, xp: int) -> None:
     st = gm.default_state()
+    st["lifetime_xp"] = xp
+    st["xp_balance"] = xp
     st["total_xp"] = xp
     gm.save_state(data_dir, username, st)
 
@@ -65,7 +67,9 @@ class TestChallengeBalanceGuards(unittest.TestCase):
                 ok, msg, _ = ch.respond_duel(d, str(row["id"]), "alice", accept=True)
                 self.assertTrue(ok, msg)
 
-            self.assertEqual(gm.load_state(d, "alice")["total_xp"], 600)
+            state = gm.load_state(d, "alice")
+            self.assertEqual(state["xp_balance"], 600)
+            self.assertEqual(state["lifetime_xp"], 1000)
 
 
 if __name__ == "__main__":

@@ -30,11 +30,12 @@ class TestAchievementUnlock(unittest.TestCase):
         new = gm._unlock_achievements(st, mastered_words=0)
         self.assertTrue(any(x.get("id") == "daily_xp_cap" for x in new))
 
-    def test_daily_soft_cap_discounts_without_hard_cap(self):
-        self.assertEqual(gm.DAILY_XP_SOFT_CAP, 1000)
+    def test_daily_soft_cap_discounts_until_hard_cap(self):
+        self.assertEqual(gm.DAILY_XP_SOFT_CAP, 300)
+        self.assertEqual(gm.DAILY_XP_HARD_CAP, 500)
         self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_SOFT_CAP, 55), 11)
-        self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_SOFT_CAP + 5000, 55), 11)
-        self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_SOFT_CAP, 3), 1)
+        self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_HARD_CAP - 5, 55), 5)
+        self.assertEqual(gm._apply_daily_cap(gm.DAILY_XP_HARD_CAP, 55), 0)
 
     def test_monthly_goal_met_achievement(self):
         today = china_today()
@@ -366,6 +367,8 @@ class TestStreakDisplayV2(unittest.TestCase):
     def test_leaderboard_includes_streak_max_record(self):
         today = china_today()
         st = gm.default_state()
+        st["lifetime_xp"] = 100
+        st["xp_balance"] = 100
         st["total_xp"] = 100
         st["streak"] = 3
         st["streak_max"] = 7
@@ -433,6 +436,8 @@ class TestMakeupCheckin(unittest.TestCase):
         today = date(2026, 5, 11)
         with patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1)):
             st = gm.default_state()
+            st["lifetime_xp"] = 500
+            st["xp_balance"] = 500
             st["total_xp"] = 500
             st["streak_correct_by_day"] = {
                 (today - timedelta(days=2)).isoformat(): gm.CHECKIN_MIN_CORRECT,
@@ -449,6 +454,8 @@ class TestMakeupCheckin(unittest.TestCase):
         with temp_data_dir() as d:
             u = "makeup-user"
             st = gm.default_state()
+            st["lifetime_xp"] = 500
+            st["xp_balance"] = 500
             st["total_xp"] = 500
             st["streak"] = 1
             st["last_streak_date"] = (today - timedelta(days=2)).isoformat()
@@ -464,7 +471,8 @@ class TestMakeupCheckin(unittest.TestCase):
                 saved = gm.load_state(d, u)
 
             self.assertEqual(out["streak"], 2)
-            self.assertEqual(out["total_xp"], 500 - out["cost_xp"])
+            self.assertEqual(out["total_xp"], 500)
+            self.assertEqual(out["xp_balance"], 500 - out["cost_xp"])
             self.assertIn((today - timedelta(days=1)).isoformat(), saved[gm.MAKEUP_CHECKINS_KEY])
             self.assertEqual(gm.valid_checkin_days_in_month(saved, today.strftime("%Y-%m")), 1)
             self.assertEqual(gm.display_streak(saved, today), 2)
@@ -474,6 +482,8 @@ class TestMakeupCheckin(unittest.TestCase):
         with temp_data_dir() as d:
             u = "makeup-today-user"
             st = gm.default_state()
+            st["lifetime_xp"] = 500
+            st["xp_balance"] = 500
             st["total_xp"] = 500
             st["streak"] = 1
             st["last_streak_date"] = today.isoformat()
@@ -496,6 +506,8 @@ class TestMakeupCheckin(unittest.TestCase):
         with temp_data_dir() as d:
             u = "makeup-sequence-user"
             st = gm.default_state()
+            st["lifetime_xp"] = 2000
+            st["xp_balance"] = 2000
             st["total_xp"] = 2000
             st["streak"] = 1
             st["last_streak_date"] = (today - timedelta(days=3)).isoformat()

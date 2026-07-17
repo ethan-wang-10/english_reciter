@@ -27,12 +27,17 @@ XP_MASTERED = 40
 XP_REMEDIAL = 4
 XP_BONUS_PRACTICE = 3
 
-DAILY_XP_SOFT_CAP = 1000
+DAILY_XP_SOFT_CAP = 300
+DAILY_XP_HARD_CAP = 500
 PRACTICE_EVENT_LIMIT = 100
+XP_TRANSACTION_LIMIT = 2000
 # Soft-cap 后仍给少量收益，避免高强度学习完全没有反馈。
 OVER_CAP_MULTIPLIER = 0.2
 
 MAX_LEVEL = 99
+
+XP_ACCOUNT_VERSION = 2
+NON_EARNING_CREDIT_SOURCES = {"duel_refund"}
 
 
 def _practice_event_scope_key(value: Any) -> str:
@@ -203,6 +208,10 @@ def _locked_user_state(data_dir: Path, username: str) -> Generator[None, None, N
 
 def default_state() -> Dict[str, Any]:
     return {
+        "xp_account_version": XP_ACCOUNT_VERSION,
+        "lifetime_xp": 0,
+        "xp_balance": 0,
+        # Backward-compatible API/storage alias. New code must use lifetime_xp or xp_balance.
         "total_xp": 0,
         "total_correct": 0,
         "streak": 0,
@@ -214,12 +223,15 @@ def default_state() -> Dict[str, Any]:
         MAKEUP_CHECKINS_KEY: {},
         "daily_xp": {},
         "xp_gain_history": {},
+        "xp_transactions": {},
         "practice_events": [],
         "achievements": {},
         "leaderboard_opt_in": True,
         # 本月打卡天数目标：与 mcheckin_goal_month 同时有效
         "mcheckin_goal": None,
         "mcheckin_goal_month": None,
+        # Number of already-valid days when the current goal was created.
+        "mcheckin_goal_baseline_days": None,
         # 已为哪个月份发放过「完成打卡目标」一次性奖励（YYYY-MM）
         "mcheckin_goal_bonus_awarded_month": None,
         # 自然月内是否已修改过打卡目标（YYYY-MM）；与 mcheckin_goal 不同月时视为新月份可改
@@ -244,6 +256,31 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
             base[k] = raw[k]
     if "achievements" in raw and isinstance(raw["achievements"], dict):
         base["achievements"] = dict(raw["achievements"])
+
+    # V1 used total_xp as both experience and currency. Preserve the current value in
+    # both accounts on first load; future spending only changes xp_balance.
+    try:
+        account_version = int(raw.get("xp_account_version") or 0)
+    except (TypeError, ValueError):
+        account_version = 0
+    if account_version < XP_ACCOUNT_VERSION:
+        try:
+            legacy_xp = max(0, int(raw.get("total_xp") or 0))
+        except (TypeError, ValueError):
+            legacy_xp = 0
+        base["lifetime_xp"] = legacy_xp
+        base["xp_balance"] = legacy_xp
+        base["xp_account_version"] = XP_ACCOUNT_VERSION
+    else:
+        try:
+            base["lifetime_xp"] = max(0, int(raw.get("lifetime_xp") or 0))
+        except (TypeError, ValueError):
+            base["lifetime_xp"] = 0
+        try:
+            base["xp_balance"] = max(0, int(raw.get("xp_balance") or 0))
+        except (TypeError, ValueError):
+            base["xp_balance"] = 0
+    base["total_xp"] = int(base["lifetime_xp"])
     if "practice_events" in raw and isinstance(raw["practice_events"], list):
         events_reversed: List[Dict[str, Any]] = []
         scope_counts: Dict[str, int] = {}
@@ -284,6 +321,24 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
             if clean_sources:
                 hist[str(dk)] = clean_sources
         base["xp_gain_history"] = hist
+    if "xp_transactions" in raw and isinstance(raw["xp_transactions"], dict):
+        clean_transactions: Dict[str, Dict[str, Any]] = {}
+        for tx_id, tx in list(raw["xp_transactions"].items())[-XP_TRANSACTION_LIMIT:]:
+            key = str(tx_id or "").strip()[:160]
+            if not key or not isinstance(tx, dict):
+                continue
+            try:
+                balance_delta = int(tx.get("balance_delta") or 0)
+                lifetime_delta = int(tx.get("lifetime_delta") or 0)
+            except (TypeError, ValueError):
+                continue
+            clean_transactions[key] = {
+                "balance_delta": balance_delta,
+                "lifetime_delta": lifetime_delta,
+                "source": str(tx.get("source") or "manual")[:64],
+                "created_at": str(tx.get("created_at") or "")[:32],
+            }
+        base["xp_transactions"] = clean_transactions
     if "streak_correct_by_day" in raw and isinstance(raw["streak_correct_by_day"], dict):
         sbd: Dict[str, int] = {}
         for dk, cnt in raw["streak_correct_by_day"].items():
@@ -317,6 +372,13 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
             base["mcheckin_goal"] = int(base["mcheckin_goal"])
         except (TypeError, ValueError):
             base["mcheckin_goal"] = None
+    if base.get("mcheckin_goal_baseline_days") is not None:
+        try:
+            base["mcheckin_goal_baseline_days"] = max(
+                0, int(base["mcheckin_goal_baseline_days"])
+            )
+        except (TypeError, ValueError):
+            base["mcheckin_goal_baseline_days"] = None
     if base.get("mcheckin_goal_bonus_awarded_month") is not None:
         base["mcheckin_goal_bonus_awarded_month"] = str(base["mcheckin_goal_bonus_awarded_month"])
     if base.get("mcheckin_goal_edits_ym") is not None:
@@ -339,6 +401,10 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
 
 
 def _save_state_unlocked(data_dir: Path, username: str, state: Dict[str, Any]) -> None:
+    state["xp_account_version"] = XP_ACCOUNT_VERSION
+    state["lifetime_xp"] = max(0, int(state.get("lifetime_xp") or 0))
+    state["xp_balance"] = max(0, int(state.get("xp_balance") or 0))
+    state["total_xp"] = int(state["lifetime_xp"])
     path = gamification_path(data_dir, username)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(suffix=".json", dir=str(path.parent), text=True)
@@ -386,13 +452,17 @@ def xp_to_next_level(total_xp: int) -> Tuple[int, int]:
 def _apply_daily_cap(daily_so_far: int, raw_xp: int) -> int:
     if raw_xp <= 0:
         return 0
+    if daily_so_far >= DAILY_XP_HARD_CAP:
+        return 0
     if daily_so_far >= DAILY_XP_SOFT_CAP:
-        return max(1, int(raw_xp * OVER_CAP_MULTIPLIER))
+        gain = max(1, int(raw_xp * OVER_CAP_MULTIPLIER))
+        return min(gain, DAILY_XP_HARD_CAP - daily_so_far)
     if daily_so_far + raw_xp <= DAILY_XP_SOFT_CAP:
-        return raw_xp
+        return min(raw_xp, DAILY_XP_HARD_CAP - daily_so_far)
     room = DAILY_XP_SOFT_CAP - daily_so_far
     over = raw_xp - room
-    return room + max(1, int(over * OVER_CAP_MULTIPLIER))
+    gain = room + max(1, int(over * OVER_CAP_MULTIPLIER))
+    return min(gain, DAILY_XP_HARD_CAP - daily_so_far)
 
 
 def checkin_completion_bonus_raw(streak_after_checkin: int) -> int:
@@ -429,6 +499,71 @@ def _record_xp_flow_unlocked(
     if key == "manual" and n < 0:
         key = "manual_deduct"
     day[key] = int(day.get(key, 0) or 0) + n
+
+
+def _account_values(state: Dict[str, Any]) -> Tuple[int, int]:
+    lifetime = max(0, int(state.get("lifetime_xp") or state.get("total_xp") or 0))
+    balance = max(0, int(state.get("xp_balance") or 0))
+    return lifetime, balance
+
+
+def _set_account_values(state: Dict[str, Any], lifetime: int, balance: int) -> None:
+    state["xp_account_version"] = XP_ACCOUNT_VERSION
+    state["lifetime_xp"] = max(0, int(lifetime))
+    state["xp_balance"] = max(0, int(balance))
+    state["total_xp"] = int(state["lifetime_xp"])
+
+
+def _transaction_matches(
+    state: Dict[str, Any],
+    transaction_id: str,
+    *,
+    balance_delta: int,
+    lifetime_delta: int,
+    source: str,
+) -> Optional[bool]:
+    tx_id = str(transaction_id or "").strip()[:160]
+    if not tx_id:
+        return None
+    transactions = state.setdefault("xp_transactions", {})
+    if not isinstance(transactions, dict):
+        transactions = {}
+        state["xp_transactions"] = transactions
+    existing = transactions.get(tx_id)
+    if existing is None:
+        return None
+    if not isinstance(existing, dict):
+        return False
+    return (
+        int(existing.get("balance_delta") or 0) == int(balance_delta)
+        and int(existing.get("lifetime_delta") or 0) == int(lifetime_delta)
+        and str(existing.get("source") or "") == str(source)
+    )
+
+
+def _record_transaction_unlocked(
+    state: Dict[str, Any],
+    transaction_id: str,
+    *,
+    balance_delta: int,
+    lifetime_delta: int,
+    source: str,
+) -> None:
+    tx_id = str(transaction_id or "").strip()[:160]
+    if not tx_id:
+        return
+    transactions = state.setdefault("xp_transactions", {})
+    if not isinstance(transactions, dict):
+        transactions = {}
+        state["xp_transactions"] = transactions
+    transactions[tx_id] = {
+        "balance_delta": int(balance_delta),
+        "lifetime_delta": int(lifetime_delta),
+        "source": str(source)[:64],
+        "created_at": china_now_iso(timespec="seconds"),
+    }
+    while len(transactions) > XP_TRANSACTION_LIMIT:
+        transactions.pop(next(iter(transactions)))
 
 
 def xp_history_from_state(
@@ -532,6 +667,7 @@ def xp_history_from_state(
         if total_expense_xp > 0
         else None
     )
+    lifetime_xp, xp_balance = _account_values(state)
     return {
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
@@ -540,6 +676,8 @@ def xp_history_from_state(
         "total_income_xp": total_income_xp,
         "total_expense_xp": total_expense_xp,
         "net_xp": net_xp,
+        "lifetime_xp": lifetime_xp,
+        "xp_balance": xp_balance,
         "active_days": len(entries),
         "best_day": best,
         "largest_expense_day": largest_expense,
@@ -890,7 +1028,7 @@ def _unlock_achievements(
 ) -> List[Dict[str, Any]]:
     """根据当前状态解锁成就，返回本次新解锁列表（含 meta）。"""
     new_list: List[Dict[str, Any]] = []
-    total_xp = int(state.get("total_xp") or 0)
+    total_xp = int(state.get("lifetime_xp") or state.get("total_xp") or 0)
     total_correct = int(state.get("total_correct") or 0)
     streak = display_streak(state, china_today())
     ach = state.setdefault("achievements", {})
@@ -976,7 +1114,7 @@ def _unlock_achievements(
             goal_n = int(state["mcheckin_goal"])
         except (TypeError, ValueError):
             goal_n = 0
-        if goal_n >= 1 and valid_checkin_days_in_month(state, ym) >= goal_n:
+        if goal_n >= 1 and monthly_goal_progress_days(state, ym) >= goal_n:
             grant("monthly_goal_met")
 
     try:
@@ -1064,6 +1202,23 @@ def valid_checkin_days_in_range(state: Dict[str, Any], start_date: date, end_dat
     return n
 
 
+def monthly_goal_progress_days(state: Dict[str, Any], year_month: str) -> int:
+    """Valid check-in days earned after the current monthly goal was created."""
+    total = valid_checkin_days_in_month(state, year_month)
+    try:
+        baseline = max(0, int(state.get("mcheckin_goal_baseline_days") or 0))
+    except (TypeError, ValueError):
+        baseline = 0
+    return max(0, total - baseline)
+
+
+def monthly_goal_max_new_days(state: Dict[str, Any], today: date) -> int:
+    remaining = days_inclusive_today_through_month_end(today)
+    if _actual_valid_checkin_day(state, today):
+        remaining -= 1
+    return max(0, remaining)
+
+
 def try_grant_monthly_checkin_goal_bonus(data_dir: Path, username: str) -> int:
     """
     在已设目标且当月有效打卡天数已达标时，发放一次性「目标天数 × CHECKIN_GOAL_XP_PER_DAY」。
@@ -1081,11 +1236,12 @@ def try_grant_monthly_checkin_goal_bonus(data_dir: Path, username: str) -> int:
             g = int(state["mcheckin_goal"])
         except (TypeError, ValueError):
             return 0
-        if valid_checkin_days_in_month(state, ym) < g:
+        if monthly_goal_progress_days(state, ym) < g:
             return 0
         bonus = g * CHECKIN_GOAL_XP_PER_DAY
         state["mcheckin_goal_bonus_awarded_month"] = ym
-        state["total_xp"] = int(state.get("total_xp") or 0) + bonus
+        lifetime, balance = _account_values(state)
+        _set_account_values(state, lifetime + bonus, balance + bonus)
         _record_xp_flow_unlocked(state, "monthly_goal_bonus", bonus, today.isoformat())
         _save_state_unlocked(data_dir, username, state)
         return bonus
@@ -1097,20 +1253,50 @@ def apply_xp_delta(
     delta: int,
     *,
     source: str = "manual",
+    lifetime_delta: Optional[int] = None,
+    transaction_id: str = "",
 ) -> Tuple[bool, str, int]:
     """
-    调整 total_xp（可为负）。成功返回 (True, "", new_total)；失败 (False, 错误信息, 当前 total)。
+    Adjust spendable XP. Positive earned credits may also increase lifetime XP.
+    A transaction_id makes retries idempotent.
     """
     with _locked_user_state(data_dir, username):
         state = load_state(data_dir, username)
-        cur = int(state.get("total_xp") or 0)
-        new_total = cur + int(delta)
-        if new_total < 0:
-            return False, "积分不足", cur
-        state["total_xp"] = new_total
-        _record_xp_flow_unlocked(state, source, int(delta))
+        lifetime, balance = _account_values(state)
+        balance_delta = int(delta)
+        if lifetime_delta is None:
+            earned_delta = (
+                max(0, balance_delta)
+                if source not in NON_EARNING_CREDIT_SOURCES
+                else 0
+            )
+        else:
+            earned_delta = max(0, int(lifetime_delta))
+        duplicate = _transaction_matches(
+            state,
+            transaction_id,
+            balance_delta=balance_delta,
+            lifetime_delta=earned_delta,
+            source=source,
+        )
+        if duplicate is True:
+            return True, "", balance
+        if duplicate is False:
+            return False, "交易标识与既有 XP 流水冲突", balance
+        new_balance = balance + balance_delta
+        if new_balance < 0:
+            return False, "积分不足", balance
+        _set_account_values(state, lifetime + earned_delta, new_balance)
+        _record_xp_flow_unlocked(state, source, balance_delta)
+        _record_transaction_unlocked(
+            state,
+            transaction_id,
+            balance_delta=balance_delta,
+            lifetime_delta=earned_delta,
+            source=source,
+        )
         _save_state_unlocked(data_dir, username, state)
-        return True, "", new_total
+        return True, "", new_balance
 
 
 def spend_xp_with_reserve(
@@ -1120,6 +1306,7 @@ def spend_xp_with_reserve(
     reserve_xp: int = 0,
     *,
     source: str = "spend",
+    transaction_id: str = "",
 ) -> Tuple[bool, str, int]:
     """
     原子扣除 XP，并要求扣除后仍保留 reserve_xp。
@@ -1129,18 +1316,67 @@ def spend_xp_with_reserve(
     reserve = max(0, int(reserve_xp))
     with _locked_user_state(data_dir, username):
         state = load_state(data_dir, username)
-        cur = int(state.get("total_xp") or 0)
-        if cur < cost + reserve:
+        lifetime, balance = _account_values(state)
+        duplicate = _transaction_matches(
+            state,
+            transaction_id,
+            balance_delta=-cost,
+            lifetime_delta=0,
+            source=source,
+        )
+        if duplicate is True:
+            return True, "", balance
+        if duplicate is False:
+            return False, "交易标识与既有 XP 流水冲突", balance
+        if balance < cost + reserve:
             return (
                 False,
                 f"积分不足：需要 {cost} XP，且至少保留 {reserve} XP 安全余量",
-                cur,
+                balance,
             )
-        new_total = cur - cost
-        state["total_xp"] = new_total
+        new_total = balance - cost
+        _set_account_values(state, lifetime, new_total)
         _record_xp_flow_unlocked(state, source, -cost)
+        _record_transaction_unlocked(
+            state,
+            transaction_id,
+            balance_delta=-cost,
+            lifetime_delta=0,
+            source=source,
+        )
         _save_state_unlocked(data_dir, username, state)
         return True, "", new_total
+
+
+def rollback_spend_transaction(
+    data_dir: Path,
+    username: str,
+    transaction_id: str,
+    *,
+    refund_source: str,
+) -> Tuple[bool, str, int]:
+    """Undo an idempotent debit so the same transaction ID can be attempted again."""
+    tx_id = str(transaction_id or "").strip()[:160]
+    if not tx_id:
+        return False, "缺少交易标识", 0
+    with _locked_user_state(data_dir, username):
+        state = load_state(data_dir, username)
+        lifetime, balance = _account_values(state)
+        transactions = state.get("xp_transactions") or {}
+        tx = transactions.get(tx_id) if isinstance(transactions, dict) else None
+        if tx is None:
+            return True, "", balance
+        if not isinstance(tx, dict):
+            return False, "XP 流水损坏", balance
+        debit = int(tx.get("balance_delta") or 0)
+        if debit >= 0 or int(tx.get("lifetime_delta") or 0) != 0:
+            return False, "只能回退余额扣款流水", balance
+        refund = -debit
+        _set_account_values(state, lifetime, balance + refund)
+        _record_xp_flow_unlocked(state, refund_source, refund)
+        del transactions[tx_id]
+        _save_state_unlocked(data_dir, username, state)
+        return True, "", balance + refund
 
 
 def _makeup_checkin_month_count(state: Dict[str, Any], year_month: str) -> int:
@@ -1176,7 +1412,7 @@ def makeup_checkin_offer(state: Dict[str, Any], today: Optional[date] = None) ->
     target = _next_makeup_target_date(state, cur_today)
     target_key = target.isoformat()
     days_ago = (cur_today - target).days
-    total_xp = int(state.get("total_xp") or 0)
+    total_xp = int(state.get("xp_balance") or 0)
     month_key = target.strftime("%Y-%m")
     month_makeups = _makeup_checkin_month_count(state, month_key)
     prior_anchor = _latest_streak_valid_day_before(state, target)
@@ -1296,7 +1532,7 @@ def purchase_makeup_checkin(
 
         target_key = str(offer["target_date"])
         cost = int(offer["cost_xp"])
-        before_xp = int(state.get("total_xp") or 0)
+        lifetime_xp, before_xp = _account_values(state)
         after_xp = before_xp - cost
         if after_xp < 0:
             raise ValueError(f"XP 不足：补打卡需要 {cost} XP，当前只有 {before_xp} XP。")
@@ -1311,7 +1547,7 @@ def purchase_makeup_checkin(
             "streak_before": int(offer.get("streak_before") or 0),
             "policy": "makeup_checkin_v1",
         }
-        state["total_xp"] = after_xp
+        _set_account_values(state, lifetime_xp, after_xp)
         _record_xp_flow_unlocked(state, "makeup_checkin", -cost, today.isoformat())
         _ensure_streak_max_initialized(state, today)
         _recompute_current_streak_from_history(state, today)
@@ -1323,12 +1559,14 @@ def purchase_makeup_checkin(
         )
         _save_state_unlocked(data_dir, username, state)
 
-        lv = level_from_xp(after_xp)
-        _, need_next = xp_to_next_level(after_xp)
+        lv = level_from_xp(lifetime_xp)
+        _, need_next = xp_to_next_level(lifetime_xp)
         return {
             "target_date": target_key,
             "cost_xp": cost,
-            "total_xp": after_xp,
+            "total_xp": lifetime_xp,
+            "lifetime_xp": lifetime_xp,
+            "xp_balance": after_xp,
             "level": lv,
             "xp_to_next_level": need_next,
             "streak": display_streak(state, today),
@@ -1422,15 +1660,21 @@ def award_correct_answer(
             and state.get("mcheckin_goal_bonus_awarded_month") != ym
         ):
             g = int(state["mcheckin_goal"])
-            if valid_checkin_days_in_month(state, ym) >= g:
+            if monthly_goal_progress_days(state, ym) >= g:
                 monthly_bonus_xp = g * CHECKIN_GOAL_XP_PER_DAY
                 state["mcheckin_goal_bonus_awarded_month"] = ym
 
+        total_credit = xp_gain + monthly_bonus_xp
+        if total_credit > 0:
+            lifetime_xp, xp_balance = _account_values(state)
+            _set_account_values(
+                state,
+                lifetime_xp + total_credit,
+                xp_balance + total_credit,
+            )
         if xp_gain > 0:
-            state["total_xp"] = int(state.get("total_xp") or 0) + xp_gain
             state["daily_xp"][day_key] = daily_so_far + xp_gain
         if monthly_bonus_xp > 0:
-            state["total_xp"] = int(state.get("total_xp") or 0) + monthly_bonus_xp
             _record_xp_flow_unlocked(state, "monthly_goal_bonus", monthly_bonus_xp, day_key)
         if xp_gain > 0:
             _record_xp_flow_unlocked(state, "practice", xp_gain, day_key)
@@ -1441,8 +1685,9 @@ def award_correct_answer(
             pk_wins=pk_wins,
             pk_matches=pk_matches,
         )
-        lv = level_from_xp(int(state["total_xp"]))
-        _, need_next = xp_to_next_level(int(state["total_xp"]))
+        lifetime_xp, xp_balance = _account_values(state)
+        lv = level_from_xp(lifetime_xp)
+        _, need_next = xp_to_next_level(lifetime_xp)
         today_correct = int(sbd.get(day_key, 0))
         check_in_done = today_correct >= CHECKIN_MIN_CORRECT
 
@@ -1453,7 +1698,9 @@ def award_correct_answer(
             "checkin_bonus_raw_xp": checkin_bonus_raw,
             "raw_xp": raw,
             "monthly_goal_bonus_xp": monthly_bonus_xp,
-            "total_xp": int(state["total_xp"]),
+            "total_xp": lifetime_xp,
+            "lifetime_xp": lifetime_xp,
+            "xp_balance": xp_balance,
             "level": lv,
             "xp_to_next_level": need_next,
             "streak": display_streak(state, today),
@@ -1532,7 +1779,7 @@ def public_profile(
         pk_matches=pk_matches,
     )
     state = load_state(data_dir, username)
-    total_xp = int(state.get("total_xp") or 0)
+    total_xp, xp_balance = _account_values(state)
     lv, need = xp_to_next_level(total_xp)
     ach = state.get("achievements") or {}
     unlocked: List[Dict[str, Any]] = []
@@ -1565,12 +1812,16 @@ def public_profile(
     bonus_total = int(goal) * CHECKIN_GOAL_XP_PER_DAY if goal is not None else None
 
     dim = calendar.monthrange(today.year, today.month)[1]
-    suggested_days = max(1, min(dim, days_inclusive_today_through_month_end(today)))
+    goal_max_days = monthly_goal_max_new_days(state, today)
+    suggested_days = max(1, goal_max_days) if goal_max_days > 0 else 0
     can_edit_goal = state.get("mcheckin_goal_edits_ym") != ym
     streak_diag = streak_diagnostics(state, today)
+    goal_progress_days = monthly_goal_progress_days(state, ym) if goal is not None else 0
 
     return {
         "total_xp": total_xp,
+        "lifetime_xp": total_xp,
+        "xp_balance": xp_balance,
         "level": lv,
         "xp_to_next_level": need,
         "streak": display_streak(state, today),
@@ -1583,6 +1834,7 @@ def public_profile(
         "achievements_all": all_defs,
         "daily_xp_today": int(state.get("daily_xp", {}).get(day_key, 0)),
         "daily_xp_soft_cap": DAILY_XP_SOFT_CAP,
+        "daily_xp_hard_cap": DAILY_XP_HARD_CAP,
         "today_correct_count": today_correct,
         "check_in_done_today": today_correct >= CHECKIN_MIN_CORRECT,
         "check_in_min_correct": CHECKIN_MIN_CORRECT,
@@ -1595,6 +1847,8 @@ def public_profile(
         "monthly_checkin_goal": goal,
         "monthly_checkin_goal_month": goal_month,
         "monthly_checkin_goal_suggested_days": suggested_days,
+        "monthly_checkin_goal_max_days": goal_max_days,
+        "monthly_checkin_goal_progress_days": goal_progress_days,
         "monthly_checkin_goal_can_edit": can_edit_goal,
         "monthly_goal_completion_bonus_xp": bonus_total,
         "monthly_goal_bonus_awarded_this_month": state.get("mcheckin_goal_bonus_awarded_month") == ym,
@@ -1614,8 +1868,6 @@ def patch_settings(
 ) -> Dict[str, Any]:
     today = china_today()
     ym = today.strftime("%Y-%m")
-    dim = calendar.monthrange(today.year, today.month)[1]
-
     goal_update = False
     goal_new: Optional[int] = None
     if clear_monthly_goal:
@@ -1623,8 +1875,8 @@ def patch_settings(
         goal_new = None
     elif monthly_checkin_goal is not None:
         g = int(monthly_checkin_goal)
-        if g < 1 or g > dim:
-            raise ValueError(f"本月目标须在 1～{dim} 之间")
+        if g < 1:
+            raise ValueError("本月目标须至少为 1 天")
         goal_update = True
         goal_new = g
 
@@ -1651,9 +1903,16 @@ def patch_settings(
                 if goal_new is None:
                     state["mcheckin_goal"] = None
                     state["mcheckin_goal_month"] = None
+                    state["mcheckin_goal_baseline_days"] = None
                 else:
+                    max_days = monthly_goal_max_new_days(state, today)
+                    if goal_new > max_days:
+                        raise ValueError(f"从今天起本月最多还能完成 {max_days} 个有效打卡日")
                     state["mcheckin_goal"] = goal_new
                     state["mcheckin_goal_month"] = ym
+                    state["mcheckin_goal_baseline_days"] = valid_checkin_days_in_month(
+                        state, ym
+                    )
                 state["mcheckin_goal_edits_ym"] = ym
 
         _save_state_unlocked(data_dir, username, state)
@@ -1688,7 +1947,7 @@ def build_leaderboard_from_states(
             continue
         if not st.get("leaderboard_opt_in", True):
             continue
-        xp = int(st.get("total_xp") or 0)
+        xp = int(st.get("lifetime_xp") or st.get("total_xp") or 0)
         ach_n = len(st.get("achievements") or {})
         streak = display_streak(st, today)
         streak_max = streak_max_record_display(st, today)
@@ -1713,8 +1972,13 @@ def build_leaderboard_from_states(
             }
         )
     rows.sort(key=lambda r: (-r["total_xp"], r["username"]))
+    previous_xp: Optional[int] = None
+    rank = 0
     for i, r in enumerate(rows, start=1):
-        r["rank"] = i
+        if previous_xp is None or int(r["total_xp"]) != previous_xp:
+            rank = i
+            previous_xp = int(r["total_xp"])
+        r["rank"] = rank
     return rows
 
 

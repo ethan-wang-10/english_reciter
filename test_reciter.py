@@ -571,6 +571,39 @@ class TestWordReciter(unittest.TestCase):
         self.assertEqual(len(picked), 3)
         self.assertEqual({w.english for w in picked}, {"a", "b", "c"})
 
+    def test_bonus_practice_session_only_accepts_issued_words_once(self):
+        reciter = WordReciter(self.config)
+        reciter.all_words = [Word("alpha", "甲"), Word("beta", "乙")]
+        session_id, picked = reciter.create_bonus_practice_session(1)
+        issued = picked[0]
+        other = "beta" if issued.english == "alpha" else "alpha"
+
+        self.assertIsNotNone(
+            reciter.resolve_bonus_practice_word(session_id, issued.english, "event-1")
+        )
+        self.assertIsNone(
+            reciter.resolve_bonus_practice_word(session_id, other, "event-2")
+        )
+        self.assertTrue(
+            reciter.complete_bonus_practice_word(
+                session_id, issued.english, "event-1"
+            )
+        )
+        self.assertIsNone(
+            reciter.resolve_bonus_practice_word(session_id, issued.english, "event-2")
+        )
+        self.assertIsNotNone(
+            reciter.resolve_bonus_practice_word(session_id, issued.english, "event-1")
+        )
+
+    def test_bonus_practice_session_requires_completed_daily_task(self):
+        reciter = WordReciter(self.config)
+        reciter.all_words = [Word("alpha", "甲", next_review_date=reciter.today)]
+        reciter.get_today_learning_plan()
+
+        with self.assertRaisesRegex(ValueError, "今日学习任务"):
+            reciter.create_bonus_practice_session(1)
+
     def test_today_plan_prioritizes_reviews_then_fills_with_new_words(self):
         reciter = WordReciter(self.config)
         reciter.config.DAILY_REVIEW_LIMIT = 3

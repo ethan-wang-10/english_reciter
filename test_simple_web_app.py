@@ -278,7 +278,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260717-leaderboard-podium2" in html
+    assert "/static/js/app.js?v=20260717-xp-v2" in html
     assert "/static/css/style.css?v=20260717-leaderboard-podium2" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
@@ -407,6 +407,26 @@ def test_practice_does_not_treat_string_false_as_bonus(client, monkeypatch) -> N
 
     assert response.status_code == 409
     assert "今日任务" in response.get_json()["error"]
+
+
+def test_bonus_practice_requires_server_session(client, monkeypatch) -> None:
+    user = {"password_hash": "unused", "enabled": True}
+    monkeypatch.setattr(web, "verify_token", lambda token: "alice")
+    monkeypatch.setattr(web, "get_user", lambda username: user)
+
+    response = client.post(
+        "/api/words/practice",
+        headers={"Authorization": "Bearer test"},
+        json={
+            "word_id": "example",
+            "answer": "example",
+            "bonus_practice": True,
+            "review_event_id": "unique-event",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "加练会话" in response.get_json()["error"]
 
 
 def test_review_payload_redacts_semantic_answers(monkeypatch, tmp_path) -> None:

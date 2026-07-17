@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app_time import china_now_iso, china_today
 import gamification as gamification_mod
+from storage_utils import interprocess_file_lock, write_json_atomic
 
 # 周榜 / 月榜前三名奖励 XP（第 1～3 名）
 WEEK_REWARD_XP: Tuple[int, int, int] = (180, 110, 70)
@@ -43,9 +44,7 @@ def _load_json(path: Path, default: Any) -> Any:
 
 
 def _save_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    write_json_atomic(path, data)
 
 
 def iso_week_id(d: date) -> str:
@@ -110,6 +109,7 @@ def build_period_leaderboard_from_states(
     viewer: str,
     start: date,
     end: date,
+    respect_opt_in: bool = True,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     today = china_today()
@@ -117,10 +117,10 @@ def build_period_leaderboard_from_states(
         st = states.get(un)
         if st is None:
             continue
-        if not st.get("leaderboard_opt_in", True):
+        if respect_opt_in and not st.get("leaderboard_opt_in", True):
             continue
         px = sum_daily_xp_in_range(st, start, end)
-        xp = int(st.get("total_xp") or 0)
+        xp = int(st.get("lifetime_xp") or st.get("total_xp") or 0)
         ach_n = len(st.get("achievements") or {})
         streak = gamification_mod.display_streak(st, today)
         streak_max = gamification_mod.streak_max_record_display(st, today)
@@ -143,12 +143,38 @@ def build_period_leaderboard_from_states(
                 "check_in_min_correct": gamification_mod.CHECKIN_MIN_CORRECT,
                 "achievements_count": ach_n,
                 "is_viewer": un == viewer,
+                "leaderboard_opt_in": bool(st.get("leaderboard_opt_in", True)),
             }
         )
     rows.sort(key=lambda r: (-r["period_xp"], r["username"]))
+    previous_xp: Optional[int] = None
+    rank = 0
     for i, r in enumerate(rows, start=1):
-        r["rank"] = i
+        if previous_xp is None or int(r["period_xp"]) != previous_xp:
+            rank = i
+            previous_xp = int(r["period_xp"])
+        r["rank"] = rank
     return rows
+
+
+def podium_reward_allocations(
+    rows: List[Dict[str, Any]],
+    rewards: Tuple[int, int, int],
+) -> List[Tuple[Dict[str, Any], int]]:
+    """Share occupied podium-slot rewards equally across tied score groups."""
+    allocations: List[Tuple[Dict[str, Any], int]] = []
+    index = 0
+    while index < len(rows) and index < len(rewards):
+        score = int(rows[index].get("period_xp") or 0)
+        end = index + 1
+        while end < len(rows) and int(rows[end].get("period_xp") or 0) == score:
+            end += 1
+        group = rows[index:end]
+        reward_pool = sum(rewards[index:min(end, len(rewards))]) if score > 0 else 0
+        share = reward_pool // len(group) if group else 0
+        allocations.extend((row, share) for row in group)
+        index = end
+    return allocations
 
 
 def build_period_leaderboard(
@@ -204,23 +230,33 @@ def _settle_one_week(
     states: Dict[str, Dict[str, Any]],
 ) -> None:
     rows = build_period_leaderboard_from_states(
-        states, usernames, viewer="", start=mon, end=sun
+        states,
+        usernames,
+        viewer="",
+        start=mon,
+        end=sun,
+        respect_opt_in=False,
     )
     top: List[Dict[str, Any]] = []
-    for i in range(min(3, len(rows))):
-        r = rows[i]
+    for r, allocated_reward in podium_reward_allocations(rows, WEEK_REWARD_XP):
         px = int(r["period_xp"])
         un = str(r["username"])
-        rank = i + 1
+        rank = int(r["rank"])
         reward = 0
         if px > 0:
-            reward = WEEK_REWARD_XP[i]
-            ok, _, _ = gamification_mod.apply_xp_delta(data_dir, un, reward, source="weekly_reward")
+            reward = allocated_reward
+            ok, _, _ = gamification_mod.apply_xp_delta(
+                data_dir,
+                un,
+                reward,
+                source="weekly_reward",
+                transaction_id=f"leaderboard:week:{week_id}:reward:{un}",
+            )
             if not ok:
-                reward = 0
+                raise RuntimeError(f"周榜奖励入账失败: {week_id}/{un}")
         top.append(
             {
-                "username": un,
+                "username": un if r.get("leaderboard_opt_in", True) else "匿名用户",
                 "rank": rank,
                 "period_xp": px,
                 "reward_xp": reward,
@@ -247,23 +283,33 @@ def _settle_one_month(
     states: Dict[str, Dict[str, Any]],
 ) -> None:
     rows = build_period_leaderboard_from_states(
-        states, usernames, viewer="", start=mon, end=last_d
+        states,
+        usernames,
+        viewer="",
+        start=mon,
+        end=last_d,
+        respect_opt_in=False,
     )
     top: List[Dict[str, Any]] = []
-    for i in range(min(3, len(rows))):
-        r = rows[i]
+    for r, allocated_reward in podium_reward_allocations(rows, MONTH_REWARD_XP):
         px = int(r["period_xp"])
         un = str(r["username"])
-        rank = i + 1
+        rank = int(r["rank"])
         reward = 0
         if px > 0:
-            reward = MONTH_REWARD_XP[i]
-            ok, _, _ = gamification_mod.apply_xp_delta(data_dir, un, reward, source="monthly_reward")
+            reward = allocated_reward
+            ok, _, _ = gamification_mod.apply_xp_delta(
+                data_dir,
+                un,
+                reward,
+                source="monthly_reward",
+                transaction_id=f"leaderboard:month:{ym}:reward:{un}",
+            )
             if not ok:
-                reward = 0
+                raise RuntimeError(f"月榜奖励入账失败: {ym}/{un}")
         top.append(
             {
-                "username": un,
+                "username": un if r.get("leaderboard_opt_in", True) else "匿名用户",
                 "rank": rank,
                 "period_xp": px,
                 "reward_xp": reward,
@@ -279,7 +325,7 @@ def _settle_one_month(
     }
 
 
-def settle_periods_if_needed(
+def _settle_periods_if_needed_unlocked(
     data_dir: Path,
     usernames: List[str],
     states: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -347,6 +393,15 @@ def settle_periods_if_needed(
             )
         if to_month:
             _save_json(path, raw)
+
+
+def settle_periods_if_needed(
+    data_dir: Path,
+    usernames: List[str],
+    states: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> None:
+    with interprocess_file_lock(_leaderboard_dir(data_dir) / ".period-rewards.lock"):
+        _settle_periods_if_needed_unlocked(data_dir, usernames, states)
 
 
 def _last_settled_week_info_from_raw(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:

@@ -101,10 +101,10 @@ ITERATIONS = [
         month_rewards=(540, 330, 220),
     ),
     BalanceConfig(
-        name="current_code_soft1000_no_hard",
+        name="current_code",
         daily_soft_cap=gm.DAILY_XP_SOFT_CAP,
         over_cap_multiplier=gm.OVER_CAP_MULTIPLIER,
-        daily_hard_cap=None,
+        daily_hard_cap=gm.DAILY_XP_HARD_CAP,
         checkin_completion_xp=gm.CHECKIN_COMPLETION_XP,
         checkin_streak_xp_per_day=gm.CHECKIN_STREAK_BONUS_XP_PER_DAY,
         checkin_streak_cap_days=gm.CHECKIN_STREAK_BONUS_CAP_DAYS,
@@ -286,6 +286,21 @@ def print_report(results: Dict[str, Dict[str, Dict[str, float]]]) -> None:
         )
 
 
+def assert_current_balance_targets(
+    results: Dict[str, Dict[str, Dict[str, float]]],
+) -> None:
+    current = results["current_code"]
+    steady = float(current["steady"]["xp_p50"])
+    if steady <= 0:
+        raise AssertionError("steady persona earned no XP")
+    grinder_ratio = float(current["grinder"]["xp_p50"]) / steady
+    burst_ratio = float(current["weekend_burst"]["xp_p50"]) / steady
+    if grinder_ratio > 2.25:
+        raise AssertionError(f"grinder/steady XP ratio {grinder_ratio:.2f} exceeds 2.25")
+    if burst_ratio > 1.10:
+        raise AssertionError(f"weekend-burst/steady XP ratio {burst_ratio:.2f} exceeds 1.10")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
@@ -297,6 +312,7 @@ def main() -> None:
         for cfg in ITERATIONS
     }
     print_report(results)
+    assert_current_balance_targets(results)
 
 
 if __name__ == "__main__":
