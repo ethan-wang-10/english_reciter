@@ -686,9 +686,19 @@ def missing_sources(sources: Iterable[dict], force: bool = False) -> List[dict]:
     ]
 
 
-def pending_candidate_records(limit: int = 0) -> Dict[str, dict]:
+def pending_candidate_records(
+    limit: int = 0,
+    word_keys: Optional[Iterable[str]] = None,
+) -> Dict[str, dict]:
+    allowed = (
+        {normalize_word(key) for key in word_keys if normalize_word(key)}
+        if word_keys is not None
+        else None
+    )
     records: Dict[str, dict] = {}
     for key, value in sorted(load_bank().get("candidates", {}).items()):
+        if allowed is not None and key not in allowed:
+            continue
         record = _candidate_record(value)
         if not record:
             continue

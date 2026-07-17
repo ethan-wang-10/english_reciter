@@ -1,5 +1,6 @@
 """Flask 入口的轻量契约与静态资源测试。"""
 
+import json
 import os
 import tempfile
 from contextlib import contextmanager
@@ -126,6 +127,32 @@ def _semantic_record():
     )
     assert error == ''
     return record
+
+
+def _new_v2_entry(english='novel'):
+    return {
+        'english': english,
+        'level': '高中',
+        'phonetic': '/novl/',
+        'senses': [{
+            'pos': 'noun',
+            'definition_zh': '小说',
+            'example_en': f'The new {english} tells a moving story about friendship and courage.',
+            'example_cn': '这部新小说讲述了一个关于友谊和勇气的感人故事。',
+            'example_form': '',
+        }],
+        'gaokao_question': {
+            'recognition_distractors': ['诗歌', '报纸', '字典'],
+            'recognition_explanation_zh': 'novel 在此表示小说。',
+            'context_sentence': (
+                f'After years of research, she published a {english} about courage '
+                'during difficult times.'
+            ),
+            'context_translation_zh': '经过多年研究，她出版了一部关于困境中勇气的小说。',
+            'context_distractors': ['poem', 'report', 'letter'],
+            'context_explanation_zh': '出版及完整叙事语境限定此处需要小说。',
+        },
+    }
 
 
 def _mock_student_session(monkeypatch, reciter):
@@ -1037,3 +1064,263 @@ def test_wordbank_search_builds_english_candidates_once_per_term(client, monkeyp
     assert response.status_code == 200
     assert [row["english"] for row in response.get_json()["words"]] == ["apple", "banana"]
     assert candidate_calls == ["apples", "banana"]
+
+
+def test_combined_word_response_finalizes_gaokao_candidate(monkeypatch) -> None:
+    raw = _new_v2_entry()
+    finalized = web.wordbank_v2.finalize_v2_entry_from_deepseek(raw)
+    assert finalized is not None
+    monkeypatch.setattr(web.gaokao_questions, 'has_complete_questions', lambda *args, **kwargs: False)
+    monkeypatch.setattr(web.gaokao_questions, 'has_pending_candidate', lambda *args, **kwargs: False)
+
+    records, errors = web.finalize_combined_gaokao_candidates([raw], [finalized])
+
+    assert errors == {}
+    assert records['novel']['word_key'] == 'novel'
+    assert records['novel']['context']['prompt'].count('____') == 1
+
+
+def test_combined_word_generation_uses_one_ai_request(monkeypatch) -> None:
+    calls = []
+
+    def chat(messages, max_tokens, **kwargs):
+        calls.append((messages[-1]['content'], max_tokens))
+        return json.dumps([_new_v2_entry()], ensure_ascii=False)
+
+    monkeypatch.setattr(web, '_deepseek_chat', chat)
+
+    rows = web.deepseek_generate_word_entries_v2(
+        ['novel'],
+        level='高中',
+        include_gaokao_candidate=True,
+    )
+
+    assert len(calls) == 1
+    assert 'gaokao_question' in calls[0][0]
+    assert rows[0]['gaokao_question']['context_distractors'] == ['poem', 'report', 'letter']
+
+
+def test_combined_gaokao_candidate_is_audited_and_published(monkeypatch) -> None:
+    persisted = []
+    temperatures = []
+    candidate = {'word_key': 'novel'}
+
+    def audit(records, chat):
+        chat([{'role': 'user', 'content': 'audit'}], 100)
+        return (
+            {'novel': {'word_key': 'novel', 'audit_version': 2}},
+            {},
+            {},
+        )
+
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'pending_candidate_records',
+        lambda **kwargs: {'novel': candidate},
+    )
+    monkeypatch.setattr(web.gaokao_questions, 'audit_question_records', audit)
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'persist_audit_result',
+        lambda approved, rejected, retry: persisted.append((approved, rejected, retry)),
+    )
+    monkeypatch.setattr(web.gaokao_questions, 'has_complete_questions', lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        web,
+        '_deepseek_chat',
+        lambda messages, max_tokens, temperature=0.7: temperatures.append(temperature) or '[]',
+    )
+
+    result = web._audit_combined_gaokao_questions_for_new_entries(
+        [_new_v2_entry()],
+        {'novel': candidate},
+        {},
+    )
+
+    assert result['generated_words'] == ['novel']
+    assert result['approved_words'] == ['novel']
+    assert result['audit_retry'] == 0
+    assert temperatures == [0.0]
+    assert persisted[0][0]['novel']['audit_version'] == 2
+
+
+def test_import_audit_retries_twice_before_leaving_candidate_pending(monkeypatch) -> None:
+    audit_calls = []
+    persisted = []
+    candidate = {'word_key': 'novel'}
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'pending_candidate_records',
+        lambda **kwargs: {'novel': candidate},
+    )
+
+    def audit(records, chat):
+        audit_calls.append(sorted(records))
+        return {}, {}, {'novel': 'temporary audit error'}
+
+    monkeypatch.setattr(web.gaokao_questions, 'audit_question_records', audit)
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'persist_audit_result',
+        lambda approved, rejected, retry: persisted.append(retry),
+    )
+    monkeypatch.setattr(web.gaokao_questions, 'has_complete_questions', lambda *args, **kwargs: False)
+
+    result = web._audit_combined_gaokao_questions_for_new_entries(
+        [_new_v2_entry()],
+        {'novel': candidate},
+        {},
+    )
+
+    assert audit_calls == [['novel'], ['novel']]
+    assert persisted == [
+        {'novel': 'temporary audit error'},
+        {'novel': 'temporary audit error'},
+    ]
+    assert result['audit_retry_words'] == ['novel']
+
+
+def test_vocab_import_automatically_audits_gaokao_question_for_new_word(
+    client,
+    monkeypatch,
+) -> None:
+    raw_entry = _new_v2_entry()
+    entry = web.wordbank_v2.finalize_v2_entry_from_deepseek(raw_entry)
+    assert entry is not None
+    staged = []
+    generation_calls = []
+    persisted_candidates = []
+    monkeypatch.setattr(web, 'verify_token', lambda token: 'alice')
+    monkeypatch.setattr(
+        web,
+        'get_user',
+        lambda username: {'password_hash': 'unused', 'enabled': True},
+    )
+    monkeypatch.setattr(web, 'is_paid_user', lambda username: True)
+    monkeypatch.setattr(web, '_rate_allow', lambda *args: True)
+    monkeypatch.setattr(web, '_read_troubles_unlocked', lambda: {'mappings': {}, 'difficult': {}})
+    monkeypatch.setattr(web, '_vocab_import_spacy_accepts_surface', lambda *args: True)
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web.wordbank_v2, 'get_v2_english_key_set', lambda: set())
+    def generate(words, level='', include_gaokao_candidate=False):
+        generation_calls.append((words, level, include_gaokao_candidate))
+        return [raw_entry]
+
+    monkeypatch.setattr(web, 'deepseek_generate_word_entries_v2', generate)
+    monkeypatch.setattr(
+        web,
+        'accumulate_valid_deepseek_v2_entries',
+        lambda entries, **kwargs: ([entry], {'novel'}),
+    )
+    monkeypatch.setattr(web.wordbank_v2, 'append_words_v2_entries', lambda rows: (1, []))
+    monkeypatch.setattr(web.wordbank_v2, 'invalidate_words_v2_cache', lambda: None)
+    monkeypatch.setattr(web, 'invalidate_merge_wordbank_rows_cache', lambda: None)
+    monkeypatch.setattr(
+        web,
+        'finalize_combined_gaokao_candidates',
+        lambda raw_entries, rows: ({'novel': {'word_key': 'novel'}}, {}),
+    )
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'persist_candidate_result',
+        lambda records, errors: persisted_candidates.append((records, errors)),
+    )
+
+    def stage(entries, records, errors):
+        staged.append((entries, records, errors))
+        return {
+            'requested': 1,
+            'eligible': 1,
+            'candidates_generated': 1,
+            'approved': 1,
+            'already_published': 0,
+            'rejected': 0,
+            'generation_failed': 0,
+            'audit_retry': 0,
+            'skipped_no_source': 0,
+            'generated_words': ['novel'],
+            'approved_words': ['novel'],
+            'rejected_words': [],
+            'generation_failed_words': [],
+            'audit_retry_words': [],
+            'skipped_words': [],
+        }
+
+    monkeypatch.setattr(web, '_audit_combined_gaokao_questions_for_new_entries', stage)
+
+    response = client.post(
+        '/api/wordbank/csv/import-words',
+        headers={'Authorization': 'Bearer test'},
+        json={
+            'words': 'novel',
+            'level': '高中',
+            'also_add_to_queue': False,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert generation_calls == [(['novel'], '高中', True)]
+    assert persisted_candidates == [({'novel': {'word_key': 'novel'}}, {})]
+    assert staged == [([entry], {'novel': {'word_key': 'novel'}}, {})]
+    assert body['gaokao_questions']['approved_words'] == ['novel']
+    assert '已自动生成并通过高考题审查 1 个' in body['message']
+
+
+def test_vocab_import_keeps_wordbank_success_when_gaokao_pipeline_crashes(
+    client,
+    monkeypatch,
+) -> None:
+    raw_entry = _new_v2_entry()
+    entry = web.wordbank_v2.finalize_v2_entry_from_deepseek(raw_entry)
+    assert entry is not None
+    monkeypatch.setattr(web, 'verify_token', lambda token: 'alice')
+    monkeypatch.setattr(
+        web,
+        'get_user',
+        lambda username: {'password_hash': 'unused', 'enabled': True},
+    )
+    monkeypatch.setattr(web, 'is_paid_user', lambda username: True)
+    monkeypatch.setattr(web, '_rate_allow', lambda *args: True)
+    monkeypatch.setattr(web, '_read_troubles_unlocked', lambda: {'mappings': {}, 'difficult': {}})
+    monkeypatch.setattr(web, '_vocab_import_spacy_accepts_surface', lambda *args: True)
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web.wordbank_v2, 'get_v2_english_key_set', lambda: set())
+    monkeypatch.setattr(
+        web,
+        'deepseek_generate_word_entries_v2',
+        lambda words, level='', include_gaokao_candidate=False: [raw_entry],
+    )
+    monkeypatch.setattr(
+        web,
+        'accumulate_valid_deepseek_v2_entries',
+        lambda entries, **kwargs: ([entry], {'novel'}),
+    )
+    monkeypatch.setattr(web.wordbank_v2, 'append_words_v2_entries', lambda rows: (1, []))
+    monkeypatch.setattr(web.wordbank_v2, 'invalidate_words_v2_cache', lambda: None)
+    monkeypatch.setattr(web, 'invalidate_merge_wordbank_rows_cache', lambda: None)
+    monkeypatch.setattr(
+        web,
+        'finalize_combined_gaokao_candidates',
+        lambda raw_entries, rows: ({'novel': {'word_key': 'novel'}}, {}),
+    )
+    monkeypatch.setattr(web.gaokao_questions, 'persist_candidate_result', lambda *args: None)
+    monkeypatch.setattr(
+        web,
+        '_audit_combined_gaokao_questions_for_new_entries',
+        lambda entries, records, errors: (_ for _ in ()).throw(
+            OSError('question bank unavailable')
+        ),
+    )
+
+    response = client.post(
+        '/api/wordbank/csv/import-words',
+        headers={'Authorization': 'Bearer test'},
+        json={'words': 'novel', 'also_add_to_queue': False},
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body['new_in_csv'] == 1
+    assert body['gaokao_questions']['generation_failed_words'] == ['novel']
+    assert '1 个高考题候选待后续补全' in body['message']

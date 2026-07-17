@@ -1979,21 +1979,39 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
             sleep(DEEPSEEK_BATCH_PAUSE_SEC)
 
 
-def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Optional[List[dict]]:
+def deepseek_generate_word_entries_v2(
+    words: List[str],
+    level: str = "",
+    *,
+    include_gaokao_candidate: bool = False,
+) -> Optional[List[dict]]:
     """
     为新词库 ``words_v2.json`` 生成条目（senses 多义项 + 例句）。
     单次调用词数不应超过 DEEPSEEK_VOCAB_BATCH_WORDS。
     """
     level_hint = f"，这批词汇难度级别为：{level}" if level else ""
-    words = list(words)[:DEEPSEEK_VOCAB_BATCH_WORDS]
+    max_words = _GAOKAO_IMPORT_BATCH_WORDS if include_gaokao_candidate else DEEPSEEK_VOCAB_BATCH_WORDS
+    words = list(words)[:max_words]
     if not words:
         return None
     words_str = "、".join(words)
     level_rule = "，与上文难度一致" if level_hint else "；未给难度时按词自选"
     # JSON 示例勿放在 f-string 内：花括号会与 f-string 插值冲突
-    _v2_json_shape_example = """[
-  {"english":"bat","senses":[{"pos":"noun","definition_zh":"蝙蝠","example_en":"Bats fly at night.","example_cn":"蝙蝠在夜间飞行。","example_form":""},{"pos":"noun","definition_zh":"球棒","example_en":"He held a wooden bat.","example_cn":"他握着一根木球棒。","example_form":""},{"pos":"verb","definition_zh":"击打","example_en":"He bats the ball.","example_cn":"他击球。","example_form":"bats"}],"level":"初中","phonetic":"/bæt/"}
+    gaokao_example = """
+,"gaokao_question":{"recognition_distractors":["羽毛","洞穴","翅膀"],"recognition_explanation_zh":"辨析该词的核心义项。","context_sentence":"The cave survey recorded one bat flying above the researchers after sunset.","context_translation_zh":"洞穴调查记录到日落后一只蝙蝠从研究人员上方飞过。","context_distractors":["cat","owl","bee"],"context_explanation_zh":"洞穴、飞行和日落共同限定此处应为蝙蝠。"}""" if include_gaokao_candidate else ""
+    _v2_json_shape_example = f"""[
+  {{"english":"bat","senses":[{{"pos":"noun","definition_zh":"蝙蝠","example_en":"Bats fly at night.","example_cn":"蝙蝠在夜间飞行。","example_form":""}},{{"pos":"noun","definition_zh":"球棒","example_en":"He held a wooden bat.","example_cn":"他握着一根木球棒。","example_form":""}},{{"pos":"verb","definition_zh":"击打","example_en":"He bats the ball.","example_cn":"他击球。","example_form":"bats"}}],"level":"初中","phonetic":"/bæt/"{gaokao_example}}}
 ]"""
+    gaokao_rules = """
+- 每个对象还必须包含 gaokao_question，和词条在同一次输出中生成：
+  - recognition_distractors：3 个中文错误释义；词性和难度接近，但不能是 senses 中任何义项或其同义表达。
+  - recognition_explanation_zh：一句中文辨析。
+  - context_sentence：围绕 senses[0] 重写的至少 12 词英文完整语境，必须包含正确词形且只出现一次。正确词形为 senses[0].example_form，若为空则为 english。
+  - context_translation_zh：context_sentence 的准确中文翻译。
+  - context_distractors：3 个能放入同一语法位置、词性和词形匹配但语义不成立的英文选项。
+  - context_explanation_zh：指出唯一限定线索，并说明干扰项为何不成立。
+- gaokao_question 不得依赖读者看不到的背景；逐项代入后只能有一个自然、合理答案。
+""" if include_gaokao_candidate else ""
     prompt = f"""为下列每项各生成 1 个对象，输出**仅**合法 JSON 数组（从 [ 到 ]），无 Markdown、无说明。
 
 列表：{words_str}{level_hint}
@@ -2004,13 +2022,15 @@ def deepseek_generate_word_entries_v2(words: List[str], level: str = "") -> Opti
 - **字段语言不能颠倒**：example_en 必须是英文句子，不能包含中文；example_cn 必须是对应的中文翻译，不能为空。严禁把中文例句写入 example_en。
 - 多义词覆盖主要高频义（如 key：钥匙/关键/键/键入）；勿合并义项。
 - english 与列表一致；phonetic 一条；level 为 小学/初中/高中/GRE 之一{level_rule}。
+{gaokao_rules}
 
 结构示例（3 义则 senses 内 3 组例句）：
 {_v2_json_shape_example}
 """
     wc = max(1, len(words))
-    # 每义项嵌套例句，JSON 更长
-    max_out = min(8192, max(3200, 900 + wc * 550))
+    # 组合生成还包含两类题目，限制为更小批次并预留更长 JSON 输出。
+    per_word_tokens = 1250 if include_gaokao_candidate else 550
+    max_out = min(8192, max(3200, 900 + wc * per_word_tokens))
     # 调试：设置 ENGLISH_RECITER_DEEPSEEK_V2_DEBUG=1 时输出完整 prompt / 原始回复（日志量大）
     _v2_dbg = os.getenv("ENGLISH_RECITER_DEEPSEEK_V2_DEBUG", "").strip().lower() in (
         "1",
@@ -2115,6 +2135,56 @@ def accumulate_valid_deepseek_v2_entries(
             extra_words[:40],
         )
     return new_entries, success_for_batch
+
+
+def finalize_combined_gaokao_candidates(
+    raw_entries: Optional[List],
+    finalized_entries: List[dict],
+) -> Tuple[Dict[str, dict], Dict[str, str]]:
+    """Validate question candidates carried by the combined word-entry response."""
+    raw_by_key = {
+        wordbank_v2.normalize_english_key(raw.get("english", "")): raw
+        for raw in raw_entries or []
+        if isinstance(raw, dict)
+        and wordbank_v2.normalize_english_key(raw.get("english", ""))
+    }
+    records: Dict[str, dict] = {}
+    errors: Dict[str, str] = {}
+    for entry in finalized_entries:
+        flat = wordbank_v2.v2_entry_to_flat_csv_row(entry)
+        source = gaokao_questions.source_from_wordbank_row(flat)
+        key = gaokao_questions.normalize_word(flat.get("english"))
+        if not key:
+            continue
+        if not source:
+            errors[key] = "combined generation produced no usable source example"
+            continue
+        if (
+            gaokao_questions.has_complete_questions(
+                key,
+                source_hash=str(source.get("source_hash") or ""),
+            )
+            or gaokao_questions.has_pending_candidate(
+                key,
+                source_hash=str(source.get("source_hash") or ""),
+            )
+        ):
+            continue
+        raw = raw_by_key.get(key)
+        question_raw = raw.get("gaokao_question") if isinstance(raw, dict) else None
+        if not isinstance(question_raw, dict):
+            errors[key] = "combined generation is missing gaokao_question"
+            continue
+        question_raw = {**question_raw, "english": key}
+        record, error = gaokao_questions.finalize_generated_questions(
+            source,
+            question_raw,
+        )
+        if record:
+            records[key] = record
+        else:
+            errors[key] = f"combined question validation failed: {error}"
+    return records, errors
 
 
 # 登录/注册简单限流（按 IP，内存存储）
@@ -6108,6 +6178,8 @@ _OCR_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 _OCR_MAX_SIDE = 2400
 _OCR_MAX_TOKENS = 500
 _OCR_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
+_GAOKAO_IMPORT_BATCH_WORDS = 5
+_GAOKAO_IMPORT_AUDIT_ATTEMPTS = 2
 
 
 def _ocr_stack_ready() -> bool:
@@ -6148,6 +6220,101 @@ def _english_tokens_from_ocr_text(text: str) -> List[str]:
         if len(out) >= _OCR_MAX_TOKENS:
             break
     return out
+
+
+def _audit_combined_gaokao_questions_for_new_entries(
+    entries: List[dict],
+    candidate_records: Dict[str, dict],
+    generation_errors: Dict[str, str],
+) -> dict:
+    """Audit and publish question candidates produced with new v2 entries."""
+    sources: List[dict] = []
+    skipped_words: List[str] = []
+    seen = set()
+    for entry in entries:
+        flat = wordbank_v2.v2_entry_to_flat_csv_row(entry)
+        key = gaokao_questions.normalize_word(flat.get("english"))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        source = gaokao_questions.source_from_wordbank_row(flat)
+        if source:
+            sources.append(source)
+        else:
+            skipped_words.append(key)
+
+    source_keys = [source["english"] for source in sources]
+    pending_records = gaokao_questions.pending_candidate_records(
+        word_keys=source_keys,
+    )
+    approved_words: List[str] = []
+    rejected_words: List[str] = []
+    audit_retry_words: List[str] = []
+    pending_items = list(pending_records.items())
+    for start in range(0, len(pending_items), _GAOKAO_IMPORT_BATCH_WORDS):
+        audit_batch = dict(pending_items[start : start + _GAOKAO_IMPORT_BATCH_WORDS])
+        for attempt in range(_GAOKAO_IMPORT_AUDIT_ATTEMPTS):
+            try:
+                approved, rejected, retry_errors = gaokao_questions.audit_question_records(
+                    audit_batch,
+                    lambda messages, max_tokens: _deepseek_chat(
+                        messages,
+                        max_tokens=max_tokens,
+                        temperature=0.0,
+                    ),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "导入新词后审查高考题失败: words=%s attempt=%s error=%s",
+                    sorted(audit_batch),
+                    attempt + 1,
+                    exc,
+                )
+                approved = {}
+                rejected = {}
+                retry_errors = {
+                    key: f"vocab import audit exception: {exc}" for key in audit_batch
+                }
+            gaokao_questions.persist_audit_result(approved, rejected, retry_errors)
+            approved_words.extend(approved)
+            rejected_words.extend(rejected)
+            if not retry_errors:
+                audit_batch = {}
+                break
+            audit_batch = {
+                key: audit_batch[key]
+                for key in retry_errors
+                if key in audit_batch
+            }
+        audit_retry_words.extend(audit_batch)
+
+    already_published = sum(
+        1
+        for source in sources
+        if gaokao_questions.has_complete_questions(
+            source["english"],
+            source_hash=str(source.get("source_hash") or ""),
+        )
+        and source["english"] not in approved_words
+    )
+
+    return {
+        "requested": len(entries),
+        "eligible": len(sources),
+        "candidates_generated": len(candidate_records),
+        "approved": len(set(approved_words)),
+        "already_published": already_published,
+        "rejected": len(set(rejected_words)),
+        "generation_failed": len(generation_errors),
+        "audit_retry": len(set(audit_retry_words)),
+        "skipped_no_source": len(skipped_words),
+        "generated_words": sorted(candidate_records),
+        "approved_words": sorted(set(approved_words)),
+        "rejected_words": sorted(set(rejected_words)),
+        "generation_failed_words": sorted(generation_errors),
+        "audit_retry_words": sorted(set(audit_retry_words)),
+        "skipped_words": skipped_words,
+    }
 
 
 @app.route('/api/wordbank/ocr-extract', methods=['POST'])
@@ -6210,6 +6377,7 @@ def import_vocab_to_csv(username):
     - 未映射时：名词「简单复数」表面形（如 apples）规范为原形（apple）再写入词库与待复习；不规则复数（feet 等）保持表面形；动词/形容词不因 lemma 误收成原形（避免 are→be）
     - 疑难词（AI 曾失败）不再重复调用 DeepSeek，直至管理员配置映射或删除记录
     - 仅当 **words_v2.json** 中尚无该英文键时调用 DeepSeek 生成并写入 v2；仅在旧 ``words.csv`` 中有仍会生成并写入 v2。已存在于 v2 则跳过生成。
+    - 新写入 v2 的词会继续生成高考题候选，并自动审查；通过后写入私有题库正式区。
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
     if not _rate_allow(f"vocab_import:{username}", _RATE_MAX_VOCAB_IMPORT):
@@ -6299,6 +6467,8 @@ def import_vocab_to_csv(username):
 
     generated_entries: List[dict] = []
     failed_surfaces: List[str] = []
+    gaokao_candidate_records: Dict[str, dict] = {}
+    gaokao_generation_errors: Dict[str, str] = {}
 
     if to_generate:
         wordbank_so_far = set(v2_keys)
@@ -6307,10 +6477,14 @@ def import_vocab_to_csv(username):
         for s in to_generate:
             gen_key_to_surface[surface_to_target[s]] = s
 
-        for i in range(0, len(to_generate), DEEPSEEK_VOCAB_BATCH_WORDS):
-            batch_surfaces = to_generate[i : i + DEEPSEEK_VOCAB_BATCH_WORDS]
+        for i in range(0, len(to_generate), _GAOKAO_IMPORT_BATCH_WORDS):
+            batch_surfaces = to_generate[i : i + _GAOKAO_IMPORT_BATCH_WORDS]
             batch = [surface_to_target[s] for s in batch_surfaces]
-            entries = deepseek_generate_word_entries_v2(batch, level=level_hint)
+            entries = deepseek_generate_word_entries_v2(
+                batch,
+                level=level_hint,
+                include_gaokao_candidate=True,
+            )
             batch_lower = {b.lower() for b in batch}
             if entries is not None:
                 rows, success = accumulate_valid_deepseek_v2_entries(
@@ -6333,6 +6507,28 @@ def import_vocab_to_csv(username):
                                 'error': f'写入新词库失败（此前批次若已成功则已保存）: {e}',
                             }
                         ), 500
+                    candidate_records, candidate_errors = finalize_combined_gaokao_candidates(
+                        entries,
+                        rows,
+                    )
+                    try:
+                        gaokao_questions.persist_candidate_result(
+                            candidate_records,
+                            candidate_errors,
+                        )
+                        gaokao_candidate_records.update(candidate_records)
+                        gaokao_generation_errors.update(candidate_errors)
+                    except Exception as exc:
+                        logger.exception(
+                            "新词已写入 words_v2，但高考题候选落盘失败: %s",
+                            exc,
+                        )
+                        for row in rows:
+                            key = gaokao_questions.normalize_word(row.get("english"))
+                            if key:
+                                gaokao_generation_errors[key] = (
+                                    f"combined candidate persistence failed: {exc}"
+                                )
                     generated_entries.extend(rows)
                     wordbank_so_far = wordbank_v2.get_v2_english_key_set()
                 miss_lemmas = [b for b in batch if b.lower() not in success]
@@ -6375,6 +6571,37 @@ def import_vocab_to_csv(username):
             except Exception as e:
                 logger.error("加入待复习失败: %s", e)
 
+    try:
+        gaokao_result = _audit_combined_gaokao_questions_for_new_entries(
+            generated_entries,
+            gaokao_candidate_records,
+            gaokao_generation_errors,
+        )
+    except Exception as exc:
+        gaokao_words = sorted({
+            gaokao_questions.normalize_word(entry.get("english"))
+            for entry in generated_entries
+            if gaokao_questions.normalize_word(entry.get("english"))
+        })
+        logger.exception("新词已入库，但自动生成高考题流程失败: %s", exc)
+        gaokao_result = {
+            "requested": len(generated_entries),
+            "eligible": len(gaokao_words),
+            "candidates_generated": 0,
+            "approved": 0,
+            "already_published": 0,
+            "rejected": 0,
+            "generation_failed": len(gaokao_words),
+            "audit_retry": 0,
+            "skipped_no_source": 0,
+            "generated_words": [],
+            "approved_words": [],
+            "rejected_words": [],
+            "generation_failed_words": gaokao_words,
+            "audit_retry_words": [],
+            "skipped_words": [],
+        }
+
     msg = f"处理 {len(input_surfaces)} 个单词：{len(generated_entries)} 个新词已写入新词库（words_v2.json）"
     if already_in_v2:
         msg += f"，{len(already_in_v2)} 个已在新词库（words_v2.json）中，未再生成"
@@ -6385,6 +6612,19 @@ def import_vocab_to_csv(username):
         msg += f"，{len(blocked_surfaces)} 个疑难词（已跳过 AI 生成）"
     if failed_surfaces:
         msg += f"，{len(failed_surfaces)} 个生成失败已记入疑难词"
+    if gaokao_result["approved"]:
+        msg += f"；已自动生成并通过高考题审查 {gaokao_result['approved']} 个"
+    if gaokao_result["already_published"]:
+        msg += f"；{gaokao_result['already_published']} 个已有已审查高考题"
+    if gaokao_result["rejected"]:
+        msg += f"；{gaokao_result['rejected']} 个高考题候选未通过语义审查"
+    gaokao_deferred = (
+        gaokao_result["generation_failed"]
+        + gaokao_result["audit_retry"]
+        + gaokao_result["skipped_no_source"]
+    )
+    if gaokao_deferred:
+        msg += f"；{gaokao_deferred} 个高考题候选待后续补全"
     if queue_result:
         msg += f"；已加入待复习 {queue_result.get('added', 0)} 个"
     elif not also_queue:
@@ -6403,6 +6643,7 @@ def import_vocab_to_csv(username):
         'invalid_surfaces': _dedupe_preserve_order(invalid_surfaces),
         'queue_result': queue_result,
         'also_add_to_queue': also_queue,
+        'gaokao_questions': gaokao_result,
     }), 200
 
 
