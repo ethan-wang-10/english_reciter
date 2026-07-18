@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Generate private candidates and centrally audit them before publication.
+"""Generate prompt-checked questions, with optional legacy candidate audit.
 
 Examples:
-  python scripts/generate_gaokao_questions.py --stage generate --level 高中
+  python scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 10
+  python scripts/generate_gaokao_questions.py --stage generate --level '' --refresh-prompt-version
   python scripts/generate_gaokao_questions.py --stage audit --audit-batch-size 10
-  python scripts/generate_gaokao_questions.py --stage all --level 高中 --limit 100
 
-Generation stores private candidates after every batch. Audit promotes only
-candidates that pass both recognition and context checks. Interrupted or
-malformed audits keep their candidates for a later audit-only retry.
+Generation uses one AI call per batch, applies deterministic validation, and
+publishes records tagged with the current prompt quality version. The audit
+stage remains available for candidates created by older deployments.
 """
 
 from __future__ import annotations
@@ -55,22 +55,24 @@ def _run_generation(
     batch_size: int,
     pause: float,
     force: bool,
+    refresh_prompt: bool,
 ) -> tuple[int, int]:
     generated = 0
     failed = 0
     for start in range(0, len(pending), batch_size):
         batch = pending[start : start + batch_size]
         try:
-            result = questions.generate_candidates_and_persist(
+            result = questions.generate_prompt_checked_and_persist(
                 batch,
                 _chat,
                 force=force,
+                refresh_prompt=refresh_prompt,
             )
         except KeyboardInterrupt:
             raise
         except Exception as exc:
             errors = {source["english"]: f"batch exception: {exc}" for source in batch}
-            questions.persist_candidate_result({}, errors)
+            questions.persist_prompt_checked_result({}, errors)
             result = {
                 "generated": 0,
                 "failed": len(batch),
@@ -82,7 +84,7 @@ def _run_generation(
         done = min(start + len(batch), len(pending))
         print(
             f"[generate {done}/{len(pending)}] "
-            f"saved={result.get('generated', 0)} failed={result.get('failed', 0)} "
+            f"published={result.get('generated', 0)} failed={result.get('failed', 0)} "
             f"ok={','.join(result.get('generated_words') or []) or '-'} "
             f"fail={','.join(result.get('failed_words') or []) or '-'}",
             flush=True,
@@ -135,21 +137,21 @@ def _run_audit(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="分阶段生成并集中审查英文识义与语境选词题库",
+        description="单次 AI 批量生成并发布英文识义与语境选词题库",
     )
     parser.add_argument(
         "--stage",
         choices=("generate", "audit", "all"),
-        default="all",
-        help="generate 只生成候选，audit 只集中审查，all 依次执行；默认 all",
+        default="generate",
+        help="generate 单次生成并直接发布；audit 审查旧候选；all 先生成再处理旧候选",
     )
     parser.add_argument("--level", default="高中", help="词库级别，默认：高中")
     parser.add_argument("--limit", type=int, default=0, help="本阶段最多处理多少题，0 为不限")
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=5,
-        help="每次生成请求包含的单词数，默认：5，最大：10",
+        default=10,
+        help="每次生成请求包含的单词数，默认：10，最大：10",
     )
     parser.add_argument(
         "--audit-batch-size",
@@ -159,13 +161,22 @@ def main() -> int:
     )
     parser.add_argument("--pause", type=float, default=0.0, help="批次间暂停秒数")
     parser.add_argument("--force", action="store_true", help="重新生成已有正式题或候选题")
+    parser.add_argument(
+        "--refresh-prompt-version",
+        action="store_true",
+        help="仅重建尚未使用当前 Prompt 版本发布的题，可配合 limit 断点续跑",
+    )
     parser.add_argument("--dry-run", action="store_true", help="只统计，不调用 AI、不写文件")
     args = parser.parse_args()
 
     batch_size = max(1, min(10, args.batch_size))
     audit_batch_size = max(1, min(10, args.audit_batch_size))
     all_sources = _sources(args.level.strip())
-    pending_generation = questions.missing_sources(all_sources, force=args.force)
+    pending_generation = (
+        questions.sources_needing_prompt_refresh(all_sources)
+        if args.refresh_prompt_version
+        else questions.missing_sources(all_sources, force=args.force)
+    )
     pending_audit = questions.pending_candidate_records()
     if args.limit > 0 and args.stage in {"generate", "all"}:
         pending_generation = pending_generation[: args.limit]
@@ -180,6 +191,7 @@ def main() -> int:
     print(
         f"题库={questions.QUESTION_BANK_FILE} 级别={args.level or '全部'} "
         f"可用词={len(all_sources)} 已发布={questions.approved_question_count(bank)} "
+        f"Prompt版本={questions.GENERATION_PROMPT_VERSION} "
         f"候选={len(bank.get('candidates', {}))} "
         f"本次待生成={len(pending_generation)} 本次待审查={len(pending_audit)}"
     )
@@ -212,6 +224,7 @@ def main() -> int:
                 batch_size=batch_size,
                 pause=args.pause,
                 force=args.force,
+                refresh_prompt=args.refresh_prompt_version,
             )
         if args.stage == "all":
             pending_audit = questions.pending_candidate_records(limit=max(0, args.limit))
@@ -226,8 +239,8 @@ def main() -> int:
         return 130
 
     print(
-        f"完成：候选生成 {generated}，生成失败 {generation_failed}，"
-        f"审查通过 {approved}，语义拒绝 {rejected}，待重试 {audit_retry}。"
+        f"完成：生成并发布 {generated}，生成失败 {generation_failed}，"
+        f"旧候选审查通过 {approved}，语义拒绝 {rejected}，待重试 {audit_retry}。"
     )
     return 0 if generation_failed == 0 and rejected == 0 and audit_retry == 0 else 2
 

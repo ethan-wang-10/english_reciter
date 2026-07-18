@@ -102,23 +102,22 @@ cp config.example.json config.json
 
 ```bash
 python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --dry-run
-python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 5 --pause 1
-python3 scripts/generate_gaokao_questions.py --stage audit --audit-batch-size 8 --pause 1
+python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 10 --pause 1
 ```
 
-`generate` 只生成候选题并原子保存到题库的 `candidates` 区；`audit` 使用低随机性独立请求集中审查候选题，英文识义和语境选词都恰好只有一个可接受答案时才提升到 `questions`。语义不合格的候选进入 `rejections`，网络错误、JSON 截断或审查缺项的候选继续留在 `candidates`，再次运行 `audit` 只重试审查，不会重新调用生成请求。审查批次建议保持默认 8，最大限制为 10，避免双题型逐项理由导致输出截断。
+`generate` 每批最多处理 10 个词，只调用一次 AI。Prompt 要求模型在输出前逐项代入四个选项并自行消除同义释义和语境歧义；程序随后执行 JSON、选项数量、重复项、答案词形和语境长度等确定性校验。通过本地校验的题目直接写入 `questions`，并标记当前 `generation_prompt_version` 和 `quality_gate`。语义质量采用 Prompt 自检策略，允许少量歧义题进入题库，后续通过抽检和下线机制处理。
 
-VIP 词汇导入每批使用一次组合请求，同时生成 `words_v2.json` 词条和高考题候选；服务端分别校验、落盘后，再用第二次低随机性请求盲审题目。审查通过后直接提升到 `questions`，无需手工运行 `--stage audit`。审查响应异常会在当前导入中自动重试一次，仍失败的候选保留在 `candidates`，不会作为正式题投放。
+VIP 词汇导入每批使用一次组合请求，同时生成 `words_v2.json` 词条和高考题；服务端分别完成确定性校验后直接落盘，不再发起第二次 AI 审查请求。
 
-也可以使用 `--stage all` 依次生成并审查；配合 `--limit 100` 可控制本次生成和审查的数量。重新运行 `all` 或 `generate` 时，已发布题和待审候选都会跳过，生成失败或被语义拒绝的词会重新生成。只有明确需要替换已有正式题时才使用 `--force`。
+重新运行 `generate` 时会自动跳过已发布题；配合 `--limit 200` 可分批处理。需要用当前 Prompt 版本完整重建旧题库时使用 `--refresh-prompt-version`，该模式会跳过已经升级完成的题，适合断点续跑。`--stage audit` 和候选区继续保留，仅用于处理旧部署遗留的候选题。
 
-线上服务只读取带当前审查版本的 `questions`。缺题或旧版 v2 题尚未重新审查时，当前任务会立即降级为拼写，不在学生请求中调用 AI。升级时不要让旧版 Web 进程与新脚本并行写同一个题库：推荐在维护窗口停止旧进程、拉取新代码、执行下列命令，再启动新进程；无法停机时则先重启到新版本，再执行命令，期间缺题会安全降级为拼写。
+线上服务兼容旧的独立审查题和当前 Prompt 自检题。缺题时当前任务会立即降级为拼写，不在学生请求中调用 AI。升级时不要让旧版批处理脚本与新脚本并行生成同一题库。
 
 ```bash
-python3 scripts/generate_gaokao_questions.py --stage all --level 高中 --batch-size 5 --audit-batch-size 8 --pause 1
+python3 scripts/generate_gaokao_questions.py --stage generate --level "" --batch-size 10 --limit 200 --refresh-prompt-version --pause 1
 ```
 
-脚本出现生成失败、语义拒绝或审查待重试时返回退出码 `2`；直接再次执行同一命令即可续跑。可通过题库 JSON 中的 `questions`、`candidates`、`rejections` 和 `failures` 分别查看已发布、待审、语义拒绝和生成失败数量。
+脚本出现生成失败时返回退出码 `2`；直接再次执行同一命令即可续跑。可通过题库 JSON 中的 `questions` 和 `failures` 分别查看已发布和生成失败数量；`candidates`、`rejections` 只保留旧审查流程的兼容数据。
 
 ## 依赖说明
 

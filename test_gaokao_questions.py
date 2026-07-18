@@ -153,6 +153,40 @@ def test_generation_is_reentrant_after_partial_batch_success(private_question_ba
     assert questions.missing_sources([apple, changed_book]) == [changed_book]
 
 
+def test_prompt_checked_generation_publishes_with_one_ai_call(private_question_bank):
+    source = _source('novel', 'n. 小说')
+    calls = []
+
+    def chat(messages, max_tokens):
+        calls.append(messages[-1]['content'])
+        return json.dumps([_generated('novel')], ensure_ascii=False)
+
+    result = questions.generate_prompt_checked_and_persist([source], chat)
+
+    assert result['generated_words'] == ['novel']
+    assert len(calls) == 1
+    assert '先在内部逐项检查' in calls[0]
+    bank = questions.load_bank()
+    record = bank['questions']['novel']
+    assert record['generation_prompt_version'] == questions.GENERATION_PROMPT_VERSION
+    assert record['quality_gate'] == questions.SELF_CHECK_QUALITY_GATE
+    assert 'audit_version' not in record
+    assert questions.get_question('novel', 'recognition') is not None
+
+
+def test_prompt_version_refresh_is_resumable(private_question_bank):
+    source = _source('novel', 'n. 小说')
+    record, error = questions.finalize_generated_questions(source, _generated('novel'))
+    assert error == ''
+    questions.persist_generation_result({'novel': record}, {})
+
+    assert questions.sources_needing_prompt_refresh([source]) == [source]
+
+    questions.persist_prompt_checked_result({'novel': record}, {})
+
+    assert questions.sources_needing_prompt_refresh([source]) == []
+
+
 def test_failure_attempts_increment_without_removing_completed_questions(
     private_question_bank,
 ):

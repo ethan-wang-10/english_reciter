@@ -2002,7 +2002,7 @@ def deepseek_generate_word_entries_v2(
     _v2_json_shape_example = f"""[
   {{"english":"bat","senses":[{{"pos":"noun","definition_zh":"蝙蝠","example_en":"Bats fly at night.","example_cn":"蝙蝠在夜间飞行。","example_form":""}},{{"pos":"noun","definition_zh":"球棒","example_en":"He held a wooden bat.","example_cn":"他握着一根木球棒。","example_form":""}},{{"pos":"verb","definition_zh":"击打","example_en":"He bats the ball.","example_cn":"他击球。","example_form":"bats"}}],"level":"初中","phonetic":"/bæt/"{gaokao_example}}}
 ]"""
-    gaokao_rules = """
+    gaokao_rules = f"""
 - 每个对象还必须包含 gaokao_question，和词条在同一次输出中生成：
   - recognition_distractors：3 个中文错误释义；词性和难度接近，但不能是 senses 中任何义项或其同义表达。
   - recognition_explanation_zh：一句中文辨析。
@@ -2010,7 +2010,8 @@ def deepseek_generate_word_entries_v2(
   - context_translation_zh：context_sentence 的准确中文翻译。
   - context_distractors：3 个能放入同一语法位置、词性和词形匹配但语义不成立的英文选项。
   - context_explanation_zh：指出唯一限定线索，并说明干扰项为何不成立。
-- gaokao_question 不得依赖读者看不到的背景；逐项代入后只能有一个自然、合理答案。
+- gaokao_question 生成前必须遵守以下自检规则：
+{gaokao_questions.GENERATION_QUALITY_RULES_ZH}
 """ if include_gaokao_candidate else ""
     prompt = f"""为下列每项各生成 1 个对象，输出**仅**合法 JSON 数组（从 [ 到 ]），无 Markdown、无说明。
 
@@ -4706,7 +4707,7 @@ def get_or_generate_word_question(username):
                 return jsonify({
                     'fallback': True,
                     'exercise_type': 'spelling',
-                    'message': '选择题尚未通过质检，已自动切换为拼写练习',
+                    'message': '选择题尚未生成或不可用，已自动切换为拼写练习',
                     'word': _spelling_fallback_word_payload(word),
                 }), 200
 
@@ -6210,7 +6211,6 @@ _OCR_MAX_SIDE = 2400
 _OCR_MAX_TOKENS = 500
 _OCR_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
 _GAOKAO_IMPORT_BATCH_WORDS = 5
-_GAOKAO_IMPORT_AUDIT_ATTEMPTS = 2
 
 
 def _ocr_stack_ready() -> bool:
@@ -6253,12 +6253,12 @@ def _english_tokens_from_ocr_text(text: str) -> List[str]:
     return out
 
 
-def _audit_combined_gaokao_questions_for_new_entries(
+def _publish_combined_gaokao_questions_for_new_entries(
     entries: List[dict],
-    candidate_records: Dict[str, dict],
+    generated_records: Dict[str, dict],
     generation_errors: Dict[str, str],
 ) -> dict:
-    """Audit and publish question candidates produced with new v2 entries."""
+    """Summarize prompt-checked questions published with new v2 entries."""
     sources: List[dict] = []
     skipped_words: List[str] = []
     seen = set()
@@ -6274,50 +6274,11 @@ def _audit_combined_gaokao_questions_for_new_entries(
         else:
             skipped_words.append(key)
 
-    source_keys = [source["english"] for source in sources]
-    pending_records = gaokao_questions.pending_candidate_records(
-        word_keys=source_keys,
+    published_words = sorted(
+        key
+        for key in generated_records
+        if gaokao_questions.has_complete_questions(key)
     )
-    approved_words: List[str] = []
-    rejected_words: List[str] = []
-    audit_retry_words: List[str] = []
-    pending_items = list(pending_records.items())
-    for start in range(0, len(pending_items), _GAOKAO_IMPORT_BATCH_WORDS):
-        audit_batch = dict(pending_items[start : start + _GAOKAO_IMPORT_BATCH_WORDS])
-        for attempt in range(_GAOKAO_IMPORT_AUDIT_ATTEMPTS):
-            try:
-                approved, rejected, retry_errors = gaokao_questions.audit_question_records(
-                    audit_batch,
-                    lambda messages, max_tokens: _deepseek_chat(
-                        messages,
-                        max_tokens=max_tokens,
-                        temperature=0.0,
-                    ),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "导入新词后审查高考题失败: words=%s attempt=%s error=%s",
-                    sorted(audit_batch),
-                    attempt + 1,
-                    exc,
-                )
-                approved = {}
-                rejected = {}
-                retry_errors = {
-                    key: f"vocab import audit exception: {exc}" for key in audit_batch
-                }
-            gaokao_questions.persist_audit_result(approved, rejected, retry_errors)
-            approved_words.extend(approved)
-            rejected_words.extend(rejected)
-            if not retry_errors:
-                audit_batch = {}
-                break
-            audit_batch = {
-                key: audit_batch[key]
-                for key in retry_errors
-                if key in audit_batch
-            }
-        audit_retry_words.extend(audit_batch)
 
     already_published = sum(
         1
@@ -6326,24 +6287,24 @@ def _audit_combined_gaokao_questions_for_new_entries(
             source["english"],
             source_hash=str(source.get("source_hash") or ""),
         )
-        and source["english"] not in approved_words
+        and source["english"] not in published_words
     )
 
     return {
         "requested": len(entries),
         "eligible": len(sources),
-        "candidates_generated": len(candidate_records),
-        "approved": len(set(approved_words)),
+        "candidates_generated": len(generated_records),
+        "approved": len(published_words),
         "already_published": already_published,
-        "rejected": len(set(rejected_words)),
+        "rejected": 0,
         "generation_failed": len(generation_errors),
-        "audit_retry": len(set(audit_retry_words)),
+        "audit_retry": 0,
         "skipped_no_source": len(skipped_words),
-        "generated_words": sorted(candidate_records),
-        "approved_words": sorted(set(approved_words)),
-        "rejected_words": sorted(set(rejected_words)),
+        "generated_words": sorted(generated_records),
+        "approved_words": published_words,
+        "rejected_words": [],
         "generation_failed_words": sorted(generation_errors),
-        "audit_retry_words": sorted(set(audit_retry_words)),
+        "audit_retry_words": [],
         "skipped_words": skipped_words,
     }
 
@@ -6498,7 +6459,7 @@ def import_vocab_to_csv(username):
 
     generated_entries: List[dict] = []
     failed_surfaces: List[str] = []
-    gaokao_candidate_records: Dict[str, dict] = {}
+    gaokao_generated_records: Dict[str, dict] = {}
     gaokao_generation_errors: Dict[str, str] = {}
 
     if to_generate:
@@ -6538,27 +6499,27 @@ def import_vocab_to_csv(username):
                                 'error': f'写入新词库失败（此前批次若已成功则已保存）: {e}',
                             }
                         ), 500
-                    candidate_records, candidate_errors = finalize_combined_gaokao_candidates(
+                    generated_records, generation_errors = finalize_combined_gaokao_candidates(
                         entries,
                         rows,
                     )
                     try:
-                        gaokao_questions.persist_candidate_result(
-                            candidate_records,
-                            candidate_errors,
+                        gaokao_questions.persist_prompt_checked_result(
+                            generated_records,
+                            generation_errors,
                         )
-                        gaokao_candidate_records.update(candidate_records)
-                        gaokao_generation_errors.update(candidate_errors)
+                        gaokao_generated_records.update(generated_records)
+                        gaokao_generation_errors.update(generation_errors)
                     except Exception as exc:
                         logger.exception(
-                            "新词已写入 words_v2，但高考题候选落盘失败: %s",
+                            "新词已写入 words_v2，但高考题发布失败: %s",
                             exc,
                         )
                         for row in rows:
                             key = gaokao_questions.normalize_word(row.get("english"))
                             if key:
                                 gaokao_generation_errors[key] = (
-                                    f"combined candidate persistence failed: {exc}"
+                                    f"combined question persistence failed: {exc}"
                                 )
                     generated_entries.extend(rows)
                     wordbank_so_far = wordbank_v2.get_v2_english_key_set()
@@ -6603,9 +6564,9 @@ def import_vocab_to_csv(username):
                 logger.error("加入待复习失败: %s", e)
 
     try:
-        gaokao_result = _audit_combined_gaokao_questions_for_new_entries(
+        gaokao_result = _publish_combined_gaokao_questions_for_new_entries(
             generated_entries,
-            gaokao_candidate_records,
+            gaokao_generated_records,
             gaokao_generation_errors,
         )
     except Exception as exc:
@@ -6644,9 +6605,9 @@ def import_vocab_to_csv(username):
     if failed_surfaces:
         msg += f"，{len(failed_surfaces)} 个生成失败已记入疑难词"
     if gaokao_result["approved"]:
-        msg += f"；已自动生成并通过高考题审查 {gaokao_result['approved']} 个"
+        msg += f"；已按题库规则生成并发布高考题 {gaokao_result['approved']} 个"
     if gaokao_result["already_published"]:
-        msg += f"；{gaokao_result['already_published']} 个已有已审查高考题"
+        msg += f"；{gaokao_result['already_published']} 个已有可用高考题"
     if gaokao_result["rejected"]:
         msg += f"；{gaokao_result['rejected']} 个高考题候选未通过语义审查"
     gaokao_deferred = (

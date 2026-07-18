@@ -539,6 +539,7 @@ def test_question_endpoint_falls_back_to_spelling_when_generation_fails(
     assert body['fallback'] is True
     assert body['exercise_type'] == 'spelling'
     assert body['word']['english'] == 'benefit'
+    assert body['message'] == '选择题尚未生成或不可用，已自动切换为拼写练习'
     assert reciter.task_item['question_fallback_reason'] == 'question_not_approved'
     assert reciter.task_item['exercise_type'] == 'spelling'
     assert reciter.saved == 1
@@ -1120,87 +1121,42 @@ def test_combined_word_generation_uses_one_ai_request(monkeypatch) -> None:
     assert rows[0]['gaokao_question']['context_distractors'] == ['poem', 'report', 'letter']
 
 
-def test_combined_gaokao_candidate_is_audited_and_published(monkeypatch) -> None:
-    persisted = []
-    temperatures = []
-    candidate = {'word_key': 'novel'}
-
-    def audit(records, chat):
-        chat([{'role': 'user', 'content': 'audit'}], 100)
-        return (
-            {'novel': {'word_key': 'novel', 'audit_version': 2}},
-            {},
-            {},
-        )
-
-    monkeypatch.setattr(
-        web.gaokao_questions,
-        'pending_candidate_records',
-        lambda **kwargs: {'novel': candidate},
-    )
-    monkeypatch.setattr(web.gaokao_questions, 'audit_question_records', audit)
-    monkeypatch.setattr(
-        web.gaokao_questions,
-        'persist_audit_result',
-        lambda approved, rejected, retry: persisted.append((approved, rejected, retry)),
-    )
+def test_combined_gaokao_question_summary_requires_no_audit_call(monkeypatch) -> None:
+    generated = {'novel': {'word_key': 'novel'}}
     monkeypatch.setattr(web.gaokao_questions, 'has_complete_questions', lambda *args, **kwargs: True)
     monkeypatch.setattr(
         web,
         '_deepseek_chat',
-        lambda messages, max_tokens, temperature=0.7: temperatures.append(temperature) or '[]',
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('unexpected AI call')),
     )
 
-    result = web._audit_combined_gaokao_questions_for_new_entries(
+    result = web._publish_combined_gaokao_questions_for_new_entries(
         [_new_v2_entry()],
-        {'novel': candidate},
+        generated,
         {},
     )
 
     assert result['generated_words'] == ['novel']
     assert result['approved_words'] == ['novel']
-    assert result['audit_retry'] == 0
-    assert temperatures == [0.0]
-    assert persisted[0][0]['novel']['audit_version'] == 2
+    assert result['rejected_words'] == []
+    assert result['audit_retry_words'] == []
 
 
-def test_import_audit_retries_twice_before_leaving_candidate_pending(monkeypatch) -> None:
-    audit_calls = []
-    persisted = []
-    candidate = {'word_key': 'novel'}
-    monkeypatch.setattr(
-        web.gaokao_questions,
-        'pending_candidate_records',
-        lambda **kwargs: {'novel': candidate},
-    )
-
-    def audit(records, chat):
-        audit_calls.append(sorted(records))
-        return {}, {}, {'novel': 'temporary audit error'}
-
-    monkeypatch.setattr(web.gaokao_questions, 'audit_question_records', audit)
-    monkeypatch.setattr(
-        web.gaokao_questions,
-        'persist_audit_result',
-        lambda approved, rejected, retry: persisted.append(retry),
-    )
+def test_combined_gaokao_question_summary_reports_generation_failure(monkeypatch) -> None:
     monkeypatch.setattr(web.gaokao_questions, 'has_complete_questions', lambda *args, **kwargs: False)
 
-    result = web._audit_combined_gaokao_questions_for_new_entries(
+    result = web._publish_combined_gaokao_questions_for_new_entries(
         [_new_v2_entry()],
-        {'novel': candidate},
         {},
+        {'novel': 'local validation failed'},
     )
 
-    assert audit_calls == [['novel'], ['novel']]
-    assert persisted == [
-        {'novel': 'temporary audit error'},
-        {'novel': 'temporary audit error'},
-    ]
-    assert result['audit_retry_words'] == ['novel']
+    assert result['approved_words'] == []
+    assert result['generation_failed_words'] == ['novel']
+    assert result['audit_retry_words'] == []
 
 
-def test_vocab_import_automatically_audits_gaokao_question_for_new_word(
+def test_vocab_import_publishes_gaokao_question_with_one_ai_generation(
     client,
     monkeypatch,
 ) -> None:
@@ -1209,7 +1165,7 @@ def test_vocab_import_automatically_audits_gaokao_question_for_new_word(
     assert entry is not None
     staged = []
     generation_calls = []
-    persisted_candidates = []
+    persisted_questions = []
     monkeypatch.setattr(web, 'verify_token', lambda token: 'alice')
     monkeypatch.setattr(
         web,
@@ -1242,8 +1198,8 @@ def test_vocab_import_automatically_audits_gaokao_question_for_new_word(
     )
     monkeypatch.setattr(
         web.gaokao_questions,
-        'persist_candidate_result',
-        lambda records, errors: persisted_candidates.append((records, errors)),
+        'persist_prompt_checked_result',
+        lambda records, errors: persisted_questions.append((records, errors)),
     )
 
     def stage(entries, records, errors):
@@ -1266,7 +1222,7 @@ def test_vocab_import_automatically_audits_gaokao_question_for_new_word(
             'skipped_words': [],
         }
 
-    monkeypatch.setattr(web, '_audit_combined_gaokao_questions_for_new_entries', stage)
+    monkeypatch.setattr(web, '_publish_combined_gaokao_questions_for_new_entries', stage)
 
     response = client.post(
         '/api/wordbank/csv/import-words',
@@ -1281,10 +1237,10 @@ def test_vocab_import_automatically_audits_gaokao_question_for_new_word(
     assert response.status_code == 200
     body = response.get_json()
     assert generation_calls == [(['novel'], '高中', True)]
-    assert persisted_candidates == [({'novel': {'word_key': 'novel'}}, {})]
+    assert persisted_questions == [({'novel': {'word_key': 'novel'}}, {})]
     assert staged == [([entry], {'novel': {'word_key': 'novel'}}, {})]
     assert body['gaokao_questions']['approved_words'] == ['novel']
-    assert '已自动生成并通过高考题审查 1 个' in body['message']
+    assert '已按题库规则生成并发布高考题 1 个' in body['message']
 
 
 def test_vocab_import_keeps_wordbank_success_when_gaokao_pipeline_crashes(
@@ -1324,10 +1280,10 @@ def test_vocab_import_keeps_wordbank_success_when_gaokao_pipeline_crashes(
         'finalize_combined_gaokao_candidates',
         lambda raw_entries, rows: ({'novel': {'word_key': 'novel'}}, {}),
     )
-    monkeypatch.setattr(web.gaokao_questions, 'persist_candidate_result', lambda *args: None)
+    monkeypatch.setattr(web.gaokao_questions, 'persist_prompt_checked_result', lambda *args: None)
     monkeypatch.setattr(
         web,
-        '_audit_combined_gaokao_questions_for_new_entries',
+        '_publish_combined_gaokao_questions_for_new_entries',
         lambda entries, records, errors: (_ for _ in ()).throw(
             OSError('question bank unavailable')
         ),
