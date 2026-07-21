@@ -6839,23 +6839,23 @@ button.import-article-chip--selected:hover {
 
 .lb-audience-side--left .lb-audience-group:nth-child(1) {
     left: 0;
-    bottom: 0;
+    bottom: 34px;
 }
 
 .lb-audience-side--left .lb-audience-group:nth-child(2) {
     right: 0;
-    top: 48px;
+    top: 86px;
     bottom: auto;
 }
 
 .lb-audience-side--right .lb-audience-group:nth-child(1) {
     right: 0;
-    bottom: 0;
+    bottom: 34px;
 }
 
 .lb-audience-side--right .lb-audience-group:nth-child(2) {
     left: 0;
-    top: 48px;
+    top: 86px;
     bottom: auto;
 }
 
@@ -7013,7 +7013,7 @@ button.import-article-chip--selected:hover {
 .lb-podium-camera {
     position: absolute;
     z-index: 4;
-    top: 128px;
+    top: 148px;
     width: 42px;
     height: 54px;
 }
@@ -7163,10 +7163,12 @@ button.import-article-chip--selected:hover {
 
     .lb-audience-side--left .lb-audience-group:nth-child(1) {
         left: 0;
+        bottom: 0;
     }
 
     .lb-audience-side--right .lb-audience-group:nth-child(1) {
         right: 0;
+        bottom: 0;
     }
 
     .lb-podium-camera {
