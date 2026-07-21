@@ -49,6 +49,8 @@ let articleAiExtractEnabled = false;
 let serverPiperAvailable = false;
 /** 首屏 bootstrap 预取的复习列表，供 showSection('review') 消费，避免重复请求。 */
 let preloadedReviewData = null;
+/** 导入后服务端可能已调整今日任务；返回复习页时必须重新获取。 */
+let reviewDataStaleAfterImport = false;
 /** 连续点击朗读：取消上一轮 Piper 请求、音频与浏览器合成 */
 let ttsPlaybackGeneration = 0;
 let ttsFetchAbort = null;
@@ -3353,6 +3355,15 @@ function renderLeaderboardPodium(apiData) {
         return;
     }
     const displayTop = top.slice(0, 3);
+    const podiumUsernames = new Set(
+        top.map((entry) => String(entry && entry.username ? entry.username : '')),
+    );
+    const audience = (Array.isArray(apiData.leaderboard) ? apiData.leaderboard : [])
+        .filter((entry) => {
+            const username = String(entry && entry.username ? entry.username : '');
+            return username && Number(entry.rank) > 3 && !podiumUsernames.has(username);
+        })
+        .slice(0, 14);
     const overflowHint = top.length > displayTop.length
         ? ` · 并列获奖共 ${formatNumber(top.length)} 人`
         : '';
@@ -3381,6 +3392,20 @@ function renderLeaderboardPodium(apiData) {
             </article>`;
         })
         .join('');
+    const cheerIcons = ['🙌', '👏', '🎉'];
+    const audienceHtml = audience.length
+        ? `<div class="leaderboard-podium-audience" aria-hidden="true">${audience
+              .map((entry, i) => {
+                  const avatar = entry.avatar_url
+                      ? `<img class="lb-audience-avatar" src="${escapeHtml(avatarDisplayUrl(entry.avatar_url, 96))}" alt="" width="42" height="42" loading="lazy" />`
+                      : '<span class="lb-audience-avatar lb-avatar-placeholder">👤</span>';
+                  return `<span class="lb-audience-member" title="${escapeHtml(entry.username)}">
+                        <span class="lb-audience-cheer">${cheerIcons[i % cheerIcons.length]}</span>
+                        ${avatar}
+                    </span>`;
+              })
+              .join('')}</div>`
+        : '';
     wrap.innerHTML =
         `<div class="leaderboard-podium">` +
         `<div class="leaderboard-podium-head">` +
@@ -3388,7 +3413,9 @@ function renderLeaderboardPodium(apiData) {
         `<p class="leaderboard-podium-sub">${escapeHtml(p.period_label || p.period_id || '')}${escapeHtml(overflowHint)}</p></div>` +
         `<span class="leaderboard-podium-status">奖励已结算</span>` +
         `</div>` +
+        `<div class="leaderboard-podium-scene">${audienceHtml}` +
         `<div class="leaderboard-podium-stage podium-count-${displayTop.length}">${cards}</div>` +
+        `</div>` +
         `</div>`;
 
     wrap.querySelectorAll('[data-lb-podium-index]').forEach((button) => {
@@ -4739,6 +4766,7 @@ async function logout() {
     localStorage.removeItem('username');
     clearWordbankCsvDiscoveryCache();
     preloadedReviewData = null;
+    reviewDataStaleAfterImport = false;
     resetArticleImportPickUI();
     closeSettings();
     showLoginPage();
@@ -4789,6 +4817,7 @@ function handleInviteRegistrationNavigation() {
 function showLoginPage() {
     resetInviteCardState();
     preloadedReviewData = null;
+    reviewDataStaleAfterImport = false;
     resetActiveReviewSession();
     document.getElementById('login-page').classList.add('active');
     document.getElementById('main-page').classList.remove('active');
@@ -4911,6 +4940,7 @@ function applyBootstrapPayload(boot) {
     }
     if (boot.review && Array.isArray(boot.review.words)) {
         preloadedReviewData = boot.review;
+        reviewDataStaleAfterImport = false;
     }
     if (boot.gamification) {
         lastGamificationProfile = boot.gamification;
@@ -5126,7 +5156,7 @@ function showSection(sectionId) {
     syncReviewSectionChromeClass();
 
     if (sectionId === 'review') {
-        if (!restoreActiveReviewSession()) {
+        if (reviewDataStaleAfterImport || !restoreActiveReviewSession()) {
             loadReviewList();
         }
     } else if (sectionId === 'discover') {
@@ -5791,19 +5821,25 @@ function getNewWordsFirstEnabled() {
     return localStorage.getItem(REVIEW_NEW_WORDS_FIRST_STORAGE_KEY) === '1';
 }
 
+function invalidateReviewDataAfterImport() {
+    preloadedReviewData = null;
+    reviewDataStaleAfterImport = true;
+}
+
 function reviewReasonOrder(word, newWordsFirst = getNewWordsFirstEnabled()) {
     if (word?.task_remedial) return -1;
     const reason = String(word?.task_reason || 'due');
-    if (newWordsFirst && reason === 'new') return 0;
+    if (newWordsFirst && word?.task_imported_today) return 0;
+    if (newWordsFirst && reason === 'new') return 1;
     const base = {
-        overdue: 1,
-        weak: 2,
-        reinforcement: 3,
-        due: 4,
-        maintenance: 5,
-        new: 6,
+        overdue: 2,
+        weak: 3,
+        reinforcement: 4,
+        due: 5,
+        maintenance: 6,
+        new: 7,
     };
-    return base[reason] ?? 4;
+    return base[reason] ?? 5;
 }
 
 function orderReviewWords(words, newWordsFirst = getNewWordsFirstEnabled()) {
@@ -5814,6 +5850,14 @@ function orderReviewWords(words, newWordsFirst = getNewWordsFirstEnabled()) {
             || a.index - b.index
         ))
         .map((row) => row.word);
+}
+
+function partitionRestoredReviewWords(words) {
+    const ordered = orderReviewWords(words);
+    return {
+        mainWords: ordered.filter((word) => !word.task_remedial),
+        remedialWords: ordered.filter((word) => word.task_remedial),
+    };
 }
 
 function reorderRemainingReviewWords() {
@@ -6304,17 +6348,30 @@ async function loadReviewList() {
             requestSequence !== reviewDataRequestSequence
         ) return;
         preloadedReviewData = null;
+        reviewDataStaleAfterImport = false;
         adaptReviewDataToAudioCapability(data);
         renderTodayTaskPlan(data.plan || null);
-        currentReviewList = orderReviewWords(data.words);
+        const restored = partitionRestoredReviewWords(data.words);
+        currentReviewList = restored.mainWords;
         currentReviewIndex = 0;
         resetReviewSectionProgress();
-        currentReviewList.forEach((w) => wordMap.set(w.english, w));
-        sessionRestoredRemedialWords = currentReviewList.filter((word) => word.task_remedial).length;
-        sessionInitialMainWords = currentReviewList.length - sessionRestoredRemedialWords;
+        [...restored.mainWords, ...restored.remedialWords].forEach((word) => {
+            wordMap.set(word.english, word);
+        });
+        wrongWordsOrder = restored.remedialWords.map((word) => word.english);
+        wrongWordsInThisPass = new Set(wrongWordsOrder);
+        sessionRestoredRemedialWords = restored.remedialWords.length;
+        sessionInitialMainWords = restored.mainWords.length;
 
         if (currentReviewList.length === 0) {
-            showInitialEmptyReview();
+            if (wrongWordsOrder.length > 0) {
+                showReviewEmptyActions(false);
+                renderWrongPanel();
+                updateWrongRoundLabel();
+                showRemedialOfferModal();
+            } else {
+                showInitialEmptyReview();
+            }
         } else {
             showReviewEmptyActions(false);
             document.getElementById('review-box').style.display = 'block';
@@ -7733,7 +7790,9 @@ async function handleDiscoveryImportClick(e) {
         const skipped = data.skipped_duplicate || 0;
         if (added > 0) {
             discoveryPendingKeys.add(k);
-            showMainBanner(`「${w.english}」已加入待复习`);
+            invalidateReviewDataAfterImport();
+            const todayHint = Number(data.added_to_today) > 0 ? '并加入今日任务' : '待复习';
+            showMainBanner(`「${w.english}」已加入${todayHint}`);
             loadStats();
             renderDiscoveryCard();
             return;
@@ -8476,6 +8535,7 @@ async function wordbankImportSelected() {
                 dupWords.push(...data.skipped_duplicate_words);
             }
         }
+        if (added > 0) invalidateReviewDataAfterImport();
         const dupUnique = [...new Set(dupWords)];
         openImportResultModal({
             variant: 'stats',
@@ -8831,6 +8891,7 @@ async function confirmArticleImportFromPicks() {
                 dupWords.push(...res.skipped_duplicate_words);
             }
         }
+        if (added > 0) invalidateReviewDataAfterImport();
         const dupUnique = [...new Set(dupWords)];
         openImportResultModal({
             variant: 'stats',
@@ -9098,6 +9159,7 @@ async function importVocabToCSV() {
             method: 'POST',
             body: JSON.stringify({ words: wordsPayload, level, also_add_to_queue: alsoAddToQueue })
         });
+        if (Number(data.queue_result?.added) > 0) invalidateReviewDataAfterImport();
         openImportResultModal({
             variant: 'text',
             title: '词汇导入结果',

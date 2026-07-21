@@ -90,7 +90,14 @@ class TestWord(unittest.TestCase):
     
     def test_word_to_dict(self):
         """测试单词序列化"""
-        word = Word("apple", "苹果", success_count=3, review_round=1, review_count=2)
+        word = Word(
+            "apple",
+            "苹果",
+            success_count=3,
+            review_round=1,
+            review_count=2,
+            added_at="2026-07-21T09:30:00+08:00",
+        )
         word_dict = word.to_dict()
         
         self.assertEqual(word_dict['english'], "apple")
@@ -98,6 +105,7 @@ class TestWord(unittest.TestCase):
         self.assertEqual(word_dict['success_count'], 3)
         self.assertEqual(word_dict['review_round'], 1)
         self.assertEqual(word_dict['review_count'], 2)
+        self.assertEqual(word_dict['added_at'], "2026-07-21T09:30:00+08:00")
     
     def test_word_from_dict(self):
         """测试从字典创建单词"""
@@ -108,7 +116,8 @@ class TestWord(unittest.TestCase):
             'next_review_date': '2026-01-31',
             'example': 'I like banana._我喜欢香蕉。',
             'review_round': 0,
-            'review_count': 1
+            'review_count': 1,
+            'added_at': '2026-01-30T18:00:00+08:00',
         }
         word = Word.from_dict(word_dict)
         
@@ -116,6 +125,7 @@ class TestWord(unittest.TestCase):
         self.assertEqual(word.chinese, "香蕉")
         self.assertEqual(word.success_count, 2)
         self.assertEqual(word.next_review_date, date(2026, 1, 31))
+        self.assertEqual(word.added_at, '2026-01-30T18:00:00+08:00')
     
     def test_word_from_dict_compatibility(self):
         """测试旧数据兼容性"""
@@ -622,6 +632,68 @@ class TestWordReciter(unittest.TestCase):
         self.assertNotIn('new-b', english)
         self.assertNotIn('future', english)
         self.assertEqual(task['plan']['backlog_after_task'], 1)
+
+    def test_today_import_replaces_untouched_regular_new_word(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 2
+        reciter.all_words = [
+            Word('due', '到期', success_count=1, next_review_date=reciter.today),
+            Word('regular-new', '普通新词', next_review_date=reciter.today),
+        ]
+        initial = reciter.get_today_learning_plan()
+        self.assertEqual([word.english for word in initial['words']], ['due', 'regular-new'])
+
+        result = reciter.add_words_from_dicts([
+            {'english': 'imported-today', 'chinese': '今日导入'},
+        ])
+        refreshed = reciter.get_today_learning_plan()
+
+        self.assertEqual(result['added_to_today'], 1)
+        self.assertEqual([word.english for word in refreshed['words']], ['due', 'imported-today'])
+        imported_item = next(
+            item for item in refreshed['items']
+            if item['word_key'] == 'imported-today'
+        )
+        self.assertEqual(imported_item['reason'], 'new')
+        self.assertTrue(imported_item['imported_today'])
+        self.assertNotIn('regular-new', [item['word_key'] for item in refreshed['items']])
+
+    def test_today_import_does_not_replace_started_new_word(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 1
+        reciter.all_words = [Word('started-new', '已开始新词', next_review_date=reciter.today)]
+        initial = reciter.get_today_learning_plan()
+        initial['items'][0]['attempts'] = 1
+
+        result = reciter.add_words_from_dicts([
+            {'english': 'later-import', 'chinese': '稍后导入'},
+        ])
+        refreshed = reciter.get_today_learning_plan()
+
+        self.assertEqual(result['added_to_today'], 0)
+        self.assertEqual([word.english for word in refreshed['words']], ['started-new'])
+
+    def test_today_import_reopens_completed_empty_task_within_new_word_target(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 3
+        reciter.learning_state_v2['daily_task'] = {
+            'version': 1,
+            'task_id': 'completed-empty-task',
+            'date': reciter.today.isoformat(),
+            'status': 'completed',
+            'available_at_creation': 0,
+            'new_word_target': 2,
+            'items': [],
+        }
+
+        result = reciter.add_words_from_dicts([
+            {'english': 'same-day-import', 'chinese': '当天导入'},
+        ])
+        refreshed = reciter.get_today_learning_plan()
+
+        self.assertEqual(result['added_to_today'], 1)
+        self.assertEqual([word.english for word in refreshed['words']], ['same-day-import'])
+        self.assertEqual(refreshed['plan']['remaining'], 1)
 
     def test_today_plan_reserves_sixty_percent_for_reviews(self):
         reciter = WordReciter(self.config)

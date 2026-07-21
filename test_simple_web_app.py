@@ -278,8 +278,11 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260717-xp-v2" in html
-    assert "/static/css/style.css?v=20260717-leaderboard-podium2" in html
+    assert "/static/js/app.js?v=20260721-podium-crowd2" in html
+    assert "word?.task_imported_today" in javascript
+    assert "partitionRestoredReviewWords" in javascript
+    assert "wrongWordsOrder = restored.remedialWords.map" in javascript
+    assert "/static/css/style.css?v=20260721-podium-crowd2" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
@@ -301,7 +304,12 @@ def test_leaderboard_podium_exposes_avatar_reward_dialog(client) -> None:
     assert 'id="avatar-view-reward-xp"' in html
     assert "openLeaderboardAvatarModal" in javascript
     assert 'data-lb-podium-index="${i}"' in javascript
+    assert "leaderboard-podium-audience" in javascript
+    assert "podiumUsernames" in javascript
+    assert "Number(entry.rank) > 3" in javascript
     assert "leaderboard-podium-stage" in stylesheet
+    assert ".lb-audience-avatar" in stylesheet
+    assert ".lb-audience-member:nth-child(n + 9)" in stylesheet
     assert ".leaderboard-podium-entry.rank-1" in stylesheet
     assert ".avatar-view-modal.is-leaderboard-view" in stylesheet
 
@@ -461,6 +469,7 @@ def test_new_word_payload_includes_study_preview_before_semantic_question(
     web.gaokao_questions.persist_generation_result({'benefit': _semantic_record()}, {})
     reciter = _SemanticReciter('recognition')
     reciter.task_item['reason'] = 'new'
+    reciter.task_item['imported_today'] = True
     task = {
         'items': [reciter.task_item],
         'plan': {'task_id': 'task-1'},
@@ -475,6 +484,7 @@ def test_new_word_payload_includes_study_preview_before_semantic_question(
     assert word['study']['english'] == 'benefit'
     assert word['study']['chinese'] == 'n. 益处；好处'
     assert word['study']['examples'][0]['en'] == 'Exercise brings many benefits.'
+    assert word['task_imported_today'] is True
 
 
 def test_question_endpoint_returns_approved_question_without_runtime_generation(

@@ -248,7 +248,8 @@ class Word:
         next_review_date: Optional[date] = None,
         example: Optional[str] = None,
         review_round: int = 0,
-        review_count: int = 0
+        review_count: int = 0,
+        added_at: Optional[str] = None,
     ):
         self.english = english
         self.chinese = chinese
@@ -257,6 +258,7 @@ class Word:
         self.example = example
         self.review_round = review_round
         self.review_count = review_count
+        self.added_at = str(added_at or '').strip() or None
     
     def to_dict(self) -> dict:
         """转换为字典"""
@@ -267,7 +269,8 @@ class Word:
             'next_review_date': self.next_review_date.isoformat(),
             'example': self.example,
             'review_round': self.review_round,
-            'review_count': self.review_count
+            'review_count': self.review_count,
+            'added_at': self.added_at,
         }
     
     @classmethod
@@ -302,6 +305,7 @@ class Word:
             example=d.get('example'),
             review_round=max(0, safe_int(d.get('review_round'))),
             review_count=max(0, safe_int(d.get('review_count'))),
+            added_at=d.get('added_at'),
         )
 
 
@@ -1018,6 +1022,9 @@ class WordReciter:
             item.update(
                 {
                     'reason': reason,
+                    'imported_today': bool(
+                        reason == 'new' and self.word_was_added_today(word)
+                    ),
                     'exercise_type': choose_exercise_type(
                         state,
                         listening_available=listening_available,
@@ -1037,6 +1044,7 @@ class WordReciter:
         candidates.sort(
             key=lambda item: (
                 rank[item['reason']],
+                0 if item.get('imported_today') else 1,
                 item['word'].next_review_date,
                 item['mastery_score'],
                 item['word'].review_count,
@@ -1044,6 +1052,101 @@ class WordReciter:
             )
         )
         return candidates
+
+    def word_was_added_today(self, word: Word) -> bool:
+        added_at = str(getattr(word, 'added_at', '') or '').strip()
+        return bool(added_at and added_at[:10] == self.today.isoformat())
+
+    def _daily_task_item_from_candidate(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        word = candidate['word']
+        return {
+            'item_id': uuid.uuid4().hex[:16],
+            'word_key': self.word_state_key(word),
+            'scheduled_due_date': word.next_review_date.isoformat(),
+            'exercise_type': candidate['exercise_type'],
+            'reason': candidate['reason'],
+            'imported_today': bool(candidate.get('imported_today')),
+            'phase': 'main',
+            'status': 'pending',
+            'attempts': 0,
+        }
+
+    def _refresh_today_imported_words(
+        self,
+        task: Dict[str, Any],
+        *,
+        listening_available: bool = False,
+    ) -> int:
+        """Fill today's remaining new-word slots with words imported today."""
+        items = task.get('items')
+        if not isinstance(items, list):
+            return 0
+        candidates = self._today_task_candidates(
+            listening_available=listening_available,
+        )
+        task_keys = {
+            str(item.get('word_key') or '')
+            for item in items
+            if isinstance(item, dict)
+        }
+        imported = [
+            candidate
+            for candidate in candidates
+            if candidate.get('reason') == 'new'
+            and candidate.get('imported_today')
+            and self.word_state_key(candidate['word']) not in task_keys
+        ]
+        available_keys = task_keys | {
+            self.word_state_key(candidate['word']) for candidate in candidates
+        }
+        task['available_at_creation'] = max(len(items), len(available_keys))
+        if not imported:
+            return 0
+
+        try:
+            new_word_target = max(0, int(task.get('new_word_target') or 0))
+        except (TypeError, ValueError, OverflowError):
+            new_word_target = 0
+        if 'new_word_target' not in task:
+            new_word_target = self.automatic_new_word_target()
+            task['new_word_target'] = new_word_target
+        limit = max(1, int(self.config.DAILY_REVIEW_LIMIT or 1))
+        non_new_count = sum(
+            1 for item in items
+            if isinstance(item, dict) and item.get('reason') != 'new'
+        )
+        allowed_new_total = min(new_word_target, max(0, limit - non_new_count))
+        current_new_count = sum(
+            1 for item in items
+            if isinstance(item, dict) and item.get('reason') == 'new'
+        )
+        replaceable = [
+            item
+            for item in reversed(items)
+            if isinstance(item, dict)
+            and item.get('reason') == 'new'
+            and not item.get('imported_today')
+            and item.get('status') == 'pending'
+            and item.get('phase') == 'main'
+            and self.task_attempt_count(item) == 0
+        ]
+
+        inserted = 0
+        for candidate in imported:
+            new_item = self._daily_task_item_from_candidate(candidate)
+            if current_new_count < allowed_new_total and len(items) < limit:
+                items.append(new_item)
+                current_new_count += 1
+            elif replaceable:
+                old_item = replaceable.pop(0)
+                items[items.index(old_item)] = new_item
+            else:
+                break
+            inserted += 1
+            task_keys.add(new_item['word_key'])
+        if inserted:
+            task['status'] = 'active'
+        return inserted
 
     def _create_today_task(
         self,
@@ -1071,21 +1174,7 @@ class WordReciter:
             return None
 
         task_id = uuid.uuid4().hex
-        items = []
-        for candidate in selected:
-            word = candidate['word']
-            items.append(
-                {
-                    'item_id': uuid.uuid4().hex[:16],
-                    'word_key': self.word_state_key(word),
-                    'scheduled_due_date': word.next_review_date.isoformat(),
-                    'exercise_type': candidate['exercise_type'],
-                    'reason': candidate['reason'],
-                    'phase': 'main',
-                    'status': 'pending',
-                    'attempts': 0,
-                }
-            )
+        items = [self._daily_task_item_from_candidate(candidate) for candidate in selected]
         task = {
             'version': 1,
             'task_id': task_id,
@@ -1147,6 +1236,9 @@ class WordReciter:
                 'new',
             ):
                 item['reason'] = 'due'
+            item['imported_today'] = bool(
+                item.get('reason') == 'new' and self.word_was_added_today(word)
+            )
             if item.get('status') not in ('pending', 'completed'):
                 item['status'] = 'pending'
             self.task_attempt_count(item)
@@ -1169,6 +1261,10 @@ class WordReciter:
         if items and not valid_items:
             return None
         task['items'] = valid_items
+        self._refresh_today_imported_words(
+            task,
+            listening_available=listening_available,
+        )
         try:
             calibration_version = int(task.get('legacy_calibration_version') or 0)
         except (TypeError, ValueError, OverflowError):
@@ -2206,6 +2302,7 @@ class WordReciter:
         skipped_duplicate = 0
         skipped_invalid = 0
 
+        added_at = china_now().isoformat()
         for pair in words:
             if not isinstance(pair, (tuple, list)) or len(pair) < 2:
                 skipped_invalid += 1
@@ -2219,7 +2316,7 @@ class WordReciter:
             if key in existing_words:
                 skipped_duplicate += 1
                 continue
-            new_words.append(Word(en, zh))
+            new_words.append(Word(en, zh, added_at=added_at))
             existing_words.add(key)
 
         if new_words:
@@ -2253,6 +2350,7 @@ class WordReciter:
         skipped_duplicate_words: List[str] = []
         _dup_cap = 80
 
+        added_at = china_now().isoformat()
         for raw in items:
             if not isinstance(raw, dict):
                 skipped_invalid += 1
@@ -2272,6 +2370,7 @@ class WordReciter:
                 payload = dict(raw)
                 payload['english'] = en
                 payload['chinese'] = zh
+                payload['added_at'] = added_at
                 ex = payload.get('example')
                 if isinstance(ex, str) and len(ex) > 4000:
                     payload['example'] = ex[:4000]
@@ -2282,8 +2381,19 @@ class WordReciter:
             added.append(word)
             existing.add(key)
 
+        added_to_today = 0
         if added:
             self.all_words.extend(added)
+            task = self.learning_state_v2.get('daily_task')
+            if isinstance(task, dict) and task.get('date') == self.today.isoformat():
+                current_task = self._current_today_task()
+                if current_task is not None:
+                    added_keys = {self.word_state_key(word) for word in added}
+                    added_to_today = sum(
+                        1 for item in current_task.get('items') or []
+                        if isinstance(item, dict)
+                        and str(item.get('word_key') or '') in added_keys
+                    )
             self._save_data()
             logger.info(
                 "成功从 JSON 添加 %s 个新单词（跳过重复 %s，无效 %s）",
@@ -2297,6 +2407,7 @@ class WordReciter:
             'skipped_duplicate': skipped_duplicate,
             'skipped_invalid': skipped_invalid,
             'skipped_duplicate_words': skipped_duplicate_words,
+            'added_to_today': added_to_today,
         }
 
 

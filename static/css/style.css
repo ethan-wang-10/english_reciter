@@ -6754,11 +6754,11 @@ button.import-article-chip--selected:hover {
 }
 
 .leaderboard-podium-wrap {
-    margin-bottom: 22px;
+    margin-bottom: 16px;
 }
 
 .leaderboard-podium {
-    padding: 20px 22px 0;
+    padding: 14px 18px 0;
     overflow: hidden;
     border-radius: 8px;
     border: 2px solid var(--border);
@@ -6770,44 +6770,119 @@ button.import-article-chip--selected:hover {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
 }
 
 .leaderboard-podium-title {
-    margin: 0 0 6px;
-    font-size: 1.08rem;
+    margin: 0 0 3px;
+    font-size: 1rem;
     font-weight: 800;
     letter-spacing: 0;
 }
 
 .leaderboard-podium-sub {
     margin: 0;
-    font-size: 0.88rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
 }
 
 .leaderboard-podium-status {
     flex: 0 0 auto;
-    padding: 5px 9px;
+    padding: 4px 8px;
     border-radius: 6px;
     color: #347900;
     background: #e4ffce;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 800;
+}
+
+.leaderboard-podium-scene {
+    position: relative;
+    min-height: 250px;
+}
+
+.leaderboard-podium-audience {
+    position: absolute;
+    z-index: 3;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    height: 42px;
+    padding: 0 1%;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 4px;
+    pointer-events: none;
+}
+
+.lb-audience-member {
+    display: inline-flex;
+    position: relative;
+    flex: 0 1 36px;
+    min-width: 22px;
+    align-items: flex-end;
+    justify-content: center;
+    filter: saturate(0.76);
+    opacity: 0.78;
+}
+
+.lb-audience-member:nth-child(3n + 1) {
+    margin-bottom: 4px;
+}
+
+.lb-audience-member:nth-child(3n + 2) {
+    margin-bottom: 0;
+}
+
+.lb-audience-member:nth-child(4n) {
+    transform: rotate(3deg);
+}
+
+.lb-audience-member:nth-child(4n + 1) {
+    transform: rotate(-3deg);
+}
+
+.lb-audience-avatar {
+    display: inline-flex;
+    position: relative;
+    z-index: 1;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 2px solid rgba(255, 255, 255, 0.94);
+    border-radius: 50%;
+    background: #e8edf1;
+    box-shadow: 0 2px 0 rgba(65, 76, 86, 0.2);
+    object-fit: cover;
+    font-size: 0.8rem;
+}
+
+.lb-audience-cheer {
+    position: absolute;
+    z-index: 0;
+    top: -9px;
+    font-size: 0.76rem;
+    line-height: 1;
 }
 
 .leaderboard-podium-stage {
     display: flex;
+    position: relative;
+    z-index: 2;
     justify-content: center;
     align-items: flex-end;
-    gap: clamp(8px, 2.4vw, 24px);
-    min-height: 350px;
-    padding: 24px 10px 0;
+    gap: clamp(8px, 2vw, 18px);
+    min-height: 250px;
+    padding: 10px 8px 36px;
 }
 
 .leaderboard-podium-entry {
     display: flex;
-    flex: 0 1 210px;
+    flex: 0 1 174px;
     min-width: 0;
     flex-direction: column;
     align-items: center;
@@ -6829,16 +6904,16 @@ button.import-article-chip--selected:hover {
 .lb-podium-person {
     display: flex;
     width: 100%;
-    min-height: 188px;
+    min-height: 126px;
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
 }
 
 .lb-podium-crown {
-    min-height: 30px;
-    margin-bottom: 2px;
-    font-size: 1.65rem;
+    min-height: 22px;
+    margin-bottom: 1px;
+    font-size: 1.25rem;
     line-height: 1;
     transform: rotate(-5deg);
 }
@@ -6847,25 +6922,25 @@ button.import-article-chip--selected:hover {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 78px;
-    width: 78px;
-    height: 78px;
+    flex: 0 0 58px;
+    width: 58px;
+    height: 58px;
     padding: 0;
     overflow: hidden;
-    border: 4px solid #d5dce2;
+    border: 3px solid #d5dce2;
     border-radius: 50%;
     background: #eef1f4;
-    box-shadow: 0 5px 0 rgba(60, 60, 60, 0.12);
+    box-shadow: 0 3px 0 rgba(60, 60, 60, 0.12);
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .rank-1 .lb-podium-avatar-button {
-    flex-basis: 92px;
-    width: 92px;
-    height: 92px;
+    flex-basis: 70px;
+    width: 70px;
+    height: 70px;
     border-color: #ffc800;
-    box-shadow: 0 6px 0 #dba800;
+    box-shadow: 0 4px 0 #dba800;
 }
 
 .rank-3 .lb-podium-avatar-button {
@@ -6873,12 +6948,12 @@ button.import-article-chip--selected:hover {
 }
 
 .lb-podium-avatar-button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 0 rgba(60, 60, 60, 0.13);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 0 rgba(60, 60, 60, 0.13);
 }
 
 .rank-1 .lb-podium-avatar-button:hover {
-    box-shadow: 0 9px 0 #dba800;
+    box-shadow: 0 6px 0 #dba800;
 }
 
 .lb-podium-avatar-button:focus-visible {
@@ -6894,35 +6969,35 @@ button.import-article-chip--selected:hover {
     justify-content: center;
     border-radius: 50%;
     object-fit: cover;
-    font-size: 2.2rem;
+    font-size: 1.65rem;
 }
 
 .lb-podium-name {
     width: 100%;
     min-height: 1.35em;
-    margin-top: 12px;
+    margin-top: 6px;
     overflow-wrap: anywhere;
     font-weight: 800;
-    font-size: 0.94rem;
+    font-size: 0.82rem;
     line-height: 1.35;
 }
 
 .lb-podium-meta {
-    margin-top: 4px;
+    margin-top: 2px;
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: 0.74rem;
     font-weight: 700;
 }
 
 .lb-podium-block {
     display: flex;
     width: 100%;
-    min-height: 96px;
-    padding: 14px 8px;
+    min-height: 64px;
+    padding: 9px 6px;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: 5px;
     border: 2px solid #cbd3da;
     border-bottom: 0;
     border-radius: 8px 8px 0 0;
@@ -6932,32 +7007,32 @@ button.import-article-chip--selected:hover {
 }
 
 .rank-1 .lb-podium-block {
-    min-height: 132px;
+    min-height: 88px;
     border-color: #e5ad00;
     color: #5f4700;
     background: #ffc800;
 }
 
 .rank-3 .lb-podium-block {
-    min-height: 76px;
-    padding: 8px 4px;
-    gap: 4px;
+    min-height: 52px;
+    padding: 7px 4px;
+    gap: 3px;
     border-color: #c56f31;
     color: #5f3015;
     background: #df8a4a;
 }
 
 .lb-podium-place {
-    font-size: 1rem;
+    font-size: 0.88rem;
     font-weight: 800;
 }
 
 .lb-podium-reward {
     max-width: 100%;
-    padding: 4px 8px;
+    padding: 3px 7px;
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.72);
-    font-size: 0.75rem;
+    font-size: 0.68rem;
     font-weight: 800;
     line-height: 1.25;
     overflow-wrap: anywhere;
@@ -6990,22 +7065,62 @@ button.import-article-chip--selected:hover {
 
 @media (max-width: 640px) {
     .leaderboard-podium {
-        padding: 16px 10px 0;
+        padding: 12px 8px 0;
     }
 
     .leaderboard-podium-head {
-        padding: 0 4px;
+        padding: 0 3px;
     }
 
     .leaderboard-podium-status {
-        padding: 4px 7px;
-        font-size: 0.7rem;
+        padding: 3px 6px;
+        font-size: 0.65rem;
+    }
+
+    .leaderboard-podium-scene {
+        min-height: 218px;
+    }
+
+    .leaderboard-podium-audience {
+        height: 34px;
+        padding: 0;
+        gap: 2px;
+    }
+
+    .lb-audience-member {
+        flex-basis: 28px;
+        min-width: 20px;
+    }
+
+    .lb-audience-member:nth-child(n + 9) {
+        display: none;
+    }
+
+    .lb-audience-member:nth-child(3n + 1) {
+        margin-bottom: 3px;
+    }
+
+    .lb-audience-member:nth-child(3n + 2) {
+        margin-bottom: 0;
+    }
+
+    .lb-audience-avatar {
+        width: 26px;
+        height: 26px;
+        flex-basis: 26px;
+        border-width: 2px;
+        font-size: 0.68rem;
+    }
+
+    .lb-audience-cheer {
+        top: -8px;
+        font-size: 0.68rem;
     }
 
     .leaderboard-podium-stage {
-        gap: 6px;
-        min-height: 290px;
-        padding: 18px 0 0;
+        gap: 5px;
+        min-height: 218px;
+        padding: 8px 0 30px;
     }
 
     .leaderboard-podium-entry {
@@ -7013,63 +7128,63 @@ button.import-article-chip--selected:hover {
     }
 
     .lb-podium-person {
-        min-height: 158px;
+        min-height: 114px;
     }
 
     .lb-podium-crown {
-        min-height: 25px;
-        font-size: 1.35rem;
+        min-height: 19px;
+        font-size: 1.1rem;
     }
 
     .lb-podium-avatar-button {
-        flex-basis: 62px;
-        width: 62px;
-        height: 62px;
-        border-width: 3px;
+        flex-basis: 48px;
+        width: 48px;
+        height: 48px;
+        border-width: 2px;
     }
 
     .rank-1 .lb-podium-avatar-button {
-        flex-basis: 74px;
-        width: 74px;
-        height: 74px;
+        flex-basis: 58px;
+        width: 58px;
+        height: 58px;
     }
 
     .lb-podium-avatar {
-        font-size: 1.7rem;
+        font-size: 1.3rem;
     }
 
     .lb-podium-name {
-        margin-top: 9px;
-        font-size: 0.78rem;
-    }
-
-    .lb-podium-meta {
+        margin-top: 5px;
         font-size: 0.72rem;
     }
 
+    .lb-podium-meta {
+        font-size: 0.66rem;
+    }
+
     .lb-podium-block {
-        min-height: 82px;
-        padding: 10px 4px;
-        gap: 6px;
+        min-height: 54px;
+        padding: 7px 3px;
+        gap: 4px;
     }
 
     .rank-1 .lb-podium-block {
-        min-height: 112px;
+        min-height: 74px;
     }
 
     .rank-3 .lb-podium-block {
-        min-height: 64px;
-        padding: 7px 3px;
-        gap: 3px;
+        min-height: 44px;
+        padding: 6px 2px;
+        gap: 2px;
     }
 
     .lb-podium-place {
-        font-size: 0.82rem;
+        font-size: 0.76rem;
     }
 
     .lb-podium-reward {
-        padding: 3px 5px;
-        font-size: 0.65rem;
+        padding: 2px 4px;
+        font-size: 0.6rem;
     }
 }
 
