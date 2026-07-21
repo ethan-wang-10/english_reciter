@@ -3392,17 +3392,39 @@ function renderLeaderboardPodium(apiData) {
             </article>`;
         })
         .join('');
-    const cheerIcons = ['🙌', '👏', '🎉'];
+    const audienceFaces = ['😊', '😄', '🤩', '🥳', '😎', '🤗'];
+    const audiencePoses = ['wave-left', 'clap', 'cheer', 'wave-right'];
+    const audienceGroups = [];
+    const audienceGroupCount = audience.length <= 5 ? 1 : Math.ceil(audience.length / 4);
+    let audienceOffset = 0;
+    for (let groupIndex = 0; groupIndex < audienceGroupCount; groupIndex += 1) {
+        const remaining = audience.length - audienceOffset;
+        const groupSize = Math.ceil(remaining / (audienceGroupCount - groupIndex));
+        audienceGroups.push(audience.slice(audienceOffset, audienceOffset + groupSize));
+        audienceOffset += groupSize;
+    }
+    let audienceIndex = 0;
     const audienceHtml = audience.length
-        ? `<div class="leaderboard-podium-audience" aria-hidden="true">${audience
-              .map((entry, i) => {
-                  const avatar = entry.avatar_url
-                      ? `<img class="lb-audience-avatar" src="${escapeHtml(avatarDisplayUrl(entry.avatar_url, 96))}" alt="" width="42" height="42" loading="lazy" />`
-                      : '<span class="lb-audience-avatar lb-avatar-placeholder">👤</span>';
-                  return `<span class="lb-audience-member" title="${escapeHtml(entry.username)}">
-                        <span class="lb-audience-cheer">${cheerIcons[i % cheerIcons.length]}</span>
-                        ${avatar}
-                    </span>`;
+        ? `<div class="leaderboard-podium-audience" aria-hidden="true">${audienceGroups
+              .map((group, groupIndex) => {
+                  const members = group
+                      .map((entry) => {
+                          const i = audienceIndex;
+                          audienceIndex += 1;
+                          const avatar = entry.avatar_url
+                              ? `<img class="lb-audience-avatar" src="${escapeHtml(avatarDisplayUrl(entry.avatar_url, 96))}" alt="" width="32" height="32" loading="lazy" />`
+                              : `<span class="lb-audience-avatar lb-audience-face">${audienceFaces[i % audienceFaces.length]}</span>`;
+                          return `<span class="lb-audience-member lb-audience-pose-${audiencePoses[i % audiencePoses.length]} lb-audience-tone-${i % 6}" title="${escapeHtml(entry.username)}">
+                                <span class="lb-audience-head">${avatar}</span>
+                                <span class="lb-audience-person">
+                                    <span class="lb-audience-arm lb-audience-arm--left"></span>
+                                    <span class="lb-audience-arm lb-audience-arm--right"></span>
+                                    <span class="lb-audience-torso"></span>
+                                </span>
+                            </span>`;
+                      })
+                      .join('');
+                  return `<span class="lb-audience-group lb-audience-group-${groupIndex % 4}">${members}</span>`;
               })
               .join('')}</div>`
         : '';

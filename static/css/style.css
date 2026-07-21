@@ -6798,7 +6798,7 @@ button.import-article-chip--selected:hover {
 
 .leaderboard-podium-scene {
     position: relative;
-    min-height: 250px;
+    min-height: 274px;
 }
 
 .leaderboard-podium-audience {
@@ -6808,48 +6808,66 @@ button.import-article-chip--selected:hover {
     bottom: 0;
     left: 0;
     display: flex;
-    height: 42px;
-    padding: 0 1%;
+    height: 66px;
+    padding: 0 2.5%;
     align-items: flex-end;
-    justify-content: space-between;
-    gap: 4px;
+    justify-content: space-around;
+    gap: clamp(10px, 2vw, 26px);
     pointer-events: none;
 }
 
-.lb-audience-member {
-    display: inline-flex;
-    position: relative;
-    flex: 0 1 36px;
-    min-width: 22px;
+.lb-audience-group {
+    display: flex;
+    min-width: 0;
     align-items: flex-end;
     justify-content: center;
-    filter: saturate(0.76);
-    opacity: 0.78;
+    gap: clamp(1px, 0.35vw, 5px);
 }
 
-.lb-audience-member:nth-child(3n + 1) {
-    margin-bottom: 4px;
+.lb-audience-group:nth-child(2n) {
+    transform: translateY(-7px);
 }
 
-.lb-audience-member:nth-child(3n + 2) {
-    margin-bottom: 0;
+.lb-audience-group:nth-child(4n) {
+    transform: translateY(-2px);
 }
 
-.lb-audience-member:nth-child(4n) {
-    transform: rotate(3deg);
+.lb-audience-member {
+    display: inline-block;
+    position: relative;
+    width: 38px;
+    height: 58px;
+    flex: 0 0 38px;
+    filter: saturate(0.9);
+    opacity: 0.92;
 }
 
-.lb-audience-member:nth-child(4n + 1) {
-    transform: rotate(-3deg);
+.lb-audience-member:nth-child(2) {
+    transform: translateY(-5px);
+}
+
+.lb-audience-member:nth-child(4) {
+    transform: translateY(-2px);
+}
+
+.lb-audience-head {
+    position: absolute;
+    z-index: 3;
+    top: 0;
+    left: 50%;
+    display: flex;
+    width: 30px;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(-50%);
 }
 
 .lb-audience-avatar {
     display: inline-flex;
-    position: relative;
-    z-index: 1;
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
     align-items: center;
     justify-content: center;
     overflow: hidden;
@@ -6858,15 +6876,158 @@ button.import-article-chip--selected:hover {
     background: #e8edf1;
     box-shadow: 0 2px 0 rgba(65, 76, 86, 0.2);
     object-fit: cover;
-    font-size: 0.8rem;
+    font-size: 1.05rem;
 }
 
-.lb-audience-cheer {
+.lb-audience-face {
+    background: #fff;
+}
+
+.lb-audience-person {
     position: absolute;
-    z-index: 0;
-    top: -9px;
-    font-size: 0.76rem;
-    line-height: 1;
+    z-index: 1;
+    top: 26px;
+    left: 0;
+    width: 38px;
+    height: 32px;
+}
+
+.lb-audience-torso {
+    position: absolute;
+    z-index: 2;
+    bottom: 7px;
+    left: 50%;
+    width: 14px;
+    height: 23px;
+    border-radius: 7px 7px 4px 4px;
+    background: var(--audience-shirt, #2f80ed);
+    transform: translateX(-50%);
+}
+
+.lb-audience-torso::before,
+.lb-audience-torso::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    width: 5px;
+    height: 11px;
+    border-radius: 0 0 4px 4px;
+    background: #4b5560;
+}
+
+.lb-audience-torso::before {
+    left: 1px;
+    transform: rotate(4deg);
+}
+
+.lb-audience-torso::after {
+    right: 1px;
+    transform: rotate(-4deg);
+}
+
+.lb-audience-arm {
+    position: absolute;
+    z-index: 1;
+    top: 5px;
+    width: 6px;
+    height: 21px;
+    border-radius: 5px;
+    background: var(--audience-shirt, #2f80ed);
+    transform-origin: 50% 3px;
+}
+
+.lb-audience-arm::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ffd0ad;
+    transform: translateX(-50%);
+}
+
+.lb-audience-arm--left {
+    left: 8px;
+    transform: rotate(20deg);
+}
+
+.lb-audience-arm--right {
+    right: 8px;
+    transform: rotate(-20deg);
+}
+
+.lb-audience-pose-wave-left .lb-audience-arm--left,
+.lb-audience-pose-cheer .lb-audience-arm--left {
+    transform: rotate(-145deg);
+}
+
+.lb-audience-pose-wave-right .lb-audience-arm--right,
+.lb-audience-pose-cheer .lb-audience-arm--right {
+    transform: rotate(145deg);
+}
+
+.lb-audience-pose-clap .lb-audience-arm--left {
+    transform: rotate(145deg);
+}
+
+.lb-audience-pose-clap .lb-audience-arm--right {
+    transform: rotate(-145deg);
+}
+
+.lb-audience-tone-0 { --audience-shirt: #2f80ed; }
+.lb-audience-tone-1 { --audience-shirt: #e65f5c; }
+.lb-audience-tone-2 { --audience-shirt: #7259c7; }
+.lb-audience-tone-3 { --audience-shirt: #2d8c73; }
+.lb-audience-tone-4 { --audience-shirt: #d57b35; }
+.lb-audience-tone-5 { --audience-shirt: #ca4f83; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .lb-audience-pose-wave-left .lb-audience-arm--left {
+        animation: lb-audience-wave-left 1.7s ease-in-out infinite;
+    }
+
+    .lb-audience-pose-wave-right .lb-audience-arm--right {
+        animation: lb-audience-wave-right 1.8s ease-in-out infinite;
+    }
+
+    .lb-audience-pose-clap .lb-audience-arm--left {
+        animation: lb-audience-clap-left 1.15s ease-in-out infinite;
+    }
+
+    .lb-audience-pose-clap .lb-audience-arm--right {
+        animation: lb-audience-clap-right 1.15s ease-in-out infinite;
+    }
+
+    .lb-audience-pose-cheer .lb-audience-person {
+        animation: lb-audience-cheer 1.8s ease-in-out infinite;
+    }
+}
+
+@keyframes lb-audience-wave-left {
+    0%, 100% { transform: rotate(-145deg); }
+    50% { transform: rotate(-118deg); }
+}
+
+@keyframes lb-audience-wave-right {
+    0%, 100% { transform: rotate(145deg); }
+    50% { transform: rotate(118deg); }
+}
+
+@keyframes lb-audience-clap-left {
+    0%, 100% { transform: rotate(145deg); }
+    50% { transform: rotate(125deg); }
+}
+
+@keyframes lb-audience-clap-right {
+    0%, 100% { transform: rotate(-145deg); }
+    50% { transform: rotate(-125deg); }
+}
+
+@keyframes lb-audience-cheer {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
 }
 
 .leaderboard-podium-stage {
@@ -6876,8 +7037,8 @@ button.import-article-chip--selected:hover {
     justify-content: center;
     align-items: flex-end;
     gap: clamp(8px, 2vw, 18px);
-    min-height: 250px;
-    padding: 10px 8px 36px;
+    min-height: 274px;
+    padding: 10px 8px 60px;
 }
 
 .leaderboard-podium-entry {
@@ -7078,30 +7239,32 @@ button.import-article-chip--selected:hover {
     }
 
     .leaderboard-podium-scene {
-        min-height: 218px;
+        min-height: 248px;
     }
 
     .leaderboard-podium-audience {
-        height: 34px;
-        padding: 0;
-        gap: 2px;
+        height: 58px;
+        padding: 0 1%;
+        gap: 8px;
     }
 
-    .lb-audience-member {
-        flex-basis: 28px;
-        min-width: 20px;
+    .lb-audience-group {
+        gap: 0;
     }
 
-    .lb-audience-member:nth-child(n + 9) {
+    .lb-audience-group:nth-child(n + 3) {
         display: none;
     }
 
-    .lb-audience-member:nth-child(3n + 1) {
-        margin-bottom: 3px;
+    .lb-audience-member {
+        width: 32px;
+        height: 52px;
+        flex-basis: 32px;
     }
 
-    .lb-audience-member:nth-child(3n + 2) {
-        margin-bottom: 0;
+    .lb-audience-head {
+        width: 26px;
+        height: 26px;
     }
 
     .lb-audience-avatar {
@@ -7109,18 +7272,39 @@ button.import-article-chip--selected:hover {
         height: 26px;
         flex-basis: 26px;
         border-width: 2px;
-        font-size: 0.68rem;
+        font-size: 0.9rem;
     }
 
-    .lb-audience-cheer {
-        top: -8px;
-        font-size: 0.68rem;
+    .lb-audience-person {
+        top: 22px;
+        width: 32px;
+        height: 30px;
+    }
+
+    .lb-audience-torso {
+        bottom: 7px;
+        width: 12px;
+        height: 20px;
+    }
+
+    .lb-audience-arm {
+        top: 5px;
+        width: 5px;
+        height: 18px;
+    }
+
+    .lb-audience-arm--left {
+        left: 7px;
+    }
+
+    .lb-audience-arm--right {
+        right: 7px;
     }
 
     .leaderboard-podium-stage {
         gap: 5px;
-        min-height: 218px;
-        padding: 8px 0 30px;
+        min-height: 248px;
+        padding: 8px 0 56px;
     }
 
     .leaderboard-podium-entry {
