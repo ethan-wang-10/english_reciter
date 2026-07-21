@@ -3393,7 +3393,6 @@ function renderLeaderboardPodium(apiData) {
         })
         .join('');
     const audienceFaces = ['😊', '😄', '🤩', '🥳', '😎', '🤗'];
-    const audiencePoses = ['wave-left', 'clap', 'cheer', 'wave-right'];
     const audienceGroups = [];
     const audienceGroupCount = audience.length <= 1
         ? audience.length
@@ -3414,14 +3413,11 @@ function renderLeaderboardPodium(apiData) {
                 const avatar = entry.avatar_url
                     ? `<img class="lb-audience-avatar" src="${escapeHtml(avatarDisplayUrl(entry.avatar_url, 96))}" alt="" width="32" height="32" loading="lazy" />`
                     : `<span class="lb-audience-avatar lb-audience-face">${audienceFaces[i % audienceFaces.length]}</span>`;
-                return `<span class="lb-audience-member lb-audience-pose-${audiencePoses[i % audiencePoses.length]} lb-audience-tone-${i % 6}" title="${escapeHtml(entry.username)}">
-                    <span class="lb-audience-head">${avatar}</span>
-                    <span class="lb-audience-person">
-                        <span class="lb-audience-arm lb-audience-arm--left"></span>
-                        <span class="lb-audience-arm lb-audience-arm--right"></span>
-                        <span class="lb-audience-torso"></span>
-                    </span>
-                </span>`;
+                const audienceJitterSeed = Array.from(String(entry.username || '')).reduce(
+                    (seed, char) => (seed * 33 + char.charCodeAt(0)) % 6,
+                    i % 6,
+                );
+                return `<span class="lb-audience-member lb-audience-jitter-${audienceJitterSeed}" title="${escapeHtml(entry.username)}">${avatar}</span>`;
             })
             .join('');
         return `<span class="lb-audience-group lb-audience-group-${groupIndex % 4}">${members}</span>`;
