@@ -278,11 +278,11 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260721-podium-crowd3" in html
+    assert "/static/js/app.js?v=20260721-podium-crowd4" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260721-podium-crowd3" in html
+    assert "/static/css/style.css?v=20260721-podium-crowd4" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
@@ -309,11 +309,15 @@ def test_leaderboard_podium_exposes_avatar_reward_dialog(client) -> None:
     assert "Number(entry.rank) > 3" in javascript
     assert "audienceGroups" in javascript
     assert "audienceFaces" in javascript
+    assert "lb-audience-side--left" in javascript
+    assert "cameraHtml('right')" in javascript
     assert "leaderboard-podium-stage" in stylesheet
     assert ".lb-audience-avatar" in stylesheet
     assert ".lb-audience-pose-wave-left" in stylesheet
     assert ".lb-audience-pose-clap" in stylesheet
-    assert ".lb-audience-group:nth-child(n + 3)" in stylesheet
+    assert ".lb-audience-side--left" in stylesheet
+    assert ".lb-podium-camera-flash" in stylesheet
+    assert ".lb-audience-side .lb-audience-group:nth-child(n + 2)" in stylesheet
     assert ".leaderboard-podium-entry.rank-1" in stylesheet
     assert ".avatar-view-modal.is-leaderboard-view" in stylesheet
 
