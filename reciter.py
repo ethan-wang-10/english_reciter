@@ -309,6 +309,10 @@ class Word:
         )
 
 
+class LearningDataLoadError(RuntimeError):
+    """Raised when persisted learning data exists but cannot be loaded safely."""
+
+
 class WordRepository:
     """单词数据访问层"""
     
@@ -359,27 +363,44 @@ class WordRepository:
         Returns:
             (all_words, mastered_words)
         """
+        data_path = Path(self.config.DATA_FILE)
         try:
-            with open(self.config.DATA_FILE, 'r', encoding='utf-8') as f:
+            if data_path.is_file() and data_path.stat().st_size == 0:
+                self.learning_state_v2 = {
+                    'version': 1,
+                    'review_states': {},
+                    'daily_task': None,
+                }
+                return [], []
+            with data_path.open('r', encoding='utf-8') as f:
                 data = json.load(f)
-                pending_rows = data.get('all_words') if isinstance(data, dict) else []
-                mastered_rows = data.get('mastered_words') if isinstance(data, dict) else []
+                if not isinstance(data, dict):
+                    raise LearningDataLoadError('学习数据根节点必须是对象')
+                pending_rows = data.get('all_words')
+                mastered_rows = data.get('mastered_words')
                 all_words = [
                     Word.from_dict(w) for w in (pending_rows or []) if isinstance(w, dict)
                 ]
                 mastered_words = [
                     Word.from_dict(w) for w in (mastered_rows or []) if isinstance(w, dict)
                 ]
+                has_main_state = 'learning_state_v2' in data
                 main_state = data.get('learning_state_v2')
+                if has_main_state and not isinstance(main_state, dict):
+                    raise LearningDataLoadError('学习状态格式无效')
                 self._set_learning_state(main_state)
                 sidecar = self._learning_state_sidecar_path()
-                if not isinstance(main_state, dict) and sidecar.is_file():
+                if not has_main_state and sidecar.is_file():
                     try:
                         with sidecar.open('r', encoding='utf-8') as state_file:
                             sidecar_state = json.load(state_file)
+                        if not isinstance(sidecar_state, dict):
+                            raise LearningDataLoadError('学习状态 sidecar 根节点必须是对象')
                         self._set_learning_state(sidecar_state)
                     except (OSError, json.JSONDecodeError) as state_error:
-                        logger.warning('学习状态 sidecar 无法读取，回退主数据: %s', state_error)
+                        raise LearningDataLoadError(
+                            f'学习状态 sidecar 无法读取: {state_error}'
+                        ) from state_error
                 
                 for word in all_words + mastered_words:
                     if not hasattr(word, 'review_round'):
@@ -407,13 +428,21 @@ class WordRepository:
             return [], []
         except json.JSONDecodeError as e:
             logger.error(f"数据文件 {self.config.DATA_FILE} 格式错误: {e}")
-            logger.warning("将重置为初始状态")
-            self.learning_state_v2 = {'version': 1, 'review_states': {}, 'daily_task': None}
-            return [], []
+            raise LearningDataLoadError(
+                f'学习数据格式错误，已拒绝覆盖原文件: {e}'
+            ) from e
+        except LearningDataLoadError:
+            raise
+        except OSError as e:
+            logger.error(f"读取数据文件 {self.config.DATA_FILE} 失败: {e}")
+            raise LearningDataLoadError(
+                f'学习数据暂时无法读取，已拒绝覆盖原文件: {e}'
+            ) from e
         except Exception as e:
             logger.error(f"加载数据时发生未知错误: {e}")
-            self.learning_state_v2 = {'version': 1, 'review_states': {}, 'daily_task': None}
-            return [], []
+            raise LearningDataLoadError(
+                f'学习数据无法安全加载，已拒绝覆盖原文件: {e}'
+            ) from e
     
     def save_data(
         self,

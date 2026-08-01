@@ -278,7 +278,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260721-podium-crowd7" in html
+    assert "/static/js/app.js?v=20260801-review-safety2" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
@@ -346,6 +346,22 @@ def test_review_flow_exposes_twenty_word_section_breaks(client) -> None:
     assert 'id="review-section-progress"' in html
     assert "阶段小结" in html
     assert ".review-section-break-metrics" in stylesheet
+
+
+def test_logout_waits_for_review_submission_before_revoking_session(client) -> None:
+    javascript = client.get("/static/js/app.js").get_data(as_text=True)
+
+    assert "let activeReviewSubmissionPromise = null" in javascript
+    assert "saved = await activeReviewSubmissionPromise" in javascript
+    assert "saved = await submitAnswer()" in javascript
+    assert "if (!saved || pendingReviewSubmission)" in javascript
+    assert javascript.index("saved = await activeReviewSubmissionPromise") < javascript.index(
+        "token = null", javascript.index("async function logout()")
+    )
+    assert "if (logoutBtn && token)" not in javascript
+    assert "logoutBtn.disabled = false" in javascript
+    assert "logoutBtn.textContent = originalLabel" in javascript
+    assert "async function submitAnswerRequest()" in javascript
 
 
 def test_summary_payload_exposes_today_progress_and_memory_status_counts() -> None:
@@ -1065,6 +1081,30 @@ def test_login_accepts_json_content_type_with_charset(client, monkeypatch) -> No
 
     assert response.status_code == 200
     assert response.get_json()["access_token"] == "test-token"
+
+
+def test_bootstrap_does_not_overwrite_corrupted_learning_data(
+    client, monkeypatch, tmp_path
+) -> None:
+    user = {"password_hash": "unused", "enabled": True}
+    monkeypatch.setattr(web, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(web, "verify_token", lambda token: "alice")
+    monkeypatch.setattr(web, "get_user", lambda username: user)
+    web._invalidate_user_reciter_cache("alice")
+    user_dir = tmp_path / "alice"
+    user_dir.mkdir()
+    learning_data = user_dir / "learning_data.json"
+    learning_data.write_text('{broken-learning-data', encoding="utf-8")
+
+    response = client.get(
+        "/api/bootstrap",
+        headers={"Authorization": "Bearer test"},
+    )
+
+    assert response.status_code == 503
+    assert "原有进度未被修改" in response.get_json()["error"]
+    assert learning_data.read_text(encoding="utf-8") == '{broken-learning-data'
+    web._invalidate_user_reciter_cache("alice")
 
 
 def test_wordbank_search_builds_english_candidates_once_per_term(client, monkeypatch) -> None:

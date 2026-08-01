@@ -11,7 +11,12 @@ from datetime import date, timedelta
 
 from app_time import china_today
 from reciter import (
-    Config, Word, ExampleGenerator, WordRepository, WordReciter
+    Config,
+    ExampleGenerator,
+    LearningDataLoadError,
+    Word,
+    WordReciter,
+    WordRepository,
 )
 from review_scheduler import ReviewEventConflict
 
@@ -352,13 +357,29 @@ class TestWordRepository(unittest.TestCase):
         self.assertEqual(len(mastered_words), 0)
     
     def test_load_corrupted_data(self):
-        """测试加载损坏的数据"""
+        """损坏的数据必须阻止请求，不能伪装成空词库。"""
         with open(self.temp_data.name, 'w') as f:
             f.write("invalid json")
-        
-        all_words, mastered_words = self.repository.load_data()
-        self.assertEqual(len(all_words), 0)
-        self.assertEqual(len(mastered_words), 0)
+
+        with self.assertRaises(LearningDataLoadError):
+            self.repository.load_data()
+        self.assertEqual(Path(self.temp_data.name).read_text(), 'invalid json')
+
+    def test_corrupted_sidecar_does_not_discard_daily_progress(self):
+        main_data = {
+            'all_words': [Word('apple', '苹果').to_dict()],
+            'mastered_words': [],
+        }
+        Path(self.temp_data.name).write_text(
+            json.dumps(main_data, ensure_ascii=False),
+            encoding='utf-8',
+        )
+        sidecar = self.repository._learning_state_sidecar_path()
+        sidecar.write_text('{broken', encoding='utf-8')
+
+        with self.assertRaises(LearningDataLoadError):
+            self.repository.load_data()
+        self.assertEqual(sidecar.read_text(encoding='utf-8'), '{broken')
 
     def test_save_error_is_not_reported_as_success(self):
         with patch('reciter.os.replace', side_effect=OSError('disk full')):

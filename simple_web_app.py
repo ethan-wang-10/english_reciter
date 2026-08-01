@@ -43,6 +43,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # 导入核心功能
 from reciter import (
     DEFAULT_DAILY_REVIEW_LIMIT,
+    LearningDataLoadError,
     MAX_DAILY_REVIEW_LIMIT,
     WordReciter,
     Config,
@@ -3829,6 +3830,10 @@ def bootstrap(username):
                 "piper": listening_available,
             },
         }), 200
+    except LearningDataLoadError as e:
+        _invalidate_user_reciter_cache(username)
+        logger.error("首屏 bootstrap 读取学习数据失败: user=%s error=%s", username, e)
+        return jsonify({'error': '学习数据暂时无法读取，原有进度未被修改，请稍后重试'}), 503
     except Exception as e:
         logger.error("首屏 bootstrap 失败: %s", e)
         return jsonify({'error': '服务器内部错误'}), 500

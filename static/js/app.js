@@ -103,6 +103,7 @@ let sessionExerciseStats = {};
 let currentTodayTaskPlan = null;
 let reviewQuestionStartedAt = 0;
 let pendingReviewSubmission = null;
+let activeReviewSubmissionPromise = null;
 let reviewSessionGeneration = 0;
 let reviewDataRequestSequence = 0;
 let listeningPlaybackAttempt = 0;
@@ -4786,21 +4787,45 @@ async function register(username, password, email, inviteCode) {
 }
 
 async function logout() {
+    if (logout.inProgress) return;
     const logoutToken = token;
-    if (typeof window.chatRoomOnLogout === 'function') window.chatRoomOnLogout();
-    token = null;
-    username = null;
-    setSessionParentFlags(false, '');
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    clearWordbankCsvDiscoveryCache();
-    preloadedReviewData = null;
-    reviewDataStaleAfterImport = false;
-    resetArticleImportPickUI();
-    closeSettings();
-    showLoginPage();
+    const logoutUsername = username;
+    const logoutBtn = document.getElementById('logout-btn');
+    const originalLabel = logoutBtn?.textContent || '退出';
+    logout.inProgress = true;
+    if (logoutBtn) {
+        logoutBtn.disabled = true;
+        logoutBtn.textContent = '保存中…';
+    }
 
     try {
+        let saved = true;
+        if (activeReviewSubmissionPromise) {
+            showMainBanner('正在保存当前作答，保存完成后将自动退出');
+            saved = await activeReviewSubmissionPromise;
+        } else if (pendingReviewSubmission) {
+            showMainBanner('正在确认上一次作答结果，确认完成后将自动退出');
+            saved = await submitAnswer();
+        }
+        if (!saved || pendingReviewSubmission) {
+            showMainBanner('当前作答尚未保存，请重试提交后再退出');
+            return;
+        }
+        if (token !== logoutToken || username !== logoutUsername) return;
+
+        if (typeof window.chatRoomOnLogout === 'function') window.chatRoomOnLogout();
+        token = null;
+        username = null;
+        setSessionParentFlags(false, '');
+        localStorage.removeItem('token');
+        localStorage.removeItem('username');
+        clearWordbankCsvDiscoveryCache();
+        preloadedReviewData = null;
+        reviewDataStaleAfterImport = false;
+        resetArticleImportPickUI();
+        closeSettings();
+        showLoginPage();
+
         if (logoutToken) {
             await fetch(`${API_BASE}/auth/logout`, {
                 method: 'POST',
@@ -4811,9 +4836,16 @@ async function logout() {
             });
         }
     } catch (e) {
-        /* 网络错误仍清除本地会话 */
+        /* 保存失败时保留会话；注销请求失败时本地会话已清除。 */
+    } finally {
+        logout.inProgress = false;
+        if (logoutBtn) {
+            logoutBtn.disabled = false;
+            logoutBtn.textContent = originalLabel;
+        }
     }
 }
+logout.inProgress = false;
 
 
 // ==================== 页面切换 ====================
@@ -6975,7 +7007,20 @@ function renderReviewOtherSensesExtra(items) {
 }
 
 async function submitAnswer() {
-    if (isSubmitting || isAdvancing) return;
+    if (activeReviewSubmissionPromise) return activeReviewSubmissionPromise;
+    const submissionPromise = submitAnswerRequest();
+    activeReviewSubmissionPromise = submissionPromise;
+    try {
+        return await submissionPromise;
+    } finally {
+        if (activeReviewSubmissionPromise === submissionPromise) {
+            activeReviewSubmissionPromise = null;
+        }
+    }
+}
+
+async function submitAnswerRequest() {
+    if (isSubmitting || isAdvancing) return false;
     const word = currentReviewList[currentReviewIndex];
     if (word?.exercise_type === 'listening' && word._listeningAudioPlayed !== true) {
         const messageDiv = document.getElementById('word-message');
@@ -6985,7 +7030,7 @@ async function submitAnswer() {
             messageDiv.style.display = 'block';
         }
         void speakExample();
-        return;
+        return false;
     }
     const existingSubmission =
         pendingReviewSubmission &&
@@ -6999,7 +7044,7 @@ async function submitAnswer() {
     
     if (!answer) {
         focusWordCapture(0);
-        return;
+        return false;
     }
 
     isSubmitting = true;
@@ -7057,7 +7102,7 @@ async function submitAnswer() {
             !isReviewContextCurrent(reviewContext) ||
             currentReviewIndex !== submissionIndex ||
             currentReviewList[submissionIndex] !== word
-        ) return;
+        ) return false;
         pendingReviewSubmission = null;
         if (captureInput) captureInput.readOnly = false;
 
@@ -7216,12 +7261,13 @@ async function submitAnswer() {
                 }
             }
         }
+        return true;
     } catch (error) {
         if (
             !isReviewContextCurrent(reviewContext) ||
             currentReviewIndex !== submissionIndex ||
             currentReviewList[submissionIndex] !== word
-        ) return;
+        ) return false;
         isSubmitting = false;
         isAdvancing = false;
         if (submitBtn) submitBtn.classList.remove('btn-submit-loading');
@@ -7256,6 +7302,7 @@ async function submitAnswer() {
         } else {
             showError(msg);
         }
+        return false;
     }
 }
 
