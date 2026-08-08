@@ -278,7 +278,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260801-review-safety2" in html
+    assert "/static/js/app.js?v=20260808-review-section30" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
@@ -326,7 +326,7 @@ def test_leaderboard_podium_exposes_avatar_reward_dialog(client) -> None:
     assert ".avatar-view-modal.is-leaderboard-view" in stylesheet
 
 
-def test_review_flow_exposes_twenty_word_section_breaks(client) -> None:
+def test_review_flow_exposes_thirty_word_section_breaks(client) -> None:
     html_response = client.get("/")
     js_response = client.get("/static/js/app.js")
     css_response = client.get("/static/css/style.css")
@@ -337,13 +337,14 @@ def test_review_flow_exposes_twenty_word_section_breaks(client) -> None:
     html = html_response.get_data(as_text=True)
     javascript = js_response.get_data(as_text=True)
     stylesheet = css_response.get_data(as_text=True)
-    assert "const REVIEW_SECTION_SIZE = 20" in javascript
+    assert "const REVIEW_SECTION_SIZE = 30" in javascript
     assert "showReviewSectionBreak" in javascript
     assert "continueReviewSection" in javascript
     assert "if (!showReviewSectionBreak()) void showCurrentWord()" in javascript
     assert 'id="review-section-break"' in html
     assert 'id="review-section-continue"' in html
     assert 'id="review-section-progress"' in html
+    assert '<dd id="review-section-break-words">30</dd>' in html
     assert "阶段小结" in html
     assert ".review-section-break-metrics" in stylesheet
 
