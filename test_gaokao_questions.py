@@ -31,7 +31,7 @@ def _source(english: str, chinese: str) -> dict:
 def _generated(english: str) -> dict:
     return {
         'english': english,
-        'recognition_distractors': ['错误释义甲', '错误释义乙', '错误释义丙'],
+        'recognition_distractors': ['负担', '风险', '限制'],
         'recognition_explanation_zh': f'{english} 的核心含义辨析。',
         'context_sentence': (
             f'During today\'s vocabulary lesson, the teacher clearly wrote {english} '
@@ -114,6 +114,33 @@ def test_public_question_never_exposes_answer_or_post_answer_feedback():
     assert 'translation_zh' not in context
     assert 'explanation_zh' not in context
     assert questions.check_answer(record['context'], record['context']['answer_option_id'])
+
+
+def test_recognition_uses_one_balanced_core_sense_per_option():
+    record, error = questions.finalize_generated_questions(
+        _source('benefit', 'n. 益处；好处；优势'),
+        _generated('benefit'),
+    )
+
+    assert error == ''
+    options = [option['text'] for option in record['recognition']['options']]
+    assert '益处' in options
+    assert all(not any(separator in text for separator in '；;、/') for text in options)
+    lengths = [len(text) for text in options]
+    assert max(lengths) - min(lengths) <= 2
+
+
+def test_recognition_rejects_option_length_leak():
+    raw = _generated('benefit')
+    raw['recognition_distractors'] = ['负担', '风险', '极其复杂的长期限制']
+
+    record, error = questions.finalize_generated_questions(
+        _source('benefit', 'n. 益处；好处'),
+        raw,
+    )
+
+    assert record is None
+    assert 'option lengths differ' in error
 
 
 def test_generation_is_reentrant_after_partial_batch_success(private_question_bank):
@@ -279,7 +306,7 @@ def test_semantic_audit_rejects_synonymous_recognition_distractor():
         lambda messages, max_tokens: _audited(
             source,
             raw,
-            recognition_acceptable=('n. 益处；好处', '好处'),
+            recognition_acceptable=('益处', '好处'),
         ),
     )
 
@@ -341,7 +368,7 @@ def test_rejected_candidate_is_recorded_and_can_be_regenerated(private_question_
         lambda messages, max_tokens: _audited(
             source,
             raw,
-            recognition_acceptable=('n. 益处；好处', '好处'),
+            recognition_acceptable=('益处', '好处'),
         ),
     )
 
@@ -369,4 +396,25 @@ def test_old_v2_record_without_current_audit_is_not_served(private_question_bank
 
     assert questions.approved_question_count() == 0
     assert questions.get_question('apple', 'recognition') is None
+    assert questions.missing_sources([source]) == [source]
+
+
+def test_old_pending_candidate_does_not_block_balanced_regeneration(private_question_bank):
+    source = _source('apple', 'n. 苹果')
+    record, error = questions.finalize_generated_questions(source, _generated('apple'))
+    assert error == ''
+    record.pop('recognition_format_version')
+    questions.QUESTION_BANK_FILE.write_text(
+        json.dumps({
+            'schema': questions.BANK_SCHEMA,
+            'version': questions.BANK_VERSION,
+            'candidates': {'apple': {'record': record}},
+        }, ensure_ascii=False),
+        encoding='utf-8',
+    )
+    questions._cache = None
+    questions._cache_mtime_ns = -1
+
+    assert questions.has_pending_candidate('apple') is False
+    assert questions.pending_candidate_records() == {}
     assert questions.missing_sources([source]) == [source]

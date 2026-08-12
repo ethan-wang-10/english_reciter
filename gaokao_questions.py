@@ -18,8 +18,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 BANK_SCHEMA = "gaokao-question-bank-v2"
 BANK_VERSION = 2
 AUDIT_VERSION = 2
-GENERATION_PROMPT_VERSION = 3
-SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v3"
+GENERATION_PROMPT_VERSION = 4
+SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v4"
+RECOGNITION_FORMAT_VERSION = 1
 QUESTION_TYPES = ("recognition", "context")
 DATA_DIR = Path(os.getenv("ENGLISH_RECITER_DATA_DIR", "user_data_simple")).expanduser()
 QUESTION_BANK_FILE = DATA_DIR / "_shared" / "gaokao_questions_v2.json"
@@ -262,23 +263,68 @@ def _clean_distinct_list(raw: Any, *, forbidden: Iterable[str], require_cjk: boo
     return out
 
 
+_RECOGNITION_POS_RE = re.compile(
+    r"^(?:n|v|vi|vt|adj|adv|prep|conj|pron|num|art|phr)\.\s*",
+    re.IGNORECASE,
+)
+_RECOGNITION_SENSE_SEPARATOR_RE = re.compile(r"[；;、/，,]+")
+
+
+def _recognition_core_sense(value: Any) -> str:
+    """Keep one concise sense so option length cannot reveal the answer."""
+    text = " ".join(str(value or "").strip().split())
+    text = _RECOGNITION_POS_RE.sub("", text).strip()
+    first = _RECOGNITION_SENSE_SEPARATOR_RE.split(text, maxsplit=1)[0].strip(" ，,。.")
+    return first[:40]
+
+
+def _recognition_options(source: dict, raw: Any) -> Tuple[Optional[Tuple[str, List[str]]], str]:
+    correct = _recognition_core_sense(source.get("chinese"))
+    if not correct or not re.search(r"[\u3400-\u9fff]", correct):
+        return None, "recognition correct answer has no usable core sense"
+    if not isinstance(raw, list):
+        return None, "recognition requires three distinct Chinese distractors"
+
+    blocked = {normalize_word(correct)}
+    distractors: List[str] = []
+    seen = set(blocked)
+    for value in raw:
+        text = _recognition_core_sense(value)
+        key = normalize_word(text)
+        if not text or key in seen or not re.search(r"[\u3400-\u9fff]", text):
+            continue
+        seen.add(key)
+        distractors.append(text)
+        if len(distractors) == 3:
+            break
+    if len(distractors) != 3:
+        return None, "recognition requires three distinct Chinese distractors with one sense each"
+    option_lengths = [
+        len(re.findall(r"[\u3400-\u9fff]", text))
+        for text in [correct, *distractors]
+    ]
+    if max(option_lengths) - min(option_lengths) > 2:
+        return None, "recognition option lengths differ by more than two Chinese characters"
+    return (correct, distractors), ""
+
+
 def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict], str]:
     if not isinstance(raw, dict):
         return None, "AI result is not an object"
     if normalize_word(raw.get("english")) != source["english"]:
         return None, "AI result word does not match request"
-    recognition_distractors = _clean_distinct_list(
+    recognition_values, recognition_error = _recognition_options(
+        source,
         raw.get("recognition_distractors"),
-        forbidden=[source["chinese"]],
-        require_cjk=True,
     )
     context_distractors = _clean_distinct_list(
         raw.get("context_distractors"),
         forbidden=[source["context_answer"], source["english"]],
         require_cjk=False,
     )
-    if len(recognition_distractors) != 3:
-        return None, "recognition requires three distinct Chinese distractors"
+    if not recognition_values:
+        return None, recognition_error
+    recognition_correct, recognition_distractors = recognition_values
     if len(context_distractors) != 3:
         return None, "context requires three distinct English distractors"
     generated_context, context_error = _generated_context(source, raw)
@@ -288,7 +334,7 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
     key = source["english"]
     recognition_revision = hashlib.sha256(
         json.dumps(
-            [source["source_hash"], source["chinese"], recognition_distractors],
+            [source["source_hash"], recognition_correct, recognition_distractors],
             ensure_ascii=False,
             sort_keys=True,
         ).encode("utf-8")
@@ -296,7 +342,7 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
     recognition_id = f"{key}:recognition:v{BANK_VERSION}:{recognition_revision}"
     recognition_options, recognition_answer = _option_rows(
         recognition_distractors,
-        source["chinese"],
+        recognition_correct,
         recognition_id,
     )
     context_revision = hashlib.sha256(
@@ -321,6 +367,7 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
     return {
         "word_key": key,
         "source_hash": source["source_hash"],
+        "recognition_format_version": RECOGNITION_FORMAT_VERSION,
         "generated_at": generated_at,
         "recognition": {
             "question_id": recognition_id,
@@ -345,7 +392,9 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
 
 GENERATION_QUALITY_RULES_ZH = """
 - 先在内部逐项检查识义题和语境题的全部 4 个选项；发现两个选项都能成立时，必须重写题干或更换干扰项。不要输出检查过程，只输出修正后的最终 JSON。
-- 中文正确释义中的分号、顿号和斜线可能分隔多个真实义项；中文干扰项不得命中其中任何义项，也不得使用同义词、近义改写、上位概念或包含正确义项的表述。
+- 识义题界面只展示 correct_definition_zh 的第一个核心义项；3 个中文干扰项也必须各自只写一个核心义项，不得包含词性缩写，不得用分号、顿号或斜线罗列多个含义。
+- 中文干扰项与首个正确义项的字数和表达粒度应接近，避免用户根据选项长短、标点数量或信息量猜答案。
+- 中文正确释义中的分号、顿号和斜线可能还分隔其他真实义项；干扰项不得命中其中任何义项，也不得使用同义词、近义改写、上位概念或包含正确义项的表述。
 - 中文干扰项应与正确释义词性、难度接近，但语义边界要清楚；不要为了“容易混淆”而制造两个都正确的选项。
 - 英文干扰项必须与正确答案词性、语法位置和词形匹配，但在题面明确提供的事实下语义不成立，不得包含正确答案或其明显变体。
 - 语境句至少 12 个英文词，并至少提供两类可观察限定信息，例如固定搭配、动作对象、因果结果、对比关系、时间地点或具体事实。
@@ -645,6 +694,7 @@ def _is_approved_record(row: Any, source_hash: str = "") -> bool:
     return bool(
         isinstance(row, dict)
         and quality_gate_ok
+        and row.get("recognition_format_version") == RECOGNITION_FORMAT_VERSION
         and (not source_hash or row.get("source_hash") == source_hash)
         and all(isinstance(row.get(question_type), dict) for question_type in QUESTION_TYPES)
     )
@@ -692,7 +742,11 @@ def has_pending_candidate(
     row = _candidate_record(
         data.get("candidates", {}).get(normalize_word(word_key))
     )
-    return bool(row and (not source_hash or row.get("source_hash") == source_hash))
+    return bool(
+        row
+        and row.get("recognition_format_version") == RECOGNITION_FORMAT_VERSION
+        and (not source_hash or row.get("source_hash") == source_hash)
+    )
 
 
 def missing_sources(sources: Iterable[dict], force: bool = False) -> List[dict]:
@@ -748,7 +802,10 @@ def pending_candidate_records(
         if allowed is not None and key not in allowed:
             continue
         record = _candidate_record(value)
-        if not record:
+        if (
+            not record
+            or record.get("recognition_format_version") != RECOGNITION_FORMAT_VERSION
+        ):
             continue
         records[key] = record
         if limit > 0 and len(records) >= limit:

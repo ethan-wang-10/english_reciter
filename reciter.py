@@ -3,6 +3,7 @@ import sys
 import json
 import math
 import random
+import re
 import shutil
 import platform
 import subprocess
@@ -40,11 +41,121 @@ MIN_DAILY_REVIEW_SHARE = 0.6
 DEFAULT_DAILY_NEW_WORD_TARGET = 15
 DAILY_PERFORMANCE_HISTORY_DAYS = 30
 LEGACY_CALIBRATION_VERSION = 1
+SPELLING_CLUSTER_ORDER_VERSION = 1
 LEGACY_CALIBRATION_MIX = (
     ('recognition', 2),
     ('context', 2),
     ('spelling', 1),
 )
+
+
+def _spelling_key(value: Any) -> str:
+    """Return a stable comparison key while retaining phrase boundaries."""
+    return " ".join(re.findall(r"[a-z]+", str(value or "").casefold()))
+
+
+def _spelling_edit_distance(left: str, right: str) -> int:
+    distances = [list(range(len(right) + 1))]
+    for left_index in range(1, len(left) + 1):
+        row = [left_index] + [0] * len(right)
+        distances.append(row)
+        for right_index in range(1, len(right) + 1):
+            row[right_index] = min(
+                row[right_index - 1] + 1,
+                distances[left_index - 1][right_index] + 1,
+                distances[left_index - 1][right_index - 1]
+                + (left[left_index - 1] != right[right_index - 1]),
+            )
+            if (
+                left_index > 1
+                and right_index > 1
+                and left[left_index - 1] == right[right_index - 2]
+                and left[left_index - 2] == right[right_index - 1]
+            ):
+                row[right_index] = min(
+                    row[right_index],
+                    distances[left_index - 2][right_index - 2] + 1,
+                )
+    return distances[-1][-1]
+
+
+def spelling_similarity(left: Any, right: Any) -> float:
+    """Estimate visual spelling similarity without dictionaries or AI calls."""
+    first = _spelling_key(left)
+    second = _spelling_key(right)
+    if not first or not second or first == second:
+        return 0.0
+    compact_first = first.replace(" ", "")
+    compact_second = second.replace(" ", "")
+    shortest = min(len(compact_first), len(compact_second))
+    longest = max(len(compact_first), len(compact_second))
+    if shortest < 3:
+        return 0.0
+
+    distance = _spelling_edit_distance(compact_first, compact_second)
+    similarity = 1.0 - (distance / longest)
+    if similarity >= 2 / 3:
+        return similarity
+    if (
+        shortest >= 3
+        and abs(len(compact_first) - len(compact_second)) <= 5
+        and (
+            compact_first.startswith(compact_second)
+            or compact_second.startswith(compact_first)
+        )
+    ):
+        return 0.8
+    return 0.0
+
+
+def order_by_spelling_similarity(rows: List[Any], key_getter) -> List[Any]:
+    """Move genuinely similar spellings together while preserving membership."""
+    source = list(rows)
+    count = len(source)
+    if count < 3:
+        return source
+    keys = [_spelling_key(key_getter(row)) for row in source]
+    scores = [[0.0] * count for _ in range(count)]
+    neighbours = [set() for _ in range(count)]
+    for left in range(count):
+        for right in range(left + 1, count):
+            score = spelling_similarity(keys[left], keys[right])
+            scores[left][right] = scores[right][left] = score
+            if score >= 2 / 3:
+                neighbours[left].add(right)
+                neighbours[right].add(left)
+
+    ordered_indices: List[int] = []
+    visited = set()
+    for seed in range(count):
+        if seed in visited:
+            continue
+        component = []
+        stack = [seed]
+        visited.add(seed)
+        while stack:
+            current = stack.pop()
+            component.append(current)
+            for neighbour in sorted(neighbours[current], reverse=True):
+                if neighbour not in visited:
+                    visited.add(neighbour)
+                    stack.append(neighbour)
+        if len(component) == 1:
+            ordered_indices.append(seed)
+            continue
+
+        current = min(component)
+        remaining = set(component)
+        remaining.remove(current)
+        ordered_indices.append(current)
+        while remaining:
+            current = max(
+                remaining,
+                key=lambda index: (scores[current][index], -index),
+            )
+            remaining.remove(current)
+            ordered_indices.append(current)
+    return [source[index] for index in ordered_indices]
 
 
 def exercise_attempt_limit(exercise_type: str) -> int:
@@ -1201,6 +1312,10 @@ class WordReciter:
         if not selected:
             self.learning_state_v2['daily_task'] = None
             return None
+        selected = order_by_spelling_similarity(
+            selected,
+            lambda candidate: candidate['word'].english,
+        )
 
         task_id = uuid.uuid4().hex
         items = [self._daily_task_item_from_candidate(candidate) for candidate in selected]
@@ -1215,6 +1330,7 @@ class WordReciter:
             'review_reserve': review_reserve,
             'recent_performance': self.recent_performance_snapshot(7),
             'recent_learning_load': self.recent_learning_load_snapshot(7),
+            'spelling_cluster_order_version': SPELLING_CLUSTER_ORDER_VERSION,
             'items': items,
         }
         self._apply_legacy_calibration_mix(task)
@@ -1294,6 +1410,27 @@ class WordReciter:
             task,
             listening_available=listening_available,
         )
+        try:
+            cluster_order_version = int(task.get('spelling_cluster_order_version') or 0)
+        except (TypeError, ValueError, OverflowError):
+            cluster_order_version = 0
+        if cluster_order_version < SPELLING_CLUSTER_ORDER_VERSION:
+            untouched_positions = [
+                index
+                for index, item in enumerate(valid_items)
+                if item.get('status') == 'pending'
+                and self.task_attempt_count(item) == 0
+                and not item.get('last_event_id')
+            ]
+            untouched_items = [valid_items[index] for index in untouched_positions]
+            clustered_items = order_by_spelling_similarity(
+                untouched_items,
+                lambda item: item.get('word_key', ''),
+            )
+            for index, item in zip(untouched_positions, clustered_items):
+                valid_items[index] = item
+            task['items'] = valid_items
+            task['spelling_cluster_order_version'] = SPELLING_CLUSTER_ORDER_VERSION
         try:
             calibration_version = int(task.get('legacy_calibration_version') or 0)
         except (TypeError, ValueError, OverflowError):

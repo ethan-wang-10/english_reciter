@@ -17,6 +17,8 @@ from reciter import (
     Word,
     WordReciter,
     WordRepository,
+    order_by_spelling_similarity,
+    spelling_similarity,
 )
 from review_scheduler import ReviewEventConflict
 
@@ -158,6 +160,19 @@ class TestWord(unittest.TestCase):
         word = Word.from_dict(word_dict)
         self.assertEqual(word.english, 'future')
         self.assertEqual(word_dict, original)
+
+    def test_spelling_similarity_handles_transposition_and_prefix_families(self):
+        self.assertGreaterEqual(spelling_similarity('form', 'from'), 2 / 3)
+        self.assertGreaterEqual(spelling_similarity('act', 'action'), 2 / 3)
+        self.assertEqual(spelling_similarity('book', 'zebra'), 0.0)
+
+    def test_spelling_order_keeps_membership_and_unrelated_order(self):
+        words = ['affect', 'banana', 'effect', 'zebra']
+        ordered = order_by_spelling_similarity(words, lambda value: value)
+
+        self.assertCountEqual(ordered, words)
+        self.assertEqual(abs(ordered.index('affect') - ordered.index('effect')), 1)
+        self.assertLess(ordered.index('banana'), ordered.index('zebra'))
 
 
 class TestExampleGenerator(unittest.TestCase):
@@ -715,6 +730,62 @@ class TestWordReciter(unittest.TestCase):
         self.assertEqual(result['added_to_today'], 1)
         self.assertEqual([word.english for word in refreshed['words']], ['same-day-import'])
         self.assertEqual(refreshed['plan']['remaining'], 1)
+
+    def test_today_plan_groups_similar_spellings_without_changing_membership(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 4
+        reciter.all_words = [
+            Word('affect', '影响', success_count=1, next_review_date=reciter.today),
+            Word('banana', '香蕉', success_count=1, next_review_date=reciter.today),
+            Word('effect', '效果', success_count=1, next_review_date=reciter.today),
+            Word('zebra', '斑马', success_count=1, next_review_date=reciter.today),
+        ]
+
+        task = reciter.get_today_learning_plan()
+        english = [word.english for word in task['words']]
+
+        self.assertCountEqual(english, ['affect', 'banana', 'effect', 'zebra'])
+        self.assertEqual(abs(english.index('affect') - english.index('effect')), 1)
+        self.assertEqual(task['plan']['remaining'], 4)
+
+    def test_existing_task_clusters_only_untouched_items(self):
+        reciter = WordReciter(self.config)
+        reciter.all_words = [
+            Word('banana', '香蕉', success_count=1, next_review_date=reciter.today),
+            Word('affect', '影响', success_count=1, next_review_date=reciter.today),
+            Word('zebra', '斑马', success_count=1, next_review_date=reciter.today),
+            Word('effect', '效果', success_count=1, next_review_date=reciter.today),
+        ]
+        reciter.learning_state_v2['daily_task'] = {
+            'version': 1,
+            'task_id': 'existing-spelling-order',
+            'date': reciter.today.isoformat(),
+            'status': 'active',
+            'available_at_creation': 4,
+            'items': [
+                {
+                    'item_id': f'item-{index}',
+                    'word_key': word.english,
+                    'scheduled_due_date': reciter.today.isoformat(),
+                    'exercise_type': 'spelling',
+                    'reason': 'due',
+                    'phase': 'main',
+                    'status': 'pending',
+                    'attempts': 1 if index == 0 else 0,
+                }
+                for index, word in enumerate(reciter.all_words)
+            ],
+        }
+
+        task = reciter.get_today_learning_plan()
+        english = [word.english for word in task['words']]
+
+        self.assertEqual(english[0], 'banana')
+        self.assertEqual(abs(english.index('affect') - english.index('effect')), 1)
+        self.assertEqual(
+            reciter.learning_state_v2['daily_task']['spelling_cluster_order_version'],
+            1,
+        )
 
     def test_today_plan_reserves_sixty_percent_for_reviews(self):
         reciter = WordReciter(self.config)
