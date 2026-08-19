@@ -7,6 +7,8 @@ from review_scheduler import (
     ReviewEventConflict,
     claim_review_event,
     choose_exercise_type,
+    mark_exercise_unavailable,
+    mastery_ready,
     mastery_snapshot,
     normalize_review_state,
     record_mastery_attempt,
@@ -237,6 +239,53 @@ class TestReviewScheduler(unittest.TestCase):
             for exercise_type in ('recognition', 'context', 'spelling')
         ]
         self.assertAlmostEqual(snapshot['overall'], sum(core_scores) / 3, places=3)
+
+    def test_missing_semantic_exercises_are_excluded_from_mastery(self):
+        state = normalize_review_state({})
+        self.assertEqual(choose_exercise_type(state), 'recognition')
+        self.assertTrue(mark_exercise_unavailable(state, 'recognition'))
+        self.assertEqual(choose_exercise_type(state), 'context')
+        self.assertEqual(
+            mastery_snapshot(state)['by_type']['spelling']['required_attempts'],
+            5,
+        )
+        self.assertTrue(mark_exercise_unavailable(state, 'context'))
+        self.assertEqual(choose_exercise_type(state), 'spelling')
+
+        for index in range(7):
+            record_mastery_attempt(
+                state,
+                'spelling',
+                True,
+                today=self.today,
+                event_id=f'spelling-{index}',
+            )
+
+        self.assertFalse(mastery_ready(state))
+        record_mastery_attempt(
+            state,
+            'spelling',
+            True,
+            today=self.today,
+            event_id='spelling-7',
+        )
+
+        snapshot = mastery_snapshot(state)
+        self.assertFalse(snapshot['by_type']['recognition']['available'])
+        self.assertFalse(snapshot['by_type']['recognition']['required'])
+        self.assertFalse(snapshot['by_type']['context']['available'])
+        self.assertTrue(snapshot['by_type']['spelling']['required'])
+        self.assertEqual(snapshot['by_type']['spelling']['required_attempts'], 8)
+        self.assertEqual(snapshot['overall_percent'], snapshot['by_type']['spelling']['percent'])
+        self.assertTrue(mastery_ready(state))
+
+    def test_spelling_cannot_be_marked_unavailable(self):
+        state = normalize_review_state(
+            {'unavailable_exercise_types': ['recognition', 'spelling', 'unknown']}
+        )
+        self.assertEqual(state['unavailable_exercise_types'], ['recognition'])
+        self.assertFalse(mark_exercise_unavailable(state, 'spelling'))
+        self.assertFalse(mastery_ready(state))
 
 
 if __name__ == '__main__':

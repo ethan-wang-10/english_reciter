@@ -4706,15 +4706,20 @@ def get_or_generate_word_question(username):
 
             question = gaokao_questions.get_question(word.english, exercise_type)
             if not question:
+                reciter.mark_exercise_unavailable(word, exercise_type)
                 task_item['exercise_type'] = 'spelling'
                 task_item.pop('question_id', None)
                 task_item['question_fallback_reason'] = 'question_not_approved'
                 reciter.save_learning_data(backup=False)
+                fallback_word = _spelling_fallback_word_payload(word)
+                state_payload = reciter.review_state_payload(word)
+                fallback_word['mastery'] = state_payload['mastery']
+                fallback_word['memory_status'] = state_payload['memory_status']
                 return jsonify({
                     'fallback': True,
                     'exercise_type': 'spelling',
                     'message': '选择题尚未生成或不可用，已自动切换为拼写练习',
-                    'word': _spelling_fallback_word_payload(word),
+                    'word': fallback_word,
                 }), 200
 
             task_item['question_id'] = question['question_id']

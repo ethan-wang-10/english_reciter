@@ -5979,18 +5979,28 @@ function renderReviewMasteryProgress(word) {
     if (!progressEl || !word) return;
     const masteryPercent = Number(word.mastery?.overall_percent);
     if (Number.isFinite(masteryPercent)) {
-        const recognition = Number(word.mastery?.by_type?.recognition?.percent) || 0;
-        const context = Number(word.mastery?.by_type?.context?.percent) || 0;
-        const spelling = Number(word.mastery?.by_type?.spelling?.percent) || 0;
-        const listening = Number(word.mastery?.by_type?.listening?.percent) || 0;
+        const recognition = masteryDimensionText(word, 'recognition', '义');
+        const context = masteryDimensionText(word, 'context', '境');
+        const spelling = masteryDimensionText(word, 'spelling', '拼');
+        const listening = masteryDimensionText(word, 'listening', '听写');
         const statusPrefix = word.memory_status === 'reinforcement' ? '待巩固 · ' : '';
-        progressEl.textContent = `${statusPrefix}掌握 ${masteryPercent}% · 义 ${recognition}% · 境 ${context}% · 拼 ${spelling}%`;
-        progressEl.title = `英文识义 ${recognition}% · 语境选词 ${context}% · 拼写 ${spelling}% · 听写 ${listening}%`;
+        progressEl.textContent = `${statusPrefix}掌握 ${masteryPercent}% · ${recognition} · ${context} · ${spelling}`;
+        progressEl.title = `英文识义 ${masteryDimensionValue(word, 'recognition')} · 语境选词 ${masteryDimensionValue(word, 'context')} · 拼写 ${masteryDimensionValue(word, 'spelling')} · ${listening}`;
         return;
     }
     const maxSuccess = word.max_success_count != null ? word.max_success_count : 8;
     progressEl.textContent = `${word.success_count}/${maxSuccess}`;
     progressEl.removeAttribute('title');
+}
+
+function masteryDimensionValue(word, exerciseType) {
+    const dimension = word?.mastery?.by_type?.[exerciseType];
+    if (dimension?.available === false) return '未提供';
+    return `${Number(dimension?.percent) || 0}%`;
+}
+
+function masteryDimensionText(word, exerciseType, label) {
+    return `${label} ${masteryDimensionValue(word, exerciseType)}`;
 }
 
 function createReviewEventId() {
@@ -7432,7 +7442,7 @@ function _renderProgressWordItem(word) {
         ? `${Math.round(masteryPercent)}%`
         : `${word.success_count}/${word.max_success_count}`;
     const masteryTitle = Number.isFinite(masteryPercent)
-        ? `识义 ${Number(word.mastery?.by_type?.recognition?.percent) || 0}% · 语境 ${Number(word.mastery?.by_type?.context?.percent) || 0}% · 拼写 ${Number(word.mastery?.by_type?.spelling?.percent) || 0}% · 听写 ${Number(word.mastery?.by_type?.listening?.percent) || 0}%`
+        ? `${masteryDimensionText(word, 'recognition', '识义')} · ${masteryDimensionText(word, 'context', '语境')} · ${masteryDimensionText(word, 'spelling', '拼写')} · ${masteryDimensionText(word, 'listening', '听写')}`
         : '';
     const masteryDetail = Number.isFinite(masteryPercent)
         ? `<div class="word-stat-detail">${escapeHtml(masteryTitle)}</div>`
@@ -7536,15 +7546,12 @@ async function loadProgress() {
 function _renderMasteredWordItem(word) {
     const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
     const masteryPercent = Number(word.mastery?.overall_percent);
-    const recognition = Number(word.mastery?.by_type?.recognition?.percent) || 0;
-    const context = Number(word.mastery?.by_type?.context?.percent) || 0;
-    const spelling = Number(word.mastery?.by_type?.spelling?.percent) || 0;
-    const listening = Number(word.mastery?.by_type?.listening?.percent) || 0;
+    const masteryDetail = `${masteryDimensionText(word, 'recognition', '识义')} · ${masteryDimensionText(word, 'context', '语境')} · ${masteryDimensionText(word, 'spelling', '拼写')} · ${masteryDimensionText(word, 'listening', '听写')}`;
     const masteryHtml = Number.isFinite(masteryPercent)
         ? `<div class="word-stat">
                 <div class="word-stat-value">${Math.round(masteryPercent)}%</div>
                 <div class="word-stat-label">多维掌握</div>
-                <div class="word-stat-detail">识义 ${recognition}% · 语境 ${context}% · 拼写 ${spelling}% · 听写 ${listening}%</div>
+                <div class="word-stat-detail">${escapeHtml(masteryDetail)}</div>
             </div>`
         : '';
     const memoryStatusHtml = word.memory_status === 'reinforcement'

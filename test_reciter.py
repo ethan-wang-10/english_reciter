@@ -1810,6 +1810,34 @@ class TestWordReciter(unittest.TestCase):
             0,
         )
 
+    def test_missing_semantic_questions_do_not_block_spelling_mastery(self):
+        reciter = WordReciter(self.config)
+        word = Word('basic-only', '仅基础题', next_review_date=reciter.today)
+        reciter.all_words = [word]
+        self.assertTrue(reciter.mark_exercise_unavailable(word, 'recognition'))
+        self.assertTrue(reciter.mark_exercise_unavailable(word, 'context'))
+
+        results = [
+            reciter.apply_scored_review_attempt(
+                word,
+                exercise_type='spelling',
+                correct=True,
+                event_id=f'basic-spelling-{index}',
+            )
+            for index in range(8)
+        ]
+
+        self.assertTrue(all(not result['mastered_now'] for result in results[:-1]))
+        self.assertIn('继续完成拼写目标', results[0]['message'])
+        self.assertTrue(results[-1]['mastered_now'])
+        self.assertIn(word, reciter.mastered_words)
+        payload = reciter.review_state_payload(word)
+        self.assertFalse(payload['mastery']['by_type']['recognition']['available'])
+        self.assertEqual(
+            payload['mastery']['overall_percent'],
+            payload['mastery']['by_type']['spelling']['percent'],
+        )
+
     def test_multidimensional_mastery_no_longer_requires_legacy_success_count(self):
         reciter = WordReciter(self.config)
         word = Word('direct-mastery', '直接掌握', next_review_date=reciter.today)

@@ -14,6 +14,7 @@ STATE_VERSION = 1
 SCHEDULER_ALGORITHM = "adaptive-sm2-v1"
 EXERCISE_TYPES = ("recognition", "context", "spelling", "listening")
 CORE_EXERCISE_TYPES = ("recognition", "context", "spelling")
+OPTIONAL_SEMANTIC_EXERCISE_TYPES = ("recognition", "context")
 CORE_MASTERY_REQUIREMENTS = {
     "recognition": {"attempts": 3, "score": 0.65},
     "context": {"attempts": 3, "score": 0.65},
@@ -154,6 +155,16 @@ def normalize_review_state(
     memory_status = str(src.get("memory_status") or "")
     if memory_status not in MEMORY_STATUSES:
         memory_status = "stable" if legacy_active else "learning"
+    unavailable_src = (
+        src.get("unavailable_exercise_types")
+        if isinstance(src.get("unavailable_exercise_types"), list)
+        else []
+    )
+    unavailable_exercise_types = [
+        exercise_type
+        for exercise_type in OPTIONAL_SEMANTIC_EXERCISE_TYPES
+        if exercise_type in unavailable_src
+    ]
     normalized = dict(src)
     normalized.update(
         {
@@ -163,12 +174,61 @@ def normalize_review_state(
             "reinforcement_since": _iso_date(src.get("reinforcement_since")),
             "scheduler": scheduler,
             "mastery": mastery,
+            "unavailable_exercise_types": unavailable_exercise_types,
             "recent_event_ids": recent_ids,
             "recent_event_fingerprints": recent_event_fingerprints,
             "recent_event_results": recent_event_results,
         }
     )
     return normalized
+
+
+def mark_exercise_unavailable(state: Dict[str, Any], exercise_type: str) -> bool:
+    """Exclude a missing optional semantic exercise from mastery requirements."""
+    if exercise_type not in OPTIONAL_SEMANTIC_EXERCISE_TYPES:
+        return False
+    raw_unavailable = state.get("unavailable_exercise_types")
+    unavailable = [
+        value
+        for value in OPTIONAL_SEMANTIC_EXERCISE_TYPES
+        if isinstance(raw_unavailable, list) and value in raw_unavailable
+    ]
+    state["unavailable_exercise_types"] = unavailable
+    if exercise_type in unavailable:
+        return False
+    unavailable.append(exercise_type)
+    unavailable.sort(key=OPTIONAL_SEMANTIC_EXERCISE_TYPES.index)
+    return True
+
+
+def _effective_core_mastery_requirements(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Transfer missing semantic evidence requirements to spelling."""
+    unavailable = {
+        exercise_type
+        for exercise_type in (state.get("unavailable_exercise_types") or [])
+        if exercise_type in OPTIONAL_SEMANTIC_EXERCISE_TYPES
+    }
+    requirements = {
+        exercise_type: dict(requirement)
+        for exercise_type, requirement in CORE_MASTERY_REQUIREMENTS.items()
+    }
+    mastery = state.get("mastery") if isinstance(state.get("mastery"), dict) else {}
+    requirements["spelling"]["attempts"] += sum(
+        max(
+            0,
+            CORE_MASTERY_REQUIREMENTS[exercise_type]["attempts"]
+            - _bounded_int(
+                (mastery.get(exercise_type) or {}).get("attempts")
+                if isinstance(mastery.get(exercise_type), dict)
+                else 0,
+                0,
+                0,
+                1_000_000,
+            ),
+        )
+        for exercise_type in unavailable
+    )
+    return requirements
 
 
 def claim_review_event(
@@ -327,13 +387,24 @@ def choose_exercise_type(
 ) -> str:
     """Choose the next core exercise; use listening only for stable maintenance."""
     mastery = state.get("mastery") or {}
+    unavailable = {
+        exercise_type
+        for exercise_type in (state.get("unavailable_exercise_types") or [])
+        if exercise_type in OPTIONAL_SEMANTIC_EXERCISE_TYPES
+    }
+    available_core_types = [
+        exercise_type
+        for exercise_type in CORE_EXERCISE_TYPES
+        if exercise_type not in unavailable
+    ]
+    effective_requirements = _effective_core_mastery_requirements(state)
 
     memory_status = str(state.get("memory_status") or "learning")
     if memory_status == "learning":
         incomplete = []
-        for order, exercise_type in enumerate(CORE_EXERCISE_TYPES):
+        for order, exercise_type in enumerate(available_core_types):
             dim = mastery.get(exercise_type) if isinstance(mastery.get(exercise_type), dict) else {}
-            requirement = CORE_MASTERY_REQUIREMENTS[exercise_type]
+            requirement = effective_requirements[exercise_type]
             attempts = _bounded_int(dim.get("attempts"), 0, 0, 1_000_000)
             score = _bounded_float(dim.get("score"), 0.0, 0.0, 1.0)
             if attempts < requirement["attempts"]:
@@ -343,10 +414,10 @@ def choose_exercise_type(
             return incomplete[0][3]
 
         below_threshold = []
-        for order, exercise_type in enumerate(CORE_EXERCISE_TYPES):
+        for order, exercise_type in enumerate(available_core_types):
             dim = mastery.get(exercise_type) if isinstance(mastery.get(exercise_type), dict) else {}
             score = _bounded_float(dim.get("score"), 0.0, 0.0, 1.0)
-            requirement = CORE_MASTERY_REQUIREMENTS[exercise_type]
+            requirement = effective_requirements[exercise_type]
             if score < requirement["score"]:
                 below_threshold.append((score, order, exercise_type))
         if below_threshold:
@@ -355,7 +426,7 @@ def choose_exercise_type(
 
     if memory_status == "reinforcement":
         weakest_core = []
-        for order, exercise_type in enumerate(CORE_EXERCISE_TYPES):
+        for order, exercise_type in enumerate(available_core_types):
             dim = mastery.get(exercise_type) if isinstance(mastery.get(exercise_type), dict) else {}
             weakest_core.append(
                 (
@@ -368,7 +439,7 @@ def choose_exercise_type(
         weakest_core.sort()
         return weakest_core[0][3]
 
-    available_types = list(CORE_EXERCISE_TYPES)
+    available_types = list(available_core_types)
     if listening_available:
         available_types.append("listening")
     ranked = []
@@ -389,10 +460,19 @@ def choose_exercise_type(
 def mastery_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
     by_type: Dict[str, Any] = {}
     scores = []
+    unavailable = {
+        exercise_type
+        for exercise_type in (state.get("unavailable_exercise_types") or [])
+        if exercise_type in OPTIONAL_SEMANTIC_EXERCISE_TYPES
+    }
+    effective_requirements = _effective_core_mastery_requirements(state)
     for exercise_type in EXERCISE_TYPES:
         dim = state["mastery"][exercise_type]
         score = _bounded_float(dim.get("score"), 0.0, 0.0, 1.0)
-        if exercise_type in CORE_EXERCISE_TYPES:
+        available = exercise_type not in unavailable
+        required = exercise_type in CORE_EXERCISE_TYPES and available
+        requirement = effective_requirements.get(exercise_type, {})
+        if required:
             scores.append(score)
         by_type[exercise_type] = {
             "score": round(score, 4),
@@ -400,6 +480,10 @@ def mastery_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
             "attempts": int(dim.get("attempts") or 0),
             "correct": int(dim.get("correct") or 0),
             "streak": int(dim.get("streak") or 0),
+            "available": available,
+            "required": required,
+            "required_attempts": int(requirement.get("attempts") or 0) if required else 0,
+            "required_score": float(requirement.get("score") or 0.0) if required else 0.0,
         }
     overall = sum(scores) / len(scores) if scores else 0.0
     return {
@@ -410,12 +494,16 @@ def mastery_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def mastery_ready(state: Dict[str, Any], *, require_listening: bool = True) -> bool:
-    """Return whether all required semantic and spelling abilities are ready."""
+    """Return whether every available core ability has reached its threshold."""
     snapshot = mastery_snapshot(state)
+    effective_requirements = _effective_core_mastery_requirements(state)
     return all(
-        snapshot["by_type"][exercise_type]["attempts"] >= requirement["attempts"]
-        and snapshot["by_type"][exercise_type]["score"] >= requirement["score"]
-        for exercise_type, requirement in CORE_MASTERY_REQUIREMENTS.items()
+        not snapshot["by_type"][exercise_type]["required"]
+        or (
+            snapshot["by_type"][exercise_type]["attempts"] >= requirement["attempts"]
+            and snapshot["by_type"][exercise_type]["score"] >= requirement["score"]
+        )
+        for exercise_type, requirement in effective_requirements.items()
     )
 
 

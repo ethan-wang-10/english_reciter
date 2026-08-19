@@ -38,6 +38,7 @@ class _SemanticReciter:
         self.mastered_words = []
         self.saved = 0
         self.last_apply = None
+        self.unavailable_exercise_types = set()
 
     def resolve_daily_task_item(self, task_id, item_id, word_id, event_id=''):
         if task_id != 'task-1' or item_id != 'item-1':
@@ -57,6 +58,11 @@ class _SemanticReciter:
 
     def task_attempt_count(self, item):
         return int((item or {}).get('attempts') or 0)
+
+    def mark_exercise_unavailable(self, word, exercise_type):
+        before = len(self.unavailable_exercise_types)
+        self.unavailable_exercise_types.add(exercise_type)
+        return len(self.unavailable_exercise_types) != before
 
     def apply_scored_review_attempt(self, word, **kwargs):
         self.last_apply = kwargs
@@ -85,13 +91,25 @@ class _SemanticReciter:
 
     def review_state_payload(self, word):
         empty = {
-            key: {'score': 0, 'percent': 0, 'attempts': 0, 'correct': 0, 'streak': 0}
+            key: {
+                'score': 0,
+                'percent': 0,
+                'attempts': 0,
+                'correct': 0,
+                'streak': 0,
+                'available': key not in self.unavailable_exercise_types,
+                'required': (
+                    key in ('recognition', 'context', 'spelling')
+                    and key not in self.unavailable_exercise_types
+                ),
+            }
             for key in ('recognition', 'context', 'spelling', 'listening')
         }
         return {
             'exercise_type': self.task_item['exercise_type'],
             'mastery': {'overall': 0, 'overall_percent': 0, 'by_type': empty},
             'scheduler': {},
+            'memory_status': 'learning',
         }
 
 
@@ -278,7 +296,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260808-review-section30" in html
+    assert "/static/js/app.js?v=20260819-optional-semantic1" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
@@ -347,6 +365,14 @@ def test_review_flow_exposes_thirty_word_section_breaks(client) -> None:
     assert '<dd id="review-section-break-words">30</dd>' in html
     assert "阶段小结" in html
     assert ".review-section-break-metrics" in stylesheet
+
+
+def test_mastery_ui_marks_missing_optional_questions_as_unavailable(client) -> None:
+    javascript = client.get("/static/js/app.js").get_data(as_text=True)
+
+    assert "dimension?.available === false" in javascript
+    assert "return '未提供'" in javascript
+    assert "masteryDimensionText(word, 'recognition', '义')" in javascript
 
 
 def test_logout_waits_for_review_submission_before_revoking_session(client) -> None:
@@ -579,8 +605,10 @@ def test_question_endpoint_falls_back_to_spelling_when_generation_fails(
     assert body['exercise_type'] == 'spelling'
     assert body['word']['english'] == 'benefit'
     assert body['message'] == '选择题尚未生成或不可用，已自动切换为拼写练习'
+    assert body['word']['mastery']['by_type']['recognition']['available'] is False
     assert reciter.task_item['question_fallback_reason'] == 'question_not_approved'
     assert reciter.task_item['exercise_type'] == 'spelling'
+    assert reciter.unavailable_exercise_types == {'recognition'}
     assert reciter.saved == 1
 
 

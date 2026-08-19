@@ -22,6 +22,7 @@ from review_scheduler import (
     EXERCISE_TYPES,
     claim_review_event,
     choose_exercise_type,
+    mark_exercise_unavailable as mark_mastery_exercise_unavailable,
     mastery_ready,
     mastery_snapshot,
     next_review_date as adaptive_next_review_date,
@@ -914,6 +915,13 @@ class WordReciter:
             event_id=event_id,
             event_fingerprint=event_fingerprint,
             elapsed_ms=elapsed_ms,
+        )
+
+    def mark_exercise_unavailable(self, word: Word, exercise_type: str) -> bool:
+        """Persist that this word has no approved optional semantic question."""
+        return mark_mastery_exercise_unavailable(
+            self.get_review_state(word),
+            exercise_type,
         )
 
     def _daily_performance_history(self) -> Dict[str, Dict[str, int]]:
@@ -1918,7 +1926,17 @@ class WordReciter:
             self.all_words.remove(word)
             return f'🎉 已掌握单词！{delta_days}天后进行保持复习'
 
-        return f'✅ 正确！继续完成识义、语境与拼写目标；下次复习: +{delta_days}天'
+        snapshot = mastery_snapshot(state)
+        required_labels = [
+            label
+            for exercise_type, label in (
+                ('recognition', '识义'),
+                ('context', '语境'),
+                ('spelling', '拼写'),
+            )
+            if snapshot['by_type'][exercise_type]['required']
+        ]
+        return f'✅ 正确！继续完成{"、".join(required_labels)}目标；下次复习: +{delta_days}天'
 
     def apply_scored_review_attempt(
         self,
