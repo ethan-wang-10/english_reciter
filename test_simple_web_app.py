@@ -296,11 +296,11 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260819-optional-semantic1" in html
+    assert "/static/js/app.js?v=20260819-mastery-progress1" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260721-podium-crowd7" in html
+    assert "/static/css/style.css?v=20260819-mastery-progress1" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
@@ -368,11 +368,18 @@ def test_review_flow_exposes_thirty_word_section_breaks(client) -> None:
 
 
 def test_mastery_ui_marks_missing_optional_questions_as_unavailable(client) -> None:
+    html = client.get("/").get_data(as_text=True)
     javascript = client.get("/static/js/app.js").get_data(as_text=True)
+    stylesheet = client.get("/static/css/style.css").get_data(as_text=True)
 
     assert "dimension?.available === false" in javascript
-    assert "return '未提供'" in javascript
-    assert "masteryDimensionText(word, 'recognition', '义')" in javascript
+    assert "percent === null ? '未提供'" in javascript
+    assert "renderReviewMasteryDimension(word, 'recognition', '识义')" in javascript
+    assert 'class="word-progress word-progress-legacy"' in html
+    assert 'class="word-progress-dimension is-unavailable"' in javascript
+    assert 'class="word-progress-overall-track"' in javascript
+    assert ".word-progress-mastery" in stylesheet
+    assert ".word-progress-dimensions" in stylesheet
 
 
 def test_logout_waits_for_review_submission_before_revoking_session(client) -> None:

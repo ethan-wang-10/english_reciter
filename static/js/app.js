@@ -5979,24 +5979,91 @@ function renderReviewMasteryProgress(word) {
     if (!progressEl || !word) return;
     const masteryPercent = Number(word.mastery?.overall_percent);
     if (Number.isFinite(masteryPercent)) {
-        const recognition = masteryDimensionText(word, 'recognition', '义');
-        const context = masteryDimensionText(word, 'context', '境');
-        const spelling = masteryDimensionText(word, 'spelling', '拼');
+        const overallPercent = clampMasteryPercent(masteryPercent);
+        const recognition = masteryDimensionText(word, 'recognition', '识义');
+        const context = masteryDimensionText(word, 'context', '语境');
+        const spelling = masteryDimensionText(word, 'spelling', '拼写');
         const listening = masteryDimensionText(word, 'listening', '听写');
-        const statusPrefix = word.memory_status === 'reinforcement' ? '待巩固 · ' : '';
-        progressEl.textContent = `${statusPrefix}掌握 ${masteryPercent}% · ${recognition} · ${context} · ${spelling}`;
+        const reinforcement = word.memory_status === 'reinforcement';
+        const statusHtml = reinforcement
+            ? '<span class="word-progress-status">待巩固</span>'
+            : '';
+        progressEl.classList.remove('word-progress-legacy');
+        progressEl.classList.add('word-progress-mastery');
+        progressEl.innerHTML = `
+            <span class="word-progress-overall">
+                <span class="word-progress-overall-label">掌握进度${statusHtml}</span>
+                <span class="word-progress-overall-track" aria-hidden="true">
+                    <span class="word-progress-overall-fill" style="width: ${overallPercent}%"></span>
+                </span>
+                <strong class="word-progress-overall-value">${overallPercent}%</strong>
+            </span>
+            <span class="word-progress-dimensions">
+                ${renderReviewMasteryDimension(word, 'recognition', '识义')}
+                ${renderReviewMasteryDimension(word, 'context', '语境')}
+                ${renderReviewMasteryDimension(word, 'spelling', '拼写')}
+            </span>
+        `;
+        const statusPrefix = reinforcement ? '待巩固，' : '';
+        progressEl.setAttribute('role', 'progressbar');
+        progressEl.setAttribute('aria-valuemin', '0');
+        progressEl.setAttribute('aria-valuemax', '100');
+        progressEl.setAttribute('aria-valuenow', String(overallPercent));
+        progressEl.setAttribute(
+            'aria-label',
+            `${statusPrefix}掌握进度 ${overallPercent}%，${recognition}，${context}，${spelling}`,
+        );
         progressEl.title = `英文识义 ${masteryDimensionValue(word, 'recognition')} · 语境选词 ${masteryDimensionValue(word, 'context')} · 拼写 ${masteryDimensionValue(word, 'spelling')} · ${listening}`;
         return;
     }
     const maxSuccess = word.max_success_count != null ? word.max_success_count : 8;
+    progressEl.classList.remove('word-progress-mastery');
+    progressEl.classList.add('word-progress-legacy');
     progressEl.textContent = `${word.success_count}/${maxSuccess}`;
+    progressEl.setAttribute('role', 'status');
+    progressEl.setAttribute('aria-label', `掌握次数 ${word.success_count}/${maxSuccess}`);
+    progressEl.removeAttribute('aria-valuemin');
+    progressEl.removeAttribute('aria-valuemax');
+    progressEl.removeAttribute('aria-valuenow');
     progressEl.removeAttribute('title');
 }
 
-function masteryDimensionValue(word, exerciseType) {
+function clampMasteryPercent(value) {
+    const percent = Number(value);
+    if (!Number.isFinite(percent)) return 0;
+    return Math.max(0, Math.min(100, Math.round(percent)));
+}
+
+function masteryDimensionPercent(word, exerciseType) {
     const dimension = word?.mastery?.by_type?.[exerciseType];
-    if (dimension?.available === false) return '未提供';
-    return `${Number(dimension?.percent) || 0}%`;
+    if (dimension?.available === false) return null;
+    return clampMasteryPercent(dimension?.percent);
+}
+
+function renderReviewMasteryDimension(word, exerciseType, label) {
+    const percent = masteryDimensionPercent(word, exerciseType);
+    if (percent === null) {
+        return `
+            <span class="word-progress-dimension is-unavailable">
+                <span>${label}</span>
+                <span class="word-progress-unavailable">未提供</span>
+            </span>
+        `;
+    }
+    return `
+        <span class="word-progress-dimension">
+            <span>${label}</span>
+            <span class="word-progress-mini-track" aria-hidden="true">
+                <span class="word-progress-mini-fill" style="width: ${percent}%"></span>
+            </span>
+            <span class="word-progress-dimension-value">${percent}%</span>
+        </span>
+    `;
+}
+
+function masteryDimensionValue(word, exerciseType) {
+    const percent = masteryDimensionPercent(word, exerciseType);
+    return percent === null ? '未提供' : `${percent}%`;
 }
 
 function masteryDimensionText(word, exerciseType, label) {

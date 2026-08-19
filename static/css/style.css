@@ -2601,12 +2601,122 @@ body {
     border-radius: 6px;
     background: #eef9ff;
     color: #086b9c;
+    box-sizing: border-box;
+}
+
+.word-progress-legacy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 10px;
     font-size: 0.88rem;
     font-weight: 800;
-    padding: 5px 10px;
     line-height: 1.35;
     text-align: center;
-    white-space: normal;
+}
+
+.word-progress-mastery {
+    display: grid;
+    flex: 0 1 320px;
+    width: min(100%, 320px);
+    max-width: 320px;
+    min-height: 48px;
+    padding: 5px 8px;
+    gap: 3px;
+}
+
+.word-progress-overall {
+    display: grid;
+    grid-template-columns: auto minmax(64px, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.word-progress-overall-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.word-progress-status {
+    color: #b45309;
+    font-size: 0.68rem;
+}
+
+.word-progress-overall-track,
+.word-progress-mini-track {
+    display: block;
+    position: relative;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #cfdfe7;
+}
+
+.word-progress-overall-track {
+    height: 6px;
+}
+
+.word-progress-overall-fill,
+.word-progress-mini-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+}
+
+.word-progress-overall-fill {
+    background: #1cb0f6;
+}
+
+.word-progress-overall-value {
+    font-size: 0.82rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.word-progress-dimensions {
+    display: grid;
+    grid-template-columns: 1fr 0.9fr 1fr;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.word-progress-dimension {
+    display: grid;
+    grid-template-columns: auto minmax(18px, 1fr) auto;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    color: #526772;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.word-progress-dimension.is-unavailable {
+    grid-template-columns: auto 1fr;
+    color: #73858e;
+}
+
+.word-progress-mini-track {
+    height: 4px;
+}
+
+.word-progress-mini-fill {
+    background: #58cc78;
+}
+
+.word-progress-dimension-value {
+    font-variant-numeric: tabular-nums;
+}
+
+.word-progress-unavailable {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .review-due-hint {
@@ -2665,6 +2775,12 @@ body {
 
     .word-progress {
         margin-left: 0;
+    }
+
+    .word-progress-mastery {
+        flex-basis: 100%;
+        width: 100%;
+        max-width: none;
     }
 
     .semantic-question-options {
