@@ -300,7 +300,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260819-mastery-progress1" in html
+    assert "/static/css/style.css?v=20260819-mastery-position1" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
@@ -376,10 +376,13 @@ def test_mastery_ui_marks_missing_optional_questions_as_unavailable(client) -> N
     assert "percent === null ? '未提供'" in javascript
     assert "renderReviewMasteryDimension(word, 'recognition', '识义')" in javascript
     assert 'class="word-progress word-progress-legacy"' in html
+    assert 'class="review-word-identity"' in html
     assert 'class="word-progress-dimension is-unavailable"' in javascript
     assert 'class="word-progress-overall-track"' in javascript
     assert ".word-progress-mastery" in stylesheet
     assert ".word-progress-dimensions" in stylesheet
+    assert ".review-word-row > .word-progress" in stylesheet
+    assert "column-gap: clamp(40px, 5vw, 72px)" in stylesheet
 
 
 def test_logout_waits_for_review_submission_before_revoking_session(client) -> None:

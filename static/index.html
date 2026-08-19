@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260819-mastery-progress1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260819-mastery-position1">
 </head>
 <body>
     <div id="app">
@@ -282,8 +282,11 @@
                         <div id="review-box" class="review-box">
                             <div class="review-header">
                                 <div class="review-word-row">
-                                    <span class="word-english" id="current-word-english">apple</span>
-                                    <span id="current-word-phonetic" class="word-item-phonetic word-review-phonetic" hidden></span>
+                                    <div class="review-word-identity">
+                                        <span class="word-english" id="current-word-english">apple</span>
+                                        <span id="current-word-phonetic" class="word-item-phonetic word-review-phonetic" hidden></span>
+                                    </div>
+                                    <div class="word-progress word-progress-legacy" id="current-word-progress" role="status" aria-live="polite">3/8</div>
                                 </div>
                                 <div class="review-header-right">
                                     <span id="review-exercise-type" class="review-exercise-type" role="status" aria-live="polite">拼写</span>
@@ -299,7 +302,6 @@
                                         <input type="checkbox" id="review-number-direct-submit" />
                                         <span>数字即提交</span>
                                     </label>
-                                    <div class="word-progress word-progress-legacy" id="current-word-progress" role="status" aria-live="polite">3/8</div>
                                 </div>
                             </div>
                             <div class="review-content" id="review-content-inner">

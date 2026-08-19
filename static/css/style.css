@@ -2288,13 +2288,42 @@ body {
 }
 
 .review-word-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+}
+
+.review-word-identity {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     gap: 10px 12px;
-    flex: 1 1 100%;
-    width: 100%;
     min-width: 0;
+}
+
+.review-word-row > .word-progress {
+    justify-self: start;
+    margin-left: 0;
+}
+
+@media (min-width: 1200px) {
+    .review-word-row {
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+        column-gap: clamp(40px, 5vw, 72px);
+    }
+
+    .review-word-row > .word-progress {
+        justify-self: end;
+    }
+
+    .review-word-row > .word-progress-mastery {
+        width: 100%;
+        max-width: 320px;
+    }
 }
 
 .word-review-phonetic {
