@@ -296,11 +296,11 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260820-leaderboard-podium-v2" in html
+    assert "/static/js/app.js?v=20260820-leaderboard-podium-v3" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260820-leaderboard-podium-v2" in html
+    assert "/static/css/style.css?v=20260820-leaderboard-podium-v3" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
@@ -327,7 +327,9 @@ def test_leaderboard_podium_exposes_avatar_reward_dialog(client) -> None:
     assert "Number(entry.rank) > 3" in javascript
     assert ".slice(0, 12)" in javascript
     assert "audienceFaces" in javascript
-    assert "audienceBackCount" in javascript
+    assert "audienceSlots" in javascript
+    assert "{ x: 32.432, row: 'back' }" in javascript
+    assert "{ x: 67.568, row: 'back' }" in javascript
     assert "lb-audience-person" in javascript
     assert "lb-audience-torso" in javascript
     assert "lb-podium-celebration" in javascript

@@ -7270,7 +7270,7 @@ button.import-article-chip--selected:hover {
     }
 }
 
-/* 领奖台 V2：获奖者只用头像，真实榜单用户组成前后两排观众。 */
+/* 领奖台 V3：获奖者只用头像，观众分列两侧并为领奖台留出中央空间。 */
 .leaderboard-podium {
     background:
         radial-gradient(circle at 12% 28%, rgba(244, 199, 67, 0.2) 0 2px, transparent 3px),
@@ -7278,7 +7278,7 @@ button.import-article-chip--selected:hover {
 }
 
 .leaderboard-podium-scene {
-    min-height: 380px;
+    min-height: 450px;
 }
 
 .leaderboard-podium-scene::before,
@@ -7339,8 +7339,8 @@ button.import-article-chip--selected:hover {
 
 .leaderboard-podium-stage {
     z-index: 2;
-    min-height: 380px;
-    padding: 48px clamp(8px, 7vw, 112px) 140px;
+    min-height: 450px;
+    padding: 48px clamp(8px, 7vw, 112px) 72px;
 }
 
 .lb-podium-person {
@@ -7362,7 +7362,7 @@ button.import-article-chip--selected:hover {
 
 .leaderboard-podium-audience {
     top: auto;
-    height: 126px;
+    height: 72px;
     overflow: visible;
     border-top: 2px solid rgba(218, 187, 142, 0.75);
     background: rgba(255, 240, 201, 0.88);
@@ -7370,7 +7370,7 @@ button.import-article-chip--selected:hover {
 
 .lb-audience-person {
     position: absolute;
-    bottom: -18px;
+    bottom: -28px;
     left: var(--lb-audience-x);
     z-index: 2;
     width: 70px;
@@ -7382,7 +7382,7 @@ button.import-article-chip--selected:hover {
 
 .lb-audience-person.is-back {
     z-index: 1;
-    bottom: 22px;
+    bottom: 16px;
     opacity: 0.92;
     transform: translateX(-50%) scale(0.84);
 }
@@ -7491,25 +7491,26 @@ button.import-article-chip--selected:hover {
 @media (min-width: 641px) and (max-width: 900px) {
     .leaderboard-podium-scene,
     .leaderboard-podium-stage {
-        min-height: 350px;
+        min-height: 400px;
     }
 
     .leaderboard-podium-stage {
-        padding: 46px 12px 126px;
+        padding: 46px 12px 68px;
     }
 
     .leaderboard-podium-audience {
-        height: 112px;
+        height: 68px;
     }
 
     .lb-audience-person {
+        bottom: -25px;
         width: 62px;
-        transform: translateX(-50%) scale(0.9);
+        transform: translateX(-50%) scale(0.84);
     }
 
     .lb-audience-person.is-back {
-        bottom: 15px;
-        transform: translateX(-50%) scale(0.76);
+        bottom: 12px;
+        transform: translateX(-50%) scale(0.72);
     }
 }
 
@@ -7540,7 +7541,7 @@ button.import-article-chip--selected:hover {
     }
 
     .leaderboard-podium-stage {
-        padding: 34px 0 108px;
+        padding: 34px 0 64px;
     }
 
     .lb-podium-person {
@@ -7561,19 +7562,19 @@ button.import-article-chip--selected:hover {
     }
 
     .leaderboard-podium-audience {
-        height: 92px;
+        height: 64px;
     }
 
     .lb-audience-person {
-        bottom: -22px;
+        bottom: -18px;
         width: 48px;
         height: 78px;
-        transform: translateX(-50%) scale(0.82);
+        transform: translateX(-50%) scale(0.64);
     }
 
     .lb-audience-person.is-back {
-        bottom: 8px;
-        transform: translateX(-50%) scale(0.7);
+        bottom: 6px;
+        transform: translateX(-50%) scale(0.55);
     }
 
     .lb-audience-head {

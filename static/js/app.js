@@ -3395,23 +3395,21 @@ function renderLeaderboardPodium(apiData) {
         .join('');
     const audienceFaces = ['😊', '😄', '🤩', '🥳', '😎', '🤗'];
     const audienceShirts = ['#ef6c57', '#61b28b', '#e89b43', '#62a8d2', '#75b95d', '#e9788f'];
-    const audienceColumns = audience.length <= 6
-        ? audience.length
-        : Math.ceil(audience.length / 2);
-    const audienceBackCount = audience.length > 6 ? audienceColumns : 0;
+    const audienceSlots = [
+        { x: 14.865, row: 'front' }, { x: 85.135, row: 'front' },
+        { x: 20.270, row: 'back' }, { x: 79.730, row: 'back' },
+        { x: 2.703, row: 'front' }, { x: 97.297, row: 'front' },
+        { x: 8.108, row: 'back' }, { x: 91.892, row: 'back' },
+        { x: 27.027, row: 'front' }, { x: 72.973, row: 'front' },
+        { x: 32.432, row: 'back' }, { x: 67.568, row: 'back' },
+    ];
     const audiencePeopleHtml = audience.map((entry, i) => {
-        const isBack = i < audienceBackCount;
-        const rowIndex = isBack ? i : i - audienceBackCount;
-        const rowCount = isBack ? audienceBackCount : audience.length - audienceBackCount;
-        const xPercent = (
-            isBack || audienceBackCount === 0
-                ? (rowIndex + 0.5) * 100 / Math.max(1, rowCount)
-                : (rowIndex + 1) * 100 / Math.max(1, rowCount + 1)
-        ).toFixed(3);
+        const slot = audienceSlots[i];
+        const isBack = slot.row === 'back';
         const avatar = entry.avatar_url
             ? `<img class="lb-audience-avatar" src="${escapeHtml(avatarDisplayUrl(entry.avatar_url, 96))}" alt="" width="48" height="48" loading="lazy" />`
             : `<span class="lb-audience-avatar lb-audience-face">${audienceFaces[i % audienceFaces.length]}</span>`;
-        return `<span class="lb-audience-person ${isBack ? 'is-back' : 'is-front'}" style="--lb-audience-x:${xPercent}%;--lb-audience-shirt:${audienceShirts[i % audienceShirts.length]}" title="${escapeHtml(entry.username)}">
+        return `<span class="lb-audience-person ${isBack ? 'is-back' : 'is-front'}" style="--lb-audience-x:${slot.x.toFixed(3)}%;--lb-audience-shirt:${audienceShirts[i % audienceShirts.length]}" title="${escapeHtml(entry.username)}">
             <span class="lb-audience-arm lb-audience-arm--left"></span>
             <span class="lb-audience-arm lb-audience-arm--right"></span>
             <span class="lb-audience-torso"><span class="lb-audience-collar"></span><span class="lb-audience-stripe"></span></span>
