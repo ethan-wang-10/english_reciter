@@ -296,11 +296,11 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260819-mastery-progress1" in html
+    assert "/static/js/app.js?v=20260820-leaderboard-podium-v2" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260819-mastery-position1" in html
+    assert "/static/css/style.css?v=20260820-leaderboard-podium-v2" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
@@ -325,21 +325,22 @@ def test_leaderboard_podium_exposes_avatar_reward_dialog(client) -> None:
     assert "leaderboard-podium-audience" in javascript
     assert "podiumUsernames" in javascript
     assert "Number(entry.rank) > 3" in javascript
-    assert "audienceGroups" in javascript
+    assert ".slice(0, 12)" in javascript
     assert "audienceFaces" in javascript
-    assert "audienceJitterSeed" in javascript
-    assert "lb-audience-person" not in javascript
-    assert "lb-audience-side--left" in javascript
-    assert "cameraHtml('right')" in javascript
+    assert "audienceBackCount" in javascript
+    assert "lb-audience-person" in javascript
+    assert "lb-audience-torso" in javascript
+    assert "lb-podium-celebration" in javascript
+    assert "lb-audience-side--left" not in javascript
+    assert "cameraHtml('right')" not in javascript
     assert "leaderboard-podium-stage" in stylesheet
     assert ".lb-audience-avatar" in stylesheet
-    assert ".lb-audience-jitter-5" in stylesheet
-    assert ".lb-audience-torso" not in stylesheet
-    assert ".lb-audience-side--left" in stylesheet
-    assert ".lb-podium-camera-flash" in stylesheet
-    assert "--lb-podium-side-width" in stylesheet
+    assert ".lb-audience-person.is-back" in stylesheet
+    assert ".lb-audience-torso" in stylesheet
+    assert ".lb-audience-collar" in stylesheet
+    assert ".lb-podium-celebration" in stylesheet
+    assert "--lb-audience-shirt" in stylesheet
     assert "@media (max-width: 900px)" in stylesheet
-    assert ".lb-audience-side .lb-audience-group:nth-child(n + 2)" in stylesheet
     assert ".leaderboard-podium-entry.rank-1" in stylesheet
     assert ".avatar-view-modal.is-leaderboard-view" in stylesheet
 

@@ -3364,7 +3364,7 @@ function renderLeaderboardPodium(apiData) {
             const username = String(entry && entry.username ? entry.username : '');
             return username && Number(entry.rank) > 3 && !podiumUsernames.has(username);
         })
-        .slice(0, 14);
+        .slice(0, 12);
     const overflowHint = top.length > displayTop.length
         ? ` · 并列获奖共 ${formatNumber(top.length)} 人`
         : '';
@@ -3394,48 +3394,38 @@ function renderLeaderboardPodium(apiData) {
         })
         .join('');
     const audienceFaces = ['😊', '😄', '🤩', '🥳', '😎', '🤗'];
-    const audienceGroups = [];
-    const audienceGroupCount = audience.length <= 1
+    const audienceShirts = ['#ef6c57', '#61b28b', '#e89b43', '#62a8d2', '#75b95d', '#e9788f'];
+    const audienceColumns = audience.length <= 6
         ? audience.length
-        : Math.max(2, Math.ceil(audience.length / 4));
-    let audienceOffset = 0;
-    for (let groupIndex = 0; groupIndex < audienceGroupCount; groupIndex += 1) {
-        const remaining = audience.length - audienceOffset;
-        const groupSize = Math.ceil(remaining / (audienceGroupCount - groupIndex));
-        audienceGroups.push(audience.slice(audienceOffset, audienceOffset + groupSize));
-        audienceOffset += groupSize;
-    }
-    let audienceIndex = 0;
-    const audienceGroupHtml = audienceGroups.map((group, groupIndex) => {
-        const members = group
-            .map((entry) => {
-                const i = audienceIndex;
-                audienceIndex += 1;
-                const avatar = entry.avatar_url
-                    ? `<img class="lb-audience-avatar" src="${escapeHtml(avatarDisplayUrl(entry.avatar_url, 96))}" alt="" width="32" height="32" loading="lazy" />`
-                    : `<span class="lb-audience-avatar lb-audience-face">${audienceFaces[i % audienceFaces.length]}</span>`;
-                const audienceJitterSeed = Array.from(String(entry.username || '')).reduce(
-                    (seed, char) => (seed * 33 + char.charCodeAt(0)) % 6,
-                    i % 6,
-                );
-                return `<span class="lb-audience-member lb-audience-jitter-${audienceJitterSeed}" title="${escapeHtml(entry.username)}">${avatar}</span>`;
-            })
-            .join('');
-        return `<span class="lb-audience-group lb-audience-group-${groupIndex % 4}">${members}</span>`;
-    });
-    const audienceSideBreak = Math.ceil(audienceGroupHtml.length / 2);
-    const cameraHtml = (side) => `<span class="lb-podium-camera lb-podium-camera--${side}">
-        <span class="lb-podium-camera-flash lb-podium-camera-flash--one">✦</span>
-        <span class="lb-podium-camera-flash lb-podium-camera-flash--two">✧</span>
-        <span class="lb-podium-camera-icon">📸</span>
-    </span>`;
+        : Math.ceil(audience.length / 2);
+    const audienceBackCount = audience.length > 6 ? audienceColumns : 0;
+    const audiencePeopleHtml = audience.map((entry, i) => {
+        const isBack = i < audienceBackCount;
+        const rowIndex = isBack ? i : i - audienceBackCount;
+        const rowCount = isBack ? audienceBackCount : audience.length - audienceBackCount;
+        const xPercent = (
+            isBack || audienceBackCount === 0
+                ? (rowIndex + 0.5) * 100 / Math.max(1, rowCount)
+                : (rowIndex + 1) * 100 / Math.max(1, rowCount + 1)
+        ).toFixed(3);
+        const avatar = entry.avatar_url
+            ? `<img class="lb-audience-avatar" src="${escapeHtml(avatarDisplayUrl(entry.avatar_url, 96))}" alt="" width="48" height="48" loading="lazy" />`
+            : `<span class="lb-audience-avatar lb-audience-face">${audienceFaces[i % audienceFaces.length]}</span>`;
+        return `<span class="lb-audience-person ${isBack ? 'is-back' : 'is-front'}" style="--lb-audience-x:${xPercent}%;--lb-audience-shirt:${audienceShirts[i % audienceShirts.length]}" title="${escapeHtml(entry.username)}">
+            <span class="lb-audience-arm lb-audience-arm--left"></span>
+            <span class="lb-audience-arm lb-audience-arm--right"></span>
+            <span class="lb-audience-torso"><span class="lb-audience-collar"></span><span class="lb-audience-stripe"></span></span>
+            <span class="lb-audience-head">${avatar}</span>
+        </span>`;
+    }).join('');
     const audienceHtml = audience.length
-        ? `<div class="leaderboard-podium-audience" aria-hidden="true">
-            <span class="lb-audience-side lb-audience-side--left">${audienceGroupHtml.slice(0, audienceSideBreak).join('')}</span>
-            ${cameraHtml('left')}${cameraHtml('right')}
-            <span class="lb-audience-side lb-audience-side--right">${audienceGroupHtml.slice(audienceSideBreak).join('')}</span>
-        </div>`
+        ? `<div class="leaderboard-podium-audience" aria-hidden="true">${audiencePeopleHtml}</div>`
         : '';
+    const celebrationHtml = `<div class="lb-podium-celebration" aria-hidden="true">
+        <span class="lb-podium-ribbon lb-podium-ribbon--left"></span>
+        <strong>恭喜获奖</strong>
+        <span class="lb-podium-ribbon lb-podium-ribbon--right"></span>
+    </div>`;
     wrap.innerHTML =
         `<div class="leaderboard-podium">` +
         `<div class="leaderboard-podium-head">` +
@@ -3443,7 +3433,7 @@ function renderLeaderboardPodium(apiData) {
         `<p class="leaderboard-podium-sub">${escapeHtml(p.period_label || p.period_id || '')}${escapeHtml(overflowHint)}</p></div>` +
         `<span class="leaderboard-podium-status">奖励已结算</span>` +
         `</div>` +
-        `<div class="leaderboard-podium-scene">${audienceHtml}` +
+        `<div class="leaderboard-podium-scene">${celebrationHtml}${audienceHtml}` +
         `<div class="leaderboard-podium-stage podium-count-${displayTop.length}">${cards}</div>` +
         `</div>` +
         `</div>`;
