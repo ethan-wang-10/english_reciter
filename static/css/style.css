@@ -7621,6 +7621,453 @@ button.import-article-chip--selected:hover {
     }
 }
 
+/* 领奖台 V4：按视觉稿对齐头部、装饰、领奖台比例与欢呼观众。 */
+.leaderboard-podium {
+    padding: 0;
+}
+
+.leaderboard-podium-head {
+    min-height: 64px;
+    padding: 14px 28px;
+    align-items: center;
+    border-bottom: 2px solid #e7dccb;
+}
+
+.leaderboard-podium-head > div {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+}
+
+.leaderboard-podium-title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 900;
+}
+
+.leaderboard-podium-sub {
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.leaderboard-podium-scene,
+.leaderboard-podium-stage {
+    min-height: 480px;
+}
+
+.leaderboard-podium-scene::before,
+.leaderboard-podium-scene::after {
+    top: 140px;
+    width: 48px;
+    height: 48px;
+    background: #f4c743;
+    clip-path: polygon(50% 0, 61% 35%, 98% 38%, 69% 59%, 79% 96%, 50% 74%, 21% 96%, 31% 59%, 2% 38%, 39% 35%);
+    color: transparent;
+    content: '';
+    filter:
+        drop-shadow(2px 0 0 #684a36)
+        drop-shadow(-2px 0 0 #684a36)
+        drop-shadow(0 2px 0 #684a36)
+        drop-shadow(0 -2px 0 #684a36);
+    text-shadow: none;
+}
+
+.leaderboard-podium-scene::before {
+    left: 10.5%;
+}
+
+.leaderboard-podium-scene::after {
+    right: 10.5%;
+}
+
+.lb-podium-confetti {
+    position: absolute;
+    z-index: 3;
+    inset: 0;
+    pointer-events: none;
+}
+
+.lb-podium-confetti-piece {
+    position: absolute;
+    border: 3px solid #684a36;
+}
+
+.lb-podium-confetti-piece.is-left-outer,
+.lb-podium-confetti-piece.is-right-outer {
+    top: 44px;
+    width: 12px;
+    height: 26px;
+    background: #f4c743;
+}
+
+.lb-podium-confetti-piece.is-left-outer {
+    left: 9%;
+    transform: rotate(-24deg);
+}
+
+.lb-podium-confetti-piece.is-right-outer {
+    right: 9%;
+    background: #e97d70;
+    transform: rotate(24deg);
+}
+
+.lb-podium-confetti-piece.is-left-inner,
+.lb-podium-confetti-piece.is-right-inner {
+    top: 82px;
+    width: 24px;
+    height: 14px;
+    background: #67acd1;
+    transform: rotate(-18deg);
+}
+
+.lb-podium-confetti-piece.is-left-inner {
+    left: 18%;
+}
+
+.lb-podium-confetti-piece.is-right-inner {
+    right: 18%;
+    background: #86c36d;
+    transform: rotate(18deg);
+}
+
+.lb-podium-celebration {
+    top: 16px;
+    gap: 40px;
+}
+
+.lb-podium-celebration strong {
+    font-size: 1.5rem;
+}
+
+.lb-podium-ribbon {
+    width: 48px;
+    height: 20px;
+    border-width: 3px;
+}
+
+.leaderboard-podium-stage {
+    gap: 0;
+    padding: 58px 24px 76px;
+}
+
+.leaderboard-podium-entry {
+    flex: 0 1 218px;
+}
+
+.leaderboard-podium-entry.rank-1 {
+    flex-basis: 230px;
+    margin-inline: -6px;
+}
+
+.lb-podium-crown {
+    z-index: 2;
+    width: 76px;
+    height: 48px;
+    min-height: 48px;
+    margin-bottom: -10px;
+    overflow: visible;
+    transform: none;
+}
+
+.lb-podium-avatar-button {
+    width: 82px;
+    height: 82px;
+    flex-basis: 82px;
+    border-width: 5px;
+}
+
+.rank-1 .lb-podium-avatar-button {
+    width: 98px;
+    height: 98px;
+    flex-basis: 98px;
+    border-width: 6px;
+}
+
+.lb-podium-name {
+    font-size: 0.9rem;
+}
+
+.lb-podium-meta {
+    font-size: 0.75rem;
+}
+
+.lb-podium-block {
+    min-height: 84px;
+    padding: 10px 6px;
+    gap: 7px;
+    border: 3px solid #684a36;
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+    color: #3f4d55;
+    background: #9bc3da;
+    box-shadow: inset 0 6px 0 rgba(255, 255, 255, 0.35);
+}
+
+.rank-1 .lb-podium-block {
+    min-height: 92px;
+    border-color: #684a36;
+    color: #5e4700;
+    background: #f5c83e;
+}
+
+.rank-3 .lb-podium-block {
+    min-height: 70px;
+    padding: 9px 6px;
+    gap: 5px;
+    border-color: #684a36;
+    color: #65391f;
+    background: #e78a51;
+}
+
+.lb-podium-place {
+    font-size: 1.1rem;
+    font-weight: 900;
+}
+
+.lb-podium-reward {
+    padding: 4px 10px;
+    font-size: 0.76rem;
+}
+
+.leaderboard-podium-audience {
+    height: 76px;
+}
+
+.lb-audience-person {
+    bottom: -52px;
+}
+
+.lb-audience-person.is-back {
+    bottom: -18px;
+}
+
+.lb-audience-arm {
+    z-index: 3;
+    top: -12px;
+    width: 11px;
+    height: 68px;
+    border: 3px solid #684a36;
+    border-radius: 999px;
+    background: #f2b995;
+}
+
+.lb-audience-arm::after {
+    top: -8px;
+    left: 50%;
+    width: 13px;
+    height: 13px;
+    border: 3px solid #684a36;
+    transform: translateX(-50%);
+}
+
+.lb-audience-arm--left {
+    right: auto;
+    left: 19px;
+    transform: rotate(-19deg);
+    transform-origin: bottom center;
+}
+
+.lb-audience-arm--left::after {
+    left: 50%;
+}
+
+.lb-audience-arm--right {
+    right: 19px;
+    left: auto;
+    transform: rotate(19deg);
+    transform-origin: bottom center;
+}
+
+.lb-audience-arm--right::after {
+    right: auto;
+    left: 50%;
+}
+
+@media (min-width: 641px) and (max-width: 900px) {
+    .leaderboard-podium-head {
+        padding-inline: 20px;
+    }
+
+    .leaderboard-podium-scene,
+    .leaderboard-podium-stage {
+        min-height: 420px;
+    }
+
+    .leaderboard-podium-stage {
+        padding-bottom: 70px;
+    }
+
+    .leaderboard-podium-audience {
+        height: 70px;
+    }
+
+    .lb-audience-person {
+        bottom: -35px;
+    }
+
+    .lb-audience-person.is-back {
+        bottom: -10px;
+    }
+}
+
+@media (max-width: 640px) {
+    .leaderboard-podium-head {
+        min-height: 68px;
+        padding: 11px 12px;
+        align-items: flex-start;
+    }
+
+    .leaderboard-podium-head > div {
+        display: block;
+    }
+
+    .leaderboard-podium-title {
+        margin-bottom: 3px;
+        font-size: 0.95rem;
+    }
+
+    .leaderboard-podium-sub {
+        font-size: 0.7rem;
+    }
+
+    .leaderboard-podium-scene,
+    .leaderboard-podium-stage {
+        min-height: 340px;
+    }
+
+    .leaderboard-podium-scene::before,
+    .leaderboard-podium-scene::after {
+        top: 104px;
+        width: 28px;
+        height: 28px;
+    }
+
+    .lb-podium-confetti-piece.is-left-outer,
+    .lb-podium-confetti-piece.is-right-outer {
+        top: 38px;
+        width: 8px;
+        height: 17px;
+        border-width: 2px;
+    }
+
+    .lb-podium-confetti-piece.is-left-inner,
+    .lb-podium-confetti-piece.is-right-inner {
+        top: 70px;
+        width: 16px;
+        height: 9px;
+        border-width: 2px;
+    }
+
+    .lb-podium-celebration {
+        top: 8px;
+        gap: 7px;
+    }
+
+    .lb-podium-celebration strong {
+        font-size: 0.82rem;
+    }
+
+    .lb-podium-ribbon {
+        width: 25px;
+        height: 9px;
+        border-width: 2px;
+    }
+
+    .leaderboard-podium-stage {
+        gap: 3px;
+        padding: 34px 0 64px;
+    }
+
+    .leaderboard-podium-entry,
+    .leaderboard-podium-entry.rank-1 {
+        flex-basis: 31.5%;
+        margin-inline: 0;
+    }
+
+    .lb-podium-crown {
+        width: 48px;
+        height: 31px;
+        min-height: 31px;
+        margin-bottom: -4px;
+    }
+
+    .lb-podium-avatar-button {
+        width: 52px;
+        height: 52px;
+        flex-basis: 52px;
+        border-width: 3px;
+    }
+
+    .rank-1 .lb-podium-avatar-button {
+        width: 62px;
+        height: 62px;
+        flex-basis: 62px;
+        border-width: 4px;
+    }
+
+    .lb-podium-block {
+        min-height: 54px;
+        padding: 7px 3px;
+        gap: 4px;
+        border-width: 2px;
+    }
+
+    .rank-1 .lb-podium-block {
+        min-height: 74px;
+    }
+
+    .rank-3 .lb-podium-block {
+        min-height: 44px;
+        padding: 6px 2px;
+        gap: 2px;
+    }
+
+    .lb-podium-place {
+        font-size: 0.76rem;
+    }
+
+    .lb-podium-reward {
+        padding: 2px 4px;
+        font-size: 0.6rem;
+    }
+
+    .leaderboard-podium-audience {
+        height: 64px;
+    }
+
+    .lb-audience-person {
+        bottom: -18px;
+    }
+
+    .lb-audience-person.is-back {
+        bottom: 6px;
+    }
+
+    .lb-audience-arm {
+        top: -12px;
+        width: 8px;
+        height: 54px;
+        border-width: 2px;
+    }
+
+    .lb-audience-arm::after {
+        top: -6px;
+        width: 10px;
+        height: 10px;
+        border-width: 2px;
+    }
+
+    .lb-audience-arm--left {
+        left: 12px;
+    }
+
+    .lb-audience-arm--right {
+        right: 12px;
+    }
+}
+
 .achievements-section-title {
     margin-bottom: 12px;
     font-size: 1.15rem;

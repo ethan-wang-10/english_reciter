@@ -3376,7 +3376,14 @@ function renderLeaderboardPodium(apiData) {
                 : '<span class="lb-podium-avatar lb-avatar-placeholder" aria-hidden="true">👤</span>';
             const rk = Number(t.rank) || i + 1;
             const rewardText = rx > 0 ? `+${formatNumber(rx)} XP` : '无额外奖励';
-            const crown = rk === 1 ? '<span class="lb-podium-crown" aria-hidden="true">👑</span>' : '';
+            const crown = rk === 1
+                ? `<svg class="lb-podium-crown" viewBox="698 225 107 68" aria-hidden="true" focusable="false">
+                    <path d="M704 274l9-31 24 21 18-33 15 36 28-17-5 35z" fill="#f5c63f" stroke="#684a36" stroke-width="4" stroke-linejoin="round"></path>
+                    <circle cx="713" cy="244" r="5" fill="#f0755d"></circle>
+                    <circle cx="755" cy="232" r="5" fill="#69bca3"></circle>
+                    <circle cx="798" cy="251" r="5" fill="#f0755d"></circle>
+                </svg>`
+                : '';
             return `<article class="leaderboard-podium-entry rank-${rk}">
                 <div class="lb-podium-person">
                     ${crown}
@@ -3394,7 +3401,10 @@ function renderLeaderboardPodium(apiData) {
         })
         .join('');
     const audienceFaces = ['😊', '😄', '🤩', '🥳', '😎', '🤗'];
-    const audienceShirts = ['#ef6c57', '#61b28b', '#e89b43', '#62a8d2', '#75b95d', '#e9788f'];
+    const audienceShirts = [
+        '#e98555', '#65b38e', '#61b28b', '#ef765c', '#72b65e', '#e9a23f',
+        '#e86c57', '#75b95d', '#5f9fd0', '#e96757', '#e89b43', '#62a8d2',
+    ];
     const audienceSlots = [
         { x: 14.865, row: 'front' }, { x: 85.135, row: 'front' },
         { x: 20.270, row: 'back' }, { x: 79.730, row: 'back' },
@@ -3419,7 +3429,13 @@ function renderLeaderboardPodium(apiData) {
     const audienceHtml = audience.length
         ? `<div class="leaderboard-podium-audience" aria-hidden="true">${audiencePeopleHtml}</div>`
         : '';
-    const celebrationHtml = `<div class="lb-podium-celebration" aria-hidden="true">
+    const celebrationHtml = `<div class="lb-podium-confetti" aria-hidden="true">
+        <span class="lb-podium-confetti-piece is-left-outer"></span>
+        <span class="lb-podium-confetti-piece is-left-inner"></span>
+        <span class="lb-podium-confetti-piece is-right-inner"></span>
+        <span class="lb-podium-confetti-piece is-right-outer"></span>
+    </div>
+    <div class="lb-podium-celebration" aria-hidden="true">
         <span class="lb-podium-ribbon lb-podium-ribbon--left"></span>
         <strong>恭喜获奖</strong>
         <span class="lb-podium-ribbon lb-podium-ribbon--right"></span>
