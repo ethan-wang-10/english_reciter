@@ -1457,7 +1457,10 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
 
     assert [len(batch) for batch, _ in batches] == [30]
     assert deepseek_calls == [
-        ([{'role': 'user', 'content': 'prompt'}], {'max_tokens': 17700}),
+        (
+            [{'role': 'user', 'content': 'prompt'}],
+            {'max_tokens': 17700, 'temperature': 0.0},
+        ),
     ]
     assert all(
         kwargs == {'force': False, 'refresh_prompt': False}
@@ -1465,6 +1468,35 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
     )
     assert result['generated'] == 30
     assert result['failed'] == 0
+
+
+def test_deepseek_chat_logs_prompt_cache_usage(monkeypatch, caplog) -> None:
+    response_body = json.dumps({
+        'choices': [{'message': {'content': '[]'}}],
+        'usage': {
+            'prompt_cache_hit_tokens': 800,
+            'prompt_cache_miss_tokens': 200,
+        },
+    }).encode('utf-8')
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return response_body
+
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web.urllib.request, 'urlopen', lambda *args, **kwargs: Response())
+
+    with caplog.at_level('INFO', logger=web.logger.name):
+        reply = web._deepseek_chat([{'role': 'user', 'content': 'prompt'}])
+
+    assert reply == '[]'
+    assert 'DeepSeek 缓存: hit_tokens=800 miss_tokens=200 hit_ratio=80.0%' in caplog.text
 
 
 def test_auto_backfill_queue_excludes_unrecorded_historical_gaps(monkeypatch) -> None:

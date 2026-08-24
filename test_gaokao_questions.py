@@ -218,6 +218,33 @@ def test_generation_output_budget_supports_one_thirty_word_request() -> None:
     assert len(errors) == 30
 
 
+def test_generation_prompt_exposes_machine_checkable_constraints() -> None:
+    prompt = questions.build_generation_prompt([
+        _source('novel', 'n. 小说；长篇故事'),
+    ])
+
+    assert '"recognition_correct_answer_zh": "小说"' in prompt
+    assert '"recognition_required_hanzi_count": 2' in prompt
+    assert '"context_min_english_word_count": 16' in prompt
+    assert '每个元素必须与 recognition_correct_answer_zh 的汉字数完全相同' in prompt
+    assert '精确答案只出现一次' in prompt
+
+
+def test_generation_prompt_keeps_dynamic_input_after_cacheable_rules() -> None:
+    first = questions.build_generation_prompt([_source('novel', 'n. 小说')])
+    second = questions.build_generation_prompt([_source('apple', 'n. 苹果')])
+    input_marker = '输入（必须为以下 JSON 数组中的每个对象输出一个结果，保持原顺序）：\n'
+
+    first_prefix, first_input = first.split(input_marker, 1)
+    second_prefix, second_input = second.split(input_marker, 1)
+
+    assert first_prefix == second_prefix
+    assert '规则：' in first_prefix
+    assert '输出前必须逐对象检查' in first_prefix
+    assert '"english": "novel"' in first_input
+    assert '"english": "apple"' in second_input
+
+
 def test_prompt_checked_result_exposes_failure_reasons(private_question_bank) -> None:
     source = _source('novel', 'n. 小说')
 

@@ -1831,6 +1831,33 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                     raw[:4000],
                 )
                 break
+            usage = result.get("usage") if isinstance(result, dict) else None
+            if isinstance(usage, dict) and (
+                "prompt_cache_hit_tokens" in usage
+                or "prompt_cache_miss_tokens" in usage
+            ):
+                try:
+                    cache_hit_tokens = max(
+                        0, int(usage.get("prompt_cache_hit_tokens") or 0)
+                    )
+                    cache_miss_tokens = max(
+                        0, int(usage.get("prompt_cache_miss_tokens") or 0)
+                    )
+                except (TypeError, ValueError):
+                    logger.warning("DeepSeek 缓存统计格式异常: usage=%r", usage)
+                else:
+                    cache_prompt_tokens = cache_hit_tokens + cache_miss_tokens
+                    cache_hit_ratio = (
+                        cache_hit_tokens / cache_prompt_tokens * 100
+                        if cache_prompt_tokens
+                        else 0.0
+                    )
+                    logger.info(
+                        "DeepSeek 缓存: hit_tokens=%s miss_tokens=%s hit_ratio=%.1f%%",
+                        cache_hit_tokens,
+                        cache_miss_tokens,
+                        cache_hit_ratio,
+                    )
             preview_out = content[:3000] + ("…[截断]" if len(content) > 3000 else "")
             logger.info(
                 "DeepSeek 响应: attempt=%s/%s response_chars=%s 输出预览=%s",
@@ -6355,7 +6382,7 @@ def gaokao_failed_question_sources(sources: List[dict]) -> List[dict]:
 
 def _gaokao_generation_chat(messages: List[dict], max_tokens: int):
     """Adapt the question generator callback to _deepseek_chat's signature."""
-    return _deepseek_chat(messages, max_tokens=max_tokens)
+    return _deepseek_chat(messages, max_tokens=max_tokens, temperature=0.0)
 
 
 def generate_gaokao_question_batches(

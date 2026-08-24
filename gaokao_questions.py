@@ -18,8 +18,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 BANK_SCHEMA = "gaokao-question-bank-v2"
 BANK_VERSION = 2
 AUDIT_VERSION = 2
-GENERATION_PROMPT_VERSION = 4
-SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v4"
+GENERATION_PROMPT_VERSION = 5
+SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v5"
 RECOGNITION_FORMAT_VERSION = 1
 QUESTION_TYPES = ("recognition", "context")
 DATA_DIR = Path(os.getenv("ENGLISH_RECITER_DATA_DIR", "user_data_simple")).expanduser()
@@ -405,27 +405,29 @@ GENERATION_QUALITY_RULES_ZH = """
 
 
 def build_generation_prompt(sources: List[dict]) -> str:
-    compact = [
-        {
+    compact = []
+    for row in sources:
+        recognition_answer = _recognition_core_sense(row["chinese"])
+        compact.append({
             "english": row["english"],
             "correct_definition_zh": row["chinese"],
+            "recognition_correct_answer_zh": recognition_answer,
+            "recognition_required_hanzi_count": len(
+                re.findall(r"[\u3400-\u9fff]", recognition_answer)
+            ),
             "level": row.get("level") or "高中",
             "pos": row.get("pos") or "",
             "context_sentence": row["context_sentence"],
             "context_correct_answer": row["context_answer"],
+            "context_min_english_word_count": 16,
             "context_translation_zh": row.get("context_cn") or "",
-        }
-        for row in sources
-    ]
+        })
     return f"""你是高考英语词汇题库编辑。根据输入数据为每个单词生成干扰项，输出仅包含合法 JSON 数组，不要 Markdown。
-
-输入：
-{json.dumps(compact, ensure_ascii=False)}
 
 每个输出对象必须包含：
 {{
   "english": "与输入完全一致",
-  "recognition_distractors": ["3个中文错误释义"],
+  "recognition_distractors": ["3个互不相同的单义中文错误释义"],
   "recognition_explanation_zh": "一句简短辨析",
   "context_sentence": "重新编写的完整英文语境句，正确答案原样出现且只出现一次",
   "context_translation_zh": "重写后语境句的准确中文翻译",
@@ -437,6 +439,13 @@ def build_generation_prompt(sources: List[dict]) -> str:
 {GENERATION_QUALITY_RULES_ZH}
 - 每组恰好 3 个互不重复的干扰项，不能产生两个都可接受的答案。
 - 不得修改正确释义或正确语境答案的词形。
+- recognition_distractors 的每个元素必须是纯中文单义短语，不得包含序号、词性、括号、标点、英文或多个义项；三个元素必须互不相同，也不得等于 recognition_correct_answer_zh 或 correct_definition_zh 中的任何真实义项。
+- recognition_distractors 的每个元素必须与 recognition_correct_answer_zh 的汉字数完全相同；以 recognition_required_hanzi_count 为准逐项计数。
+- context_sentence 至少写 16 个英文单词。必须逐字符复制 context_correct_answer，使其作为独立单词或完整短语恰好出现一次；不得改成单复数、时态、大小写变体或近义词，也不得在句中第二次使用该答案。
+- 输出前必须逐对象检查：english 原样一致；两个 distractors 数组都恰好 3 项且互不重复；三个中文项均满足指定汉字数；context_sentence 达到 16 词且精确答案只出现一次。任何一项不满足时先重写该对象，再输出最终 JSON。
+
+输入（必须为以下 JSON 数组中的每个对象输出一个结果，保持原顺序）：
+{json.dumps(compact, ensure_ascii=False)}
 """
 
 
