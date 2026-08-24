@@ -19,10 +19,13 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 BANK_SCHEMA = "gaokao-question-bank-v2"
 BANK_VERSION = 2
 AUDIT_VERSION = 2
-GENERATION_PROMPT_VERSION = 6
-SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v6"
+GENERATION_PROMPT_VERSION = 7
+SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v7"
 RECOGNITION_FORMAT_VERSION = 1
 GENERATION_REQUEST_WORDS = 10
+CONTEXT_VALIDATION_MIN_WORDS = 16
+CONTEXT_GENERATION_TARGET_MIN_WORDS = 22
+CONTEXT_GENERATION_TARGET_MAX_WORDS = 28
 QUESTION_TYPES = ("recognition", "context")
 DATA_DIR = Path(os.getenv("ENGLISH_RECITER_DATA_DIR", "user_data_simple")).expanduser()
 QUESTION_BANK_FILE = DATA_DIR / "_shared" / "gaokao_questions_v2.json"
@@ -173,7 +176,10 @@ def _generated_context(source: dict, raw: dict) -> Tuple[Optional[dict], str]:
     masked = _replace_target_once(sentence, answer)
     if not masked:
         return None, "context sentence must contain the exact answer once"
-    if len(re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", sentence)) < 16:
+    if (
+        len(re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", sentence))
+        < CONTEXT_VALIDATION_MIN_WORDS
+    ):
         return None, "context sentence is too short to disambiguate the options"
 
     translation = str(raw.get("context_translation_zh") or "").strip()[:500]
@@ -422,15 +428,15 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
 
 
 GENERATION_QUALITY_RULES_ZH = """
-- 先在内部生成候选，再像严格质检员一样逐项复核；发现正确释义、同义词、近义改写或第二个可接受答案时，必须替换候选。不要输出检查过程，只输出修正后的最终 JSON。
+- 先在内部生成候选，再像严格质检员一样逐项代入复核；发现正确释义、同义词、近义改写、上下义词或第二个可接受答案时，必须替换候选。不要输出检查过程，只输出修正后的最终 JSON。
 - 程序会自动把 recognition_correct_answer_zh 加入识义题。recognition_distractors 中只能放错误释义，绝对不能再次放入正确释义、forbidden_recognition_senses_zh 中的义项或它们的同义表达。
 - 识义题界面只展示 recognition_correct_answer_zh；每个中文候选也只能写一个核心义项，不得包含词性缩写，不得用分号、顿号或斜线罗列多个含义。
-- 中文干扰项与首个正确义项的字数和表达粒度应接近，避免用户根据选项长短、标点数量或信息量猜答案。
-- 中文候选应与正确释义词性和难度接近，但语义必须清楚地错误。唯一性优先于迷惑性，不要用“近义但不是标准释义”作为错误理由，因为普通同义表达也算正确答案。
-- context_distractors 必须与 context_correct_answer 词性、语法位置和词形匹配，但含义要明显不同；同义词、近义词、可互换表达及正确答案的变体全部禁止。
-- 语境句至少 16 个英文词，并至少提供两类可观察限定信息，例如固定搭配、动作对象、因果结果、对比关系、时间地点或具体事实。15 个词仍算失败。
+- 中文干扰项必须落在 recognition_allowed_hanzi_count_min 到 recognition_allowed_hanzi_count_max 的闭区间内，并与正确义项表达粒度接近。正确义项较长时，使用等长的其他职业、身份、场所或动作描述，不能退化为两三个字的泛称。
+- 中文候选应与正确释义词性和难度接近，但语义必须清楚地错误。优先选择反义或不同语义场的词，宁可容易排除也不能制造多解；“近义但不是标准释义”不是错误理由，因为普通同义表达也算正确答案。
+- context_distractors 必须与 required_context_answer_verbatim 词性、语法位置和词形匹配，但含义要明显不同；同义词、近义词、上下义词、可互换表达及正确答案的变体全部禁止。优先选择反义词或不同语义场中语法匹配的词。
+- context_sentence 实际写 22 至 28 个英文词，为 16 词的程序底线留足余量；完成句子后按英文单词逐个计数，不得把目标写成 16 词。句子至少提供两类可观察限定信息，例如固定搭配、动作对象、因果结果、对比关系、时间地点或具体事实。
 - 不得依赖读者看不到的背景或常识猜测来排除干扰项。逐项代入后，只允许正确答案形成自然、语法正确且符合全部题面信息的意思。
-- 正确答案必须以给定的精确词形在 context_sentence 中出现且只出现一次；不要挖空，程序会负责替换。
+- required_context_answer_verbatim 是不可修改字符串，必须逐字符复制到 context_sentence 中并且只出现一次；它可能是屈折形式或完整短语，与 english 不同时必须使用 required_context_answer_verbatim，绝不能改回 english。不要挖空，程序会负责替换。
 - explanation 只解释正确义项和决定性语境线索，不要逐个复述候选文本，以免程序从 6 个候选中选取 3 个后解释不一致。
 """.strip()
 
@@ -439,20 +445,27 @@ def build_generation_prompt(sources: List[dict]) -> str:
     compact = []
     for row in sources:
         recognition_answer = _recognition_core_sense(row["chinese"])
+        recognition_hanzi_count = len(
+            re.findall(r"[\u3400-\u9fff]", recognition_answer)
+        )
         compact.append({
             "english": row["english"],
             "correct_definition_zh": row["chinese"],
             "recognition_correct_answer_zh": recognition_answer,
             "forbidden_recognition_senses_zh": _recognition_senses(row["chinese"]),
-            "recognition_required_hanzi_count": len(
-                re.findall(r"[\u3400-\u9fff]", recognition_answer)
+            "recognition_required_hanzi_count": recognition_hanzi_count,
+            "recognition_allowed_hanzi_count_min": max(
+                1, recognition_hanzi_count - 2
             ),
+            "recognition_allowed_hanzi_count_max": recognition_hanzi_count + 2,
             "level": row.get("level") or "高中",
             "pos": row.get("pos") or "",
-            "context_sentence": row["context_sentence"],
-            "context_correct_answer": row["context_answer"],
-            "context_min_english_word_count": 16,
-            "context_translation_zh": row.get("context_cn") or "",
+            "source_context_with_blank": row["context_sentence"],
+            "required_context_answer_verbatim": row["context_answer"],
+            "context_validation_min_english_word_count": CONTEXT_VALIDATION_MIN_WORDS,
+            "context_target_english_word_count_min": CONTEXT_GENERATION_TARGET_MIN_WORDS,
+            "context_target_english_word_count_max": CONTEXT_GENERATION_TARGET_MAX_WORDS,
+            "source_context_translation_zh": row.get("context_cn") or "",
         })
     return f"""你是高考英语词汇题库编辑。根据输入数据为每个单词生成干扰项，输出仅包含合法 JSON 数组，不要 Markdown。
 
@@ -472,11 +485,16 @@ def build_generation_prompt(sources: List[dict]) -> str:
 - 两个 distractors 数组都必须提供恰好 6 个互不重复的错误候选；程序将从中选取 3 个，最终题目仍是四选一。
 - 不得修改正确释义或正确语境答案的词形。
 - recognition_distractors 的每个元素必须是纯中文单义短语，不得包含序号、词性、括号、标点、英文或多个义项；六个元素不得等于正确义项、真实义项或其任何同义/近义表达。
-- recognition_distractors 的每个元素应与 recognition_correct_answer_zh 的汉字数相同；至少保证其中 3 个与指定汉字数相同。
-- context_sentence 至少写 16 个英文单词。必须逐字符复制 context_correct_answer，使其作为独立单词或完整短语恰好出现一次；不得改成单复数、时态、大小写变体或近义词，也不得在句中第二次使用该答案。
+- recognition_distractors 六个元素的汉字数都必须处于输入指定的允许区间；优先与 recognition_required_hanzi_count 完全相同，至少保证前三个完全相同。
+- context_sentence 必须写 22 至 28 个英文单词，写完逐词计数。必须逐字符复制 required_context_answer_verbatim，使其作为独立单词或完整短语恰好出现一次；不得改成单复数、时态、大小写变体或近义词，也不得在句中第二次使用该答案。
 - 反例：若正确义项是“憎恶”，["憎恶", "厌恶", "痛恨"] 全部禁止，因为三项都能算正确。可改用词性相同但含义明确错误的 ["赞美", "忽视", "允许"] 等候选。
 - 反例：句子是“I abhor violence because it causes lasting harm.”时，detest、loathe、hate 都能成立，禁止作为候选；应选择在该因果事实下明显冲突且语法匹配的词。
-- 输出前必须逐对象检查：english 原样一致；两个 distractors 数组都恰好 6 项且互不重复；没有候选属于正确答案、同义词或近义词；context_sentence 达到 16 词且精确答案只出现一次。任何一项不满足时先重写该对象，再输出最终 JSON。
+- 习语反例：正确义项是“焦躁不安”时，“如坐针毡”“心急如焚”“坐卧不宁”都属于正确或近义表达，禁止作为干扰项；应使用“从容镇定”“喜出望外”“漫不经心”等明确不同的四字表达。
+- 长释义示例：正确义项“女修道院院长”有 6 个汉字，可使用“男子学校校长”“地方教区主教”“城市医院院长”等 6 字错误身份；不能只给“修女”“牧师”“主教”等过短候选。
+- 形容词反例：abject 的语境答案若表示“悲惨的”，miserable 也可能成立，禁止作为干扰项；可使用 affluent、orderly、hopeful 等明显不同且语法匹配的词。
+- 屈折词形示例：english 是 abet 而 required_context_answer_verbatim 是 abetting 时，句中必须原样写 abetting，例如“The witness was charged with abetting the escape after providing a vehicle, false documents, and detailed directions to the fugitives.”；写成 abet、abetted 或 aid 都会失败。
+- context 反例：abjured 的候选不能包含 renounced、relinquished、forsook 等同义或近义词；宁可使用 maintained、concealed、questioned 等语义明确不同的同形候选。
+- 输出前必须逐对象检查：english 原样一致；两个 distractors 数组都恰好 6 项且互不重复；中文候选字数全部在允许区间；没有候选属于正确答案、同义词、近义词或上下义词；context_sentence 实际达到 22 至 28 词且 required_context_answer_verbatim 精确出现一次。任何一项不满足时先重写该对象，再输出最终 JSON。
 
 输入（必须为以下 JSON 数组中的每个对象输出一个结果，保持原顺序）：
 {json.dumps(compact, ensure_ascii=False)}

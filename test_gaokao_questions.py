@@ -271,11 +271,33 @@ def test_generation_prompt_exposes_machine_checkable_constraints() -> None:
     assert '"recognition_correct_answer_zh": "小说"' in prompt
     assert '"forbidden_recognition_senses_zh": ["小说", "长篇故事"]' in prompt
     assert '"recognition_required_hanzi_count": 2' in prompt
-    assert '"context_min_english_word_count": 16' in prompt
-    assert '至少保证其中 3 个与指定汉字数相同' in prompt
-    assert '精确答案只出现一次' in prompt
+    assert '"recognition_allowed_hanzi_count_min": 1' in prompt
+    assert '"recognition_allowed_hanzi_count_max": 4' in prompt
+    assert '"required_context_answer_verbatim": "novel"' in prompt
+    assert '"context_validation_min_english_word_count": 16' in prompt
+    assert '"context_target_english_word_count_min": 22' in prompt
+    assert '"context_target_english_word_count_max": 28' in prompt
+    assert '至少保证前三个完全相同' in prompt
+    assert '精确出现一次' in prompt
     assert '["错误释义甲", "错误释义乙", "错误释义丙"' in prompt
     assert '程序会自动把 recognition_correct_answer_zh 加入识义题' in prompt
+
+
+def test_generation_prompt_covers_observed_failure_modes() -> None:
+    prompt = questions.build_generation_prompt([
+        dict(
+            _source('abbess', 'n. 女修道院院长'),
+            context_answer='abetting',
+        ),
+    ])
+
+    assert '“女修道院院长”有 6 个汉字' in prompt
+    assert 'english 是 abet 而 required_context_answer_verbatim 是 abetting' in prompt
+    assert 'miserable 也可能成立' in prompt
+    assert 'abjured 的候选不能包含 renounced' in prompt
+    assert '“如坐针毡”“心急如焚”“坐卧不宁”' in prompt
+    assert '"recognition_allowed_hanzi_count_min": 4' in prompt
+    assert '"recognition_allowed_hanzi_count_max": 8' in prompt
 
 
 def test_recognition_core_sense_strips_long_part_of_speech_prefix() -> None:
