@@ -51,6 +51,17 @@ def _run_generation(
             f"fail={','.join(result.get('failed_words') or []) or '-'}",
             flush=True,
         )
+        failure_errors = result.get("failure_errors") or {}
+        if failure_errors:
+            reason_counts: dict[str, int] = {}
+            for reason in failure_errors.values():
+                text = str(reason or "generation failed")
+                reason_counts[text] = reason_counts.get(text, 0) + 1
+            summary = " | ".join(
+                f"{count}x {reason}"
+                for reason, count in sorted(reason_counts.items())
+            )
+            print(f"[generate errors] {summary}", flush=True)
 
     result = web.generate_gaokao_question_batches(
         pending,
@@ -125,7 +136,7 @@ def main() -> int:
         "--batch-size",
         type=int,
         default=30,
-        help="每次生成请求包含的单词数，默认：30，最大：30",
+        help="兼容旧命令；生成请求固定为每批 30 个",
     )
     parser.add_argument(
         "--audit-batch-size",
@@ -143,7 +154,12 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="只统计，不调用 AI、不写文件")
     args = parser.parse_args()
 
-    batch_size = max(1, min(30, args.batch_size))
+    if args.batch_size != 30:
+        print(
+            f"忽略 --batch-size {args.batch_size}；高考题生成固定每批 30 个。",
+            file=sys.stderr,
+        )
+    batch_size = 30
     audit_batch_size = max(1, min(10, args.audit_batch_size))
     all_sources = _sources(args.level.strip())
     pending_generation = (

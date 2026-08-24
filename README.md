@@ -114,7 +114,7 @@ VIP 词汇导入每批使用一次组合请求，同时生成 `words_v2.json` �
 
 Web/Gunicorn 启动后会同时启动高考题后台补全调度器。题库 `failures` 中明确记录的导入/生成失败累计达到 30 个时，调度器在 DeepSeek 官方低峰时段领取 30 个并通过一个请求完成；成功题立即落盘，下次自动跳过。它不会自动扫描全词库的历史缺题，历史全量补题仍由手工脚本控制。按 [DeepSeek 官方计费说明](https://api-docs.deepseek.com/quick_start/pricing)，当前高峰为工作日 UTC `01:00-04:00` 和 `06:00-10:00`，即北京时间工作日 `09:00-12:00` 和 `14:00-18:00`，其余时间及周末为低峰。多个 Gunicorn worker 和手工脚本共用跨进程任务锁，不会并行补题。
 
-默认每 5 分钟检查一次、两次任务至少间隔 30 分钟。可通过 `.env` 的 `GAOKAO_AUTO_BACKFILL_ENABLED`、`GAOKAO_AUTO_BACKFILL_BATCH_WORDS`、`GAOKAO_AUTO_BACKFILL_CHECK_SECONDS` 和 `GAOKAO_AUTO_BACKFILL_MIN_INTERVAL_SECONDS` 调整；剩余不足 30 个时会继续等待后续缺题累积。最近一次任务状态保存在 `user_data_simple/_shared/gaokao_backfill_state.json`。
+默认每 5 分钟检查一次、两次任务至少间隔 30 分钟。可通过 `.env` 的 `GAOKAO_AUTO_BACKFILL_ENABLED`、`GAOKAO_AUTO_BACKFILL_CHECK_SECONDS` 和 `GAOKAO_AUTO_BACKFILL_MIN_INTERVAL_SECONDS` 调整；30 个的触发阈值和单请求大小固定不拆分，剩余不足 30 个时会继续等待后续缺题累积。最近一次任务状态保存在 `user_data_simple/_shared/gaokao_backfill_state.json`。
 
 线上服务兼容旧的独立审查题和当前 Prompt 自检题。缺题时当前任务会立即降级为拼写，不在学生请求中调用 AI。升级时不要让旧版批处理脚本与新脚本并行生成同一题库。
 

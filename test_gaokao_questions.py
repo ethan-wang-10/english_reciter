@@ -212,9 +212,23 @@ def test_generation_output_budget_supports_one_thirty_word_request() -> None:
         max_tokens_seen.append(max_tokens)
         return 'invalid response'
 
-    questions.generate_candidate_records(sources, chat)
+    _, errors = questions.generate_candidate_records(sources, chat)
 
     assert max_tokens_seen == [17700]
+    assert len(errors) == 30
+
+
+def test_prompt_checked_result_exposes_failure_reasons(private_question_bank) -> None:
+    source = _source('novel', 'n. 小说')
+
+    result = questions.generate_prompt_checked_and_persist(
+        [source],
+        lambda messages, max_tokens: 'invalid response',
+    )
+
+    assert result['failure_errors'] == {
+        'novel': 'AI response is missing a valid JSON array',
+    }
 
 
 def test_prompt_version_refresh_is_resumable(private_question_bank):

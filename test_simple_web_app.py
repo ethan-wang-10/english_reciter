@@ -1418,6 +1418,12 @@ def _auto_backfill_settings() -> dict:
     }
 
 
+def test_auto_backfill_batch_size_is_fixed_at_thirty(monkeypatch) -> None:
+    monkeypatch.setenv('GAOKAO_AUTO_BACKFILL_BATCH_WORDS', '10')
+
+    assert web._gaokao_auto_backfill_settings()['batch_words'] == 30
+
+
 def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypatch) -> None:
     sources = [
         {'english': f'word-{index}'}

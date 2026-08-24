@@ -6367,6 +6367,7 @@ def generate_gaokao_question_batches(
     failed = 0
     generated_words: List[str] = []
     failed_words: List[str] = []
+    failure_errors: Dict[str, str] = {}
     size = max(1, min(30, int(batch_size or 30)))
     for start in range(0, len(sources), size):
         batch = sources[start : start + size]
@@ -6388,11 +6389,13 @@ def generate_gaokao_question_batches(
                 "failed": len(batch),
                 "generated_words": [],
                 "failed_words": sorted(errors),
+                "failure_errors": errors,
             }
         generated += int(result.get("generated") or 0)
         failed += int(result.get("failed") or 0)
         generated_words.extend(result.get("generated_words") or [])
         failed_words.extend(result.get("failed_words") or [])
+        failure_errors.update(result.get("failure_errors") or {})
         done = min(start + len(batch), len(sources))
         if progress is not None:
             progress(done, len(sources), result)
@@ -6404,19 +6407,14 @@ def generate_gaokao_question_batches(
         "failed": failed,
         "generated_words": sorted(set(generated_words)),
         "failed_words": sorted(set(failed_words)),
+        "failure_errors": failure_errors,
     }
 
 
 def _gaokao_auto_backfill_settings() -> dict:
-    batch_words = _env_int(
-        "GAOKAO_AUTO_BACKFILL_BATCH_WORDS",
-        30,
-        1,
-        30,
-    )
     return {
         "enabled": _env_flag("GAOKAO_AUTO_BACKFILL_ENABLED", True),
-        "batch_words": batch_words,
+        "batch_words": 30,
         "check_interval_seconds": _env_int(
             "GAOKAO_AUTO_BACKFILL_CHECK_SECONDS",
             300,

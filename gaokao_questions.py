@@ -1032,6 +1032,7 @@ def generate_prompt_checked_and_persist(
         "failed": len(errors),
         "generated_words": sorted(records),
         "failed_words": sorted(errors),
+        "failure_errors": dict(errors),
     }
 
 
