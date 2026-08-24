@@ -2044,24 +2044,22 @@ def deepseek_generate_word_entries_v2(
     level_rule = "，与上文难度一致" if level_hint else "；未给难度时按词自选"
     # JSON 示例勿放在 f-string 内：花括号会与 f-string 插值冲突
     gaokao_example = """
-,"gaokao_question":{"recognition_distractors":["羽毛","洞穴","翅膀"],"recognition_explanation_zh":"辨析该词的核心义项。","context_sentence":"The cave survey recorded one bat flying above the researchers after sunset.","context_translation_zh":"洞穴调查记录到日落后一只蝙蝠从研究人员上方飞过。","context_distractors":["cat","owl","bee"],"context_explanation_zh":"洞穴、飞行和日落共同限定此处应为蝙蝠。"}""" if include_gaokao_candidate else ""
+,"gaokao_question":{"recognition_distractors":["羽毛","洞穴","翅膀","树枝","水滴","岩石"],"recognition_explanation_zh":"辨析该词的核心义项。","context_sentence":"During the evening cave survey, the researchers recorded one bat flying silently above their equipment before disappearing into a narrow passage near the entrance.","context_translation_zh":"傍晚洞穴调查期间，研究人员记录到一只蝙蝠从设备上方无声飞过，随后消失在入口附近的狭窄通道中。","context_distractors":["cat","owl","bee","moth","eagle","mouse"],"context_explanation_zh":"洞穴、飞行和傍晚共同限定此处应为蝙蝠。"}""" if include_gaokao_candidate else ""
     _v2_json_shape_example = f"""[
   {{"english":"bat","senses":[{{"pos":"noun","definition_zh":"蝙蝠","example_en":"Bats fly at night.","example_cn":"蝙蝠在夜间飞行。","example_form":""}},{{"pos":"noun","definition_zh":"球棒","example_en":"He held a wooden bat.","example_cn":"他握着一根木球棒。","example_form":""}},{{"pos":"verb","definition_zh":"击打","example_en":"He bats the ball.","example_cn":"他击球。","example_form":"bats"}}],"level":"初中","phonetic":"/bæt/"{gaokao_example}}}
 ]"""
     gaokao_rules = f"""
 - 每个对象还必须包含 gaokao_question，和词条在同一次输出中生成：
-  - recognition_distractors：3 个中文错误释义；词性和难度接近，但不能是 senses 中任何义项或其同义表达。
+  - recognition_distractors：恰好 6 个中文错误释义；词性和难度接近，但不能是 senses 中任何义项或其同义表达。
   - recognition_explanation_zh：一句中文辨析。
-  - context_sentence：围绕 senses[0] 重写的至少 12 词英文完整语境，必须包含正确词形且只出现一次。正确词形为 senses[0].example_form，若为空则为 english。
+  - context_sentence：围绕 senses[0] 重写的 22 至 28 词英文完整语境，必须包含正确词形且只出现一次。正确词形为 senses[0].example_form，若为空则为 english；该词形相当于 required_context_answer_verbatim，必须逐字符复制。
   - context_translation_zh：context_sentence 的准确中文翻译。
-  - context_distractors：3 个能放入同一语法位置、词性和词形匹配但语义不成立的英文选项。
+  - context_distractors：恰好 6 个能放入同一语法位置、词性和词形匹配但语义不成立的英文选项，供后续独立审计选择 3 个。
   - context_explanation_zh：指出唯一限定线索，并说明干扰项为何不成立。
 - gaokao_question 生成前必须遵守以下自检规则：
 {gaokao_questions.GENERATION_QUALITY_RULES_ZH}
 """ if include_gaokao_candidate else ""
-    prompt = f"""为下列每项各生成 1 个对象，输出**仅**合法 JSON 数组（从 [ 到 ]），无 Markdown、无说明。
-
-列表：{words_str}{level_hint}
+    prompt = f"""为输入列表中的每项各生成 1 个对象，输出**仅**合法 JSON 数组（从 [ 到 ]），无 Markdown、无说明。
 
 规则：
 - senses：每条含 pos、definition_zh（2～12 字）；senses[0] 为最常见义；pos 用 noun|verb|adjective|adverb|phrase。
@@ -2073,6 +2071,9 @@ def deepseek_generate_word_entries_v2(
 
 结构示例（3 义则 senses 内 3 组例句）：
 {_v2_json_shape_example}
+
+输入列表（必须逐项输出并保持顺序）：
+{words_str}{level_hint}
 """
     wc = max(1, len(words))
     # 组合生成还包含两类题目，限制为更小批次并预留更长 JSON 输出。
@@ -2223,12 +2224,12 @@ def finalize_combined_gaokao_candidates(
             errors[key] = "combined generation is missing gaokao_question"
             continue
         question_raw = {**question_raw, "english": key}
-        record, error = gaokao_questions.finalize_generated_questions(
+        pool, error = gaokao_questions.build_generation_candidate_pool(
             source,
             question_raw,
         )
-        if record:
-            records[key] = record
+        if pool:
+            records[key] = pool
         else:
             errors[key] = f"combined question validation failed: {error}"
     return records, errors
@@ -6314,7 +6315,7 @@ def _publish_combined_gaokao_questions_for_new_entries(
     generated_records: Dict[str, dict],
     generation_errors: Dict[str, str],
 ) -> dict:
-    """Summarize prompt-checked questions published with new v2 entries."""
+    """Summarize question candidates queued for asynchronous semantic audit."""
     sources: List[dict] = []
     skipped_words: List[str] = []
     seen = set()
@@ -6330,11 +6331,8 @@ def _publish_combined_gaokao_questions_for_new_entries(
         else:
             skipped_words.append(key)
 
-    published_words = sorted(
-        key
-        for key in generated_records
-        if gaokao_questions.has_complete_questions(key)
-    )
+    published_words: List[str] = []
+    pending_audit_words = sorted(generated_records)
 
     already_published = sum(
         1
@@ -6360,7 +6358,7 @@ def _publish_combined_gaokao_questions_for_new_entries(
         "approved_words": published_words,
         "rejected_words": [],
         "generation_failed_words": sorted(generation_errors),
-        "audit_retry_words": [],
+        "audit_retry_words": pending_audit_words,
         "skipped_words": skipped_words,
     }
 
@@ -6418,7 +6416,7 @@ def generate_gaokao_question_batches(
     progress=None,
     diagnostic=None,
 ) -> dict:
-    """Generate and persist prompt-checked questions in bounded AI requests."""
+    """Generate, independently audit, repair, and publish bounded batches."""
     generated = 0
     failed = 0
     generated_words: List[str] = []
@@ -6428,19 +6426,21 @@ def generate_gaokao_question_batches(
     for start in range(0, len(sources), size):
         batch = sources[start : start + size]
         try:
-            result = gaokao_questions.generate_prompt_checked_and_persist(
+            result = gaokao_questions.generate_audited_and_persist(
                 batch,
                 _gaokao_generation_chat,
+                audit_chat=_gaokao_generation_chat,
                 force=force,
                 refresh_prompt=refresh_prompt,
                 diagnostic=diagnostic,
+                max_generation_attempts=2,
             )
         except Exception as exc:
             errors = {
                 source["english"]: f"batch exception: {exc}"
                 for source in batch
             }
-            gaokao_questions.persist_prompt_checked_result({}, errors)
+            gaokao_questions.persist_candidate_pool_result({}, errors)
             result = {
                 "generated": 0,
                 "failed": len(batch),
@@ -6465,6 +6465,84 @@ def generate_gaokao_question_batches(
         "generated_words": sorted(set(generated_words)),
         "failed_words": sorted(set(failed_words)),
         "failure_errors": failure_errors,
+    }
+
+
+def audit_gaokao_candidate_pool_batches(
+    pools: Dict[str, dict],
+    *,
+    batch_size: int = gaokao_questions.GENERATION_REQUEST_WORDS,
+    pause: float = 0.0,
+    progress=None,
+    diagnostic=None,
+) -> dict:
+    """Audit queued import candidates in off-peak batches without regenerating them."""
+    approved = 0
+    rejected = 0
+    retry = 0
+    approved_words: List[str] = []
+    rejected_words: List[str] = []
+    retry_words: List[str] = []
+    rejection_errors: Dict[str, str] = {}
+    retry_errors: Dict[str, str] = {}
+    items = list(pools.items())
+    size = max(1, min(gaokao_questions.GENERATION_REQUEST_WORDS, int(batch_size)))
+    for start in range(0, len(items), size):
+        batch = dict(items[start : start + size])
+        try:
+            accepted_rows, rejected_rows, retry_rows = (
+                gaokao_questions.audit_generation_candidate_pools(
+                    batch,
+                    _gaokao_generation_chat,
+                    diagnostic=diagnostic,
+                )
+            )
+            gaokao_questions.persist_candidate_pool_audit_result(
+                accepted_rows,
+                rejected_rows,
+                retry_rows,
+                expected_pools=batch,
+            )
+        except Exception as exc:
+            accepted_rows = {}
+            rejected_rows = {}
+            retry_rows = {key: f"audit batch exception: {exc}" for key in batch}
+            gaokao_questions.persist_candidate_pool_audit_result(
+                accepted_rows,
+                rejected_rows,
+                retry_rows,
+                expected_pools=batch,
+            )
+        approved += len(accepted_rows)
+        rejected += len(rejected_rows)
+        retry += len(retry_rows)
+        approved_words.extend(accepted_rows)
+        rejected_words.extend(rejected_rows)
+        retry_words.extend(retry_rows)
+        rejection_errors.update(rejected_rows)
+        retry_errors.update(retry_rows)
+        done = min(start + len(batch), len(items))
+        if progress is not None:
+            progress(done, len(items), {
+                "approved": len(accepted_rows),
+                "rejected": len(rejected_rows),
+                "retry": len(retry_rows),
+                "approved_words": sorted(accepted_rows),
+                "rejected_words": sorted(rejected_rows),
+                "retry_words": sorted(retry_rows),
+            })
+        if pause > 0 and done < len(items):
+            sleep(pause)
+    return {
+        "pending": len(pools),
+        "approved": approved,
+        "rejected": rejected,
+        "retry": retry,
+        "approved_words": sorted(set(approved_words)),
+        "rejected_words": sorted(set(rejected_words)),
+        "retry_words": sorted(set(retry_words)),
+        "rejection_errors": rejection_errors,
+        "retry_errors": retry_errors,
     }
 
 
@@ -6521,35 +6599,88 @@ def _run_gaokao_auto_backfill_once(
             }
 
         sources = gaokao_question_sources("")
-        pending = gaokao_failed_question_sources(sources)
-        if len(pending) < settings["trigger_words"]:
+        pending_pools = gaokao_questions.pending_candidate_pools()
+        pending_generation = gaokao_failed_question_sources(sources)
+        pending_count = len(pending_pools) + len(pending_generation)
+        if pending_count < settings["trigger_words"]:
             return {
                 "status": "below_threshold",
-                "pending": len(pending),
+                "pending": pending_count,
                 "threshold": settings["trigger_words"],
             }
 
-        selected = pending[: settings["job_words"]]
+        selected_pools = dict(
+            list(pending_pools.items())[: settings["job_words"]]
+        )
+        remaining_slots = settings["job_words"] - len(selected_pools)
+        selected_generation = pending_generation[:max(0, remaining_slots)]
+        selected_words = [
+            *selected_pools,
+            *(source["english"] for source in selected_generation),
+        ]
         started_at = current.astimezone(timezone.utc).isoformat(timespec="seconds")
         state.update({
             "status": "running",
             "last_started_at": started_at,
-            "last_pending_count": len(pending),
-            "last_selected_words": [source["english"] for source in selected],
+            "last_pending_count": pending_count,
+            "last_selected_words": selected_words,
         })
         gaokao_backfill.save_auto_state(state)
         logger.info(
             "高考题后台补全开始: pending=%s selected=%s request_words=%s",
-            len(pending),
-            len(selected),
+            pending_count,
+            len(selected_words),
             settings["request_words"],
         )
         try:
-            result = generate_gaokao_question_batches(
-                selected,
+            audit_result = audit_gaokao_candidate_pool_batches(
+                selected_pools,
                 batch_size=settings["request_words"],
                 pause=DEEPSEEK_BATCH_PAUSE_SEC,
-            )
+            ) if selected_pools else {
+                "approved": 0,
+                "rejected": 0,
+                "retry": 0,
+                "approved_words": [],
+                "rejected_words": [],
+                "retry_words": [],
+            }
+            generation_result = generate_gaokao_question_batches(
+                selected_generation,
+                batch_size=settings["request_words"],
+                pause=DEEPSEEK_BATCH_PAUSE_SEC,
+            ) if selected_generation else {
+                "requested": 0,
+                "generated": 0,
+                "failed": 0,
+                "generated_words": [],
+                "failed_words": [],
+                "failure_errors": {},
+            }
+            result = {
+                "requested": len(selected_words),
+                "generated": (
+                    int(audit_result.get("approved") or 0)
+                    + int(generation_result.get("generated") or 0)
+                ),
+                "failed": (
+                    int(audit_result.get("rejected") or 0)
+                    + int(audit_result.get("retry") or 0)
+                    + int(generation_result.get("failed") or 0)
+                ),
+                "generated_words": sorted({
+                    *(audit_result.get("approved_words") or []),
+                    *(generation_result.get("generated_words") or []),
+                }),
+                "failed_words": sorted({
+                    *(audit_result.get("rejected_words") or []),
+                    *(audit_result.get("retry_words") or []),
+                    *(generation_result.get("failed_words") or []),
+                }),
+                "audited": int(audit_result.get("approved") or 0),
+                "audit_rejected": int(audit_result.get("rejected") or 0),
+                "audit_retry": int(audit_result.get("retry") or 0),
+            }
         except Exception as exc:
             state.update({
                 "status": "failed",
@@ -6580,7 +6711,7 @@ def _run_gaokao_auto_backfill_once(
         )
         return {
             "status": "completed",
-            "pending": len(pending),
+            "pending": pending_count,
             **result,
         }
 
@@ -6836,7 +6967,7 @@ def import_vocab_to_csv(username):
                         rows,
                     )
                     try:
-                        gaokao_questions.persist_prompt_checked_result(
+                        gaokao_questions.persist_candidate_pool_result(
                             generated_records,
                             generation_errors,
                         )

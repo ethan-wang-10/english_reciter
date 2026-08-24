@@ -1204,8 +1204,9 @@ def test_combined_word_response_finalizes_gaokao_candidate(monkeypatch) -> None:
     records, errors = web.finalize_combined_gaokao_candidates([raw], [finalized])
 
     assert errors == {}
-    assert records['novel']['word_key'] == 'novel'
-    assert records['novel']['context']['prompt'].count('____') == 1
+    assert records['novel']['record']['word_key'] == 'novel'
+    assert records['novel']['record']['context']['prompt'].count('____') == 1
+    assert records['novel']['raw']['context_distractors'] == ['poem', 'report', 'letter']
 
 
 def test_combined_word_generation_uses_one_ai_request(monkeypatch) -> None:
@@ -1228,7 +1229,7 @@ def test_combined_word_generation_uses_one_ai_request(monkeypatch) -> None:
     assert rows[0]['gaokao_question']['context_distractors'] == ['poem', 'report', 'letter']
 
 
-def test_combined_gaokao_question_summary_requires_no_audit_call(monkeypatch) -> None:
+def test_combined_gaokao_question_summary_defers_audit_call(monkeypatch) -> None:
     generated = {'novel': {'word_key': 'novel'}}
     monkeypatch.setattr(web.gaokao_questions, 'has_complete_questions', lambda *args, **kwargs: True)
     monkeypatch.setattr(
@@ -1244,9 +1245,9 @@ def test_combined_gaokao_question_summary_requires_no_audit_call(monkeypatch) ->
     )
 
     assert result['generated_words'] == ['novel']
-    assert result['approved_words'] == ['novel']
+    assert result['approved_words'] == []
     assert result['rejected_words'] == []
-    assert result['audit_retry_words'] == []
+    assert result['audit_retry_words'] == ['novel']
 
 
 def test_combined_gaokao_question_summary_reports_generation_failure(monkeypatch) -> None:
@@ -1263,7 +1264,7 @@ def test_combined_gaokao_question_summary_reports_generation_failure(monkeypatch
     assert result['audit_retry_words'] == []
 
 
-def test_vocab_import_publishes_gaokao_question_with_one_ai_generation(
+def test_vocab_import_queues_gaokao_question_for_async_audit(
     client,
     monkeypatch,
 ) -> None:
@@ -1305,7 +1306,7 @@ def test_vocab_import_publishes_gaokao_question_with_one_ai_generation(
     )
     monkeypatch.setattr(
         web.gaokao_questions,
-        'persist_prompt_checked_result',
+        'persist_candidate_pool_result',
         lambda records, errors: persisted_questions.append((records, errors)),
     )
 
@@ -1315,17 +1316,17 @@ def test_vocab_import_publishes_gaokao_question_with_one_ai_generation(
             'requested': 1,
             'eligible': 1,
             'candidates_generated': 1,
-            'approved': 1,
+            'approved': 0,
             'already_published': 0,
             'rejected': 0,
             'generation_failed': 0,
-            'audit_retry': 0,
+            'audit_retry': 1,
             'skipped_no_source': 0,
             'generated_words': ['novel'],
-            'approved_words': ['novel'],
+            'approved_words': [],
             'rejected_words': [],
             'generation_failed_words': [],
-            'audit_retry_words': [],
+            'audit_retry_words': ['novel'],
             'skipped_words': [],
         }
 
@@ -1346,8 +1347,9 @@ def test_vocab_import_publishes_gaokao_question_with_one_ai_generation(
     assert generation_calls == [(['novel'], '高中', True)]
     assert persisted_questions == [({'novel': {'word_key': 'novel'}}, {})]
     assert staged == [([entry], {'novel': {'word_key': 'novel'}}, {})]
-    assert body['gaokao_questions']['approved_words'] == ['novel']
-    assert '已按题库规则生成并发布高考题 1 个' in body['message']
+    assert body['gaokao_questions']['approved_words'] == []
+    assert body['gaokao_questions']['audit_retry_words'] == ['novel']
+    assert '1 个高考题待后台自动补全' in body['message']
 
 
 def test_vocab_import_keeps_wordbank_success_when_gaokao_pipeline_crashes(
@@ -1387,7 +1389,7 @@ def test_vocab_import_keeps_wordbank_success_when_gaokao_pipeline_crashes(
         'finalize_combined_gaokao_candidates',
         lambda raw_entries, rows: ({'novel': {'word_key': 'novel'}}, {}),
     )
-    monkeypatch.setattr(web.gaokao_questions, 'persist_prompt_checked_result', lambda *args: None)
+    monkeypatch.setattr(web.gaokao_questions, 'persist_candidate_pool_result', lambda *args: None)
     monkeypatch.setattr(
         web,
         '_publish_combined_gaokao_questions_for_new_entries',
@@ -1454,7 +1456,7 @@ def test_generate_gaokao_question_batches_uses_three_ten_word_requests(monkeypat
 
     monkeypatch.setattr(
         web.gaokao_questions,
-        'generate_prompt_checked_and_persist',
+        'generate_audited_and_persist',
         generate,
     )
     monkeypatch.setattr(web, '_deepseek_chat', deepseek_chat)
@@ -1479,9 +1481,11 @@ def test_generate_gaokao_question_batches_uses_three_ten_word_requests(monkeypat
     ] * 3
     assert all(
         kwargs == {
+            'audit_chat': web._gaokao_generation_chat,
             'force': False,
             'refresh_prompt': False,
             'diagnostic': diagnostics.append,
+            'max_generation_attempts': 2,
         }
         for _, kwargs in batches
     )
@@ -1594,6 +1598,63 @@ def test_auto_backfill_claims_only_thirty_and_obeys_cooldown(
     assert len(calls[0][0]) == 30
     assert calls[0][1]['batch_size'] == 10
     assert second['status'] == 'cooldown'
+
+
+def test_auto_backfill_audits_thirty_import_candidates_off_peak(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    pools = {f'word-{index:02d}': {'pool': index} for index in range(30)}
+    calls = []
+    monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
+    monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level='': [])
+    monkeypatch.setattr(web, 'gaokao_failed_question_sources', lambda sources: [])
+    monkeypatch.setattr(web.gaokao_questions, 'pending_candidate_pools', lambda: pools)
+    monkeypatch.setattr(
+        web.gaokao_backfill,
+        'GENERATION_LOCK_FILE',
+        tmp_path / '.backfill.lock',
+    )
+    monkeypatch.setattr(
+        web.gaokao_backfill,
+        'AUTO_STATE_FILE',
+        tmp_path / 'backfill-state.json',
+    )
+
+    def audit(selected, **kwargs):
+        calls.append((selected, kwargs))
+        return {
+            'pending': len(selected),
+            'approved': len(selected),
+            'rejected': 0,
+            'retry': 0,
+            'approved_words': list(selected),
+            'rejected_words': [],
+            'retry_words': [],
+        }
+
+    monkeypatch.setattr(web, 'audit_gaokao_candidate_pool_batches', audit)
+    monkeypatch.setattr(
+        web,
+        'generate_gaokao_question_batches',
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError('audit-only job must not regenerate candidates')
+        ),
+    )
+
+    result = web._run_gaokao_auto_backfill_once(
+        datetime(2026, 8, 24, 0, 30, tzinfo=timezone.utc)
+    )
+
+    assert result['status'] == 'completed'
+    assert result['pending'] == 30
+    assert result['generated'] == 30
+    assert result['audited'] == 30
+    assert len(calls) == 1
+    assert list(calls[0][0]) == list(pools)
+    assert calls[0][1]['batch_size'] == 10
 
 
 def test_auto_backfill_waits_until_thirty_are_pending(monkeypatch, tmp_path) -> None:

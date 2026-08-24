@@ -106,23 +106,23 @@ python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --d
 python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 10 --pause 1
 ```
 
-手工脚本每次默认最多处理 30 个词，固定按每个 DeepSeek 请求 10 个词执行；显式传入 `--limit 0` 才会全量处理。Prompt 要求模型在输出前逐项代入四个选项并自行消除同义释义和语境歧义；程序随后执行 JSON、选项数量、重复项、答案词形和语境长度等确定性校验。通过本地校验的题目直接写入 `questions`，并标记当前 `generation_prompt_version` 和 `quality_gate`。语义质量采用 Prompt 自检策略，允许少量歧义题进入题库，后续通过抽检和下线机制处理。
+手工脚本每次默认最多处理 30 个词，固定按每个 DeepSeek 请求 10 个词执行；显式传入 `--limit 0` 才会全量处理。生成请求为每题提供 6 个中文和 6 个英文干扰候选，程序先执行 JSON、候选数量、重复项、答案词形和语境长度等确定性校验，再用独立审计请求逐项判断真实义项、语法词形、语境多解和答案泄露。审计器从安全候选中各选择 3 个，只有通过当前 `generation_prompt_version`、`audit_version` 和 `quality_gate` 的题目才写入正式题库；候选不足时会批量重生成一次。
 
-VIP 词汇导入每批使用一次组合请求，同时生成 `words_v2.json` 词条和高考题；服务端分别完成确定性校验后直接落盘，不再发起第二次 AI 审查请求。
+VIP 词汇导入每批使用一次组合请求，同时生成 `words_v2.json` 词条和 6+6 高考题候选。词条立即落盘，题目只写入服务端候选区，不在用户请求内追加审计调用；候选累计后由低峰后台异步审计，通过后才发布。
 
-重新运行 `generate` 时会自动跳过已发布题；配合 `--limit 200` 可分批处理。需要用当前 Prompt 版本完整重建旧题库时使用 `--refresh-prompt-version`，该模式会跳过已经升级完成的题，适合断点续跑。`--stage audit` 和候选区继续保留，仅用于处理旧部署遗留的候选题。
+重新运行 `generate` 时会自动跳过已通过当前生成和审计版本的题；配合 `--limit 200` 可分批处理。需要重建旧质量版本时使用 `--refresh-prompt-version`，该模式会跳过已经升级完成的题，适合断点续跑。`--stage audit` 可手工处理词汇导入留下的异步候选。
 
-Web/Gunicorn 启动后会同时启动高考题后台补全调度器。题库 `failures` 中明确记录的导入/生成失败累计达到 30 个时，调度器在 DeepSeek 官方低峰时段领取 30 个，并固定拆成 3 个 10 词请求；成功题每 10 个一批立即落盘，下次自动跳过。它不会自动扫描全词库的历史缺题，历史全量补题仍由手工脚本控制。按 [DeepSeek 官方计费说明](https://api-docs.deepseek.com/quick_start/pricing)，当前高峰为工作日 UTC `01:00-04:00` 和 `06:00-10:00`，即北京时间工作日 `09:00-12:00` 和 `14:00-18:00`，其余时间及周末为低峰。多个 Gunicorn worker 和手工脚本共用跨进程任务锁，不会并行补题。
+Web/Gunicorn 启动后会同时启动高考题后台调度器。待审候选和题库 `failures` 中明确记录的失败合计达到 30 个时，调度器在 DeepSeek 官方低峰时段领取 30 个，优先审计已有候选，再补充重生成失败题；生成和审计都固定按每请求最多 10 个处理。审计拒绝会写入失败队列，累计后自动重生成。它不会自动扫描全词库的历史缺题，历史全量升级仍由手工脚本控制。按 [DeepSeek 官方计费说明](https://api-docs.deepseek.com/quick_start/pricing)，当前高峰为工作日 UTC `01:00-04:00` 和 `06:00-10:00`，即北京时间工作日 `09:00-12:00` 和 `14:00-18:00`，其余时间及周末为低峰。多个 Gunicorn worker 和手工脚本共用跨进程任务锁，不会并行补题。
 
 默认每 5 分钟检查一次、两次任务至少间隔 30 分钟。可通过 `.env` 的 `GAOKAO_AUTO_BACKFILL_ENABLED`、`GAOKAO_AUTO_BACKFILL_CHECK_SECONDS` 和 `GAOKAO_AUTO_BACKFILL_MIN_INTERVAL_SECONDS` 调整；触发阈值和每次任务领取量固定为 30，单请求大小固定为 10，剩余不足 30 个时会继续等待后续缺题累积。最近一次任务状态保存在 `user_data_simple/_shared/gaokao_backfill_state.json`。
 
-线上服务兼容旧的独立审查题和当前 Prompt 自检题。缺题时当前任务会立即降级为拼写，不在学生请求中调用 AI。升级时不要让旧版批处理脚本与新脚本并行生成同一题库。
+线上服务只提供通过当前独立审计质量门的题目。缺题或候选待审时当前任务会立即降级为拼写，不在学生请求中调用 AI。升级时不要让旧版批处理脚本与新脚本并行生成同一题库。
 
 ```bash
 python3 scripts/generate_gaokao_questions.py --stage generate --level "" --batch-size 10 --limit 200 --refresh-prompt-version --pause 1
 ```
 
-脚本出现生成失败时返回退出码 `2`；直接再次执行同一命令即可续跑。可通过题库 JSON 中的 `questions` 和 `failures` 分别查看已发布和生成失败数量；`candidates`、`rejections` 只保留旧审查流程的兼容数据。
+脚本出现生成失败时返回退出码 `2`；直接再次执行同一命令即可续跑。题库 JSON 中的 `questions` 保存已通过独立审计的题目，`candidates` 保存异步待审候选，`rejections` 保存审计拒绝记录，`failures` 保存等待后续重生成的失败项。
 
 ## 依赖说明
 

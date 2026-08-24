@@ -87,6 +87,65 @@ def _audited(
     }], ensure_ascii=False)
 
 
+def _pool_audited(
+    source: dict,
+    raw: dict,
+    *,
+    recognition_valid=None,
+    context_fits=None,
+    context_grammatical=None,
+    context_quality=None,
+) -> str:
+    pool, error = questions.build_generation_candidate_pool(source, raw)
+    assert error == ''
+    correct_zh, recognition_rows, recognition_error = questions._recognition_candidate_rows(
+        source,
+        raw['recognition_distractors'],
+    )
+    assert recognition_error == ''
+    recognition_options = [correct_zh, *(row[1] for row in recognition_rows)]
+    context_options = [
+        source['context_answer'],
+        *questions._clean_distinct_list(
+            raw['context_distractors'],
+            forbidden=[source['context_answer'], source['english']],
+            require_cjk=False,
+            limit=12,
+        ),
+    ]
+    valid_recognition = set(recognition_valid or (correct_zh,))
+    fitting_context = set(context_fits or (source['context_answer'],))
+    grammatical_context = set(context_grammatical or context_options)
+    quality = context_quality or {
+        'natural': True,
+        'decisive_clues': True,
+        'answer_revealed': False,
+        'reason_zh': '句子自然且存在明确的唯一限定线索。',
+    }
+    return json.dumps([{
+        'item_id': 'q1',
+        'recognition_verdicts': [
+            {
+                'option': option,
+                'valid_definition': option in valid_recognition,
+                'parallel_form': True,
+                'reason_zh': '逐项核对中文义项和表达形式。',
+            }
+            for option in recognition_options
+        ],
+        'context_verdicts': [
+            {
+                'option': option,
+                'grammatical': option in grammatical_context,
+                'meaning_fits': option in fitting_context,
+                'reason_zh': '逐项代入检查语法和题面语义。',
+            }
+            for option in context_options
+        ],
+        'context_quality': quality,
+    }], ensure_ascii=False)
+
+
 def test_source_masks_existing_example_once():
     source = questions.source_from_wordbank_row({
         'english': 'apply',
@@ -180,24 +239,27 @@ def test_generation_is_reentrant_after_partial_batch_success(private_question_ba
     assert questions.missing_sources([apple, changed_book]) == [changed_book]
 
 
-def test_prompt_checked_generation_publishes_with_one_ai_call(private_question_bank):
+def test_generation_publishes_only_after_independent_audit(private_question_bank):
     source = _source('novel', 'n. 小说')
     calls = []
 
     def chat(messages, max_tokens):
         calls.append(messages[-1]['content'])
+        if '独立的高考英语单选题语义审计员' in messages[-1]['content']:
+            return _pool_audited(source, _generated('novel'))
         return json.dumps([_generated('novel')], ensure_ascii=False)
 
     result = questions.generate_prompt_checked_and_persist([source], chat)
 
     assert result['generated_words'] == ['novel']
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert '先在内部生成候选' in calls[0]
+    assert '独立的高考英语单选题语义审计员' in calls[1]
     bank = questions.load_bank()
     record = bank['questions']['novel']
     assert record['generation_prompt_version'] == questions.GENERATION_PROMPT_VERSION
-    assert record['quality_gate'] == questions.SELF_CHECK_QUALITY_GATE
-    assert 'audit_version' not in record
+    assert record['quality_gate'] == questions.INDEPENDENT_AUDIT_QUALITY_GATE
+    assert record['audit_version'] == questions.AUDIT_VERSION
     assert questions.get_question('novel', 'recognition') is not None
 
 
@@ -358,13 +420,162 @@ def test_prompt_version_refresh_is_resumable(private_question_bank):
     source = _source('novel', 'n. 小说')
     record, error = questions.finalize_generated_questions(source, _generated('novel'))
     assert error == ''
-    questions.persist_generation_result({'novel': record}, {})
+    questions.persist_prompt_checked_result({'novel': record}, {})
 
     assert questions.sources_needing_prompt_refresh([source]) == [source]
 
-    questions.persist_prompt_checked_result({'novel': record}, {})
+    questions.persist_generation_result({'novel': record}, {})
 
     assert questions.sources_needing_prompt_refresh([source]) == []
+
+
+def test_pool_audit_selects_safe_backup_distractors() -> None:
+    source = _source('benefit', 'n. 益处；好处')
+    raw = _generated('benefit')
+    raw['recognition_distractors'] = ['优势', '负担', '风险', '限制', '机会', '成本']
+    raw['context_distractors'] = [
+        'advantage', 'value', 'help', 'burden', 'obstacle', 'damage',
+    ]
+    pool, error = questions.build_generation_candidate_pool(source, raw)
+    assert error == ''
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'benefit': pool},
+        lambda messages, max_tokens: _pool_audited(
+            source,
+            raw,
+            recognition_valid=('益处', '优势'),
+            context_fits=('benefit', 'advantage', 'value', 'help'),
+        ),
+    )
+
+    assert rejected == {}
+    assert retry == {}
+    record = approved['benefit']
+    recognition_options = {
+        option['text'] for option in record['recognition']['options']
+    }
+    context_options = {option['text'] for option in record['context']['options']}
+    assert recognition_options == {'益处', '负担', '风险', '限制'}
+    assert context_options == {'benefit', 'burden', 'obstacle', 'damage'}
+    assert record['audit_version'] == questions.AUDIT_VERSION
+
+
+def test_pool_audit_rejects_grammar_only_distractors() -> None:
+    source = _source('abash', 'v. 使尴尬')
+    source['context_answer'] = 'abashed'
+    raw = _generated('abash')
+    raw['context_sentence'] = (
+        'Her criticism abashed him during the meeting, and he lowered his head '
+        'before quietly apologizing to every colleague in the room.'
+    )
+    raw['context_distractors'] = ['proud', 'happy', 'calm', 'delighted', 'brave', 'relaxed']
+    pool, error = questions.build_generation_candidate_pool(source, raw)
+    assert error == ''
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'abash': pool},
+        lambda messages, max_tokens: _pool_audited(
+            source,
+            raw,
+            context_grammatical=('abashed',),
+        ),
+    )
+
+    assert approved == {}
+    assert retry == {}
+    assert 'insufficient safe options' in rejected['abash']
+
+
+def test_rejected_pool_is_regenerated_once_before_publish(private_question_bank) -> None:
+    source = _source('novel', 'n. 小说')
+    raw = _generated('novel')
+    generation_calls = 0
+    audit_calls = 0
+
+    def generate_chat(messages, max_tokens):
+        nonlocal generation_calls
+        generation_calls += 1
+        return json.dumps([raw], ensure_ascii=False)
+
+    def audit_chat(messages, max_tokens):
+        nonlocal audit_calls
+        audit_calls += 1
+        quality = None
+        if audit_calls == 1:
+            quality = {
+                'natural': True,
+                'decisive_clues': False,
+                'answer_revealed': False,
+                'reason_zh': '首轮语境缺少形成唯一答案的决定性线索。',
+            }
+        return _pool_audited(source, raw, context_quality=quality)
+
+    result = questions.generate_audited_and_persist(
+        [source],
+        generate_chat,
+        audit_chat=audit_chat,
+        max_generation_attempts=2,
+    )
+
+    assert generation_calls == 2
+    assert audit_calls == 2
+    assert result['generated_words'] == ['novel']
+    assert result['failed_words'] == []
+    assert questions.get_question('novel', 'context') is not None
+    assert questions.pending_candidate_pools() == {}
+
+
+def test_import_candidate_pool_stays_private_until_audit(private_question_bank) -> None:
+    source = _source('novel', 'n. 小说')
+    raw = _generated('novel')
+    pool, error = questions.build_generation_candidate_pool(source, raw)
+    assert error == ''
+
+    questions.persist_candidate_pool_result({'novel': pool}, {})
+
+    assert questions.get_question('novel', 'recognition') is None
+    assert list(questions.pending_candidate_pools()) == ['novel']
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'novel': pool},
+        lambda messages, max_tokens: _pool_audited(source, raw),
+    )
+    questions.persist_candidate_pool_audit_result(approved, rejected, retry)
+
+    assert questions.get_question('novel', 'recognition') is not None
+    assert questions.pending_candidate_pools() == {}
+
+
+def test_stale_pool_audit_cannot_publish_over_new_candidates(private_question_bank) -> None:
+    source = _source('novel', 'n. 小说')
+    first_raw = _generated('novel')
+    first_pool, error = questions.build_generation_candidate_pool(source, first_raw)
+    assert error == ''
+    questions.persist_candidate_pool_result({'novel': first_pool}, {})
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'novel': first_pool},
+        lambda messages, max_tokens: _pool_audited(source, first_raw),
+    )
+
+    second_raw = _generated('novel')
+    second_raw['recognition_distractors'] = [
+        '规则', '表格', '风险', '机会', '限制', '责任',
+    ]
+    second_pool, error = questions.build_generation_candidate_pool(source, second_raw)
+    assert error == ''
+    questions.persist_candidate_pool_result({'novel': second_pool}, {})
+
+    questions.persist_candidate_pool_audit_result(
+        approved,
+        rejected,
+        retry,
+        expected_pools={'novel': first_pool},
+    )
+
+    assert questions.get_question('novel', 'recognition') is None
+    assert questions.pending_candidate_pools()['novel']['raw'] == second_raw
 
 
 def test_failure_attempts_increment_without_removing_completed_questions(
