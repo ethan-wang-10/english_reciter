@@ -1467,7 +1467,7 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
             {
                 'max_tokens': 28200,
                 'temperature': 0.0,
-                'thinking': True,
+                'thinking': False,
                 'timeout_sec': 300,
             },
         ),

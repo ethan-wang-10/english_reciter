@@ -1825,7 +1825,9 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                 )
                 break
             try:
-                content = result["choices"][0]["message"]["content"]
+                choice = result["choices"][0]
+                message = choice["message"]
+                content = message["content"]
             except (KeyError, IndexError, TypeError) as ke:
                 last_err = ke
                 logger.error(
@@ -1835,6 +1837,18 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                 )
                 break
             usage = result.get("usage") if isinstance(result, dict) else None
+            reasoning_content = (
+                message.get("reasoning_content") if isinstance(message, dict) else None
+            )
+            logger.info(
+                "DeepSeek 完成: finish_reason=%s prompt_tokens=%s completion_tokens=%s "
+                "reasoning_chars=%s content_chars=%s",
+                choice.get("finish_reason") if isinstance(choice, dict) else None,
+                usage.get("prompt_tokens") if isinstance(usage, dict) else None,
+                usage.get("completion_tokens") if isinstance(usage, dict) else None,
+                len(reasoning_content) if isinstance(reasoning_content, str) else 0,
+                len(content) if isinstance(content, str) else 0,
+            )
             if isinstance(usage, dict) and (
                 "prompt_cache_hit_tokens" in usage
                 or "prompt_cache_miss_tokens" in usage
@@ -6389,7 +6403,7 @@ def _gaokao_generation_chat(messages: List[dict], max_tokens: int):
         messages,
         max_tokens=max_tokens,
         temperature=0.0,
-        thinking=True,
+        thinking=False,
         timeout_sec=300,
     )
 
