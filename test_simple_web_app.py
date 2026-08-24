@@ -1431,6 +1431,7 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
     ]
     batches = []
     deepseek_calls = []
+    diagnostics = []
 
     def deepseek_chat(messages, **kwargs):
         deepseek_calls.append((messages, kwargs))
@@ -1453,7 +1454,11 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
     )
     monkeypatch.setattr(web, '_deepseek_chat', deepseek_chat)
 
-    result = web.generate_gaokao_question_batches(sources, batch_size=30)
+    result = web.generate_gaokao_question_batches(
+        sources,
+        batch_size=30,
+        diagnostic=diagnostics.append,
+    )
 
     assert [len(batch) for batch, _ in batches] == [30]
     assert deepseek_calls == [
@@ -1463,7 +1468,11 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
         ),
     ]
     assert all(
-        kwargs == {'force': False, 'refresh_prompt': False}
+        kwargs == {
+            'force': False,
+            'refresh_prompt': False,
+            'diagnostic': diagnostics.append,
+        }
         for _, kwargs in batches
     )
     assert result['generated'] == 30

@@ -14,6 +14,7 @@ stage remains available for candidates created by older deployments.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -42,6 +43,7 @@ def _run_generation(
     pause: float,
     force: bool,
     refresh_prompt: bool,
+    debug_generation: bool,
 ) -> tuple[int, int]:
     def report(done: int, total: int, result: dict) -> None:
         print(
@@ -63,6 +65,13 @@ def _run_generation(
             )
             print(f"[generate errors] {summary}", flush=True)
 
+    def diagnostic(event: dict) -> None:
+        print("[generate diagnostic]", flush=True)
+        print(
+            json.dumps(event, ensure_ascii=False, indent=2, sort_keys=True),
+            flush=True,
+        )
+
     result = web.generate_gaokao_question_batches(
         pending,
         batch_size=batch_size,
@@ -70,6 +79,7 @@ def _run_generation(
         force=force,
         refresh_prompt=refresh_prompt,
         progress=report,
+        diagnostic=diagnostic if debug_generation else None,
     )
     return int(result["generated"]), int(result["failed"])
 
@@ -152,6 +162,11 @@ def main() -> int:
         help="仅重建尚未使用当前 Prompt 版本发布的题，可配合 limit 断点续跑",
     )
     parser.add_argument("--dry-run", action="store_true", help="只统计，不调用 AI、不写文件")
+    parser.add_argument(
+        "--debug-generation",
+        action="store_true",
+        help="输出完整生成 Prompt、AI 原始响应和逐词校验诊断；内容较多，仅用于手工排查",
+    )
     args = parser.parse_args()
 
     if args.batch_size != 30:
@@ -220,6 +235,7 @@ def main() -> int:
                     pause=args.pause,
                     force=args.force,
                     refresh_prompt=args.refresh_prompt_version,
+                    debug_generation=args.debug_generation,
                 )
             if args.stage == "all":
                 pending_audit = questions.pending_candidate_records(limit=max(0, args.limit))

@@ -218,6 +218,38 @@ def test_generation_output_budget_supports_one_thirty_word_request() -> None:
     assert len(errors) == 30
 
 
+def test_generation_diagnostics_include_raw_output_and_validation_trace() -> None:
+    source = _source('novel', 'n. 小说')
+    raw = _generated('novel')
+    raw['recognition_distractors'] = ['小说', '诗歌']
+    events = []
+
+    records, errors = questions.generate_candidate_records(
+        [source],
+        lambda messages, max_tokens: json.dumps([raw], ensure_ascii=False),
+        diagnostic=events.append,
+    )
+
+    assert records == {}
+    assert errors == {
+        'novel': 'recognition requires three distinct Chinese distractors with one sense each',
+    }
+    assert [event['event'] for event in events] == [
+        'request',
+        'response',
+        'parse',
+        'validation',
+    ]
+    assert events[0]['prompt_chars'] == len(events[0]['prompt'])
+    assert events[1]['raw_response'] == json.dumps([raw], ensure_ascii=False)
+    validation = events[-1]
+    assert validation['recognition']['raw_count'] == 2
+    assert validation['recognition']['accepted_item_count'] == 1
+    assert validation['recognition']['items'][0]['duplicate_or_correct'] is True
+    assert validation['context']['answer_match_count'] == 1
+    assert validation['context']['sentence_word_count'] >= 12
+
+
 def test_generation_prompt_exposes_machine_checkable_constraints() -> None:
     prompt = questions.build_generation_prompt([
         _source('novel', 'n. 小说；长篇故事'),

@@ -461,25 +461,169 @@ def _extract_json_array(reply: str) -> Optional[List[Any]]:
 
 
 ChatFunction = Callable[[List[dict], int], Optional[str]]
+GenerationDiagnosticFunction = Callable[[Dict[str, Any]], None]
+
+
+def _emit_generation_diagnostic(
+    diagnostic: Optional[GenerationDiagnosticFunction],
+    event: Dict[str, Any],
+) -> None:
+    if diagnostic is None:
+        return
+    try:
+        diagnostic(event)
+    except Exception:
+        # Diagnostics must never turn an otherwise valid generation into a failure.
+        return
+
+
+def _generation_validation_diagnostic(
+    source: dict,
+    raw: Any,
+    record: Optional[dict],
+    error: str,
+) -> Dict[str, Any]:
+    correct = _recognition_core_sense(source.get("chinese"))
+    correct_key = normalize_word(correct)
+    recognition_raw = raw.get("recognition_distractors") if isinstance(raw, dict) else None
+    recognition_items = []
+    seen = {correct_key}
+    if isinstance(recognition_raw, list):
+        for index, value in enumerate(recognition_raw):
+            core = _recognition_core_sense(value)
+            key = normalize_word(core)
+            has_cjk = bool(re.search(r"[\u3400-\u9fff]", core))
+            duplicate_or_correct = key in seen
+            accepted = bool(core and has_cjk and not duplicate_or_correct)
+            recognition_items.append({
+                "index": index,
+                "raw_type": type(value).__name__,
+                "raw_value": value,
+                "core_sense": core,
+                "normalized": key,
+                "hanzi_count": len(re.findall(r"[\u3400-\u9fff]", core)),
+                "has_chinese": has_cjk,
+                "duplicate_or_correct": duplicate_or_correct,
+                "accepted_by_shape_filter": accepted,
+            })
+            if accepted:
+                seen.add(key)
+
+    sentence = str(raw.get("context_sentence") or "") if isinstance(raw, dict) else ""
+    answer = str(source.get("context_answer") or "").strip()
+    answer_pattern = (
+        re.compile(rf"(?<![A-Za-z]){re.escape(answer)}(?![A-Za-z])", re.IGNORECASE)
+        if answer
+        else None
+    )
+    context_raw = raw.get("context_distractors") if isinstance(raw, dict) else None
+    return {
+        "event": "validation",
+        "word": source.get("english"),
+        "status": "published" if record else "failed",
+        "error": error,
+        "source": source,
+        "raw_type": type(raw).__name__,
+        "raw_output": raw,
+        "recognition": {
+            "correct_core_sense": correct,
+            "correct_hanzi_count": len(re.findall(r"[\u3400-\u9fff]", correct)),
+            "raw_type": type(recognition_raw).__name__,
+            "raw_count": len(recognition_raw) if isinstance(recognition_raw, list) else None,
+            "items": recognition_items,
+            "accepted_item_count": sum(
+                1 for item in recognition_items if item["accepted_by_shape_filter"]
+            ),
+        },
+        "context": {
+            "answer": answer,
+            "answer_match_count": (
+                len(answer_pattern.findall(sentence)) if answer_pattern is not None else 0
+            ),
+            "sentence_word_count": len(
+                re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", sentence)
+            ),
+            "sentence": sentence,
+            "translation_zh": (
+                raw.get("context_translation_zh") if isinstance(raw, dict) else None
+            ),
+            "explanation_zh": (
+                raw.get("context_explanation_zh") if isinstance(raw, dict) else None
+            ),
+            "distractors_raw_type": type(context_raw).__name__,
+            "distractors_raw_count": (
+                len(context_raw) if isinstance(context_raw, list) else None
+            ),
+            "distractors_raw": context_raw,
+            "distractors_after_filter": _clean_distinct_list(
+                context_raw,
+                forbidden=[answer, source.get("english")],
+                require_cjk=False,
+            ),
+        },
+    }
 
 
 def generate_candidate_records(
     sources: List[dict],
     chat: ChatFunction,
+    *,
+    diagnostic: Optional[GenerationDiagnosticFunction] = None,
 ) -> Tuple[Dict[str, dict], Dict[str, str]]:
     if not sources:
         return {}, {}
     prompt = build_generation_prompt(sources)
+    max_tokens = min(32768, 1200 + len(sources) * 550)
+    _emit_generation_diagnostic(diagnostic, {
+        "event": "request",
+        "word_count": len(sources),
+        "words": [source.get("english") for source in sources],
+        "max_tokens": max_tokens,
+        "prompt_chars": len(prompt),
+        "prompt": prompt,
+    })
     reply = chat(
         [{"role": "user", "content": prompt}],
-        min(32768, 1200 + len(sources) * 550),
+        max_tokens,
     )
+    _emit_generation_diagnostic(diagnostic, {
+        "event": "response",
+        "response_type": type(reply).__name__,
+        "response_chars": len(reply) if isinstance(reply, str) else None,
+        "raw_response": reply,
+    })
     parsed = _extract_json_array(reply or "")
     if parsed is None:
+        _emit_generation_diagnostic(diagnostic, {
+            "event": "parse",
+            "status": "failed",
+            "error": "AI response is missing a valid JSON array",
+        })
         return {}, {
             source["english"]: "AI response is missing a valid JSON array"
             for source in sources
         }
+    returned_keys = [
+        normalize_word(row.get("english"))
+        for row in parsed
+        if isinstance(row, dict) and normalize_word(row.get("english"))
+    ]
+    _emit_generation_diagnostic(diagnostic, {
+        "event": "parse",
+        "status": "ok",
+        "parsed_item_count": len(parsed),
+        "parsed_object_count": sum(isinstance(row, dict) for row in parsed),
+        "returned_word_keys": returned_keys,
+        "duplicate_word_keys": sorted({
+            key for key in returned_keys if returned_keys.count(key) > 1
+        }),
+        "unexpected_word_keys": sorted(
+            set(returned_keys) - {source["english"] for source in sources}
+        ),
+        "missing_word_keys": sorted(
+            {source["english"] for source in sources} - set(returned_keys)
+        ),
+    })
     raw_by_key = {
         normalize_word(row.get("english")): row
         for row in parsed
@@ -494,6 +638,10 @@ def generate_candidate_records(
             records[key] = record
         else:
             errors[key] = error or "question validation failed"
+        _emit_generation_diagnostic(
+            diagnostic,
+            _generation_validation_diagnostic(source, raw_by_key.get(key), record, error),
+        )
     return records, errors
 
 
@@ -1023,6 +1171,7 @@ def generate_prompt_checked_and_persist(
     *,
     force: bool = False,
     refresh_prompt: bool = False,
+    diagnostic: Optional[GenerationDiagnosticFunction] = None,
 ) -> dict:
     """Generate once, apply deterministic validation, and publish without AI audit."""
     pending = (
@@ -1032,7 +1181,11 @@ def generate_prompt_checked_and_persist(
     )
     if not pending:
         return {"requested": len(sources), "pending": 0, "generated": 0, "failed": 0}
-    records, errors = generate_candidate_records(pending, chat)
+    records, errors = generate_candidate_records(
+        pending,
+        chat,
+        diagnostic=diagnostic,
+    )
     persist_prompt_checked_result(records, errors)
     return {
         "requested": len(sources),

@@ -6393,6 +6393,7 @@ def generate_gaokao_question_batches(
     force: bool = False,
     refresh_prompt: bool = False,
     progress=None,
+    diagnostic=None,
 ) -> dict:
     """Generate and persist prompt-checked questions in bounded AI requests."""
     generated = 0
@@ -6409,6 +6410,7 @@ def generate_gaokao_question_batches(
                 _gaokao_generation_chat,
                 force=force,
                 refresh_prompt=refresh_prompt,
+                diagnostic=diagnostic,
             )
         except Exception as exc:
             errors = {
