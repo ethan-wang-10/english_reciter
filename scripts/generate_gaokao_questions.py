@@ -2,7 +2,7 @@
 """Generate prompt-checked questions, with optional legacy candidate audit.
 
 Examples:
-  python scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 30
+  python scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 10
   python scripts/generate_gaokao_questions.py --stage generate --level '' --refresh-prompt-version
   python scripts/generate_gaokao_questions.py --stage audit --audit-batch-size 10
 
@@ -145,8 +145,8 @@ def main() -> int:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=30,
-        help="兼容旧命令；生成请求固定为每批 30 个",
+        default=questions.GENERATION_REQUEST_WORDS,
+        help="兼容旧命令；生成请求固定为每批 10 个",
     )
     parser.add_argument(
         "--audit-batch-size",
@@ -169,12 +169,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if args.batch_size != 30:
+    if args.batch_size != questions.GENERATION_REQUEST_WORDS:
         print(
-            f"忽略 --batch-size {args.batch_size}；高考题生成固定每批 30 个。",
+            f"忽略 --batch-size {args.batch_size}；高考题生成固定每批 "
+            f"{questions.GENERATION_REQUEST_WORDS} 个。",
             file=sys.stderr,
         )
-    batch_size = 30
+    batch_size = questions.GENERATION_REQUEST_WORDS
     audit_batch_size = max(1, min(10, args.audit_batch_size))
     all_sources = _sources(args.level.strip())
     pending_generation = (

@@ -1412,19 +1412,24 @@ def test_vocab_import_keeps_wordbank_success_when_gaokao_pipeline_crashes(
 def _auto_backfill_settings() -> dict:
     return {
         'enabled': True,
-        'batch_words': 30,
+        'trigger_words': 30,
+        'job_words': 30,
+        'request_words': 10,
         'check_interval_seconds': 300,
         'minimum_run_interval_seconds': 1800,
     }
 
 
-def test_auto_backfill_batch_size_is_fixed_at_thirty(monkeypatch) -> None:
-    monkeypatch.setenv('GAOKAO_AUTO_BACKFILL_BATCH_WORDS', '10')
+def test_auto_backfill_request_size_is_fixed_at_ten(monkeypatch) -> None:
+    monkeypatch.setenv('GAOKAO_AUTO_BACKFILL_BATCH_WORDS', '30')
 
-    assert web._gaokao_auto_backfill_settings()['batch_words'] == 30
+    settings = web._gaokao_auto_backfill_settings()
+    assert settings['trigger_words'] == 30
+    assert settings['job_words'] == 30
+    assert settings['request_words'] == 10
 
 
-def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypatch) -> None:
+def test_generate_gaokao_question_batches_uses_three_ten_word_requests(monkeypatch) -> None:
     sources = [
         {'english': f'word-{index}'}
         for index in range(30)
@@ -1439,7 +1444,7 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
 
     def generate(batch, chat, **kwargs):
         batches.append(([row['english'] for row in batch], kwargs))
-        chat([{'role': 'user', 'content': 'prompt'}], 28200)
+        chat([{'role': 'user', 'content': 'prompt'}], 10200)
         return {
             'generated': len(batch),
             'failed': 0,
@@ -1460,18 +1465,18 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
         diagnostic=diagnostics.append,
     )
 
-    assert [len(batch) for batch, _ in batches] == [30]
+    assert [len(batch) for batch, _ in batches] == [10, 10, 10]
     assert deepseek_calls == [
         (
             [{'role': 'user', 'content': 'prompt'}],
             {
-                'max_tokens': 28200,
+                'max_tokens': 10200,
                 'temperature': 0.0,
                 'thinking': False,
                 'timeout_sec': 300,
             },
         ),
-    ]
+    ] * 3
     assert all(
         kwargs == {
             'force': False,
@@ -1587,7 +1592,7 @@ def test_auto_backfill_claims_only_thirty_and_obeys_cooldown(
     assert first['pending'] == 35
     assert len(calls) == 1
     assert len(calls[0][0]) == 30
-    assert calls[0][1]['batch_size'] == 30
+    assert calls[0][1]['batch_size'] == 10
     assert second['status'] == 'cooldown'
 
 

@@ -22,6 +22,7 @@ AUDIT_VERSION = 2
 GENERATION_PROMPT_VERSION = 6
 SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v6"
 RECOGNITION_FORMAT_VERSION = 1
+GENERATION_REQUEST_WORDS = 10
 QUESTION_TYPES = ("recognition", "context")
 DATA_DIR = Path(os.getenv("ENGLISH_RECITER_DATA_DIR", "user_data_simple")).expanduser()
 QUESTION_BANK_FILE = DATA_DIR / "_shared" / "gaokao_questions_v2.json"
@@ -612,6 +613,10 @@ def generate_candidate_records(
 ) -> Tuple[Dict[str, dict], Dict[str, str]]:
     if not sources:
         return {}, {}
+    if len(sources) > GENERATION_REQUEST_WORDS:
+        raise ValueError(
+            f"generation request exceeds fixed {GENERATION_REQUEST_WORDS}-word limit"
+        )
     prompt = build_generation_prompt(sources)
     # Thinking mode shares this output budget with the final JSON response.
     max_tokens = min(32768, 1200 + len(sources) * 900)

@@ -6411,7 +6411,7 @@ def _gaokao_generation_chat(messages: List[dict], max_tokens: int):
 def generate_gaokao_question_batches(
     sources: List[dict],
     *,
-    batch_size: int = 30,
+    batch_size: int = gaokao_questions.GENERATION_REQUEST_WORDS,
     pause: float = 0.0,
     force: bool = False,
     refresh_prompt: bool = False,
@@ -6424,7 +6424,7 @@ def generate_gaokao_question_batches(
     generated_words: List[str] = []
     failed_words: List[str] = []
     failure_errors: Dict[str, str] = {}
-    size = max(1, min(30, int(batch_size or 30)))
+    size = gaokao_questions.GENERATION_REQUEST_WORDS
     for start in range(0, len(sources), size):
         batch = sources[start : start + size]
         try:
@@ -6471,7 +6471,9 @@ def generate_gaokao_question_batches(
 def _gaokao_auto_backfill_settings() -> dict:
     return {
         "enabled": _env_flag("GAOKAO_AUTO_BACKFILL_ENABLED", True),
-        "batch_words": 30,
+        "trigger_words": 30,
+        "job_words": 30,
+        "request_words": gaokao_questions.GENERATION_REQUEST_WORDS,
         "check_interval_seconds": _env_int(
             "GAOKAO_AUTO_BACKFILL_CHECK_SECONDS",
             300,
@@ -6520,14 +6522,14 @@ def _run_gaokao_auto_backfill_once(
 
         sources = gaokao_question_sources("")
         pending = gaokao_failed_question_sources(sources)
-        if len(pending) < settings["batch_words"]:
+        if len(pending) < settings["trigger_words"]:
             return {
                 "status": "below_threshold",
                 "pending": len(pending),
-                "threshold": settings["batch_words"],
+                "threshold": settings["trigger_words"],
             }
 
-        selected = pending[: settings["batch_words"]]
+        selected = pending[: settings["job_words"]]
         started_at = current.astimezone(timezone.utc).isoformat(timespec="seconds")
         state.update({
             "status": "running",
@@ -6537,15 +6539,15 @@ def _run_gaokao_auto_backfill_once(
         })
         gaokao_backfill.save_auto_state(state)
         logger.info(
-            "高考题后台补全开始: pending=%s selected=%s batch_size=%s",
+            "高考题后台补全开始: pending=%s selected=%s request_words=%s",
             len(pending),
             len(selected),
-            settings["batch_words"],
+            settings["request_words"],
         )
         try:
             result = generate_gaokao_question_batches(
                 selected,
-                batch_size=settings["batch_words"],
+                batch_size=settings["request_words"],
                 pause=DEEPSEEK_BATCH_PAUSE_SEC,
             )
         except Exception as exc:

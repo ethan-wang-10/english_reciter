@@ -201,10 +201,10 @@ def test_prompt_checked_generation_publishes_with_one_ai_call(private_question_b
     assert questions.get_question('novel', 'recognition') is not None
 
 
-def test_generation_output_budget_supports_one_thirty_word_request() -> None:
+def test_generation_output_budget_supports_one_ten_word_request() -> None:
     sources = [
         _source(f'word{index}', f'n. 词{index}')
-        for index in range(30)
+        for index in range(10)
     ]
     max_tokens_seen = []
 
@@ -214,8 +214,21 @@ def test_generation_output_budget_supports_one_thirty_word_request() -> None:
 
     _, errors = questions.generate_candidate_records(sources, chat)
 
-    assert max_tokens_seen == [28200]
-    assert len(errors) == 30
+    assert max_tokens_seen == [10200]
+    assert len(errors) == 10
+
+
+def test_generation_rejects_more_than_ten_words_in_one_request() -> None:
+    sources = [
+        _source(f'word{index}', f'n. 词{index}')
+        for index in range(11)
+    ]
+
+    with pytest.raises(ValueError, match='fixed 10-word limit'):
+        questions.generate_candidate_records(
+            sources,
+            lambda messages, max_tokens: pytest.fail('must reject before AI call'),
+        )
 
 
 def test_generation_diagnostics_include_raw_output_and_validation_trace() -> None:
