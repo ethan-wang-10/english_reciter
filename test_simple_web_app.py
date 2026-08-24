@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -1406,4 +1406,146 @@ def test_vocab_import_keeps_wordbank_success_when_gaokao_pipeline_crashes(
     body = response.get_json()
     assert body['new_in_csv'] == 1
     assert body['gaokao_questions']['generation_failed_words'] == ['novel']
-    assert '1 个高考题候选待后续补全' in body['message']
+    assert '1 个高考题待后台自动补全' in body['message']
+
+
+def _auto_backfill_settings() -> dict:
+    return {
+        'enabled': True,
+        'batch_words': 30,
+        'check_interval_seconds': 300,
+        'minimum_run_interval_seconds': 1800,
+    }
+
+
+def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypatch) -> None:
+    sources = [
+        {'english': f'word-{index}'}
+        for index in range(30)
+    ]
+    batches = []
+
+    def generate(batch, chat, **kwargs):
+        batches.append(([row['english'] for row in batch], kwargs))
+        return {
+            'generated': len(batch),
+            'failed': 0,
+            'generated_words': [row['english'] for row in batch],
+            'failed_words': [],
+        }
+
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'generate_prompt_checked_and_persist',
+        generate,
+    )
+
+    result = web.generate_gaokao_question_batches(sources, batch_size=30)
+
+    assert [len(batch) for batch, _ in batches] == [30]
+    assert all(
+        kwargs == {'force': False, 'refresh_prompt': False}
+        for _, kwargs in batches
+    )
+    assert result['generated'] == 30
+    assert result['failed'] == 0
+
+
+def test_auto_backfill_queue_excludes_unrecorded_historical_gaps(monkeypatch) -> None:
+    sources = [
+        {'english': 'failed-import'},
+        {'english': 'historical-gap'},
+    ]
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'load_bank',
+        lambda: {'failures': {'failed-import': {'attempts': 1}}},
+    )
+    monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)
+
+    assert web.gaokao_failed_question_sources(sources) == [sources[0]]
+
+
+def test_auto_backfill_claims_only_thirty_and_obeys_cooldown(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    sources = [{'english': f'word-{index:02d}'} for index in range(35)]
+    calls = []
+    monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
+    monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level='': sources)
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'load_bank',
+        lambda: {'failures': {row['english']: {} for row in sources}},
+    )
+    monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)
+    monkeypatch.setattr(
+        web.gaokao_backfill,
+        'GENERATION_LOCK_FILE',
+        tmp_path / '.backfill.lock',
+    )
+    monkeypatch.setattr(
+        web.gaokao_backfill,
+        'AUTO_STATE_FILE',
+        tmp_path / 'backfill-state.json',
+    )
+
+    def generate(selected, **kwargs):
+        calls.append(([row['english'] for row in selected], kwargs))
+        return {
+            'requested': len(selected),
+            'generated': len(selected),
+            'failed': 0,
+            'generated_words': [row['english'] for row in selected],
+            'failed_words': [],
+        }
+
+    monkeypatch.setattr(web, 'generate_gaokao_question_batches', generate)
+    now = datetime(2026, 8, 24, 0, 30, tzinfo=timezone.utc)
+
+    first = web._run_gaokao_auto_backfill_once(now)
+    second = web._run_gaokao_auto_backfill_once(now)
+
+    assert first['status'] == 'completed'
+    assert first['pending'] == 35
+    assert len(calls) == 1
+    assert len(calls[0][0]) == 30
+    assert calls[0][1]['batch_size'] == 30
+    assert second['status'] == 'cooldown'
+
+
+def test_auto_backfill_waits_until_thirty_are_pending(monkeypatch, tmp_path) -> None:
+    sources = [{'english': f'word-{index:02d}'} for index in range(29)]
+    monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
+    monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level='': sources)
+    monkeypatch.setattr(
+        web.gaokao_questions,
+        'load_bank',
+        lambda: {'failures': {row['english']: {} for row in sources}},
+    )
+    monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)
+    monkeypatch.setattr(
+        web.gaokao_backfill,
+        'GENERATION_LOCK_FILE',
+        tmp_path / '.backfill.lock',
+    )
+    monkeypatch.setattr(
+        web.gaokao_backfill,
+        'AUTO_STATE_FILE',
+        tmp_path / 'backfill-state.json',
+    )
+
+    result = web._run_gaokao_auto_backfill_once(
+        datetime(2026, 8, 24, 0, 30, tzinfo=timezone.utc)
+    )
+
+    assert result == {
+        'status': 'below_threshold',
+        'pending': 29,
+        'threshold': 30,
+    }

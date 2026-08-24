@@ -9,6 +9,12 @@
 
 def worker_exit(server, worker) -> None:  # noqa: ARG001
     try:
+        import simple_web_app
+
+        simple_web_app.stop_gaokao_auto_backfill_scheduler()
+    except Exception:
+        pass
+    try:
         import auth_session_store
 
         auth_session_store.close_connection()
@@ -20,3 +26,10 @@ def worker_exit(server, worker) -> None:  # noqa: ARG001
         user_store.close_connection()
     except Exception:
         pass
+
+
+def post_worker_init(worker) -> None:  # noqa: ARG001
+    """Start the low-peak Gaokao backfill scheduler after each worker fork."""
+    import simple_web_app
+
+    simple_web_app.start_gaokao_auto_backfill_scheduler()

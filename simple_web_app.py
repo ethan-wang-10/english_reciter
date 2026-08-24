@@ -25,7 +25,7 @@ import urllib.error
 import urllib.request
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import formataddr, parseaddr
 from io import BytesIO, StringIO
@@ -56,6 +56,7 @@ import leaderboard_periods as leaderboard_periods_mod
 import chat_room
 import wordbank_v2
 import gaokao_questions
+import gaokao_backfill
 from review_scheduler import EXERCISE_TYPES, ReviewEventConflict
 from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
 from auth_session_store import (
@@ -6320,6 +6321,269 @@ def _publish_combined_gaokao_questions_for_new_entries(
     }
 
 
+def gaokao_question_sources(level: str = "") -> List[dict]:
+    """Build stable, de-duplicated question sources from the merged wordbank."""
+    rows, _ = merge_wordbank_rows_for_search(level)
+    sources: List[dict] = []
+    seen = set()
+    for row in rows:
+        source = gaokao_questions.source_from_wordbank_row(row)
+        if not source or source["english"] in seen:
+            continue
+        seen.add(source["english"])
+        sources.append(source)
+    sources.sort(key=lambda row: row["english"])
+    return sources
+
+
+def gaokao_failed_question_sources(sources: List[dict]) -> List[dict]:
+    """Return retryable sources explicitly recorded as generation failures."""
+    bank = gaokao_questions.load_bank()
+    failure_keys = {
+        gaokao_questions.normalize_word(key)
+        for key in (bank.get("failures") or {})
+        if gaokao_questions.normalize_word(key)
+    }
+    if not failure_keys:
+        return []
+    return [
+        source
+        for source in gaokao_questions.missing_sources(sources)
+        if source["english"] in failure_keys
+    ]
+
+
+def generate_gaokao_question_batches(
+    sources: List[dict],
+    *,
+    batch_size: int = 30,
+    pause: float = 0.0,
+    force: bool = False,
+    refresh_prompt: bool = False,
+    progress=None,
+) -> dict:
+    """Generate and persist prompt-checked questions in bounded AI requests."""
+    generated = 0
+    failed = 0
+    generated_words: List[str] = []
+    failed_words: List[str] = []
+    size = max(1, min(30, int(batch_size or 30)))
+    for start in range(0, len(sources), size):
+        batch = sources[start : start + size]
+        try:
+            result = gaokao_questions.generate_prompt_checked_and_persist(
+                batch,
+                _deepseek_chat,
+                force=force,
+                refresh_prompt=refresh_prompt,
+            )
+        except Exception as exc:
+            errors = {
+                source["english"]: f"batch exception: {exc}"
+                for source in batch
+            }
+            gaokao_questions.persist_prompt_checked_result({}, errors)
+            result = {
+                "generated": 0,
+                "failed": len(batch),
+                "generated_words": [],
+                "failed_words": sorted(errors),
+            }
+        generated += int(result.get("generated") or 0)
+        failed += int(result.get("failed") or 0)
+        generated_words.extend(result.get("generated_words") or [])
+        failed_words.extend(result.get("failed_words") or [])
+        done = min(start + len(batch), len(sources))
+        if progress is not None:
+            progress(done, len(sources), result)
+        if pause > 0 and done < len(sources):
+            sleep(pause)
+    return {
+        "requested": len(sources),
+        "generated": generated,
+        "failed": failed,
+        "generated_words": sorted(set(generated_words)),
+        "failed_words": sorted(set(failed_words)),
+    }
+
+
+def _gaokao_auto_backfill_settings() -> dict:
+    batch_words = _env_int(
+        "GAOKAO_AUTO_BACKFILL_BATCH_WORDS",
+        30,
+        1,
+        30,
+    )
+    return {
+        "enabled": _env_flag("GAOKAO_AUTO_BACKFILL_ENABLED", True),
+        "batch_words": batch_words,
+        "check_interval_seconds": _env_int(
+            "GAOKAO_AUTO_BACKFILL_CHECK_SECONDS",
+            300,
+            30,
+            86400,
+        ),
+        "minimum_run_interval_seconds": _env_int(
+            "GAOKAO_AUTO_BACKFILL_MIN_INTERVAL_SECONDS",
+            1800,
+            60,
+            86400,
+        ),
+    }
+
+
+def _run_gaokao_auto_backfill_once(
+    now: Optional[datetime] = None,
+) -> dict:
+    """Claim and process one automatic batch when all scheduling gates pass."""
+    settings = _gaokao_auto_backfill_settings()
+    if not settings["enabled"]:
+        return {"status": "disabled"}
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    if not gaokao_backfill.is_deepseek_off_peak(current):
+        return {"status": "peak_hours"}
+    if not get_deepseek_api_key():
+        return {"status": "missing_api_key"}
+
+    with gaokao_backfill.generation_job_lock(blocking=False) as acquired:
+        if not acquired:
+            return {"status": "busy"}
+        state = gaokao_backfill.load_auto_state()
+        since_last = gaokao_backfill.seconds_since_last_start(state, current)
+        if (
+            since_last is not None
+            and since_last < settings["minimum_run_interval_seconds"]
+        ):
+            return {
+                "status": "cooldown",
+                "retry_after_seconds": int(
+                    settings["minimum_run_interval_seconds"] - since_last
+                ),
+            }
+
+        sources = gaokao_question_sources("")
+        pending = gaokao_failed_question_sources(sources)
+        if len(pending) < settings["batch_words"]:
+            return {
+                "status": "below_threshold",
+                "pending": len(pending),
+                "threshold": settings["batch_words"],
+            }
+
+        selected = pending[: settings["batch_words"]]
+        started_at = current.astimezone(timezone.utc).isoformat(timespec="seconds")
+        state.update({
+            "status": "running",
+            "last_started_at": started_at,
+            "last_pending_count": len(pending),
+            "last_selected_words": [source["english"] for source in selected],
+        })
+        gaokao_backfill.save_auto_state(state)
+        logger.info(
+            "高考题后台补全开始: pending=%s selected=%s batch_size=%s",
+            len(pending),
+            len(selected),
+            settings["batch_words"],
+        )
+        try:
+            result = generate_gaokao_question_batches(
+                selected,
+                batch_size=settings["batch_words"],
+                pause=DEEPSEEK_BATCH_PAUSE_SEC,
+            )
+        except Exception as exc:
+            state.update({
+                "status": "failed",
+                "last_finished_at": datetime.now(timezone.utc).isoformat(
+                    timespec="seconds"
+                ),
+                "last_error": str(exc)[:500],
+            })
+            gaokao_backfill.save_auto_state(state)
+            raise
+
+        state.update({
+            "status": "completed",
+            "last_finished_at": datetime.now(timezone.utc).isoformat(
+                timespec="seconds"
+            ),
+            "last_generated": result["generated"],
+            "last_failed": result["failed"],
+            "last_generated_words": result["generated_words"],
+            "last_failed_words": result["failed_words"],
+            "last_error": "",
+        })
+        gaokao_backfill.save_auto_state(state)
+        logger.info(
+            "高考题后台补全完成: generated=%s failed=%s",
+            result["generated"],
+            result["failed"],
+        )
+        return {
+            "status": "completed",
+            "pending": len(pending),
+            **result,
+        }
+
+
+_GAOKAO_BACKFILL_THREAD_LOCK = threading.Lock()
+_GAOKAO_BACKFILL_STOP_EVENT = threading.Event()
+_gaokao_backfill_thread: Optional[threading.Thread] = None
+
+
+def _gaokao_auto_backfill_loop() -> None:
+    while not _GAOKAO_BACKFILL_STOP_EVENT.is_set():
+        try:
+            _run_gaokao_auto_backfill_once()
+        except Exception:
+            logger.exception("高考题后台补全调度异常")
+        try:
+            check_seconds = _gaokao_auto_backfill_settings()[
+                "check_interval_seconds"
+            ]
+        except RuntimeError:
+            logger.exception("高考题后台补全配置无效")
+            check_seconds = 300
+        if _GAOKAO_BACKFILL_STOP_EVENT.wait(check_seconds):
+            break
+
+
+def start_gaokao_auto_backfill_scheduler() -> bool:
+    """Start one daemon scheduler thread in the current web worker."""
+    global _gaokao_backfill_thread
+    if not _gaokao_auto_backfill_settings()["enabled"]:
+        logger.info("高考题后台补全已禁用")
+        return False
+    with _GAOKAO_BACKFILL_THREAD_LOCK:
+        if _gaokao_backfill_thread and _gaokao_backfill_thread.is_alive():
+            return False
+        _GAOKAO_BACKFILL_STOP_EVENT.clear()
+        _gaokao_backfill_thread = threading.Thread(
+            target=_gaokao_auto_backfill_loop,
+            name="gaokao-auto-backfill",
+            daemon=True,
+        )
+        _gaokao_backfill_thread.start()
+    logger.info("高考题后台补全调度器已启动")
+    return True
+
+
+def stop_gaokao_auto_backfill_scheduler() -> None:
+    """Ask the current worker's scheduler thread to stop."""
+    global _gaokao_backfill_thread
+    _GAOKAO_BACKFILL_STOP_EVENT.set()
+    with _GAOKAO_BACKFILL_THREAD_LOCK:
+        thread = _gaokao_backfill_thread
+        _gaokao_backfill_thread = None
+    if thread and thread.is_alive() and thread is not threading.current_thread():
+        thread.join(timeout=2.0)
+
+
+atexit.register(stop_gaokao_auto_backfill_scheduler)
+
+
 @app.route('/api/wordbank/ocr-extract', methods=['POST'])
 @token_required
 def wordbank_ocr_extract(username):
@@ -6621,13 +6885,13 @@ def import_vocab_to_csv(username):
         msg += f"；{gaokao_result['already_published']} 个已有可用高考题"
     if gaokao_result["rejected"]:
         msg += f"；{gaokao_result['rejected']} 个高考题候选未通过语义审查"
-    gaokao_deferred = (
-        gaokao_result["generation_failed"]
-        + gaokao_result["audit_retry"]
-        + gaokao_result["skipped_no_source"]
-    )
+    gaokao_deferred = len({
+        *gaokao_result["generation_failed_words"],
+        *gaokao_result["audit_retry_words"],
+        *gaokao_result["skipped_words"],
+    })
     if gaokao_deferred:
-        msg += f"；{gaokao_deferred} 个高考题候选待后续补全"
+        msg += f"；{gaokao_deferred} 个高考题待后台自动补全"
     if queue_result:
         msg += f"；已加入待复习 {queue_result.get('added', 0)} 个"
     elif not also_queue:
@@ -7890,6 +8154,8 @@ def health():
 
 if __name__ == '__main__':
     _debug = os.getenv("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
+    if not _debug or os.getenv("WERKZEUG_RUN_MAIN") == "true":
+        start_gaokao_auto_backfill_scheduler()
     app.run(
         host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", "8000")),

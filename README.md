@@ -103,19 +103,23 @@ cp config.example.json config.json
 
 ```bash
 python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --dry-run
-python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 10 --pause 1
+python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 30 --pause 1
 ```
 
-`generate` 每批最多处理 10 个词，只调用一次 AI。Prompt 要求模型在输出前逐项代入四个选项并自行消除同义释义和语境歧义；程序随后执行 JSON、选项数量、重复项、答案词形和语境长度等确定性校验。通过本地校验的题目直接写入 `questions`，并标记当前 `generation_prompt_version` 和 `quality_gate`。语义质量采用 Prompt 自检策略，允许少量歧义题进入题库，后续通过抽检和下线机制处理。
+手工脚本每次默认最多处理 30 个词，并在一个 DeepSeek 请求中完成；显式传入 `--limit 0` 才会全量处理。Prompt 要求模型在输出前逐项代入四个选项并自行消除同义释义和语境歧义；程序随后执行 JSON、选项数量、重复项、答案词形和语境长度等确定性校验。通过本地校验的题目直接写入 `questions`，并标记当前 `generation_prompt_version` 和 `quality_gate`。语义质量采用 Prompt 自检策略，允许少量歧义题进入题库，后续通过抽检和下线机制处理。
 
 VIP 词汇导入每批使用一次组合请求，同时生成 `words_v2.json` 词条和高考题；服务端分别完成确定性校验后直接落盘，不再发起第二次 AI 审查请求。
 
 重新运行 `generate` 时会自动跳过已发布题；配合 `--limit 200` 可分批处理。需要用当前 Prompt 版本完整重建旧题库时使用 `--refresh-prompt-version`，该模式会跳过已经升级完成的题，适合断点续跑。`--stage audit` 和候选区继续保留，仅用于处理旧部署遗留的候选题。
 
+Web/Gunicorn 启动后会同时启动高考题后台补全调度器。题库 `failures` 中明确记录的导入/生成失败累计达到 30 个时，调度器在 DeepSeek 官方低峰时段领取 30 个并通过一个请求完成；成功题立即落盘，下次自动跳过。它不会自动扫描全词库的历史缺题，历史全量补题仍由手工脚本控制。按 [DeepSeek 官方计费说明](https://api-docs.deepseek.com/quick_start/pricing)，当前高峰为工作日 UTC `01:00-04:00` 和 `06:00-10:00`，即北京时间工作日 `09:00-12:00` 和 `14:00-18:00`，其余时间及周末为低峰。多个 Gunicorn worker 和手工脚本共用跨进程任务锁，不会并行补题。
+
+默认每 5 分钟检查一次、两次任务至少间隔 30 分钟。可通过 `.env` 的 `GAOKAO_AUTO_BACKFILL_ENABLED`、`GAOKAO_AUTO_BACKFILL_BATCH_WORDS`、`GAOKAO_AUTO_BACKFILL_CHECK_SECONDS` 和 `GAOKAO_AUTO_BACKFILL_MIN_INTERVAL_SECONDS` 调整；剩余不足 30 个时会继续等待后续缺题累积。最近一次任务状态保存在 `user_data_simple/_shared/gaokao_backfill_state.json`。
+
 线上服务兼容旧的独立审查题和当前 Prompt 自检题。缺题时当前任务会立即降级为拼写，不在学生请求中调用 AI。升级时不要让旧版批处理脚本与新脚本并行生成同一题库。
 
 ```bash
-python3 scripts/generate_gaokao_questions.py --stage generate --level "" --batch-size 10 --limit 200 --refresh-prompt-version --pause 1
+python3 scripts/generate_gaokao_questions.py --stage generate --level "" --batch-size 30 --limit 200 --refresh-prompt-version --pause 1
 ```
 
 脚本出现生成失败时返回退出码 `2`；直接再次执行同一命令即可续跑。可通过题库 JSON 中的 `questions` 和 `failures` 分别查看已发布和生成失败数量；`candidates`、`rejections` 只保留旧审查流程的兼容数据。

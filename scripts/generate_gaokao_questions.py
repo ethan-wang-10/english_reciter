@@ -2,7 +2,7 @@
 """Generate prompt-checked questions, with optional legacy candidate audit.
 
 Examples:
-  python scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 10
+  python scripts/generate_gaokao_questions.py --stage generate --level 高中 --batch-size 30
   python scripts/generate_gaokao_questions.py --stage generate --level '' --refresh-prompt-version
   python scripts/generate_gaokao_questions.py --stage audit --audit-batch-size 10
 
@@ -27,26 +27,12 @@ import gaokao_questions as questions  # noqa: E402
 import simple_web_app as web  # noqa: E402
 
 
-def _chat(messages: list[dict], max_tokens: int):
-    return web._deepseek_chat(messages, max_tokens=max_tokens)
-
-
 def _audit_chat(messages: list[dict], max_tokens: int):
     return web._deepseek_chat(messages, max_tokens=max_tokens, temperature=0.0)
 
 
 def _sources(level: str) -> list[dict]:
-    rows, _ = web.merge_wordbank_rows_for_search(level)
-    out = []
-    seen = set()
-    for row in rows:
-        source = questions.source_from_wordbank_row(row)
-        if not source or source["english"] in seen:
-            continue
-        seen.add(source["english"])
-        out.append(source)
-    out.sort(key=lambda row: row["english"])
-    return out
+    return web.gaokao_question_sources(level)
 
 
 def _run_generation(
@@ -57,41 +43,24 @@ def _run_generation(
     force: bool,
     refresh_prompt: bool,
 ) -> tuple[int, int]:
-    generated = 0
-    failed = 0
-    for start in range(0, len(pending), batch_size):
-        batch = pending[start : start + batch_size]
-        try:
-            result = questions.generate_prompt_checked_and_persist(
-                batch,
-                _chat,
-                force=force,
-                refresh_prompt=refresh_prompt,
-            )
-        except KeyboardInterrupt:
-            raise
-        except Exception as exc:
-            errors = {source["english"]: f"batch exception: {exc}" for source in batch}
-            questions.persist_prompt_checked_result({}, errors)
-            result = {
-                "generated": 0,
-                "failed": len(batch),
-                "generated_words": [],
-                "failed_words": sorted(errors),
-            }
-        generated += int(result.get("generated") or 0)
-        failed += int(result.get("failed") or 0)
-        done = min(start + len(batch), len(pending))
+    def report(done: int, total: int, result: dict) -> None:
         print(
-            f"[generate {done}/{len(pending)}] "
+            f"[generate {done}/{total}] "
             f"published={result.get('generated', 0)} failed={result.get('failed', 0)} "
             f"ok={','.join(result.get('generated_words') or []) or '-'} "
             f"fail={','.join(result.get('failed_words') or []) or '-'}",
             flush=True,
         )
-        if pause > 0 and done < len(pending):
-            time.sleep(pause)
-    return generated, failed
+
+    result = web.generate_gaokao_question_batches(
+        pending,
+        batch_size=batch_size,
+        pause=pause,
+        force=force,
+        refresh_prompt=refresh_prompt,
+        progress=report,
+    )
+    return int(result["generated"]), int(result["failed"])
 
 
 def _run_audit(
@@ -146,12 +115,17 @@ def main() -> int:
         help="generate 单次生成并直接发布；audit 审查旧候选；all 先生成再处理旧候选",
     )
     parser.add_argument("--level", default="高中", help="词库级别，默认：高中")
-    parser.add_argument("--limit", type=int, default=0, help="本阶段最多处理多少题，0 为不限")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=30,
+        help="本阶段最多处理多少题，默认 30；显式传 0 为不限",
+    )
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=10,
-        help="每次生成请求包含的单词数，默认：10，最大：10",
+        default=30,
+        help="每次生成请求包含的单词数，默认：30，最大：30",
     )
     parser.add_argument(
         "--audit-batch-size",
@@ -169,7 +143,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="只统计，不调用 AI、不写文件")
     args = parser.parse_args()
 
-    batch_size = max(1, min(10, args.batch_size))
+    batch_size = max(1, min(30, args.batch_size))
     audit_batch_size = max(1, min(10, args.audit_batch_size))
     all_sources = _sources(args.level.strip())
     pending_generation = (
@@ -212,31 +186,36 @@ def main() -> int:
         print("未配置 DeepSeek API Key，无法生成或审查题库", file=sys.stderr)
         return 2
 
-    generated = 0
-    generation_failed = 0
-    approved = 0
-    rejected = 0
-    audit_retry = 0
-    try:
-        if args.stage in {"generate", "all"}:
-            generated, generation_failed = _run_generation(
-                pending_generation,
-                batch_size=batch_size,
-                pause=args.pause,
-                force=args.force,
-                refresh_prompt=args.refresh_prompt_version,
-            )
-        if args.stage == "all":
-            pending_audit = questions.pending_candidate_records(limit=max(0, args.limit))
-        if args.stage in {"audit", "all"}:
-            approved, rejected, audit_retry = _run_audit(
-                pending_audit,
-                batch_size=audit_batch_size,
-                pause=args.pause,
-            )
-    except KeyboardInterrupt:
-        print("\n已中断；候选和已发布题目均已原子保存，下次可继续。", file=sys.stderr)
-        return 130
+    with web.gaokao_backfill.generation_job_lock(blocking=False) as acquired:
+        if not acquired:
+            print("已有后台或手工补题任务正在运行，请稍后重试。", file=sys.stderr)
+            return 3
+
+        generated = 0
+        generation_failed = 0
+        approved = 0
+        rejected = 0
+        audit_retry = 0
+        try:
+            if args.stage in {"generate", "all"}:
+                generated, generation_failed = _run_generation(
+                    pending_generation,
+                    batch_size=batch_size,
+                    pause=args.pause,
+                    force=args.force,
+                    refresh_prompt=args.refresh_prompt_version,
+                )
+            if args.stage == "all":
+                pending_audit = questions.pending_candidate_records(limit=max(0, args.limit))
+            if args.stage in {"audit", "all"}:
+                approved, rejected, audit_retry = _run_audit(
+                    pending_audit,
+                    batch_size=audit_batch_size,
+                    pause=args.pause,
+                )
+        except KeyboardInterrupt:
+            print("\n已中断；候选和已发布题目均已原子保存，下次可继续。", file=sys.stderr)
+            return 130
 
     print(
         f"完成：生成并发布 {generated}，生成失败 {generation_failed}，"

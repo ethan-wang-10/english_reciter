@@ -461,7 +461,10 @@ def generate_candidate_records(
     if not sources:
         return {}, {}
     prompt = build_generation_prompt(sources)
-    reply = chat([{"role": "user", "content": prompt}], min(8192, 1200 + len(sources) * 550))
+    reply = chat(
+        [{"role": "user", "content": prompt}],
+        min(32768, 1200 + len(sources) * 550),
+    )
     parsed = _extract_json_array(reply or "")
     if parsed is None:
         return {}, {

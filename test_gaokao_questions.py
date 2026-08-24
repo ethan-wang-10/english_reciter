@@ -201,6 +201,22 @@ def test_prompt_checked_generation_publishes_with_one_ai_call(private_question_b
     assert questions.get_question('novel', 'recognition') is not None
 
 
+def test_generation_output_budget_supports_one_thirty_word_request() -> None:
+    sources = [
+        _source(f'word{index}', f'n. 词{index}')
+        for index in range(30)
+    ]
+    max_tokens_seen = []
+
+    def chat(messages, max_tokens):
+        max_tokens_seen.append(max_tokens)
+        return 'invalid response'
+
+    questions.generate_candidate_records(sources, chat)
+
+    assert max_tokens_seen == [17700]
+
+
 def test_prompt_version_refresh_is_resumable(private_question_bank):
     source = _source('novel', 'n. 小说')
     record, error = questions.finalize_generated_questions(source, _generated('novel'))
