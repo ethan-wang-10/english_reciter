@@ -6353,6 +6353,11 @@ def gaokao_failed_question_sources(sources: List[dict]) -> List[dict]:
     ]
 
 
+def _gaokao_generation_chat(messages: List[dict], max_tokens: int):
+    """Adapt the question generator callback to _deepseek_chat's signature."""
+    return _deepseek_chat(messages, max_tokens=max_tokens)
+
+
 def generate_gaokao_question_batches(
     sources: List[dict],
     *,
@@ -6374,7 +6379,7 @@ def generate_gaokao_question_batches(
         try:
             result = gaokao_questions.generate_prompt_checked_and_persist(
                 batch,
-                _deepseek_chat,
+                _gaokao_generation_chat,
                 force=force,
                 refresh_prompt=refresh_prompt,
             )

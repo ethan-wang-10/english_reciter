@@ -1430,9 +1430,15 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
         for index in range(30)
     ]
     batches = []
+    deepseek_calls = []
+
+    def deepseek_chat(messages, **kwargs):
+        deepseek_calls.append((messages, kwargs))
+        return 'unused'
 
     def generate(batch, chat, **kwargs):
         batches.append(([row['english'] for row in batch], kwargs))
+        chat([{'role': 'user', 'content': 'prompt'}], 17700)
         return {
             'generated': len(batch),
             'failed': 0,
@@ -1445,10 +1451,14 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
         'generate_prompt_checked_and_persist',
         generate,
     )
+    monkeypatch.setattr(web, '_deepseek_chat', deepseek_chat)
 
     result = web.generate_gaokao_question_batches(sources, batch_size=30)
 
     assert [len(batch) for batch, _ in batches] == [30]
+    assert deepseek_calls == [
+        ([{'role': 'user', 'content': 'prompt'}], {'max_tokens': 17700}),
+    ]
     assert all(
         kwargs == {'force': False, 'refresh_prompt': False}
         for _, kwargs in batches
