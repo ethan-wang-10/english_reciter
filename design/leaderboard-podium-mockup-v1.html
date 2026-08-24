@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>排行榜领奖台示意稿 V1</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      background: #dfe8e4;
+      color: #453b31;
+      font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      letter-spacing: 0;
+    }
+    .board {
+      position: relative;
+      width: min(1480px, calc(100vw - 64px));
+      aspect-ratio: 2.18 / 1;
+      min-height: 620px;
+      overflow: hidden;
+      border: 2px solid #dbcdb8;
+      border-radius: 8px;
+      background:
+        radial-gradient(circle at 12% 22%, rgba(255,255,255,.72) 0 2px, transparent 3px),
+        linear-gradient(180deg, #fffdf7 0%, #fff9e9 100%);
+      box-shadow: 0 20px 54px rgba(83, 71, 51, .18);
+    }
+    .board::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: .34;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.055'/%3E%3C/svg%3E");
+      mix-blend-mode: multiply;
+    }
+    .topbar {
+      position: relative;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 78px;
+      padding: 20px 30px 14px;
+      border-bottom: 1px solid rgba(128, 102, 67, .14);
+      background: rgba(255, 253, 247, .76);
+    }
+    .title-line { display: flex; align-items: baseline; gap: 14px; min-width: 0; }
+    .title {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 900;
+      color: #3f372e;
+    }
+    .period { color: #8b7c6b; font-size: 16px; font-weight: 650; }
+    .settled {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      border: 1px solid #b6d987;
+      border-radius: 6px;
+      color: #397300;
+      background: #ebffd4;
+      font-size: 14px;
+      font-weight: 850;
+    }
+    .celebrate {
+      position: absolute;
+      top: 93px;
+      left: 50%;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      transform: translateX(-50%);
+      color: #66452f;
+    }
+    .celebrate strong {
+      white-space: nowrap;
+      font-size: 27px;
+      font-weight: 950;
+    }
+    .ribbon {
+      width: 52px;
+      height: 17px;
+      border: 3px solid #6c4935;
+      transform: skewX(-18deg) rotate(-7deg);
+      background: #ff785e;
+    }
+    .ribbon.right { transform: skewX(18deg) rotate(7deg); background: #69bfa6; }
+    .confetti { position: absolute; z-index: 3; border: 2px solid #704d38; }
+    .c1 { top: 132px; left: 13%; width: 13px; height: 25px; background:#f6c94b; transform: rotate(24deg); }
+    .c2 { top: 190px; left: 21%; width: 17px; height: 11px; background:#6db1d6; transform: rotate(-28deg); }
+    .c3 { top: 148px; right: 15%; width: 12px; height: 23px; background:#e98171; transform: rotate(22deg); }
+    .c4 { top: 216px; right: 24%; width: 16px; height: 12px; background:#8dc66e; transform: rotate(-20deg); }
+    .star { position:absolute; z-index:3; color:#f6c83f; font-size:28px; -webkit-text-stroke: 1.5px #704d38; }
+    .s1 { top: 215px; left: 11%; transform: rotate(-10deg); }
+    .s2 { top: 180px; right: 10%; transform: rotate(12deg); }
+    .stage {
+      position: absolute;
+      z-index: 4;
+      right: 0;
+      bottom: 87px;
+      left: 0;
+      display: flex;
+      min-height: 435px;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 22px;
+      padding: 0 120px;
+    }
+    .winner {
+      display: flex;
+      width: 260px;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .winner.first { order: 2; width: 286px; }
+    .winner.second { order: 1; }
+    .winner.third { order: 3; }
+    .person {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      min-height: 198px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .first .person { min-height: 246px; }
+    .avatar-shell {
+      position: relative;
+      z-index: 3;
+      width: 92px;
+      height: 92px;
+      overflow: hidden;
+      border: 5px solid #cfd7de;
+      border-radius: 50%;
+      background: #eef2f4;
+      box-shadow: 0 5px 0 rgba(80, 59, 42, .16);
+    }
+    .first .avatar-shell { width: 112px; height: 112px; border-color: #f3b700; box-shadow: 0 6px 0 #d89a00; }
+    .third .avatar-shell { border-color: #d67c40; }
+    .avatar-shell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .crown {
+      position: absolute;
+      top: -33px;
+      left: 50%;
+      z-index: 4;
+      font-size: 34px;
+      transform: translateX(-50%) rotate(-6deg);
+      filter: drop-shadow(0 2px 0 rgba(98,65,27,.24));
+    }
+    .body {
+      position: relative;
+      width: 92px;
+      height: 78px;
+      margin-top: -4px;
+      border: 4px solid #674634;
+      border-radius: 36px 36px 12px 12px;
+      background: #63aadc;
+    }
+    .first .body { width: 108px; height: 91px; background: #ef654d; }
+    .third .body { background: #75bd62; }
+    .body::before, .body::after {
+      content: "";
+      position: absolute;
+      top: 9px;
+      width: 42px;
+      height: 15px;
+      border: solid #674634;
+      border-width: 4px 0 0;
+      background: currentColor;
+    }
+    .body::before { right: 75%; transform: rotate(-36deg); }
+    .body::after { left: 75%; transform: rotate(36deg); }
+    .medal {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      width: 27px;
+      height: 35px;
+      border-right: 4px solid #f8d25a;
+      border-left: 4px solid #f8d25a;
+      transform: translateX(-50%);
+    }
+    .medal::after {
+      content:"";
+      position:absolute;
+      bottom:-7px;
+      left:50%;
+      width:24px;
+      height:24px;
+      border:3px solid #704d38;
+      border-radius:50%;
+      background:#f4c343;
+      transform:translateX(-50%);
+    }
+    .identity {
+      position: relative;
+      z-index: 4;
+      width: 100%;
+      margin: 8px 0 9px;
+      line-height: 1.2;
+    }
+    .name { display:block; font-size:18px; font-weight:900; overflow-wrap:anywhere; }
+    .xp { display:block; margin-top:4px; color:#887665; font-size:14px; font-weight:750; }
+    .podium {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      width: 100%;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      border: 4px solid #6d4b36;
+      border-bottom: 0;
+      border-radius: 10px 10px 0 0;
+      box-shadow: inset 0 7px 0 rgba(255,255,255,.2);
+    }
+    .second .podium { height: 112px; background:#91bed9; }
+    .first .podium { height: 156px; background:#f7c942; }
+    .third .podium { height: 92px; background:#e98950; }
+    .place { margin-top:16px; font-size:24px; font-weight:950; }
+    .reward {
+      margin-top:8px;
+      padding:6px 11px;
+      border-radius:6px;
+      background:rgba(255,255,255,.72);
+      font-size:14px;
+      font-weight:900;
+    }
+    .audience {
+      position:absolute;
+      z-index:6;
+      right:0;
+      bottom:0;
+      left:0;
+      display:flex;
+      height:103px;
+      align-items:flex-end;
+      justify-content:center;
+      gap:34px;
+      border-top:3px solid #dbc19c;
+      background:rgba(255,244,213,.92);
+    }
+    .fan { position:relative; width:82px; height:92px; color:#f06c53; }
+    .fan:nth-child(2), .fan:nth-child(5) { color:#5cb389; }
+    .fan:nth-child(3), .fan:nth-child(6) { color:#ef9b3e; }
+    .fan-head {
+      position:absolute;
+      top:-15px;
+      left:50%;
+      width:52px;
+      height:52px;
+      overflow:hidden;
+      border:3px solid #fff;
+      border-radius:50%;
+      background:#d9e4ea;
+      box-shadow:0 3px 0 rgba(78,56,39,.2);
+      transform:translateX(-50%);
+    }
+    .fan-head img { width:100%; height:100%; object-fit:cover; display:block; }
+    .fan-body {
+      position:absolute;
+      right:8px;
+      bottom:-22px;
+      left:8px;
+      height:64px;
+      border:3px solid #674634;
+      border-radius:25px 25px 0 0;
+      background:currentColor;
+    }
+    .fan-body::before, .fan-body::after {
+      content:"";
+      position:absolute;
+      top:9px;
+      width:30px;
+      height:35px;
+      border:solid #674634;
+      border-width:3px 0 0;
+    }
+    .fan-body::before { right:84%; transform:rotate(-58deg); }
+    .fan-body::after { left:84%; transform:rotate(58deg); }
+    .mock-label {
+      position:absolute;
+      z-index:9;
+      right:14px;
+      bottom:10px;
+      padding:4px 7px;
+      border-radius:4px;
+      color:#8d7964;
+      background:rgba(255,255,255,.78);
+      font-size:11px;
+      font-weight:700;
+    }
+    @media (max-width: 1000px) {
+      body { padding: 14px; }
+      .board { width: calc(100vw - 28px); min-height: 600px; }
+      .stage { padding: 0 24px; gap: 10px; }
+      .winner, .winner.first { width: min(30vw, 230px); }
+      .audience { gap: 10px; }
+      .fan:nth-child(n+6) { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="board" aria-label="排行榜领奖台示意稿">
+    <header class="topbar">
+      <div class="title-line">
+        <h1 class="title">上期月榜三甲</h1>
+        <span class="period">2026年7月1日 - 31日</span>
+      </div>
+      <span class="settled">奖励已结算</span>
+    </header>
+
+    <div class="celebrate" aria-hidden="true">
+      <span class="ribbon"></span><strong>恭喜获奖</strong><span class="ribbon right"></span>
+    </div>
+    <i class="confetti c1"></i><i class="confetti c2"></i><i class="confetti c3"></i><i class="confetti c4"></i>
+    <span class="star s1">★</span><span class="star s2">★</span>
+
+    <section class="stage">
+      <article class="winner second">
+        <div class="person">
+          <div class="avatar-shell"><img src="leaderboard-avatar-dylan.png" alt="dylan4213"></div>
+          <div class="body"><i class="medal"></i></div>
+        </div>
+        <div class="identity"><span class="name">dylan4213</span><span class="xp">7,239 XP</span></div>
+        <div class="podium"><strong class="place">第 2 名</strong><span class="reward">+330 XP</span></div>
+      </article>
+
+      <article class="winner first">
+        <div class="person">
+          <div class="avatar-shell"><span class="crown">👑</span><img src="leaderboard-avatar-ethan.png" alt="ethan"></div>
+          <div class="body"><i class="medal"></i></div>
+        </div>
+        <div class="identity"><span class="name">ethan</span><span class="xp">9,738 XP</span></div>
+        <div class="podium"><strong class="place">第 1 名</strong><span class="reward">+540 XP</span></div>
+      </article>
+
+      <article class="winner third">
+        <div class="person">
+          <div class="avatar-shell"><img src="leaderboard-avatar-wanggang.png" alt="wanggang"></div>
+          <div class="body"><i class="medal"></i></div>
+        </div>
+        <div class="identity"><span class="name">wanggang</span><span class="xp">3,873 XP</span></div>
+        <div class="podium"><strong class="place">第 3 名</strong><span class="reward">+220 XP</span></div>
+      </article>
+    </section>
+
+    <div class="audience" aria-hidden="true">
+      <div class="fan"><div class="fan-head"><img src="leaderboard-avatar-dylan.png" alt=""></div><div class="fan-body"></div></div>
+      <div class="fan"><div class="fan-head"><img src="leaderboard-avatar-wanggang.png" alt=""></div><div class="fan-body"></div></div>
+      <div class="fan"><div class="fan-head"><img src="leaderboard-avatar-ethan.png" alt=""></div><div class="fan-body"></div></div>
+      <div class="fan"><div class="fan-head"><img src="leaderboard-avatar-dylan.png" alt=""></div><div class="fan-body"></div></div>
+      <div class="fan"><div class="fan-head"><img src="leaderboard-avatar-wanggang.png" alt=""></div><div class="fan-body"></div></div>
+      <div class="fan"><div class="fan-head"><img src="leaderboard-avatar-ethan.png" alt=""></div><div class="fan-body"></div></div>
+      <div class="fan"><div class="fan-head"><img src="leaderboard-avatar-dylan.png" alt=""></div><div class="fan-body"></div></div>
+    </div>
+    <span class="mock-label">视觉示意 V1</span>
+  </main>
+</body>
+</html>

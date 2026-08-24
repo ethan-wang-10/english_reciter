@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1480" height="1480" viewBox="0 0 1480 1480">
+  <rect width="1480" height="1480" fill="#ffffff"/>
+  <!-- Square wrapper keeps Quick Look from cropping the landscape artwork. -->
+  <image x="0" y="400" width="1480" height="680" xlink:href="leaderboard-podium-mockup-v1.svg"/>
+</svg>

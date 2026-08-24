@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1480" height="680" viewBox="0 0 1480 680">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffdf7"/>
+      <stop offset="1" stop-color="#fff7e4"/>
+    </linearGradient>
+    <filter id="paperNoise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="2" seed="7" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0" result="gray"/>
+      <feComponentTransfer in="gray" result="faded">
+        <feFuncA type="table" tableValues="0 0.05"/>
+      </feComponentTransfer>
+      <feBlend in="SourceGraphic" in2="faded" mode="multiply"/>
+    </filter>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#6d5037" flood-opacity="0.2"/>
+    </filter>
+    <clipPath id="avatarEthan"><circle cx="740" cy="342" r="57"/></clipPath>
+    <clipPath id="avatarDylan"><circle cx="476" cy="382" r="48"/></clipPath>
+    <clipPath id="avatarWang"><circle cx="1004" cy="402" r="48"/></clipPath>
+    <symbol id="cheeringFan" viewBox="0 0 80 104">
+      <path d="M23 58L10 20M57 58L70 20" fill="none" stroke="#684a36" stroke-width="12" stroke-linecap="round"/>
+      <path d="M23 58L10 20M57 58L70 20" fill="none" stroke="#f2b995" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="9" cy="17" r="7" fill="#f2b995" stroke="#684a36" stroke-width="3"/>
+      <circle cx="71" cy="17" r="7" fill="#f2b995" stroke="#684a36" stroke-width="3"/>
+      <path d="M17 61Q40 45 63 61L69 105H11Z" fill="currentColor" stroke="#684a36" stroke-width="4"/>
+      <path d="M29 57Q40 70 51 57" fill="#fff9e8" stroke="#684a36" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M20 82H60" stroke="#fff" stroke-opacity="0.5" stroke-width="7"/>
+    </symbol>
+  </defs>
+
+  <rect x="2" y="2" width="1476" height="676" rx="8" fill="url(#paper)" stroke="#d7c8b2" stroke-width="4" filter="url(#paperNoise)"/>
+  <path d="M3 80H1477" stroke="#e7dccb" stroke-width="2"/>
+
+  <text x="32" y="48" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="27" font-weight="900" fill="#40372f">上期月榜三甲</text>
+  <text x="224" y="48" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="650" fill="#8a7968">2026年7月1日 - 31日</text>
+  <rect x="1326" y="22" width="122" height="37" rx="6" fill="#ebffd4" stroke="#b6d987" stroke-width="2"/>
+  <text x="1387" y="47" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="850" fill="#397300">奖励已结算</text>
+
+  <g stroke="#684a36" stroke-width="3" stroke-linejoin="round">
+    <path d="M573 108l50-8 7 18-48 13z" fill="#f0795f"/>
+    <path d="M907 108l-50-8-7 18 48 13z" fill="#66bba3"/>
+  </g>
+  <text x="740" y="126" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="30" font-weight="950" fill="#68452f">恭喜获奖</text>
+
+  <g stroke="#684a36" stroke-width="2.5">
+    <path d="M150 135l12 25-14 7-12-25z" fill="#f4c743"/>
+    <path d="M265 188l23-8 6 14-23 8z" fill="#67acd1"/>
+    <path d="M1330 138l-12 25 14 7 12-25z" fill="#e97d70"/>
+    <path d="M1212 200l-23-8-6 14 23 8z" fill="#86c36d"/>
+    <path d="M187 260l9 19 21 3-16 14 5 21-19-11-19 11 5-21-16-14 21-3z" fill="#f4c743"/>
+    <path d="M1293 260l-9 19-21 3 16 14-5 21 19-11 19 11-5-21 16-14-21-3z" fill="#f4c743"/>
+  </g>
+
+  <!-- The winners stay avatar-only so real profile images remain the focus. -->
+  <g filter="url(#softShadow)">
+    <circle cx="476" cy="382" r="51" fill="#e9eef1" stroke="#c5d0d8" stroke-width="6"/>
+    <image x="428" y="334" width="96" height="96" xlink:href="leaderboard-avatar-dylan.png" clip-path="url(#avatarDylan)" preserveAspectRatio="xMidYMid slice"/>
+  </g>
+  <text x="476" y="451" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" font-weight="900" fill="#443930">dylan4213</text>
+  <text x="476" y="474" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="750" fill="#887665">7,239 XP</text>
+  <rect x="340" y="489" width="272" height="104" rx="10" fill="#9bc3da" stroke="#684a36" stroke-width="4"/>
+  <path d="M347 501H605" stroke="#fff" stroke-opacity="0.35" stroke-width="7" stroke-linecap="round"/>
+  <text x="476" y="531" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="24" font-weight="950" fill="#3f4d55">第 2 名</text>
+  <rect x="429" y="545" width="94" height="32" rx="6" fill="#fff" fill-opacity="0.76"/>
+  <text x="476" y="567" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="900" fill="#3f4d55">+330 XP</text>
+
+  <!-- First place -->
+  <g filter="url(#softShadow)">
+    <circle cx="740" cy="342" r="61" fill="#f5ce3d" stroke="#d99f00" stroke-width="7"/>
+    <image x="683" y="285" width="114" height="114" xlink:href="leaderboard-avatar-ethan.png" clip-path="url(#avatarEthan)" preserveAspectRatio="xMidYMid slice"/>
+    <path d="M704 274l9-31 24 21 18-33 15 36 28-17-5 35z" fill="#f5c63f" stroke="#684a36" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="713" cy="244" r="5" fill="#f0755d"/><circle cx="755" cy="232" r="5" fill="#69bca3"/><circle cx="798" cy="251" r="5" fill="#f0755d"/>
+  </g>
+  <text x="740" y="421" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="19" font-weight="950" fill="#443930">ethan</text>
+  <text x="740" y="445" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="750" fill="#887665">9,738 XP</text>
+  <rect x="597" y="479" width="286" height="114" rx="10" fill="#f5c83e" stroke="#684a36" stroke-width="4"/>
+  <path d="M604 491H876" stroke="#fff" stroke-opacity="0.35" stroke-width="7" stroke-linecap="round"/>
+  <text x="740" y="524" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="25" font-weight="950" fill="#5e4700">第 1 名</text>
+  <rect x="691" y="540" width="98" height="34" rx="6" fill="#fff" fill-opacity="0.78"/>
+  <text x="740" y="563" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="900" fill="#5e4700">+540 XP</text>
+
+  <!-- Third place -->
+  <g filter="url(#softShadow)">
+    <circle cx="1004" cy="402" r="51" fill="#f3ddd0" stroke="#d77a40" stroke-width="6"/>
+    <image x="956" y="354" width="96" height="96" xlink:href="leaderboard-avatar-wanggang.png" clip-path="url(#avatarWang)" preserveAspectRatio="xMidYMid slice"/>
+  </g>
+  <text x="1004" y="467" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" font-weight="900" fill="#443930">wanggang</text>
+  <text x="1004" y="490" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="750" fill="#887665">3,873 XP</text>
+  <rect x="868" y="505" width="272" height="88" rx="10" fill="#e78a51" stroke="#684a36" stroke-width="4"/>
+  <path d="M875 517H1133" stroke="#fff" stroke-opacity="0.3" stroke-width="7" stroke-linecap="round"/>
+  <text x="1004" y="546" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="24" font-weight="950" fill="#65391f">第 3 名</text>
+  <rect x="957" y="557" width="94" height="29" rx="6" fill="#fff" fill-opacity="0.74"/>
+  <text x="1004" y="577" text-anchor="middle" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="900" fill="#65391f">+220 XP</text>
+
+  <!-- Two audience rows add density without competing with the podium data. -->
+  <rect x="2" y="585" width="1476" height="93" fill="#fff0c9" fill-opacity="0.94"/>
+  <path d="M2 585H1478" stroke="#dabb8e" stroke-width="3"/>
+  <g opacity="0.92">
+    <use x="80" y="555" width="80" height="125" color="#e86c57" xlink:href="#cheeringFan"/>
+    <use x="260" y="555" width="80" height="125" color="#61b28b" xlink:href="#cheeringFan"/>
+    <use x="440" y="555" width="80" height="125" color="#e89b43" xlink:href="#cheeringFan"/>
+    <use x="960" y="555" width="80" height="125" color="#62a8d2" xlink:href="#cheeringFan"/>
+    <use x="1140" y="555" width="80" height="125" color="#ef765c" xlink:href="#cheeringFan"/>
+    <use x="1320" y="555" width="80" height="125" color="#75b95d" xlink:href="#cheeringFan"/>
+  </g>
+  <g>
+    <use x="0" y="596" width="80" height="112" color="#72b65e" xlink:href="#cheeringFan"/>
+    <use x="180" y="596" width="80" height="112" color="#e98555" xlink:href="#cheeringFan"/>
+    <use x="360" y="596" width="80" height="112" color="#5f9fd0" xlink:href="#cheeringFan"/>
+    <use x="1040" y="596" width="80" height="112" color="#e96757" xlink:href="#cheeringFan"/>
+    <use x="1220" y="596" width="80" height="112" color="#65b38e" xlink:href="#cheeringFan"/>
+    <use x="1400" y="596" width="80" height="112" color="#e9a23f" xlink:href="#cheeringFan"/>
+  </g>
+
+  <g filter="url(#softShadow)" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-weight="900" text-anchor="middle">
+    <circle cx="120" cy="620" r="28" fill="#fff" stroke="#fff" stroke-width="6"/>
+    <circle cx="300" cy="620" r="28" fill="#d9f0e5" stroke="#fff" stroke-width="6"/>
+    <text x="300" y="629" font-size="24" fill="#36745b">L</text>
+    <circle cx="480" cy="620" r="28" fill="#fff" stroke="#fff" stroke-width="6"/>
+    <circle cx="1000" cy="620" r="28" fill="#dceafa" stroke="#fff" stroke-width="6"/>
+    <text x="1000" y="629" font-size="24" fill="#326c9a">M</text>
+    <circle cx="1180" cy="620" r="28" fill="#fff" stroke="#fff" stroke-width="6"/>
+    <circle cx="1360" cy="620" r="28" fill="#ffe6c9" stroke="#fff" stroke-width="6"/>
+    <text x="1360" y="629" font-size="24" fill="#9b5a22">K</text>
+
+    <circle cx="40" cy="646" r="31" fill="#e8f4d7" stroke="#fff" stroke-width="6"/>
+    <text x="40" y="656" font-size="26" fill="#527c28">J</text>
+    <circle cx="220" cy="646" r="31" fill="#fff" stroke="#fff" stroke-width="6"/>
+    <circle cx="400" cy="646" r="31" fill="#ffe0dc" stroke="#fff" stroke-width="6"/>
+    <text x="400" y="656" font-size="26" fill="#9d493d">R</text>
+    <circle cx="1080" cy="646" r="31" fill="#fff" stroke="#fff" stroke-width="6"/>
+    <circle cx="1260" cy="646" r="31" fill="#e1f1eb" stroke="#fff" stroke-width="6"/>
+    <text x="1260" y="656" font-size="26" fill="#34745d">C</text>
+    <circle cx="1440" cy="646" r="31" fill="#fff" stroke="#fff" stroke-width="6"/>
+  </g>
+  <text x="1452" y="575" text-anchor="end" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#9a816b">视觉示意 V2</text>
+</svg>
