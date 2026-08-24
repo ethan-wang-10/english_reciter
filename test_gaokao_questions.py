@@ -35,7 +35,7 @@ def _generated(english: str) -> dict:
         'recognition_explanation_zh': f'{english} 的核心含义辨析。',
         'context_sentence': (
             f'During today\'s vocabulary lesson, the teacher clearly wrote {english} '
-            'on the board for everyone.'
+            'on the board for everyone to study carefully afterward.'
         ),
         'context_translation_zh': f'在今天的词汇课上，老师清楚地把 {english} 写在黑板上给大家看。',
         'context_distractors': ['choicea', 'choiceb', 'choicec'],
@@ -192,7 +192,7 @@ def test_prompt_checked_generation_publishes_with_one_ai_call(private_question_b
 
     assert result['generated_words'] == ['novel']
     assert len(calls) == 1
-    assert '先在内部逐项检查' in calls[0]
+    assert '先在内部生成候选' in calls[0]
     bank = questions.load_bank()
     record = bank['questions']['novel']
     assert record['generation_prompt_version'] == questions.GENERATION_PROMPT_VERSION
@@ -214,7 +214,7 @@ def test_generation_output_budget_supports_one_thirty_word_request() -> None:
 
     _, errors = questions.generate_candidate_records(sources, chat)
 
-    assert max_tokens_seen == [17700]
+    assert max_tokens_seen == [28200]
     assert len(errors) == 30
 
 
@@ -245,9 +245,9 @@ def test_generation_diagnostics_include_raw_output_and_validation_trace() -> Non
     validation = events[-1]
     assert validation['recognition']['raw_count'] == 2
     assert validation['recognition']['accepted_item_count'] == 1
-    assert validation['recognition']['items'][0]['duplicate_or_correct'] is True
+    assert validation['recognition']['items'][0]['duplicate_or_real_sense'] is True
     assert validation['context']['answer_match_count'] == 1
-    assert validation['context']['sentence_word_count'] >= 12
+    assert validation['context']['sentence_word_count'] >= 16
 
 
 def test_generation_prompt_exposes_machine_checkable_constraints() -> None:
@@ -256,10 +256,39 @@ def test_generation_prompt_exposes_machine_checkable_constraints() -> None:
     ])
 
     assert '"recognition_correct_answer_zh": "小说"' in prompt
+    assert '"forbidden_recognition_senses_zh": ["小说", "长篇故事"]' in prompt
     assert '"recognition_required_hanzi_count": 2' in prompt
     assert '"context_min_english_word_count": 16' in prompt
-    assert '每个元素必须与 recognition_correct_answer_zh 的汉字数完全相同' in prompt
+    assert '至少保证其中 3 个与指定汉字数相同' in prompt
     assert '精确答案只出现一次' in prompt
+    assert '["错误释义甲", "错误释义乙", "错误释义丙"' in prompt
+    assert '程序会自动把 recognition_correct_answer_zh 加入识义题' in prompt
+
+
+def test_recognition_core_sense_strips_long_part_of_speech_prefix() -> None:
+    assert questions._recognition_core_sense('article 一个') == '一个'
+    assert questions._recognition_core_sense('determiner: 这些') == '这些'
+
+
+def test_recognition_uses_later_candidates_when_earlier_values_are_invalid() -> None:
+    raw = _generated('abhor')
+    raw['recognition_distractors'] = [
+        '憎恶',
+        '赞美',
+        '极其复杂的长期限制',
+        '忽视',
+        '允许',
+        '赞美',
+    ]
+
+    record, error = questions.finalize_generated_questions(
+        _source('abhor', 'v. 憎恶'),
+        raw,
+    )
+
+    assert error == ''
+    option_texts = {option['text'] for option in record['recognition']['options']}
+    assert option_texts == {'憎恶', '赞美', '忽视', '允许'}
 
 
 def test_generation_prompt_keeps_dynamic_input_after_cacheable_rules() -> None:
@@ -344,9 +373,11 @@ def test_short_generic_context_is_rejected_before_it_reaches_learners():
     assert 'too short to disambiguate' in error
 
 
-def test_context_with_eleven_words_is_rejected_consistently_with_prompt():
+def test_context_with_fifteen_words_is_rejected_consistently_with_prompt():
     raw = _generated('get')
-    raw['context_sentence'] = 'Today our teacher asked everyone to get one reference book immediately.'
+    raw['context_sentence'] = (
+        'Today our teacher asked everyone to get one useful reference book from the library immediately.'
+    )
 
     record, error = questions.finalize_generated_questions(
         _source('get', 'v. 获得；得到'),
@@ -360,7 +391,7 @@ def test_context_with_eleven_words_is_rejected_consistently_with_prompt():
 def test_semantic_audit_rejects_a_long_context_with_multiple_valid_answers():
     raw = _generated('get')
     raw['context_sentence'] = (
-        'After work today, I decided that I need to get a new book for class.'
+        'After work today, I decided that I need to get a new book for class tomorrow.'
     )
     raw['context_distractors'] = ['find', 'buy', 'read']
 
@@ -386,7 +417,7 @@ def test_semantic_audit_rejects_a_long_context_with_multiple_valid_answers():
 def test_semantic_audit_rejects_synonymous_recognition_distractor():
     source = _source('benefit', 'n. 益处；好处')
     raw = _generated('benefit')
-    raw['recognition_distractors'] = ['好处', '负担', '风险']
+    raw['recognition_distractors'] = ['优势', '负担', '风险']
     record, error = questions.finalize_generated_questions(source, raw)
     assert error == ''
 
@@ -395,14 +426,14 @@ def test_semantic_audit_rejects_synonymous_recognition_distractor():
         lambda messages, max_tokens: _audited(
             source,
             raw,
-            recognition_acceptable=('益处', '好处'),
+            recognition_acceptable=('益处', '优势'),
         ),
     )
 
     assert approved == {}
     assert retry_errors == {}
     assert 'semantic audit rejected recognition' in rejected['benefit']
-    assert '好处' in rejected['benefit']
+    assert '优势' in rejected['benefit']
 
 
 def test_central_audit_retries_without_regenerating_candidate(private_question_bank):
@@ -447,7 +478,7 @@ def test_central_audit_retries_without_regenerating_candidate(private_question_b
 def test_rejected_candidate_is_recorded_and_can_be_regenerated(private_question_bank):
     source = _source('benefit', 'n. 益处；好处')
     raw = _generated('benefit')
-    raw['recognition_distractors'] = ['好处', '负担', '风险']
+    raw['recognition_distractors'] = ['优势', '负担', '风险']
     questions.generate_candidates_and_persist(
         [source],
         lambda messages, max_tokens: json.dumps([raw], ensure_ascii=False),
@@ -457,7 +488,7 @@ def test_rejected_candidate_is_recorded_and_can_be_regenerated(private_question_
         lambda messages, max_tokens: _audited(
             source,
             raw,
-            recognition_acceptable=('益处', '好处'),
+            recognition_acceptable=('益处', '优势'),
         ),
     )
 

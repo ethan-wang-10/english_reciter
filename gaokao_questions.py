@@ -11,6 +11,7 @@ import tempfile
 import threading
 from contextlib import contextmanager
 from datetime import datetime
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -18,8 +19,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 BANK_SCHEMA = "gaokao-question-bank-v2"
 BANK_VERSION = 2
 AUDIT_VERSION = 2
-GENERATION_PROMPT_VERSION = 5
-SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v5"
+GENERATION_PROMPT_VERSION = 6
+SELF_CHECK_QUALITY_GATE = "generation-prompt-self-check-v6"
 RECOGNITION_FORMAT_VERSION = 1
 QUESTION_TYPES = ("recognition", "context")
 DATA_DIR = Path(os.getenv("ENGLISH_RECITER_DATA_DIR", "user_data_simple")).expanduser()
@@ -171,7 +172,7 @@ def _generated_context(source: dict, raw: dict) -> Tuple[Optional[dict], str]:
     masked = _replace_target_once(sentence, answer)
     if not masked:
         return None, "context sentence must contain the exact answer once"
-    if len(re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", sentence)) < 12:
+    if len(re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", sentence)) < 16:
         return None, "context sentence is too short to disambiguate the options"
 
     translation = str(raw.get("context_translation_zh") or "").strip()[:500]
@@ -264,7 +265,9 @@ def _clean_distinct_list(raw: Any, *, forbidden: Iterable[str], require_cjk: boo
 
 
 _RECOGNITION_POS_RE = re.compile(
-    r"^(?:n|v|vi|vt|adj|adv|prep|conj|pron|num|art|phr)\.\s*",
+    r"^(?:(?:auxiliary|determiner|article|interj|modal|abbr|prep|conj|pron|"
+    r"adj|adv|num|phr|aux|det|int|art|noun|verb|n|v|vi|vt)"
+    r"(?:\.\s*|:\s*|\s+))+",
     re.IGNORECASE,
 )
 _RECOGNITION_SENSE_SEPARATOR_RE = re.compile(r"[；;、/，,]+")
@@ -278,6 +281,20 @@ def _recognition_core_sense(value: Any) -> str:
     return first[:40]
 
 
+def _recognition_senses(value: Any) -> List[str]:
+    """Return all explicit dictionary senses without part-of-speech prefixes."""
+    text = " ".join(str(value or "").strip().split())
+    senses: List[str] = []
+    seen = set()
+    for part in _RECOGNITION_SENSE_SEPARATOR_RE.split(text):
+        sense = _recognition_core_sense(part)
+        key = normalize_word(sense)
+        if key and key not in seen and re.search(r"[\u3400-\u9fff]", sense):
+            seen.add(key)
+            senses.append(sense)
+    return senses
+
+
 def _recognition_options(source: dict, raw: Any) -> Tuple[Optional[Tuple[str, List[str]]], str]:
     correct = _recognition_core_sense(source.get("chinese"))
     if not correct or not re.search(r"[\u3400-\u9fff]", correct):
@@ -285,26 +302,39 @@ def _recognition_options(source: dict, raw: Any) -> Tuple[Optional[Tuple[str, Li
     if not isinstance(raw, list):
         return None, "recognition requires three distinct Chinese distractors"
 
-    blocked = {normalize_word(correct)}
-    distractors: List[str] = []
+    blocked = {
+        normalize_word(sense)
+        for sense in _recognition_senses(source.get("chinese"))
+    }
+    blocked.add(normalize_word(correct))
+    candidates: List[Tuple[int, str, int]] = []
     seen = set(blocked)
-    for value in raw:
+    for index, value in enumerate(raw):
         text = _recognition_core_sense(value)
         key = normalize_word(text)
         if not text or key in seen or not re.search(r"[\u3400-\u9fff]", text):
             continue
         seen.add(key)
-        distractors.append(text)
-        if len(distractors) == 3:
-            break
-    if len(distractors) != 3:
+        candidates.append((index, text, len(re.findall(r"[\u3400-\u9fff]", text))))
+    if len(candidates) < 3:
         return None, "recognition requires three distinct Chinese distractors with one sense each"
-    option_lengths = [
-        len(re.findall(r"[\u3400-\u9fff]", text))
-        for text in [correct, *distractors]
-    ]
-    if max(option_lengths) - min(option_lengths) > 2:
+
+    correct_length = len(re.findall(r"[\u3400-\u9fff]", correct))
+    valid_groups = []
+    for group in combinations(candidates, 3):
+        lengths = [correct_length, *(item[2] for item in group)]
+        if max(lengths) - min(lengths) <= 2:
+            valid_groups.append(group)
+    if not valid_groups:
         return None, "recognition option lengths differ by more than two Chinese characters"
+    selected = min(
+        valid_groups,
+        key=lambda group: (
+            sum(abs(item[2] - correct_length) for item in group),
+            tuple(item[0] for item in group),
+        ),
+    )
+    distractors = [item[1] for item in selected]
     return (correct, distractors), ""
 
 
@@ -391,16 +421,16 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
 
 
 GENERATION_QUALITY_RULES_ZH = """
-- 先在内部逐项检查识义题和语境题的全部 4 个选项；发现两个选项都能成立时，必须重写题干或更换干扰项。不要输出检查过程，只输出修正后的最终 JSON。
-- 识义题界面只展示 correct_definition_zh 的第一个核心义项；3 个中文干扰项也必须各自只写一个核心义项，不得包含词性缩写，不得用分号、顿号或斜线罗列多个含义。
+- 先在内部生成候选，再像严格质检员一样逐项复核；发现正确释义、同义词、近义改写或第二个可接受答案时，必须替换候选。不要输出检查过程，只输出修正后的最终 JSON。
+- 程序会自动把 recognition_correct_answer_zh 加入识义题。recognition_distractors 中只能放错误释义，绝对不能再次放入正确释义、forbidden_recognition_senses_zh 中的义项或它们的同义表达。
+- 识义题界面只展示 recognition_correct_answer_zh；每个中文候选也只能写一个核心义项，不得包含词性缩写，不得用分号、顿号或斜线罗列多个含义。
 - 中文干扰项与首个正确义项的字数和表达粒度应接近，避免用户根据选项长短、标点数量或信息量猜答案。
-- 中文正确释义中的分号、顿号和斜线可能还分隔其他真实义项；干扰项不得命中其中任何义项，也不得使用同义词、近义改写、上位概念或包含正确义项的表述。
-- 中文干扰项应与正确释义词性、难度接近，但语义边界要清楚；不要为了“容易混淆”而制造两个都正确的选项。
-- 英文干扰项必须与正确答案词性、语法位置和词形匹配，但在题面明确提供的事实下语义不成立，不得包含正确答案或其明显变体。
-- 语境句至少 12 个英文词，并至少提供两类可观察限定信息，例如固定搭配、动作对象、因果结果、对比关系、时间地点或具体事实。
+- 中文候选应与正确释义词性和难度接近，但语义必须清楚地错误。唯一性优先于迷惑性，不要用“近义但不是标准释义”作为错误理由，因为普通同义表达也算正确答案。
+- context_distractors 必须与 context_correct_answer 词性、语法位置和词形匹配，但含义要明显不同；同义词、近义词、可互换表达及正确答案的变体全部禁止。
+- 语境句至少 16 个英文词，并至少提供两类可观察限定信息，例如固定搭配、动作对象、因果结果、对比关系、时间地点或具体事实。15 个词仍算失败。
 - 不得依赖读者看不到的背景或常识猜测来排除干扰项。逐项代入后，只允许正确答案形成自然、语法正确且符合全部题面信息的意思。
 - 正确答案必须以给定的精确词形在 context_sentence 中出现且只出现一次；不要挖空，程序会负责替换。
-- context_explanation_zh 必须指出唯一限定线索，并分别说明 3 个英文干扰项为什么与题面事实冲突。
+- explanation 只解释正确义项和决定性语境线索，不要逐个复述候选文本，以免程序从 6 个候选中选取 3 个后解释不一致。
 """.strip()
 
 
@@ -412,6 +442,7 @@ def build_generation_prompt(sources: List[dict]) -> str:
             "english": row["english"],
             "correct_definition_zh": row["chinese"],
             "recognition_correct_answer_zh": recognition_answer,
+            "forbidden_recognition_senses_zh": _recognition_senses(row["chinese"]),
             "recognition_required_hanzi_count": len(
                 re.findall(r"[\u3400-\u9fff]", recognition_answer)
             ),
@@ -427,22 +458,24 @@ def build_generation_prompt(sources: List[dict]) -> str:
 每个输出对象必须包含：
 {{
   "english": "与输入完全一致",
-  "recognition_distractors": ["3个互不相同的单义中文错误释义"],
+  "recognition_distractors": ["错误释义甲", "错误释义乙", "错误释义丙", "备用错误释义丁", "备用错误释义戊", "备用错误释义己"],
   "recognition_explanation_zh": "一句简短辨析",
   "context_sentence": "重新编写的完整英文语境句，正确答案原样出现且只出现一次",
   "context_translation_zh": "重写后语境句的准确中文翻译",
-  "context_distractors": ["3个可放入同一语法位置但语义不正确的英文选项"],
-  "context_explanation_zh": "指出唯一限定线索，并逐一说明三个干扰项为何不成立"
+  "context_distractors": ["wrongA", "wrongB", "wrongC", "backupD", "backupE", "backupF"],
+  "context_explanation_zh": "只指出确保正确答案唯一的题面线索"
 }}
 
 规则：
 {GENERATION_QUALITY_RULES_ZH}
-- 每组恰好 3 个互不重复的干扰项，不能产生两个都可接受的答案。
+- 两个 distractors 数组都必须提供恰好 6 个互不重复的错误候选；程序将从中选取 3 个，最终题目仍是四选一。
 - 不得修改正确释义或正确语境答案的词形。
-- recognition_distractors 的每个元素必须是纯中文单义短语，不得包含序号、词性、括号、标点、英文或多个义项；三个元素必须互不相同，也不得等于 recognition_correct_answer_zh 或 correct_definition_zh 中的任何真实义项。
-- recognition_distractors 的每个元素必须与 recognition_correct_answer_zh 的汉字数完全相同；以 recognition_required_hanzi_count 为准逐项计数。
+- recognition_distractors 的每个元素必须是纯中文单义短语，不得包含序号、词性、括号、标点、英文或多个义项；六个元素不得等于正确义项、真实义项或其任何同义/近义表达。
+- recognition_distractors 的每个元素应与 recognition_correct_answer_zh 的汉字数相同；至少保证其中 3 个与指定汉字数相同。
 - context_sentence 至少写 16 个英文单词。必须逐字符复制 context_correct_answer，使其作为独立单词或完整短语恰好出现一次；不得改成单复数、时态、大小写变体或近义词，也不得在句中第二次使用该答案。
-- 输出前必须逐对象检查：english 原样一致；两个 distractors 数组都恰好 3 项且互不重复；三个中文项均满足指定汉字数；context_sentence 达到 16 词且精确答案只出现一次。任何一项不满足时先重写该对象，再输出最终 JSON。
+- 反例：若正确义项是“憎恶”，["憎恶", "厌恶", "痛恨"] 全部禁止，因为三项都能算正确。可改用词性相同但含义明确错误的 ["赞美", "忽视", "允许"] 等候选。
+- 反例：句子是“I abhor violence because it causes lasting harm.”时，detest、loathe、hate 都能成立，禁止作为候选；应选择在该因果事实下明显冲突且语法匹配的词。
+- 输出前必须逐对象检查：english 原样一致；两个 distractors 数组都恰好 6 项且互不重复；没有候选属于正确答案、同义词或近义词；context_sentence 达到 16 词且精确答案只出现一次。任何一项不满足时先重写该对象，再输出最终 JSON。
 
 输入（必须为以下 JSON 数组中的每个对象输出一个结果，保持原顺序）：
 {json.dumps(compact, ensure_ascii=False)}
@@ -484,26 +517,32 @@ def _generation_validation_diagnostic(
     error: str,
 ) -> Dict[str, Any]:
     correct = _recognition_core_sense(source.get("chinese"))
-    correct_key = normalize_word(correct)
+    correct_hanzi_count = len(re.findall(r"[\u3400-\u9fff]", correct))
     recognition_raw = raw.get("recognition_distractors") if isinstance(raw, dict) else None
     recognition_items = []
-    seen = {correct_key}
+    seen = {
+        normalize_word(sense)
+        for sense in _recognition_senses(source.get("chinese"))
+    }
+    seen.add(normalize_word(correct))
     if isinstance(recognition_raw, list):
         for index, value in enumerate(recognition_raw):
             core = _recognition_core_sense(value)
             key = normalize_word(core)
+            hanzi_count = len(re.findall(r"[\u3400-\u9fff]", core))
             has_cjk = bool(re.search(r"[\u3400-\u9fff]", core))
-            duplicate_or_correct = key in seen
-            accepted = bool(core and has_cjk and not duplicate_or_correct)
+            duplicate_or_real_sense = key in seen
+            accepted = bool(core and has_cjk and not duplicate_or_real_sense)
             recognition_items.append({
                 "index": index,
                 "raw_type": type(value).__name__,
                 "raw_value": value,
                 "core_sense": core,
                 "normalized": key,
-                "hanzi_count": len(re.findall(r"[\u3400-\u9fff]", core)),
+                "hanzi_count": hanzi_count,
+                "hanzi_count_delta": hanzi_count - correct_hanzi_count,
                 "has_chinese": has_cjk,
-                "duplicate_or_correct": duplicate_or_correct,
+                "duplicate_or_real_sense": duplicate_or_real_sense,
                 "accepted_by_shape_filter": accepted,
             })
             if accepted:
@@ -527,7 +566,8 @@ def _generation_validation_diagnostic(
         "raw_output": raw,
         "recognition": {
             "correct_core_sense": correct,
-            "correct_hanzi_count": len(re.findall(r"[\u3400-\u9fff]", correct)),
+            "correct_hanzi_count": correct_hanzi_count,
+            "forbidden_real_senses": _recognition_senses(source.get("chinese")),
             "raw_type": type(recognition_raw).__name__,
             "raw_count": len(recognition_raw) if isinstance(recognition_raw, list) else None,
             "items": recognition_items,
@@ -573,7 +613,8 @@ def generate_candidate_records(
     if not sources:
         return {}, {}
     prompt = build_generation_prompt(sources)
-    max_tokens = min(32768, 1200 + len(sources) * 550)
+    # Thinking mode shares this output budget with the final JSON response.
+    max_tokens = min(32768, 1200 + len(sources) * 900)
     _emit_generation_diagnostic(diagnostic, {
         "event": "request",
         "word_count": len(sources),

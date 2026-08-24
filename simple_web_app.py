@@ -1759,7 +1759,9 @@ def _deepseek_http_error_body_for_log(e: urllib.error.HTTPError) -> str:
 
 
 def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
-                   max_tokens: int = 4096, temperature: float = 0.7) -> Optional[str]:
+                   max_tokens: int = 4096, temperature: float = 0.7,
+                   thinking: bool = False,
+                   timeout_sec: Optional[float] = None) -> Optional[str]:
     """调用 DeepSeek Chat API，返回助手回复文本；失败返回 None。"""
     api_key = get_deepseek_api_key()
     if not api_key:
@@ -1770,23 +1772,24 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
     if messages and isinstance(messages[-1], dict) and messages[-1].get("role") == "user":
         user_text = str(messages[-1].get("content") or "")
     prompt_chars = len(user_text)
+    effective_timeout = max(1.0, float(timeout_sec or DEEPSEEK_HTTP_TIMEOUT_SEC))
     preview_in = user_text[:2000] + ("…[截断]" if len(user_text) > 2000 else "")
     logger.info(
-        "DeepSeek 请求: model=%s max_tokens=%s temperature=%s timeout_sec=%s prompt_chars=%s 输入预览=%s",
+        "DeepSeek 请求: model=%s max_tokens=%s temperature=%s thinking=%s timeout_sec=%s prompt_chars=%s 输入预览=%s",
         model,
         max_tokens,
         temperature,
-        DEEPSEEK_HTTP_TIMEOUT_SEC,
+        thinking,
+        effective_timeout,
         prompt_chars,
         preview_in,
     )
-    # v4 系列默认开启思考；本应用仅需最终回复，显式关闭以匹配旧 deepseek-chat 并降低延迟/费用。
     payload = json.dumps({
         "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
-        "thinking": {"type": "disabled"},
+        "thinking": {"type": "enabled" if thinking else "disabled"},
     }).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
@@ -1798,7 +1801,7 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
         try:
             with urllib.request.urlopen(
                 req,
-                timeout=DEEPSEEK_HTTP_TIMEOUT_SEC,
+                timeout=effective_timeout,
                 context=_ssl_context_for_https(),
             ) as resp:
                 raw = resp.read().decode("utf-8")
@@ -6382,7 +6385,13 @@ def gaokao_failed_question_sources(sources: List[dict]) -> List[dict]:
 
 def _gaokao_generation_chat(messages: List[dict], max_tokens: int):
     """Adapt the question generator callback to _deepseek_chat's signature."""
-    return _deepseek_chat(messages, max_tokens=max_tokens, temperature=0.0)
+    return _deepseek_chat(
+        messages,
+        max_tokens=max_tokens,
+        temperature=0.0,
+        thinking=True,
+        timeout_sec=300,
+    )
 
 
 def generate_gaokao_question_batches(

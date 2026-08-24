@@ -136,7 +136,7 @@ def _semantic_record():
             'recognition_explanation_zh': 'benefit 表示益处或好处。',
             'context_sentence': (
                 'Regular exercise brings many benefits to our health by reducing '
-                'stress and improving sleep.'
+                'stress and improving sleep through consistent daily movement and training.'
             ),
             'context_translation_zh': '规律锻炼通过减轻压力和改善睡眠给健康带来许多益处。',
             'context_distractors': ['burdens', 'limits', 'risks'],
@@ -164,7 +164,7 @@ def _new_v2_entry(english='novel'):
             'recognition_explanation_zh': 'novel 在此表示小说。',
             'context_sentence': (
                 f'After years of research, she published a {english} about courage '
-                'during difficult times.'
+                'during difficult times for young readers around the world.'
             ),
             'context_translation_zh': '经过多年研究，她出版了一部关于困境中勇气的小说。',
             'context_distractors': ['poem', 'report', 'letter'],
@@ -1439,7 +1439,7 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
 
     def generate(batch, chat, **kwargs):
         batches.append(([row['english'] for row in batch], kwargs))
-        chat([{'role': 'user', 'content': 'prompt'}], 17700)
+        chat([{'role': 'user', 'content': 'prompt'}], 28200)
         return {
             'generated': len(batch),
             'failed': 0,
@@ -1464,7 +1464,12 @@ def test_generate_gaokao_question_batches_uses_one_thirty_word_request(monkeypat
     assert deepseek_calls == [
         (
             [{'role': 'user', 'content': 'prompt'}],
-            {'max_tokens': 17700, 'temperature': 0.0},
+            {
+                'max_tokens': 28200,
+                'temperature': 0.0,
+                'thinking': True,
+                'timeout_sec': 300,
+            },
         ),
     ]
     assert all(
@@ -1498,13 +1503,25 @@ def test_deepseek_chat_logs_prompt_cache_usage(monkeypatch, caplog) -> None:
         def read(self):
             return response_body
 
+    requests = []
+
+    def urlopen(request, **kwargs):
+        requests.append((json.loads(request.data), kwargs))
+        return Response()
+
     monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
-    monkeypatch.setattr(web.urllib.request, 'urlopen', lambda *args, **kwargs: Response())
+    monkeypatch.setattr(web.urllib.request, 'urlopen', urlopen)
 
     with caplog.at_level('INFO', logger=web.logger.name):
-        reply = web._deepseek_chat([{'role': 'user', 'content': 'prompt'}])
+        reply = web._deepseek_chat(
+            [{'role': 'user', 'content': 'prompt'}],
+            thinking=True,
+            timeout_sec=300,
+        )
 
     assert reply == '[]'
+    assert requests[0][0]['thinking'] == {'type': 'enabled'}
+    assert requests[0][1]['timeout'] == 300
     assert 'DeepSeek 缓存: hit_tokens=800 miss_tokens=200 hit_ratio=80.0%' in caplog.text
 
 
