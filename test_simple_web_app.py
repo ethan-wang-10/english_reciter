@@ -1422,6 +1422,15 @@ def _auto_backfill_settings() -> dict:
     }
 
 
+def _current_auto_retry_failure() -> dict:
+    return {
+        'attempts': 1,
+        'auto_retry_pipeline_version': (
+            web.gaokao_questions.AUTO_RETRY_PIPELINE_VERSION
+        ),
+    }
+
+
 def test_auto_backfill_request_size_is_fixed_at_ten(monkeypatch) -> None:
     monkeypatch.setenv('GAOKAO_AUTO_BACKFILL_BATCH_WORDS', '30')
 
@@ -1534,7 +1543,7 @@ def test_deepseek_chat_logs_prompt_cache_usage(monkeypatch, caplog) -> None:
     assert 'DeepSeek 缓存: hit_tokens=800 miss_tokens=200 hit_ratio=80.0%' in caplog.text
 
 
-def test_auto_backfill_queue_excludes_unrecorded_historical_gaps(monkeypatch) -> None:
+def test_auto_backfill_queue_excludes_legacy_and_unrecorded_failures(monkeypatch) -> None:
     sources = [
         {'english': 'failed-import'},
         {'english': 'historical-gap'},
@@ -1542,7 +1551,12 @@ def test_auto_backfill_queue_excludes_unrecorded_historical_gaps(monkeypatch) ->
     monkeypatch.setattr(
         web.gaokao_questions,
         'load_bank',
-        lambda: {'failures': {'failed-import': {'attempts': 1}}},
+        lambda: {
+            'failures': {
+                'failed-import': _current_auto_retry_failure(),
+                'historical-gap': {'attempts': 1},
+            },
+        },
     )
     monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)
 
@@ -1562,7 +1576,11 @@ def test_auto_backfill_claims_only_thirty_and_obeys_cooldown(
     monkeypatch.setattr(
         web.gaokao_questions,
         'load_bank',
-        lambda: {'failures': {row['english']: {} for row in sources}},
+        lambda: {
+            'failures': {
+                row['english']: _current_auto_retry_failure() for row in sources
+            },
+        },
     )
     monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)
     monkeypatch.setattr(
@@ -1666,7 +1684,11 @@ def test_auto_backfill_waits_until_thirty_are_pending(monkeypatch, tmp_path) -> 
     monkeypatch.setattr(
         web.gaokao_questions,
         'load_bank',
-        lambda: {'failures': {row['english']: {} for row in sources}},
+        lambda: {
+            'failures': {
+                row['english']: _current_auto_retry_failure() for row in sources
+            },
+        },
     )
     monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)
     monkeypatch.setattr(
@@ -1689,3 +1711,35 @@ def test_auto_backfill_waits_until_thirty_are_pending(monkeypatch, tmp_path) -> 
         'pending': 29,
         'threshold': 30,
     }
+
+
+def test_gunicorn_style_request_starts_auto_backfill_scheduler(monkeypatch) -> None:
+    starts = []
+    monkeypatch.setitem(web.app.config, 'TESTING', False)
+    monkeypatch.setattr(
+        web,
+        'start_gaokao_auto_backfill_scheduler',
+        lambda: starts.append(True) or True,
+    )
+
+    with web.app.test_client() as request_client:
+        response = request_client.get('/api/health')
+
+    assert response.status_code == 200
+    assert starts == [True]
+
+
+def test_testing_request_does_not_start_auto_backfill_scheduler(monkeypatch) -> None:
+    starts = []
+    monkeypatch.setitem(web.app.config, 'TESTING', True)
+    monkeypatch.setattr(
+        web,
+        'start_gaokao_auto_backfill_scheduler',
+        lambda: starts.append(True) or True,
+    )
+
+    with web.app.test_client() as request_client:
+        response = request_client.get('/api/health')
+
+    assert response.status_code == 200
+    assert starts == []

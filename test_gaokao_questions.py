@@ -124,23 +124,15 @@ def _pool_audited(
     }
     return json.dumps([{
         'item_id': 'q1',
-        'recognition_verdicts': [
-            {
-                'option': option,
-                'valid_definition': option in valid_recognition,
-                'parallel_form': True,
-                'reason_zh': '逐项核对中文义项和表达形式。',
-            }
-            for option in recognition_options
+        'recognition_valid_definition': [
+            option in valid_recognition for option in recognition_options
         ],
-        'context_verdicts': [
-            {
-                'option': option,
-                'grammatical': option in grammatical_context,
-                'meaning_fits': option in fitting_context,
-                'reason_zh': '逐项代入检查语法和题面语义。',
-            }
-            for option in context_options
+        'recognition_parallel_form': [True for _ in recognition_options],
+        'context_grammatical': [
+            option in grammatical_context for option in context_options
+        ],
+        'context_meaning_fits': [
+            option in fitting_context for option in context_options
         ],
         'context_quality': quality,
     }], ensure_ascii=False)
@@ -403,6 +395,25 @@ def test_generation_prompt_keeps_dynamic_input_after_cacheable_rules() -> None:
     assert '"english": "apple"' in second_input
 
 
+def test_generation_repair_feedback_is_kept_in_dynamic_input() -> None:
+    prompt = questions.build_generation_prompt(
+        [_source('a', 'art. 一个')],
+        repair_feedback={
+            'a': 'context sentence must contain the exact answer once',
+        },
+    )
+    prefix, dynamic_input = prompt.split(
+        '输入（必须为以下 JSON 数组中的每个对象输出一个结果，保持原顺序）：\n',
+        1,
+    )
+
+    assert 'context sentence must contain the exact answer once' not in prefix
+    assert (
+        '"previous_failure_to_fix": '
+        '"context sentence must contain the exact answer once"'
+    ) in dynamic_input
+
+
 def test_prompt_checked_result_exposes_failure_reasons(private_question_bank) -> None:
     source = _source('novel', 'n. 小说')
 
@@ -487,15 +498,64 @@ def test_pool_audit_rejects_grammar_only_distractors() -> None:
     assert 'insufficient safe options' in rejected['abash']
 
 
+def test_pool_audit_uses_compact_arrays_and_observed_counterexamples() -> None:
+    source = _source('novel', 'n. 小说')
+    raw = _generated('novel')
+    pool, error = questions.build_generation_candidate_pool(source, raw)
+    assert error == ''
+    requests = []
+
+    def chat(messages, max_tokens):
+        requests.append((messages[-1]['content'], max_tokens))
+        return _pool_audited(source, raw)
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'novel': pool},
+        chat,
+    )
+
+    assert list(approved) == ['novel']
+    assert rejected == {}
+    assert retry == {}
+    prompt, max_tokens = requests[0]
+    assert '"recognition_valid_definition"' in prompt
+    assert '"context_meaning_fits"' in prompt
+    assert 'recognition_verdicts' not in prompt
+    assert 'cannot ____ his complaining because it wastes time' in prompt
+    assert 'stone walls、arches 和 ruins' in prompt
+    assert 'Her criticism ____ him' in prompt
+    assert max_tokens == 1150
+
+
+def test_pool_audit_retries_malformed_boolean_array() -> None:
+    source = _source('novel', 'n. 小说')
+    raw = _generated('novel')
+    pool, error = questions.build_generation_candidate_pool(source, raw)
+    assert error == ''
+    malformed = json.loads(_pool_audited(source, raw))
+    malformed[0]['context_meaning_fits'] = [True, False]
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'novel': pool},
+        lambda messages, max_tokens: json.dumps(malformed, ensure_ascii=False),
+    )
+
+    assert approved == {}
+    assert rejected == {}
+    assert 'expected 4 JSON booleans' in retry['novel']
+
+
 def test_rejected_pool_is_regenerated_once_before_publish(private_question_bank) -> None:
     source = _source('novel', 'n. 小说')
     raw = _generated('novel')
     generation_calls = 0
     audit_calls = 0
+    generation_prompts = []
 
     def generate_chat(messages, max_tokens):
         nonlocal generation_calls
         generation_calls += 1
+        generation_prompts.append(messages[-1]['content'])
         return json.dumps([raw], ensure_ascii=False)
 
     def audit_chat(messages, max_tokens):
@@ -520,10 +580,38 @@ def test_rejected_pool_is_regenerated_once_before_publish(private_question_bank)
 
     assert generation_calls == 2
     assert audit_calls == 2
+    assert '"previous_failure_to_fix":' not in generation_prompts[0]
+    assert '"previous_failure_to_fix":' in generation_prompts[1]
+    assert '首轮语境缺少形成唯一答案的决定性线索' in generation_prompts[1]
     assert result['generated_words'] == ['novel']
     assert result['failed_words'] == []
     assert questions.get_question('novel', 'context') is not None
     assert questions.pending_candidate_pools() == {}
+
+
+def test_current_pool_failures_are_tagged_for_automatic_retry(
+    private_question_bank,
+) -> None:
+    source = _source('novel', 'n. 小说')
+    raw = _generated('novel')
+    pool, error = questions.build_generation_candidate_pool(source, raw)
+    assert error == ''
+
+    questions.persist_candidate_pool_result({}, {'broken': 'invalid JSON'})
+    questions.persist_candidate_pool_result({'novel': pool}, {})
+    questions.persist_candidate_pool_audit_result(
+        {},
+        {'novel': 'ambiguous context'},
+        {},
+    )
+
+    failures = questions.load_bank()['failures']
+    assert failures['broken']['auto_retry_pipeline_version'] == (
+        questions.AUTO_RETRY_PIPELINE_VERSION
+    )
+    assert failures['novel']['auto_retry_pipeline_version'] == (
+        questions.AUTO_RETRY_PIPELINE_VERSION
+    )
 
 
 def test_import_candidate_pool_stays_private_until_audit(private_question_bank) -> None:

@@ -6379,12 +6379,15 @@ def gaokao_question_sources(level: str = "") -> List[dict]:
 
 
 def gaokao_failed_question_sources(sources: List[dict]) -> List[dict]:
-    """Return retryable sources explicitly recorded as generation failures."""
+    """Return failures explicitly produced by the current generation pipeline."""
     bank = gaokao_questions.load_bank()
     failure_keys = {
         gaokao_questions.normalize_word(key)
-        for key in (bank.get("failures") or {})
+        for key, failure in (bank.get("failures") or {}).items()
         if gaokao_questions.normalize_word(key)
+        and isinstance(failure, dict)
+        and failure.get("auto_retry_pipeline_version")
+        == gaokao_questions.AUTO_RETRY_PIPELINE_VERSION
     }
     if not failure_keys:
         return []
@@ -6770,6 +6773,13 @@ def stop_gaokao_auto_backfill_scheduler() -> None:
 
 
 atexit.register(stop_gaokao_auto_backfill_scheduler)
+
+
+@app.before_request
+def _ensure_gaokao_auto_backfill_scheduler() -> None:
+    """Lazily start the scheduler when Gunicorn serves its first request."""
+    if not app.testing:
+        start_gaokao_auto_backfill_scheduler()
 
 
 @app.route('/api/wordbank/ocr-extract', methods=['POST'])
