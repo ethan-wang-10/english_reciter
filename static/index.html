@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260820-leaderboard-podium-v4">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260825-instant-remedial-v1">
 </head>
 <body>
     <div id="app">
@@ -364,6 +364,7 @@
                                 </div>
                             </dl>
                             <div class="review-section-break-actions">
+                                <button type="button" id="review-section-wrong-now" class="btn btn-danger-outline">立即复习错题</button>
                                 <button type="button" id="review-section-continue" class="btn btn-primary">继续下一节</button>
                                 <button type="button" id="review-section-progress" class="btn btn-secondary">查看学习进度</button>
                             </div>
@@ -394,6 +395,7 @@
                                 <p class="wrong-words-sub" id="wrong-round-label">同一单词达到本题尝试上限仍未答对后会出现在这里</p>
                                 <ul class="wrong-words-list" id="wrong-words-list"></ul>
                                 <p class="wrong-words-empty" id="wrong-words-empty">暂无错题，继续加油！</p>
+                                <button type="button" id="wrong-words-review-now" class="btn btn-danger-outline wrong-words-review-now">立即复习错题</button>
                                 <div class="wrong-order-control" id="wrong-order-control">
                                     <span class="wrong-order-label">错题顺序</span>
                                     <div class="wrong-order-btns">
@@ -1235,7 +1237,7 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20260820-leaderboard-podium-v4" defer></script>
+    <script src="/static/js/app.js?v=20260825-instant-remedial-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>

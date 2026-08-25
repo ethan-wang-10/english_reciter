@@ -3473,7 +3473,10 @@ def _review_words_payload(
                 item['examples'] = [{'en': a.strip(), 'cn': b.strip()}]
             else:
                 item['examples'] = [{'en': raw, 'cn': ''}]
-        if item['task_reason'] == 'new' and item['task_attempts'] == 0:
+        if (
+            (item['task_reason'] == 'new' and item['task_attempts'] == 0)
+            or item['task_remedial']
+        ):
             item['study'] = {
                 'english': w.english,
                 'chinese': item['chinese'],
@@ -4869,11 +4872,17 @@ def practice_word(username):
             if not word:
                 return jsonify({'error': '单词未找到'}), 404
 
-            exercise_type = (
-                str(task_item.get('exercise_type') or 'spelling')
-                if task_item
-                else requested_exercise_type
-            )
+            # 错题巩固固定使用拼写题。主轮仍以服务端任务题型为准，避免客户端
+            # 任意改写正常任务；remedial 作答由下方 apply_scored_review_attempt
+            # 排除在掌握度和近期正确率之外。
+            if remedial and requested_exercise_type == 'spelling':
+                exercise_type = 'spelling'
+            else:
+                exercise_type = (
+                    str(task_item.get('exercise_type') or 'spelling')
+                    if task_item
+                    else requested_exercise_type
+                )
             if exercise_type == 'listening' and not audio_available:
                 exercise_type = 'spelling'
             if exercise_type not in EXERCISE_TYPES:

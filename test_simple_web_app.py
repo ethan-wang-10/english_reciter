@@ -296,11 +296,11 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260820-leaderboard-podium-v4" in html
+    assert "/static/js/app.js?v=20260825-instant-remedial-v1" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260820-leaderboard-podium-v4" in html
+    assert "/static/css/style.css?v=20260825-instant-remedial-v1" in html
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
@@ -368,9 +368,46 @@ def test_review_flow_exposes_thirty_word_section_breaks(client) -> None:
     assert 'id="review-section-break"' in html
     assert 'id="review-section-continue"' in html
     assert 'id="review-section-progress"' in html
+    assert 'id="review-section-wrong-now"' in html
+    assert 'id="wrong-words-review-now"' in html
     assert '<dd id="review-section-break-words">30</dd>' in html
     assert "阶段小结" in html
+    assert "startImmediateWrongReview" in javascript
+    assert "finishImmediateWrongReview" in javascript
+    assert "prepareRemedialStudyWord" in javascript
+    assert "countedResponse && !isWrongReviewAttempt" in javascript
+    assert "先看词，再拼写（不计答对率）" in javascript
     assert ".review-section-break-metrics" in stylesheet
+    assert ".wrong-words-review-now" in stylesheet
+
+
+def test_remedial_practice_can_override_semantic_task_with_spelling(
+    client,
+    monkeypatch,
+) -> None:
+    reciter = _SemanticReciter('context')
+    reciter.task_item['phase'] = 'remedial'
+    reciter.task_item['attempts'] = 2
+    _mock_student_session(monkeypatch, reciter)
+
+    response = client.post(
+        '/api/words/practice',
+        headers={'Authorization': 'Bearer test'},
+        json={
+            'word_id': 'benefit',
+            'answer': 'incorrect',
+            'task_id': 'task-1',
+            'task_item_id': 'item-1',
+            'exercise_type': 'spelling',
+            'remedial': True,
+            'review_event_id': 'remedial-spelling-event',
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()['exercise_type'] == 'spelling'
+    assert reciter.last_apply['exercise_type'] == 'spelling'
+    assert reciter.last_apply['remedial'] is True
 
 
 def test_mastery_ui_marks_missing_optional_questions_as_unavailable(client) -> None:
@@ -556,6 +593,24 @@ def test_new_word_payload_includes_study_preview_before_semantic_question(
     assert word['study']['chinese'] == 'n. 益处；好处'
     assert word['study']['examples'][0]['en'] == 'Exercise brings many benefits.'
     assert word['task_imported_today'] is True
+
+
+def test_remedial_semantic_payload_keeps_study_preview(monkeypatch) -> None:
+    reciter = _SemanticReciter('context')
+    reciter.task_item.update({'phase': 'remedial', 'attempts': 2, 'reason': 'due'})
+    task = {
+        'items': [reciter.task_item],
+        'plan': {'task_id': 'task-1'},
+    }
+    monkeypatch.setattr(web, 'lookup_csv_word', lambda word: None)
+
+    payload = web._review_words_payload(reciter, [reciter.word], task)
+    word = payload['words'][0]
+
+    assert word['task_remedial'] is True
+    assert word['study']['english'] == 'benefit'
+    assert word['study']['chinese'] == 'n. 益处；好处'
+    assert word['chinese'] == ''
 
 
 def test_question_endpoint_returns_approved_question_without_runtime_generation(

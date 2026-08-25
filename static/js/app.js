@@ -38,6 +38,8 @@ let reviewSectionStartCorrectAttempts = 0;
 let reviewSectionStartWrongAttempts = 0;
 let reviewSectionStartMasteredCount = 0;
 let reviewSectionCompletedCount = 0;
+/** 立即错题复习期间保存的主轮现场；错题只练一轮后原样恢复。 */
+let immediateRemedialReturnState = null;
 
 /** 用户套餐类型: 'free' | 'paid'（paid 对应 VIP 权益，展示文案统一为 VIP） */
 let userPlan = 'free';
@@ -100,6 +102,7 @@ let sessionRestoredRemedialWords = 0;
 let sessionTotalWrongAttempts = 0;
 let sessionNewMastered = [];
 let sessionExerciseStats = {};
+let sessionImmediateRemedialRounds = 0;
 let currentTodayTaskPlan = null;
 let reviewQuestionStartedAt = 0;
 let pendingReviewSubmission = null;
@@ -5485,6 +5488,27 @@ function buildWrongWordItemHtml(w) {
     return `<span class="ww-en">${escapeHtml(w.english)}</span><span class="ww-zh">${escapeHtml(w.chinese)}</span>`;
 }
 
+function canStartImmediateWrongReview() {
+    return Boolean(
+        reviewSessionMode === 'daily'
+        && wrongRoundNumber === 0
+        && !immediateRemedialReturnState
+        && wrongWordsOrder.length > 0
+        && !isRemedialOfferModalOpen()
+    );
+}
+
+function updateImmediateWrongReviewButtons() {
+    const enabled = canStartImmediateWrongReview();
+    const title = enabled ? '先看词，再拼写；本轮不计答对率' : '当前没有可立即复习的错题';
+    ['wrong-words-review-now', 'review-section-wrong-now'].forEach((id) => {
+        const button = document.getElementById(id);
+        if (!button) return;
+        button.disabled = !enabled;
+        button.title = title;
+    });
+}
+
 function renderWrongPanel() {
     const ul = document.getElementById('wrong-words-list');
     const empty = document.getElementById('wrong-words-empty');
@@ -5502,6 +5526,7 @@ function renderWrongPanel() {
     if (badge) {
         badge.textContent = String(wrongWordsOrder.length);
     }
+    updateImmediateWrongReviewButtons();
 }
 
 function renderRemedialOfferWrongList() {
@@ -5594,6 +5619,7 @@ function resetSessionReviewStats() {
     sessionTotalWrongAttempts = 0;
     sessionNewMastered = [];
     sessionExerciseStats = {};
+    sessionImmediateRemedialRounds = 0;
 }
 
 function resetActiveReviewSession() {
@@ -5613,6 +5639,7 @@ function resetActiveReviewSession() {
     wrongWordsOrder = [];
     wordMap = new Map();
     wrongRoundNumber = 0;
+    immediateRemedialReturnState = null;
     reviewSessionMode = 'daily';
     sessionSkippedRemedialAfterMain = false;
     currentTodayTaskPlan = null;
@@ -5673,7 +5700,7 @@ function setReviewSubmitButtonState(action = 'submit', { disabled = false } = {}
 }
 
 function sessionCorrectAttemptCount() {
-    return sessionMainCorrect + sessionRemedialCorrect;
+    return sessionMainCorrect;
 }
 
 function isReviewSectionBreakOpen() {
@@ -5717,7 +5744,7 @@ function showReviewSectionBreak() {
     const accuracyEl = document.getElementById('review-section-break-accuracy');
     const masteredEl = document.getElementById('review-section-break-mastered');
     if (words) words.textContent = String(completedWords);
-    if (accuracyEl) accuracyEl.textContent = `${accuracy}%`;
+    if (accuracyEl) accuracyEl.textContent = wrongRoundNumber > 0 ? '不计' : `${accuracy}%`;
     if (masteredEl) masteredEl.textContent = String(mastered);
 
     const reviewBox = document.getElementById('review-box');
@@ -6180,7 +6207,8 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
     const mainFailed = sessionMainFailedThree;
     const remedialOk = sessionRemedialCorrect;
     const wrongTries = sessionTotalWrongAttempts;
-    const correctTries = mainOk + remedialOk;
+    const totalRemedialRounds = remedialRoundsDone + sessionImmediateRemedialRounds;
+    const correctTries = mainOk;
     const totalTries = correctTries + wrongTries;
     const accPct = totalTries > 0 ? Math.round((correctTries / totalTries) * 1000) / 10 : 0;
 
@@ -6197,10 +6225,10 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
         );
     }
 
-    if (remedialRoundsDone > 0) {
+    if (totalRemedialRounds > 0) {
         parts.push(
-            `<div class="review-summary-section"><strong>错题巩固</strong>：共完成 ${remedialRoundsDone} 轮；` +
-            `错题轮累计答对 ${remedialOk} 次（含同一词多次练习）。</div>`
+            `<div class="review-summary-section"><strong>错题巩固</strong>：共完成 ${totalRemedialRounds} 轮；` +
+            `错题轮累计答对 ${remedialOk} 次（不计入答对率）。</div>`
         );
     } else if (sessionRestoredRemedialWords > 0 || remedialOk > 0) {
         parts.push(
@@ -6236,8 +6264,8 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
     }
 
     parts.push(
-        `<div class="review-summary-section"><strong>本次作答</strong>：共 ${totalTries} 次提交，` +
-        `其中答错 ${wrongTries} 次，答对率约 ${accPct}%。</div>`
+        `<div class="review-summary-section"><strong>计分作答</strong>：共 ${totalTries} 次提交，` +
+        `其中答错 ${wrongTries} 次，答对率约 ${accPct}%（错题巩固不计）。</div>`
     );
 
     let tip = '';
@@ -6251,7 +6279,7 @@ function buildReviewSessionSummaryHtml(remedialRoundsDone, isBonus) {
         tip = '全对通过，保持节奏即可。';
     } else if (mainFailed > 0 && sessionSkippedRemedialAfterMain) {
         tip = '可随时点击「继续学习」再次进入今日复习流程；错题仍会在后续排期中再次出现。';
-    } else if (mainFailed > 0 || remedialRoundsDone > 1) {
+    } else if (mainFailed > 0 || totalRemedialRounds > 1) {
         tip = '错题已巩固完成；不熟悉的词可在「学习进度」里查看下次复习时间。';
     } else if (wrongTries > 0) {
         tip = '偶尔答错很正常，间隔复习会帮助巩固。';
@@ -6304,6 +6332,167 @@ function applyWrongOrderToRemaining() {
     currentReviewList = [...done, ...remaining];
 }
 
+function prepareRemedialStudyWord(word) {
+    const existingStudy = word?.study || {};
+    const english = String(existingStudy.english || word?.english || '').trim();
+    const chinese = String(existingStudy.chinese || word?.chinese || '').trim();
+    const studyExamples = Array.isArray(existingStudy.examples) && existingStudy.examples.length
+        ? existingStudy.examples
+        : (Array.isArray(word?.examples) ? word.examples : []);
+    return {
+        ...word,
+        english,
+        chinese,
+        exercise_type: 'spelling',
+        question: null,
+        question_required: false,
+        task_remedial: true,
+        study: {
+            english,
+            chinese,
+            phonetic: String(existingStudy.phonetic || word?.phonetic || '').trim(),
+            examples: studyExamples.map((example) => ({ ...example })),
+        },
+        _remedialStudy: true,
+        _introSeen: false,
+        _questionPromise: null,
+        _selectedOptionId: '',
+        _eliminatedOptionIds: [],
+    };
+}
+
+async function restorePausedReviewWord(returnState) {
+    const word = currentReviewList[currentReviewIndex];
+    if (!word) {
+        onPassComplete();
+        return;
+    }
+    await showCurrentWord();
+    if (
+        immediateRemedialReturnState
+        || currentReviewList[currentReviewIndex] !== word
+        || isReviewSectionBreakOpen()
+    ) return;
+
+    currentErrorCount = returnState.currentErrorCount;
+    currentRevealedCount = returnState.currentRevealedCount;
+    const studyPanel = document.getElementById('new-word-study');
+    if (!isSemanticExercise(word.exercise_type) && (!studyPanel || studyPanel.hidden)) {
+        const targetAnswer = word._targetAnswer || word.english;
+        document.getElementById('current-word-english').textContent = getHintStringForTarget(
+            targetAnswer,
+            currentRevealedCount,
+        );
+        const capture = document.getElementById('mobile-word-capture');
+        if (capture && returnState.inputValue) {
+            capture.value = returnState.inputValue;
+            capture.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+}
+
+function finishImmediateWrongReview() {
+    const returnState = immediateRemedialReturnState;
+    if (!returnState) return false;
+
+    const failedWords = wrongWordsOrder
+        .map((english) => wordMap.get(english))
+        .filter(Boolean);
+    immediateRemedialReturnState = null;
+    sessionImmediateRemedialRounds += 1;
+    currentReviewList = returnState.currentReviewList;
+    currentReviewIndex = returnState.currentReviewIndex;
+    currentErrorCount = returnState.currentErrorCount;
+    currentRevealedCount = returnState.currentRevealedCount;
+    wrongRoundNumber = returnState.wrongRoundNumber;
+    wordMap = returnState.wordMap;
+    failedWords.forEach((word) => wordMap.set(word.english, word));
+    wrongWordsOrder = failedWords.map((word) => word.english);
+    wrongWordsInThisPass = new Set(wrongWordsOrder);
+    reviewSectionStartIndex = returnState.reviewSectionStartIndex;
+    reviewSectionStartCorrectAttempts = returnState.reviewSectionStartCorrectAttempts;
+    reviewSectionStartWrongAttempts = returnState.reviewSectionStartWrongAttempts;
+    reviewSectionStartMasteredCount = returnState.reviewSectionStartMasteredCount;
+    reviewSectionCompletedCount = returnState.reviewSectionCompletedCount;
+
+    const sectionBreak = document.getElementById('review-section-break');
+    const reviewBox = document.getElementById('review-box');
+    const reviewComplete = document.getElementById('review-complete');
+    if (reviewComplete) reviewComplete.style.display = 'none';
+    renderWrongPanel();
+    updateWrongRoundLabel();
+    showMainBanner(
+        failedWords.length > 0
+            ? `本轮错题复习完成，${failedWords.length} 个词仍需巩固，已返回原进度`
+            : '本轮错题复习完成，已返回原进度',
+    );
+
+    if (returnState.sectionBreakOpen) {
+        if (reviewBox) reviewBox.style.display = 'none';
+        if (sectionBreak) sectionBreak.hidden = false;
+        setTimeout(() => document.getElementById('review-section-continue')?.focus(), 0);
+    } else {
+        if (sectionBreak) sectionBreak.hidden = true;
+        if (reviewBox) reviewBox.style.display = 'block';
+        void restorePausedReviewWord(returnState);
+    }
+    return true;
+}
+
+function startImmediateWrongReview() {
+    if (!canStartImmediateWrongReview()) return false;
+    if (isSubmitting || isAdvancing) {
+        showMainBanner('当前题正在提交，请稍后再开始错题复习');
+        return false;
+    }
+
+    const remedialWords = wrongWordsOrder
+        .map((english) => wordMap.get(english))
+        .filter(Boolean)
+        .map(prepareRemedialStudyWord);
+    if (remedialWords.length === 0) {
+        wrongWordsOrder = [];
+        wrongWordsInThisPass = new Set();
+        renderWrongPanel();
+        return false;
+    }
+
+    const capture = document.getElementById('mobile-word-capture');
+    immediateRemedialReturnState = {
+        currentReviewList,
+        currentReviewIndex,
+        currentErrorCount,
+        currentRevealedCount,
+        wrongRoundNumber,
+        wordMap: new Map(wordMap),
+        inputValue: String(capture?.value || ''),
+        sectionBreakOpen: isReviewSectionBreakOpen(),
+        reviewSectionStartIndex,
+        reviewSectionStartCorrectAttempts,
+        reviewSectionStartWrongAttempts,
+        reviewSectionStartMasteredCount,
+        reviewSectionCompletedCount,
+    };
+
+    cancelPendingReviewAdvance();
+    currentReviewList = remedialWords;
+    currentReviewIndex = 0;
+    currentErrorCount = 0;
+    currentRevealedCount = 0;
+    wrongRoundNumber = 1;
+    wrongWordsOrder = [];
+    wrongWordsInThisPass = new Set();
+    remedialWords.forEach((word) => wordMap.set(word.english, word));
+    resetReviewSectionProgress();
+    document.getElementById('review-box').style.display = 'block';
+    document.getElementById('review-complete').style.display = 'none';
+    renderWrongPanel();
+    updateWrongRoundLabel();
+    showMainBanner(`开始复习 ${remedialWords.length} 个错题：先看词，再拼写（不计答对率）`);
+    void showCurrentWord();
+    return true;
+}
+
 /** 进入下一轮错题复习（主轮结束后需用户确认时由弹框调用，或错题轮结束后自动调用） */
 function enterRemedialRound() {
     wrongRoundNumber += 1;
@@ -6313,12 +6502,16 @@ function enterRemedialRound() {
         : `进入第 ${wrongRoundNumber} 轮错题复习（${n} 个单词）`;
     showMainBanner(msg);
 
-    let orderedList = wrongWordsOrder.map((en) => wordMap.get(en)).filter(Boolean);
+    let orderedList = wrongWordsOrder
+        .map((en) => wordMap.get(en))
+        .filter(Boolean)
+        .map(prepareRemedialStudyWord);
     if (getWrongOrder() === 'random') {
         shuffleArray(orderedList);
     }
 
     currentReviewList = orderedList;
+    currentReviewList.forEach((word) => wordMap.set(word.english, word));
     wrongWordsOrder = [];
     wrongWordsInThisPass = new Set();
 
@@ -6375,6 +6568,10 @@ function onRemedialOfferDecline() {
 
 /** 一轮题目做完：无错题则结束；主轮有错题时弹框确认；错题轮之间仍自动进入下一轮 */
 function onPassComplete() {
+    if (immediateRemedialReturnState) {
+        finishImmediateWrongReview();
+        return;
+    }
     if (wrongWordsOrder.length === 0) {
         showFinalComplete();
         return;
@@ -6387,6 +6584,7 @@ function onPassComplete() {
 }
 
 function showFinalComplete() {
+    immediateRemedialReturnState = null;
     const sectionBreak = document.getElementById('review-section-break');
     if (sectionBreak) sectionBreak.hidden = true;
     document.getElementById('review-box').style.display = 'none';
@@ -6434,6 +6632,7 @@ function showFinalComplete() {
 }
 
 function showInitialEmptyReview() {
+    immediateRemedialReturnState = null;
     const sectionBreak = document.getElementById('review-section-break');
     if (sectionBreak) sectionBreak.hidden = true;
     document.getElementById('review-box').style.display = 'none';
@@ -6474,6 +6673,7 @@ async function loadReviewList() {
     const requestSequence = ++reviewDataRequestSequence;
     try {
         sessionSkippedRemedialAfterMain = false;
+        immediateRemedialReturnState = null;
         wrongWordsInThisPass = new Set();
         wrongWordsOrder = [];
         wrongRoundNumber = 0;
@@ -6552,6 +6752,7 @@ async function startBonusReview() {
         }
         adaptReviewDataToAudioCapability(data);
         sessionSkippedRemedialAfterMain = false;
+        immediateRemedialReturnState = null;
         wrongWordsInThisPass = new Set();
         wrongWordsOrder = [];
         wrongRoundNumber = 0;
@@ -6746,6 +6947,9 @@ function resetSemanticOptionsForRetry(word) {
 }
 
 function shouldShowNewWordStudy(word) {
+    if (wrongRoundNumber > 0 && word?._remedialStudy && word._introSeen !== true) {
+        return true;
+    }
     return Boolean(
         reviewSessionMode === 'daily'
         && wrongRoundNumber === 0
@@ -6758,6 +6962,7 @@ function shouldShowNewWordStudy(word) {
 
 function renderNewWordStudy(word) {
     const study = word.study || {};
+    const isRemedialStudy = Boolean(word._remedialStudy && wrongRoundNumber > 0);
     const panel = document.getElementById('new-word-study');
     const semanticPanel = document.getElementById('semantic-question');
     const defExampleWrap = document.getElementById('review-def-example-wrap');
@@ -6767,18 +6972,24 @@ function renderNewWordStudy(word) {
     if (!panel) return;
 
     panel.hidden = false;
+    panel.classList.toggle('is-remedial', isRemedialStudy);
     if (semanticPanel) semanticPanel.hidden = true;
     if (defExampleWrap) defExampleWrap.hidden = true;
     if (inputRow) inputRow.hidden = true;
     if (modeEl) {
-        modeEl.textContent = '新词学习';
+        modeEl.textContent = isRemedialStudy ? '错题预习' : '新词学习';
         modeEl.classList.remove('is-listening', 'is-semantic');
     }
     if (dueHint) {
         dueHint.hidden = false;
-        dueHint.className = 'review-due-hint review-due-hint-scheduled';
-        dueHint.textContent = '今日新词';
+        dueHint.className = isRemedialStudy
+            ? 'review-due-hint review-due-hint-carryover'
+            : 'review-due-hint review-due-hint-scheduled';
+        dueHint.textContent = isRemedialStudy ? '错题复习 · 本轮不计答对率' : '今日新词';
     }
+
+    const kicker = panel.querySelector('.new-word-study-kicker');
+    if (kicker) kicker.textContent = isRemedialStudy ? '先看词' : '首次学习';
 
     const english = String(study.english || word.english || '').trim();
     document.getElementById('current-word-english').textContent = english;
@@ -6823,6 +7034,7 @@ function renderNewWordStudy(word) {
     }
     const start = document.getElementById('new-word-study-start');
     if (start) {
+        start.textContent = isRemedialStudy ? '开始拼写' : '开始作答';
         start.onclick = () => {
             word._introSeen = true;
             panel.hidden = true;
@@ -6896,7 +7108,9 @@ async function showCurrentWord() {
     const lemma = (word.english || '').trim();
     const inflected = (word.example_form || '').trim() || lemma;
     const targetAnswer =
-        word.exercise_type !== 'listening' && getReviewTestInflectionEnabled()
+        wrongRoundNumber === 0
+        && word.exercise_type !== 'listening'
+        && getReviewTestInflectionEnabled()
             ? inflected
             : lemma;
     word._targetAnswer = targetAnswer;
@@ -6915,8 +7129,11 @@ async function showCurrentWord() {
     const phoneticInput = document.getElementById('review-show-phonetic');
     const phoneticToggle = phoneticInput?.closest('label');
     const directSubmitToggle = document.getElementById('review-number-direct-submit-toggle');
-    if (inflectionInput) inflectionInput.disabled = isListening || isSemantic;
-    if (inflectionToggle) inflectionToggle.style.display = (isListening || isSemantic) ? 'none' : '';
+    const fixedRemedialSpelling = wrongRoundNumber > 0;
+    if (inflectionInput) inflectionInput.disabled = isListening || isSemantic || fixedRemedialSpelling;
+    if (inflectionToggle) {
+        inflectionToggle.style.display = (isListening || isSemantic || fixedRemedialSpelling) ? 'none' : '';
+    }
     if (phoneticToggle) phoneticToggle.style.display = word.exercise_type === 'context' ? 'none' : '';
     if (directSubmitToggle) directSubmitToggle.hidden = !isSemantic;
     
@@ -6926,10 +7143,10 @@ async function showCurrentWord() {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-bonus';
             dueHint.textContent = '随机加练（不改变掌握进度与排期）';
-        } else if (word.task_remedial) {
+        } else if (wrongRoundNumber > 0 || word.task_remedial) {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-carryover';
-            dueHint.textContent = '错题巩固';
+            dueHint.textContent = '错题巩固（不计答对率）';
         } else if (word.task_calibration === 'legacy') {
             dueHint.hidden = false;
             dueHint.className = 'review-due-hint review-due-hint-scheduled';
@@ -7160,7 +7377,7 @@ async function submitAnswerRequest() {
                     bonus_practice: reviewSessionMode === 'bonus',
                     bonus_session_id:
                         reviewSessionMode === 'bonus' ? String(word.bonus_session_id || '') : '',
-                    test_inflection: getReviewTestInflectionEnabled(),
+                    test_inflection: wrongRoundNumber === 0 && getReviewTestInflectionEnabled(),
                     task_id: word.task_id || '',
                     task_item_id: word.task_item_id || '',
                     exercise_type: activeExerciseType,
@@ -7200,7 +7417,9 @@ async function submitAnswerRequest() {
 
         if (result.task_progress) updateTodayTaskProgress(result.task_progress);
 
-        if (result.recorded !== false || isSubmissionRetry || result.replayed === true) {
+        const countedResponse = result.recorded !== false || isSubmissionRetry || result.replayed === true;
+        const isWrongReviewAttempt = wrongRoundNumber > 0 || result.remedial === true;
+        if (countedResponse && !isWrongReviewAttempt) {
             const exerciseType = result.exercise_type || word.exercise_type || 'spelling';
             const typeStats = sessionExerciseStats[exerciseType] || { attempts: 0, correct: 0 };
             typeStats.attempts += 1;
@@ -7208,11 +7427,11 @@ async function submitAnswerRequest() {
             sessionExerciseStats[exerciseType] = typeStats;
         }
 
-        if (result.recorded !== false || isSubmissionRetry || result.replayed === true) {
+        if (countedResponse) {
             if (!result.correct) {
-                sessionTotalWrongAttempts += 1;
+                if (!isWrongReviewAttempt) sessionTotalWrongAttempts += 1;
             } else {
-                if (!result.remedial) {
+                if (!isWrongReviewAttempt) {
                     sessionMainCorrect += 1;
                 } else {
                     sessionRemedialCorrect += 1;
@@ -10009,6 +10228,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('review-section-continue')?.addEventListener('click', () => {
         continueReviewSection();
     });
+    document.getElementById('review-section-wrong-now')?.addEventListener('click', () => {
+        startImmediateWrongReview();
+    });
     document.getElementById('review-section-progress')?.addEventListener('click', () => {
         showSection('progress');
     });
@@ -10075,6 +10297,10 @@ document.addEventListener('DOMContentLoaded', function() {
         radio.addEventListener('change', () => {
             applyWrongOrderToRemaining();
         });
+    });
+
+    document.getElementById('wrong-words-review-now')?.addEventListener('click', () => {
+        startImmediateWrongReview();
     });
 
     document.getElementById('remedial-offer-accept')?.addEventListener('click', onRemedialOfferAccept);

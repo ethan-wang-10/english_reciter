@@ -1406,6 +1406,19 @@ body {
     padding: 16px 8px;
 }
 
+.wrong-words-review-now {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.wrong-words-review-now:disabled,
+#review-section-wrong-now:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    box-shadow: none;
+    transform: none;
+}
+
 @media (max-width: 900px) {
     .review-layout {
         grid-template-columns: 1fr;
@@ -2447,6 +2460,14 @@ body {
 
 .new-word-study .btn-primary {
     justify-self: start;
+}
+
+.new-word-study.is-remedial {
+    border-left-color: var(--error-color);
+}
+
+.new-word-study.is-remedial .new-word-study-kicker {
+    color: var(--error-dark);
 }
 
 .semantic-question-prompt {
