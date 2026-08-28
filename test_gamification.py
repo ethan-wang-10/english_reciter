@@ -52,17 +52,18 @@ class TestMonthlyGoalEditLock(unittest.TestCase):
     def test_second_edit_same_month_raises(self):
         with temp_data_dir() as d:
             u = "tuser"
+            goal = gm.days_inclusive_today_through_month_end(china_today())
             gm.patch_settings(
                 d,
                 u,
-                monthly_checkin_goal=10,
+                monthly_checkin_goal=goal,
                 clear_monthly_goal=False,
             )
             with self.assertRaises(ValueError) as ctx:
                 gm.patch_settings(
                     d,
                     u,
-                    monthly_checkin_goal=12,
+                    monthly_checkin_goal=goal + 1,
                     clear_monthly_goal=False,
                 )
             self.assertIn("本月已修改过", str(ctx.exception))
@@ -70,10 +71,11 @@ class TestMonthlyGoalEditLock(unittest.TestCase):
     def test_idempotent_same_value_ok(self):
         with temp_data_dir() as d:
             u = "tuser2"
-            gm.patch_settings(d, u, monthly_checkin_goal=8, clear_monthly_goal=False)
-            gm.patch_settings(d, u, monthly_checkin_goal=8, clear_monthly_goal=False)
+            goal = gm.days_inclusive_today_through_month_end(china_today())
+            gm.patch_settings(d, u, monthly_checkin_goal=goal, clear_monthly_goal=False)
+            gm.patch_settings(d, u, monthly_checkin_goal=goal, clear_monthly_goal=False)
             st = gm.load_state(d, u)
-            self.assertEqual(st.get("mcheckin_goal"), 8)
+            self.assertEqual(st.get("mcheckin_goal"), goal)
 
     def test_days_inclusive_last_day_of_month(self):
         n = gm.days_inclusive_today_through_month_end(date(2026, 3, 31))

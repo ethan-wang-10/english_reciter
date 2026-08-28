@@ -12,10 +12,14 @@ import uuid
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 from datetime import date, timedelta
+from time import perf_counter
 from pathlib import Path
 from prettytable import PrettyTable
 import readchar
 import logging
+from logging.handlers import RotatingFileHandler
+
+from learning_sqlite_store import LearningSQLiteStore, LearningStoreLoadError
 
 from app_time import china_date_from_timestamp, china_now, china_today
 from review_scheduler import (
@@ -166,6 +170,14 @@ def exercise_attempt_limit(exercise_type: str) -> int:
     return MAX_ATTEMPTS
 
 
+def _positive_env_int(name: str, default: int) -> int:
+    try:
+        value = int(str(os.getenv(name, '')).strip())
+    except (TypeError, ValueError):
+        value = default
+    return max(1, value)
+
+
 def get_logger(name: str = __name__) -> logging.Logger:
     """获取日志记录器（单例模式）"""
     logger = logging.getLogger(name)
@@ -174,7 +186,12 @@ def get_logger(name: str = __name__) -> logging.Logger:
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         
         # 文件处理器
-        file_handler = logging.FileHandler('reciter.log', encoding='utf-8')
+        file_handler = RotatingFileHandler(
+            'reciter.log',
+            maxBytes=max(1024 * 1024, _positive_env_int('RECITER_LOG_MAX_BYTES', 10 * 1024 * 1024)),
+            backupCount=_positive_env_int('RECITER_LOG_BACKUP_COUNT', 5),
+            encoding='utf-8',
+        )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
         
@@ -219,6 +236,7 @@ class Config:
             "log_level": "INFO",
             "piper_model": "",
             "piper_binary": "",
+            "learning_db_file": "",
         }
         
         if os.path.exists(self.config_file):
@@ -254,6 +272,7 @@ class Config:
 
         self.PIPER_MODEL = (default_config.get("piper_model") or "").strip()
         self.PIPER_BINARY = (default_config.get("piper_binary") or "").strip()
+        self.LEARNING_DB_FILE = (default_config.get("learning_db_file") or "").strip()
 
 
 class ExampleGenerator:
@@ -430,11 +449,26 @@ class WordRepository:
     
     def __init__(self, config: Config):
         self.config = config
+        self._learning_sqlite_store: Optional[LearningSQLiteStore] = None
+        self.last_load_ms = 0.0
+        self.last_save_ms = 0.0
+        self.save_count = 0
         self.learning_state_v2: Dict[str, Any] = {
             'version': 1,
             'review_states': {},
             'daily_task': None,
         }
+
+    def _sqlite_store(self) -> Optional[LearningSQLiteStore]:
+        db_file = str(getattr(self.config, 'LEARNING_DB_FILE', '') or '').strip()
+        if not db_file:
+            return None
+        if (
+            self._learning_sqlite_store is None
+            or self._learning_sqlite_store.db_path != Path(db_file)
+        ):
+            self._learning_sqlite_store = LearningSQLiteStore(db_file, self.config.DATA_FILE)
+        return self._learning_sqlite_store
 
     def _learning_state_sidecar_path(self) -> Path:
         data_path = Path(self.config.DATA_FILE)
@@ -475,6 +509,27 @@ class WordRepository:
         Returns:
             (all_words, mastered_words)
         """
+        sqlite_store = self._sqlite_store()
+        if sqlite_store is not None:
+            started = perf_counter()
+            try:
+                pending_rows, mastered_rows, state = sqlite_store.load()
+                self._set_learning_state(state)
+                return (
+                    [Word.from_dict(row) for row in pending_rows],
+                    [Word.from_dict(row) for row in mastered_rows],
+                )
+            except LearningStoreLoadError as exc:
+                logger.error("SQLite 学习数据迁移失败: %s", exc)
+                raise LearningDataLoadError(
+                    f'学习数据无法安全迁移，已拒绝覆盖原文件: {exc}'
+                ) from exc
+            except (OSError, ValueError) as exc:
+                logger.error("SQLite 学习数据读取失败: %s", exc)
+                raise LearningDataLoadError(f'学习数据暂时无法读取: {exc}') from exc
+            finally:
+                self.last_load_ms = round((perf_counter() - started) * 1000, 1)
+
         data_path = Path(self.config.DATA_FILE)
         try:
             if data_path.is_file() and data_path.stat().st_size == 0:
@@ -569,6 +624,19 @@ class WordRepository:
                 if learning_state_v2 is not None
                 else self.learning_state_v2
             )
+            sqlite_store = self._sqlite_store()
+            if sqlite_store is not None:
+                started = perf_counter()
+                sqlite_store.save(
+                    (w.to_dict() for w in all_words),
+                    (w.to_dict() for w in mastered_words),
+                    state_to_save,
+                )
+                self._set_learning_state(state_to_save)
+                self.last_save_ms = round((perf_counter() - started) * 1000, 1)
+                self.save_count += 1
+                logger.debug("SQLite 数据保存成功")
+                return
             data = {
                 'all_words': [w.to_dict() for w in all_words],
                 'mastered_words': [w.to_dict() for w in mastered_words],
@@ -594,6 +662,17 @@ class WordRepository:
         
         try:
             now = china_now()
+            sqlite_store = self._sqlite_store()
+            if sqlite_store is not None:
+                backup_dir = sqlite_store.db_path.parent / "backups"
+                backup_dir.mkdir(exist_ok=True)
+                timestamp = now.strftime("%Y%m%d_%H%M%S")
+                backup_file = backup_dir / f"learning_data_backup_{timestamp}.sqlite3"
+                sqlite_store.backup_to(backup_file)
+                self._cleanup_old_backups(backup_dir, suffix='.sqlite3')
+                logger.info("SQLite 数据备份成功: %s", backup_file)
+                return str(backup_file)
+
             backup_dir = Path("backups")
             backup_dir.mkdir(exist_ok=True)
             
@@ -616,11 +695,11 @@ class WordRepository:
             logger.error(f"备份数据失败: {e}")
             return None
     
-    def _cleanup_old_backups(self, backup_dir: Path) -> None:
+    def _cleanup_old_backups(self, backup_dir: Path, *, suffix: str = '.json') -> None:
         """清理旧备份文件"""
         try:
             backups = sorted(
-                backup_dir.glob("learning_data_backup_*.json"),
+                backup_dir.glob(f"learning_data_backup_*{suffix}"),
                 key=lambda x: x.stat().st_mtime,
                 reverse=True
             )
@@ -660,9 +739,13 @@ class WordReciter:
         if not self.config.BACKUP_ENABLED:
             return
         
-        backup_dir = Path("backups")
+        db_file = str(getattr(self.config, 'LEARNING_DB_FILE', '') or '').strip()
+        backup_dir = Path(db_file).parent / "backups" if db_file else Path("backups")
+        backup_pattern = (
+            "learning_data_backup_*.sqlite3" if db_file else "learning_data_backup_*.json"
+        )
         if backup_dir.exists():
-            backups = list(backup_dir.glob("learning_data_backup_*.json"))
+            backups = list(backup_dir.glob(backup_pattern))
             if backups:
                 latest_backup = max(backups, key=lambda x: x.stat().st_mtime)
                 last_backup_date = china_date_from_timestamp(latest_backup.stat().st_mtime)

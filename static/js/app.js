@@ -9343,11 +9343,15 @@ async function importFromArticle() {
             const at = sessionStorage.getItem('adminToken');
             if (at) extraHeaders['X-Admin-Token'] = at;
         }
-        const data = await apiRequest('/words/import-from-article', {
+        let data = await apiRequest('/words/import-from-article', {
             method: 'POST',
             body: JSON.stringify(body),
             headers: extraHeaders,
         });
+        if (data.job_id) {
+            if (btnA) btnA.textContent = '后台提取中…';
+            data = await waitForVocabImportJob(data.job_id);
+        }
 
         const words = Array.isArray(data.words) ? data.words : [];
 
@@ -9502,6 +9506,19 @@ function initImportVocabTextareaNormalize() {
     });
 }
 
+async function waitForVocabImportJob(jobId) {
+    const deadline = Date.now() + (15 * 60 * 1000);
+    while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        const job = await apiRequest(`/wordbank/import-jobs/${encodeURIComponent(jobId)}`);
+        if (job.status === 'succeeded' && job.result) return job.result;
+        if (job.status === 'failed') {
+            throw new Error(job.error || '后台导入失败');
+        }
+    }
+    throw new Error('后台导入仍在进行，请稍后重试');
+}
+
 async function importVocabToCSV() {
     if (importVocabBusy) return;
     if (userPlan !== 'paid') {
@@ -9528,10 +9545,14 @@ async function importVocabToCSV() {
         btn.textContent = '处理中…';
     }
     try {
-        const data = await apiRequest('/wordbank/csv/import-words', {
+        let data = await apiRequest('/wordbank/csv/import-words', {
             method: 'POST',
             body: JSON.stringify({ words: wordsPayload, level, also_add_to_queue: alsoAddToQueue })
         });
+        if (data.job_id) {
+            if (btn) btn.textContent = '后台处理中…';
+            data = await waitForVocabImportJob(data.job_id);
+        }
         if (Number(data.queue_result?.added) > 0) invalidateReviewDataAfterImport();
         openImportResultModal({
             variant: 'text',

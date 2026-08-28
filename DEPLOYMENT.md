@@ -146,22 +146,18 @@ EOF
 docker-compose up -d
 ```
 
-#### 5. 配置 Nginx 反向代理（可选）
+#### 5. 配置 Nginx 反向代理与静态资源
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+```bash
+sudo cp deploy/nginx/00-english-reciter-log-format.conf /etc/nginx/conf.d/
+sudo cp deploy/nginx/english-reciter.conf /etc/nginx/conf.d/
+sudo nginx -t
+sudo systemctl reload nginx
 ```
+
+模板让 Nginx 直接提供 `/static/`、启用 gzip 和一年 immutable 缓存，并以 JSON 记录
+`request_time`、`upstream_response_time`、请求 ID 和应用耗时。部署到不同域名或目录时，
+先修改模板中的 `server_name`、证书路径和 `/data/english_reciter`。
 
 ### 方案二：使用 CloudBase（腾讯云无服务器）
 
@@ -279,6 +275,11 @@ kubectl apply -f deployment.yaml
 | SMTP_TIMEOUT | SMTP 连接超时秒数 | 15 | 否 |
 | PASSWORD_RESET_TTL_MINUTES | 密码重置链接有效分钟数（1–1440） | 30 | 否 |
 | PASSWORD_RESET_COOLDOWN_SECONDS | 同一账号再次发送重置邮件的冷却秒数（0–86400，0 为关闭） | 60 | 否 |
+| IMPORT_JOBS_ASYNC | VIP 词汇导入使用持久后台任务 | true | 否 |
+| RECITER_CACHE_MAX_USERS | 单 worker 背诵器 LRU 最大用户数 | 24 | 否 |
+| RECITER_CACHE_TTL_SECONDS | 背诵器缓存空闲过期秒数 | 1800 | 否 |
+| PERF_RETENTION_DAYS | 性能 JSONL 保留天数 | 30 | 否 |
+| PIPER_CACHE_MAX_BYTES | Piper WAV 缓存容量上限 | 536870912 | 否 |
 
 ### 端口配置
 
@@ -292,8 +293,11 @@ kubectl apply -f deployment.yaml
 user_data_simple/
 ├── users.json              # 用户数据
 ├── username1/              # 用户1的数据
-│   ├── learning_data.json  # 学习进度
+│   ├── learning_data.json  # 旧进度迁移源（迁移后保留，不再逐请求重写）
+│   ├── learning.sqlite3    # Web 学习进度（SQLite WAL）
 │   └── word_examples.json  # 例句库
+├── _shared/import_jobs.sqlite3       # 持久导入任务
+└── _shared/gaokao_questions_v2.sqlite3 # 高考题增量存储
 └── username2/              # 用户2的数据
     └── ...
 ```

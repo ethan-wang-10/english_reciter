@@ -12,6 +12,7 @@ def worker_exit(server, worker) -> None:  # noqa: ARG001
         import simple_web_app
 
         simple_web_app.stop_gaokao_auto_backfill_scheduler()
+        simple_web_app.stop_import_job_runner()
     except Exception:
         pass
     try:
@@ -33,3 +34,4 @@ def post_worker_init(worker) -> None:  # noqa: ARG001
     import simple_web_app
 
     simple_web_app.start_gaokao_auto_backfill_scheduler()
+    simple_web_app.start_import_job_runner()

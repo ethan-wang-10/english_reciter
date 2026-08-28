@@ -28,6 +28,7 @@ PERFORMANCE_LOG_SUFFIX = ".jsonl"
 PERFORMANCE_SHARE_MAX_TTL_SEC = 24 * 60 * 60
 
 _WRITE_LOCK = threading.Lock()
+_LAST_CLEANUP_DATE = None
 _LOG_NAME_RE = re.compile(r"^perf-\d{4}-\d{2}-\d{2}\.jsonl$")
 _REDACT_KEY_RE = re.compile(r"(password|passwd|pwd|token|secret|authorization|cookie|answer)", re.IGNORECASE)
 _REDACT_EXACT_KEYS = {
@@ -162,6 +163,47 @@ def performance_log_path(data_dir: Path | str) -> Path:
     return performance_log_dir(data_dir) / f"{PERFORMANCE_LOG_PREFIX}{china_today().isoformat()}{PERFORMANCE_LOG_SUFFIX}"
 
 
+def cleanup_performance_logs(data_dir: Path | str, retention_days: int | None = None) -> int:
+    """Remove only recognized daily telemetry files outside the retention window."""
+    days = retention_days
+    if days is None:
+        days = env_int("PERF_RETENTION_DAYS", 30, min_value=7, max_value=365)
+    cutoff = china_today().toordinal() - max(1, int(days))
+    directory = performance_log_dir(data_dir)
+    if not directory.is_dir():
+        return 0
+    removed = 0
+    for path in directory.iterdir():
+        if not path.is_file() or not is_valid_performance_log_name(path.name):
+            continue
+        try:
+            day_text = path.name[len(PERFORMANCE_LOG_PREFIX):-len(PERFORMANCE_LOG_SUFFIX)]
+            log_day = datetime.strptime(day_text, "%Y-%m-%d").date()
+            if log_day.toordinal() < cutoff:
+                path.unlink()
+                removed += 1
+        except (OSError, ValueError):
+            continue
+    return removed
+
+
+def cleanup_stale_question_temp_files(data_dir: Path | str, min_age_seconds: int = 86400) -> int:
+    """Clean legacy Gaokao atomic-write leftovers without touching bank data."""
+    shared = Path(data_dir) / "_shared"
+    if not shared.is_dir():
+        return 0
+    now = datetime.now().timestamp()
+    removed = 0
+    for path in shared.glob(".gaokao_questions_v2.json.*.tmp"):
+        try:
+            if path.is_file() and now - path.stat().st_mtime >= max(3600, min_age_seconds):
+                path.unlink()
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def is_valid_performance_log_name(name: str) -> bool:
     return bool(_LOG_NAME_RE.fullmatch(name or ""))
 
@@ -255,6 +297,7 @@ def sanitize_value(value: Any, *, depth: int = 0, max_depth: int = 5) -> Any:
 
 
 def write_performance_events(data_dir: Path | str, events: Iterable[Dict[str, Any]]) -> int:
+    global _LAST_CLEANUP_DATE
     clean_events = [sanitize_value(ev) for ev in events if isinstance(ev, dict)]
     if not clean_events:
         return 0
@@ -263,6 +306,11 @@ def write_performance_events(data_dir: Path | str, events: Iterable[Dict[str, An
     path.parent.mkdir(parents=True, exist_ok=True)
     with _WRITE_LOCK:
         with _interprocess_file_lock(path.parent / ".performance.lock"):
+            today = china_today()
+            if _LAST_CLEANUP_DATE != today:
+                cleanup_performance_logs(data_dir)
+                cleanup_stale_question_temp_files(data_dir)
+                _LAST_CLEANUP_DATE = today
             with open(path, "a", encoding="utf-8") as f:
                 for ev in clean_events:
                     row = {

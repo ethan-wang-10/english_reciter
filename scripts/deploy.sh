@@ -420,7 +420,8 @@ smoke_check() {
     run "$py" -m py_compile \
       simple_web_app.py reciter.py user_store.py auth_session_store.py wordbank_v2.py \
       gamification.py challenges.py leaderboard_periods.py chat_room.py performance_store.py \
-      app_time.py project_paths.py tts_piper.py
+      app_time.py project_paths.py tts_piper.py learning_sqlite_store.py \
+      question_sqlite_store.py import_job_store.py gaokao_questions.py gaokao_backfill.py
   elif [ "$MODE" = "docker" ]; then
     warn "Python not available on host; Docker build will validate Python dependencies"
   else
@@ -445,7 +446,9 @@ restart_pm2() {
   have pm2 || die "pm2 not found; install PM2 or use --mode native/docker"
   [ -f ecosystem.config.cjs ] || die "ecosystem.config.cjs not found"
   if pm2 describe english-reciter >/dev/null 2>&1; then
-    run pm2 reload english-reciter --update-env
+    # Reload from the ecosystem file so script args (including gunicorn -c)
+    # are updated as well as environment variables.
+    run pm2 reload ecosystem.config.cjs --only english-reciter --update-env
   else
     run pm2 start ecosystem.config.cjs --update-env
   fi

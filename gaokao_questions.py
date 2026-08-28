@@ -15,6 +15,8 @@ from itertools import combinations
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from question_sqlite_store import QuestionSQLiteStore
+
 
 BANK_SCHEMA = "gaokao-question-bank-v2"
 BANK_VERSION = 2
@@ -38,6 +40,21 @@ QUESTION_BANK_LOCK_FILE = DATA_DIR / "_shared" / ".gaokao_questions.lock"
 _thread_lock = threading.Lock()
 _cache: Optional[dict] = None
 _cache_mtime_ns = -1
+_store_lock = threading.Lock()
+_store_cache: Optional[QuestionSQLiteStore] = None
+_store_cache_path: Optional[Path] = None
+
+
+def _question_store() -> QuestionSQLiteStore:
+    global _store_cache, _store_cache_path
+    # Derived on every call because tests and maintenance scripts replace the
+    # JSON path to operate on isolated banks.
+    path = Path(QUESTION_BANK_FILE)
+    with _store_lock:
+        if _store_cache is None or _store_cache_path != path:
+            _store_cache = QuestionSQLiteStore(path, empty_bank=empty_bank)
+            _store_cache_path = path
+        return _store_cache
 
 
 def normalize_word(value: Any) -> str:
@@ -110,21 +127,27 @@ def _normalize_bank(raw: Any) -> dict:
 
 
 def _read_bank_unlocked() -> dict:
-    if not QUESTION_BANK_FILE.is_file():
-        return empty_bank()
-    try:
-        with QUESTION_BANK_FILE.open("r", encoding="utf-8") as f:
-            return _normalize_bank(json.load(f))
-    except (OSError, json.JSONDecodeError):
-        return empty_bank()
+    return _normalize_bank(_question_store().load_all())
+
+
+def _mutation_keys(*mappings: Dict[str, Any]) -> List[str]:
+    return sorted({normalize_word(key) for mapping in mappings for key in mapping if normalize_word(key)})
+
+
+def _read_bank_keys_unlocked(keys: Iterable[str]) -> dict:
+    return _normalize_bank(_question_store().load_keys(keys))
+
+
+def _write_bank_keys_unlocked(bank: dict, keys: Iterable[str]) -> None:
+    global _cache, _cache_mtime_ns
+    _question_store().save_keys(keys, bank)
+    _cache = None
+    _cache_mtime_ns = -1
 
 
 def load_bank() -> dict:
     global _cache, _cache_mtime_ns
-    try:
-        mtime_ns = QUESTION_BANK_FILE.stat().st_mtime_ns
-    except OSError:
-        mtime_ns = 0
+    mtime_ns = _question_store().revision()
     with _thread_lock:
         if _cache is not None and _cache_mtime_ns == mtime_ns:
             return _cache
@@ -137,30 +160,12 @@ def load_bank() -> dict:
 
 def _write_bank_unlocked(bank: dict) -> None:
     global _cache, _cache_mtime_ns
-    QUESTION_BANK_FILE.parent.mkdir(parents=True, exist_ok=True)
     bank["schema"] = BANK_SCHEMA
     bank["version"] = BANK_VERSION
     bank["updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-    fd, tmp_name = tempfile.mkstemp(
-        prefix=f".{QUESTION_BANK_FILE.name}.",
-        suffix=".tmp",
-        dir=str(QUESTION_BANK_FILE.parent),
-        text=True,
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(bank, f, ensure_ascii=False, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_name, QUESTION_BANK_FILE)
-    except Exception:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
+    _question_store().replace_all(bank)
     _cache = bank
-    _cache_mtime_ns = QUESTION_BANK_FILE.stat().st_mtime_ns
+    _cache_mtime_ns = _question_store().revision()
 
 
 def _replace_target_once(sentence: str, answer: str) -> Optional[str]:
@@ -1347,8 +1352,12 @@ def has_current_prompt_questions(
     bank: Optional[dict] = None,
     source_hash: str = "",
 ) -> bool:
-    data = bank or load_bank()
-    row = data.get("questions", {}).get(normalize_word(word_key))
+    normalized = normalize_word(word_key)
+    row = (
+        bank.get("questions", {}).get(normalized)
+        if bank is not None
+        else _question_store().get("questions", normalized)
+    )
     return bool(
         _is_approved_record(row, source_hash)
         and row.get("generation_prompt_version") == GENERATION_PROMPT_VERSION
@@ -1362,13 +1371,17 @@ def has_complete_questions(
     bank: Optional[dict] = None,
     source_hash: str = "",
 ) -> bool:
-    data = bank or load_bank()
-    row = data.get("questions", {}).get(normalize_word(word_key))
+    normalized = normalize_word(word_key)
+    row = (
+        bank.get("questions", {}).get(normalized)
+        if bank is not None
+        else _question_store().get("questions", normalized)
+    )
     return _is_approved_record(row, source_hash)
 
 
 def approved_question_count(bank: Optional[dict] = None) -> int:
-    data = bank or load_bank()
+    data = bank if bank is not None else {"questions": _question_store().load_namespace("questions")}
     return sum(
         1
         for row in data.get("questions", {}).values()
@@ -1381,9 +1394,11 @@ def has_pending_candidate(
     bank: Optional[dict] = None,
     source_hash: str = "",
 ) -> bool:
-    data = bank or load_bank()
+    normalized = normalize_word(word_key)
     pool = _candidate_pool(
-        data.get("candidates", {}).get(normalize_word(word_key))
+        bank.get("candidates", {}).get(normalized)
+        if bank is not None
+        else _question_store().get("candidates", normalized)
     )
     row = pool.get("record") if pool else None
     return bool(
@@ -1395,12 +1410,15 @@ def has_pending_candidate(
 
 
 def missing_sources(sources: Iterable[dict], force: bool = False) -> List[dict]:
-    bank = load_bank()
+    source_rows = [source for source in sources if source]
+    keys = [normalize_word(source.get("english")) for source in source_rows]
+    bank = empty_bank()
+    bank["questions"] = _question_store().get_many("questions", keys)
+    bank["candidates"] = _question_store().get_many("candidates", keys)
     return [
         source
-        for source in sources
-        if source
-        and (
+        for source in source_rows
+        if (
             force
             or not (
                 has_complete_questions(
@@ -1420,12 +1438,14 @@ def missing_sources(sources: Iterable[dict], force: bool = False) -> List[dict]:
 
 def sources_needing_prompt_refresh(sources: Iterable[dict]) -> List[dict]:
     """Return sources not yet published by the current generation and audit gate."""
-    bank = load_bank()
+    source_rows = [source for source in sources if source]
+    keys = [normalize_word(source.get("english")) for source in source_rows]
+    bank = empty_bank()
+    bank["questions"] = _question_store().get_many("questions", keys)
     return [
         source
-        for source in sources
-        if source
-        and not has_current_prompt_questions(
+        for source in source_rows
+        if not has_current_prompt_questions(
             source["english"],
             bank,
             str(source.get("source_hash") or ""),
@@ -1443,7 +1463,7 @@ def pending_candidate_records(
         else None
     )
     records: Dict[str, dict] = {}
-    for key, value in sorted(load_bank().get("candidates", {}).items()):
+    for key, value in _question_store().load_namespace("candidates").items():
         if allowed is not None and key not in allowed:
             continue
         record = _candidate_record(value)
@@ -1468,7 +1488,7 @@ def pending_candidate_pools(
         else None
     )
     pools: Dict[str, dict] = {}
-    for key, value in sorted(load_bank().get("candidates", {}).items()):
+    for key, value in _question_store().load_namespace("candidates").items():
         if allowed is not None and key not in allowed:
             continue
         pool = _candidate_pool(value)
@@ -1485,10 +1505,15 @@ def pending_candidate_pools(
     return pools
 
 
+def failure_records() -> Dict[str, dict]:
+    return _question_store().load_namespace("failures")
+
+
 def persist_candidate_result(records: Dict[str, dict], errors: Dict[str, str]) -> None:
+    mutation_keys = _mutation_keys(records, errors)
     with _thread_lock:
         with _interprocess_lock():
-            bank = _read_bank_unlocked()
+            bank = _read_bank_keys_unlocked(mutation_keys)
             candidates = bank.setdefault("candidates", {})
             failures = bank.setdefault("failures", {})
             now = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -1518,16 +1543,17 @@ def persist_candidate_result(records: Dict[str, dict], errors: Dict[str, str]) -
                     "last_attempt_at": now,
                     "last_error": str(error or "generation failed")[:500],
                 }
-            _write_bank_unlocked(bank)
+            _write_bank_keys_unlocked(bank, mutation_keys)
 
 
 def persist_candidate_pool_result(
     pools: Dict[str, dict],
     errors: Dict[str, str],
 ) -> None:
+    mutation_keys = _mutation_keys(pools, errors)
     with _thread_lock:
         with _interprocess_lock():
-            bank = _read_bank_unlocked()
+            bank = _read_bank_keys_unlocked(mutation_keys)
             candidates = bank.setdefault("candidates", {})
             failures = bank.setdefault("failures", {})
             now = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -1562,7 +1588,7 @@ def persist_candidate_pool_result(
                     "last_error": str(error or "generation failed")[:500],
                     "auto_retry_pipeline_version": AUTO_RETRY_PIPELINE_VERSION,
                 }
-            _write_bank_unlocked(bank)
+            _write_bank_keys_unlocked(bank, mutation_keys)
 
 
 def generate_candidates_and_persist(
@@ -1591,9 +1617,10 @@ def persist_audit_result(
     rejected: Dict[str, str],
     retry_errors: Dict[str, str],
 ) -> None:
+    mutation_keys = _mutation_keys(approved, rejected, retry_errors)
     with _thread_lock:
         with _interprocess_lock():
-            bank = _read_bank_unlocked()
+            bank = _read_bank_keys_unlocked(mutation_keys)
             questions = bank.setdefault("questions", {})
             candidates = bank.setdefault("candidates", {})
             rejections = bank.setdefault("rejections", {})
@@ -1650,7 +1677,7 @@ def persist_audit_result(
                 current["audit_attempts"] = int(current.get("audit_attempts") or 0) + 1
                 current["last_audit_at"] = now
                 current["last_audit_error"] = str(error or "semantic audit failed")[:500]
-            _write_bank_unlocked(bank)
+            _write_bank_keys_unlocked(bank, mutation_keys)
 
 
 def persist_candidate_pool_audit_result(
@@ -1661,9 +1688,10 @@ def persist_candidate_pool_audit_result(
     expected_pools: Optional[Dict[str, dict]] = None,
 ) -> None:
     """Atomically publish approved pool selections and queue rejected words."""
+    mutation_keys = _mutation_keys(approved, rejected, retry_errors)
     with _thread_lock:
         with _interprocess_lock():
-            bank = _read_bank_unlocked()
+            bank = _read_bank_keys_unlocked(mutation_keys)
             questions = bank.setdefault("questions", {})
             candidates = bank.setdefault("candidates", {})
             rejections = bank.setdefault("rejections", {})
@@ -1744,7 +1772,7 @@ def persist_candidate_pool_audit_result(
                 current["audit_attempts"] = int(current.get("audit_attempts") or 0) + 1
                 current["last_audit_at"] = now
                 current["last_audit_error"] = str(error or "semantic pool audit failed")[:500]
-            _write_bank_unlocked(bank)
+            _write_bank_keys_unlocked(bank, mutation_keys)
 
 
 def audit_candidate_pools_and_persist(
@@ -1798,9 +1826,10 @@ def audit_candidates_and_persist(chat: ChatFunction, *, limit: int = 0) -> dict:
 
 
 def persist_generation_result(records: Dict[str, dict], errors: Dict[str, str]) -> None:
+    mutation_keys = _mutation_keys(records, errors)
     with _thread_lock:
         with _interprocess_lock():
-            bank = _read_bank_unlocked()
+            bank = _read_bank_keys_unlocked(mutation_keys)
             questions = bank.setdefault("questions", {})
             failures = bank.setdefault("failures", {})
             for key, record in records.items():
@@ -1817,7 +1846,7 @@ def persist_generation_result(records: Dict[str, dict], errors: Dict[str, str]) 
                     "last_attempt_at": now,
                     "last_error": str(error or "generation failed")[:500],
                 }
-            _write_bank_unlocked(bank)
+            _write_bank_keys_unlocked(bank, mutation_keys)
 
 
 def generate_audited_and_persist(
@@ -1907,9 +1936,10 @@ def generate_audited_and_persist(
 
 def persist_prompt_checked_result(records: Dict[str, dict], errors: Dict[str, str]) -> None:
     """Publish locally valid records generated by the current self-check prompt."""
+    mutation_keys = _mutation_keys(records, errors)
     with _thread_lock:
         with _interprocess_lock():
-            bank = _read_bank_unlocked()
+            bank = _read_bank_keys_unlocked(mutation_keys)
             questions = bank.setdefault("questions", {})
             candidates = bank.setdefault("candidates", {})
             rejections = bank.setdefault("rejections", {})
@@ -1936,7 +1966,7 @@ def persist_prompt_checked_result(records: Dict[str, dict], errors: Dict[str, st
                     "last_attempt_at": now,
                     "last_error": str(error or "generation failed")[:500],
                 }
-            _write_bank_unlocked(bank)
+            _write_bank_keys_unlocked(bank, mutation_keys)
 
 
 def generate_prompt_checked_and_persist(
@@ -1984,7 +2014,7 @@ def generate_and_persist(
 def get_question(word_key: str, question_type: str) -> Optional[dict]:
     if question_type not in QUESTION_TYPES:
         return None
-    row = load_bank().get("questions", {}).get(normalize_word(word_key))
+    row = _question_store().get("questions", normalize_word(word_key))
     if not _is_approved_record(row):
         return None
     question = row.get(question_type) if isinstance(row, dict) else None
@@ -1995,14 +2025,11 @@ def get_question_by_id(question_id: str) -> Optional[dict]:
     target = str(question_id or "").strip()
     if not target:
         return None
-    for row in load_bank().get("questions", {}).values():
-        if not _is_approved_record(row):
-            continue
-        for question_type in QUESTION_TYPES:
-            question = row.get(question_type)
-            if isinstance(question, dict) and question.get("question_id") == target:
-                return question
-    return None
+    found = _question_store().get_question_by_id(target)
+    if not found:
+        return None
+    question, record = found
+    return question if _is_approved_record(record) else None
 
 
 def public_question(question: Optional[dict]) -> Optional[dict]:

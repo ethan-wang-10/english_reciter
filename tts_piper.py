@@ -9,15 +9,123 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Generator, Optional
 
 logger = logging.getLogger(__name__)
+
+_cache_locks_guard = threading.Lock()
+_cache_locks: Dict[str, tuple[threading.Lock, int]] = {}
+_cache_cleanup_lock = threading.Lock()
+_last_cache_cleanup = 0.0
+_result_local = threading.local()
+
+
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(str(os.getenv(name, '')).strip())
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+def _cache_directory() -> Path:
+    raw = os.getenv('PIPER_CACHE_DIR', '').strip()
+    if raw:
+        return Path(raw).expanduser()
+    data_dir = Path(os.getenv('ENGLISH_RECITER_DATA_DIR', 'user_data_simple')).expanduser()
+    return data_dir / '_shared' / 'tts_cache'
+
+
+def _model_identity(model_path: Path, binary: str) -> str:
+    parts = [str(model_path.resolve()), str(binary)]
+    for path in (model_path, model_path.with_suffix(model_path.suffix + '.json')):
+        try:
+            stat = path.stat()
+            parts.extend((str(stat.st_size), str(stat.st_mtime_ns)))
+        except OSError:
+            parts.extend(('0', '0'))
+    return '|'.join(parts)
+
+
+def _cache_key(model_path: Path, binary: str, text: str) -> str:
+    normalized = ' '.join(str(text or '').split())
+    source = f"{_model_identity(model_path, binary)}\0{normalized}".encode('utf-8')
+    return hashlib.sha256(source).hexdigest()
+
+
+@contextmanager
+def _key_lock(key: str) -> Generator[None, None, None]:
+    with _cache_locks_guard:
+        lock, refs = _cache_locks.get(key, (threading.Lock(), 0))
+        _cache_locks[key] = (lock, refs + 1)
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
+        with _cache_locks_guard:
+            current = _cache_locks.get(key)
+            if current and current[0] is lock:
+                if current[1] <= 1:
+                    _cache_locks.pop(key, None)
+                else:
+                    _cache_locks[key] = (lock, current[1] - 1)
+
+
+def _cleanup_cache(directory: Path, *, force: bool = False) -> None:
+    global _last_cache_cleanup
+    now = time.time()
+    if not force and now - _last_cache_cleanup < 300:
+        return
+    if not _cache_cleanup_lock.acquire(blocking=False):
+        return
+    try:
+        _last_cache_cleanup = now
+        if not directory.is_dir():
+            return
+        max_age = _env_int('PIPER_CACHE_MAX_AGE_DAYS', 30, 1, 365) * 86400
+        max_files = _env_int('PIPER_CACHE_MAX_FILES', 2000, 10, 50000)
+        max_bytes = _env_int(
+            'PIPER_CACHE_MAX_BYTES', 512 * 1024 * 1024, 1024 * 1024, 10 * 1024 * 1024 * 1024
+        )
+        rows = []
+        for path in directory.glob('*.wav'):
+            try:
+                stat = path.stat()
+                if now - stat.st_mtime > max_age:
+                    path.unlink(missing_ok=True)
+                    continue
+                rows.append((stat.st_mtime, stat.st_size, path))
+            except OSError:
+                continue
+        rows.sort()
+        total = sum(row[1] for row in rows)
+        while rows and (len(rows) > max_files or total > max_bytes):
+            _, size, path = rows.pop(0)
+            try:
+                path.unlink(missing_ok=True)
+                total -= size
+            except OSError:
+                pass
+    finally:
+        _cache_cleanup_lock.release()
+
+
+def piper_last_result_metadata() -> Dict[str, Any]:
+    return {
+        'cache_hit': bool(getattr(_result_local, 'cache_hit', False)),
+        'duration_ms': float(getattr(_result_local, 'duration_ms', 0.0)),
+    }
 
 
 def _resolve_piper_binary(explicit: str = "") -> Optional[str]:
@@ -79,7 +187,43 @@ def piper_synthesize_wav(safe_text: str, config: Any = None) -> Optional[bytes]:
         logger.debug("未找到 piper 可执行文件")
         return None
 
-    model_path = str(Path(model).resolve())
+    started = time.perf_counter()
+    _result_local.cache_hit = False
+    _result_local.duration_ms = 0.0
+    resolved_model = Path(model).resolve()
+    model_path = str(resolved_model)
+    cache_dir = _cache_directory()
+    key = _cache_key(resolved_model, binary, safe_text)
+    cache_path = cache_dir / f'{key}.wav'
+    with _key_lock(key):
+        try:
+            cached = cache_path.read_bytes()
+            if len(cached) >= 100:
+                os.utime(cache_path, None)
+                _result_local.cache_hit = True
+                _result_local.duration_ms = round((time.perf_counter() - started) * 1000, 1)
+                return cached
+        except (FileNotFoundError, OSError):
+            pass
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        _cleanup_cache(cache_dir)
+        return _synthesize_and_cache(
+            safe_text,
+            binary=binary,
+            model_path=model_path,
+            cache_path=cache_path,
+            started=started,
+        )
+
+
+def _synthesize_and_cache(
+    safe_text: str,
+    *,
+    binary: str,
+    model_path: str,
+    cache_path: Path,
+    started: float,
+) -> Optional[bytes]:
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         out_path = tmp.name
     try:
@@ -97,7 +241,30 @@ def piper_synthesize_wav(safe_text: str, config: Any = None) -> Optional[bytes]:
         if not p.is_file() or p.stat().st_size < 100:
             logger.warning("piper 输出 WAV 无效或过小")
             return None
-        return p.read_bytes()
+        wav = p.read_bytes()
+        fd, cache_tmp = tempfile.mkstemp(
+            prefix=f'.{cache_path.stem}.',
+            suffix='.tmp',
+            dir=str(cache_path.parent),
+        )
+        try:
+            with os.fdopen(fd, 'wb') as target:
+                target.write(wav)
+                target.flush()
+                os.fsync(target.fileno())
+            os.replace(cache_tmp, cache_path)
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            try:
+                Path(cache_tmp).unlink(missing_ok=True)
+            except OSError:
+                pass
+            logger.warning("Piper 缓存写入失败", exc_info=True)
+        _result_local.duration_ms = round((time.perf_counter() - started) * 1000, 1)
+        return wav
     except subprocess.TimeoutExpired:
         logger.warning("piper 合成超时")
         return None
@@ -105,6 +272,7 @@ def piper_synthesize_wav(safe_text: str, config: Any = None) -> Optional[bytes]:
         logger.warning("piper 执行失败: %s", e)
         return None
     finally:
+        _result_local.duration_ms = round((time.perf_counter() - started) * 1000, 1)
         try:
             Path(out_path).unlink(missing_ok=True)
         except OSError:

@@ -268,7 +268,8 @@ def test_static_assets_use_public_cache_headers(client) -> None:
     assert response.status_code == 200
     cache_control = response.headers.get("Cache-Control", "")
     assert "public" in cache_control
-    assert "max-age=3600" in cache_control
+    assert "max-age=31536000" in cache_control
+    assert "immutable" in cache_control
     assert "no-cache" not in cache_control
 
 
@@ -296,7 +297,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260825-instant-remedial-v1" in html
+    assert "/static/js/app.js?v=20260828-performance-v1" in html
     assert "word?.task_imported_today" in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
@@ -1407,6 +1408,74 @@ def test_vocab_import_queues_gaokao_question_for_async_audit(
     assert '1 个高考题待后台自动补全' in body['message']
 
 
+def test_vocab_import_enqueues_persisted_job_in_production(client, monkeypatch) -> None:
+    queued = []
+
+    class Store:
+        def enqueue(self, kind, username, payload):
+            queued.append((kind, username, payload))
+            return {'job_id': 'a' * 32, 'status': 'queued'}
+
+    monkeypatch.setattr(web, 'verify_token', lambda token: 'alice')
+    monkeypatch.setattr(
+        web,
+        'get_user',
+        lambda username: {'password_hash': 'unused', 'enabled': True},
+    )
+    monkeypatch.setattr(web, 'is_paid_user', lambda username: True)
+    monkeypatch.setattr(web, '_rate_allow', lambda *args: True)
+    monkeypatch.setattr(web, '_import_jobs_async_enabled', lambda: True)
+    monkeypatch.setattr(web, '_import_job_store', lambda: Store())
+
+    response = client.post(
+        '/api/wordbank/csv/import-words',
+        headers={'Authorization': 'Bearer test'},
+        json={'words': 'apple, book', 'level': '高中', 'also_add_to_queue': False},
+    )
+
+    assert response.status_code == 202
+    assert response.get_json()['job_id'] == 'a' * 32
+    assert queued == [(
+        'vocab_import',
+        'alice',
+        {'words': 'apple, book', 'level': '高中', 'also_add_to_queue': False},
+    )]
+
+
+def test_paid_article_extract_enqueues_background_job(client, monkeypatch) -> None:
+    queued = []
+
+    class Store:
+        def enqueue(self, kind, username, payload):
+            queued.append((kind, username, payload))
+            return {'job_id': 'b' * 32, 'status': 'queued'}
+
+    monkeypatch.setattr(web, 'verify_token', lambda token: 'alice')
+    monkeypatch.setattr(
+        web,
+        'get_user',
+        lambda username: {'password_hash': 'unused', 'enabled': True},
+    )
+    monkeypatch.setattr(web, 'get_user_plan', lambda username: 'paid')
+    monkeypatch.setattr(web, '_rate_allow', lambda *args: True)
+    monkeypatch.setattr(web, '_import_jobs_async_enabled', lambda: True)
+    monkeypatch.setattr(web, '_import_job_store', lambda: Store())
+
+    response = client.post(
+        '/api/words/import-from-article',
+        headers={'Authorization': 'Bearer test'},
+        json={'text': 'A short English article.', 'extract_mode': 'spacy'},
+    )
+
+    assert response.status_code == 202
+    assert response.get_json()['job_id'] == 'b' * 32
+    assert queued == [(
+        'article_extract',
+        'alice',
+        {'text': 'A short English article.', 'extract_mode': 'spacy'},
+    )]
+
+
 def test_vocab_import_keeps_wordbank_success_when_gaokao_pipeline_crashes(
     client,
     monkeypatch,
@@ -1605,12 +1674,10 @@ def test_auto_backfill_queue_excludes_legacy_and_unrecorded_failures(monkeypatch
     ]
     monkeypatch.setattr(
         web.gaokao_questions,
-        'load_bank',
+        'failure_records',
         lambda: {
-            'failures': {
                 'failed-import': _current_auto_retry_failure(),
                 'historical-gap': {'attempts': 1},
-            },
         },
     )
     monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)
@@ -1630,11 +1697,9 @@ def test_auto_backfill_claims_only_thirty_and_obeys_cooldown(
     monkeypatch.setattr(web, 'gaokao_question_sources', lambda level='': sources)
     monkeypatch.setattr(
         web.gaokao_questions,
-        'load_bank',
+        'failure_records',
         lambda: {
-            'failures': {
                 row['english']: _current_auto_retry_failure() for row in sources
-            },
         },
     )
     monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)
@@ -1738,11 +1803,9 @@ def test_auto_backfill_waits_until_thirty_are_pending(monkeypatch, tmp_path) -> 
     monkeypatch.setattr(web, 'gaokao_question_sources', lambda level='': sources)
     monkeypatch.setattr(
         web.gaokao_questions,
-        'load_bank',
+        'failure_records',
         lambda: {
-            'failures': {
                 row['english']: _current_auto_retry_failure() for row in sources
-            },
         },
     )
     monkeypatch.setattr(web.gaokao_questions, 'missing_sources', lambda rows: rows)

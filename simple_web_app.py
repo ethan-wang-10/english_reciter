@@ -23,7 +23,7 @@ import subprocess
 import threading
 import urllib.error
 import urllib.request
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -99,12 +99,19 @@ from performance_store import (
     verify_performance_share_signature,
     write_performance_events,
 )
+from learning_sqlite_store import LearningSQLiteStore, learning_store_revision
+from import_job_store import ImportJobStore
 
 try:
-    from tts_piper import piper_runtime_ready, piper_synthesize_wav
+    from tts_piper import (
+        piper_last_result_metadata,
+        piper_runtime_ready,
+        piper_synthesize_wav,
+    )
 except ImportError:
     piper_runtime_ready = None  # type: ignore[misc, assignment]
     piper_synthesize_wav = None  # type: ignore[misc, assignment]
+    piper_last_result_metadata = None  # type: ignore[misc, assignment]
 
 try:
     from PIL import Image as PILImage
@@ -122,10 +129,10 @@ except ImportError:
 
         pass
 
-try:
-    import spacy
-except ImportError:
-    spacy = None  # type: ignore
+# Imported on first NLP request. Loading spaCy at module import costs substantial
+# resident memory even for workers that only serve ordinary review traffic.
+spacy = None  # type: ignore
+_spacy_import_attempted = False
 
 
 def _load_dotenv_from_file() -> None:
@@ -187,42 +194,47 @@ CORS(app, supports_credentials=True)
 @app.after_request
 def _gzip_large_text_responses(response: Response) -> Response:
     """压缩首屏文本资源和较大的 JSON，缩短慢网络首次打开时间。"""
-    if response.status_code != 200 or request.method != "GET":
-        return response
-    if response.headers.get("Content-Encoding") or request.headers.get("Range"):
-        return response
-    ae = request.headers.get("Accept-Encoding") or ""
-    if "gzip" not in ae.lower():
-        return response
-
-    ct = (response.headers.get("Content-Type") or "").lower()
-    path = request.path or ""
-    text_like = (
-        "text/html" in ct
-        or "text/css" in ct
-        or "javascript" in ct
-        or path.endswith((".js", ".css", ".html"))
-    )
-    json_like = "application/json" in ct
-    if not (text_like or json_like):
-        return response
-
     try:
-        if response.direct_passthrough:
-            response.direct_passthrough = False
-        data = response.get_data()
-    except Exception:
+        if response.status_code != 200 or request.method != "GET":
+            return response
+        if response.headers.get("Content-Encoding") or request.headers.get("Range"):
+            return response
+        ae = request.headers.get("Accept-Encoding") or ""
+        if "gzip" not in ae.lower():
+            return response
+
+        ct = (response.headers.get("Content-Type") or "").lower()
+        path = request.path or ""
+        text_like = (
+            "text/html" in ct
+            or "text/css" in ct
+            or "javascript" in ct
+            or path.endswith((".js", ".css", ".html"))
+        )
+        json_like = "application/json" in ct
+        if not (text_like or json_like):
+            return response
+
+        try:
+            if response.direct_passthrough:
+                response.direct_passthrough = False
+            data = response.get_data()
+        except Exception:
+            return response
+        if len(data) < 2048:
+            return response
+        gz = gzip.compress(data, compresslevel=6)
+        if len(gz) >= len(data):
+            return response
+        response.set_data(gz)
+        response.headers["Content-Encoding"] = "gzip"
+        response.headers["Content-Length"] = str(len(gz))
+        response.headers.add("Vary", "Accept-Encoding")
         return response
-    if len(data) < 2048:
-        return response
-    gz = gzip.compress(data, compresslevel=6)
-    if len(gz) >= len(data):
-        return response
-    response.set_data(gz)
-    response.headers["Content-Encoding"] = "gzip"
-    response.headers["Content-Length"] = str(len(gz))
-    response.headers.add("Vary", "Accept-Encoding")
-    return response
+    finally:
+        # This hook is registered first and therefore runs last in Flask's
+        # reverse after_request order. Timing now includes response compression.
+        _performance_after_request(response)
 
 # 用户名：防止路径穿越与非法目录名，仅允许字母数字下划线
 USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
@@ -340,21 +352,34 @@ def _performance_before_request() -> None:
     g.request_id = rid[:80] if rid else uuid.uuid4().hex
 
 
-@app.after_request
 def _performance_after_request(response: Response) -> Response:
     rid = getattr(g, "request_id", "")
     if rid:
         response.headers["X-Request-ID"] = rid
 
+    started_at = getattr(g, "request_started_at", None)
+    if not isinstance(started_at, (int, float)):
+        return response
+    duration_ms = round((time() - started_at) * 1000.0, 1)
+    response.headers["X-App-Duration-Ms"] = f"{duration_ms:.1f}"
+    timing_parts = [f"app;dur={duration_ms:.1f}"]
+    for attr, name in (
+        ("learning_lock_wait_ms", "learning_lock"),
+        ("learning_load_ms", "learning_load"),
+        ("learning_save_ms", "learning_save"),
+    ):
+        value = getattr(g, attr, None)
+        if isinstance(value, (int, float)):
+            timing_parts.append(f"{name};dur={value:.1f}")
+    existing_timing = response.headers.get("Server-Timing")
+    response.headers["Server-Timing"] = ", ".join(
+        ([existing_timing] if existing_timing else []) + timing_parts
+    )
     if not performance_enabled():
         return response
     path = _safe_request_path()
     if path == "/api/performance/report" or path.startswith("/api/chat/stream"):
         return response
-    started_at = getattr(g, "request_started_at", None)
-    if not isinstance(started_at, (int, float)):
-        return response
-    duration_ms = round((time() - started_at) * 1000.0, 1)
     status = int(response.status_code or 0)
     slow = duration_ms >= slow_request_threshold_ms()
     failed = status >= 500
@@ -1773,17 +1798,21 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
         user_text = str(messages[-1].get("content") or "")
     prompt_chars = len(user_text)
     effective_timeout = max(1.0, float(timeout_sec or DEEPSEEK_HTTP_TIMEOUT_SEC))
-    preview_in = user_text[:2000] + ("…[截断]" if len(user_text) > 2000 else "")
+    content_debug = os.getenv('DEEPSEEK_DEBUG_CONTENT_LOGS', '').strip().lower() in (
+        '1', 'true', 'yes', 'on'
+    )
     logger.info(
-        "DeepSeek 请求: model=%s max_tokens=%s temperature=%s thinking=%s timeout_sec=%s prompt_chars=%s 输入预览=%s",
+        "DeepSeek 请求: model=%s max_tokens=%s temperature=%s thinking=%s timeout_sec=%s prompt_chars=%s prompt_sha256=%s",
         model,
         max_tokens,
         temperature,
         thinking,
         effective_timeout,
         prompt_chars,
-        preview_in,
+        hashlib.sha256(user_text.encode('utf-8')).hexdigest()[:16],
     )
+    if content_debug:
+        logger.info("DeepSeek 输入全文:\n%s", user_text)
     payload = json.dumps({
         "model": model,
         "messages": messages,
@@ -1810,18 +1839,21 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
             except json.JSONDecodeError as je:
                 last_err = je
                 logger.error(
-                    "DeepSeek 响应非合法 JSON: %s 原始前 2500 字: %s",
+                    "DeepSeek 响应非合法 JSON: %s chars=%s sha256=%s",
                     je,
-                    raw[:2500],
+                    len(raw),
+                    hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16],
                 )
+                if content_debug:
+                    logger.info("DeepSeek 非法 JSON 响应全文:\n%s", raw)
                 break
             if isinstance(result, dict) and result.get("error"):
                 err_obj = result["error"]
                 last_err = ValueError(str(err_obj))
                 logger.error(
-                    "DeepSeek API 返回 error 字段: %s 完整响应前 4000 字: %s",
+                    "DeepSeek API 返回 error 字段: %s response_chars=%s",
                     err_obj,
-                    raw[:4000],
+                    len(raw),
                 )
                 break
             try:
@@ -1831,9 +1863,9 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
             except (KeyError, IndexError, TypeError) as ke:
                 last_err = ke
                 logger.error(
-                    "DeepSeek 响应缺少 choices[0].message.content: %s result 前 4000 字: %s",
+                    "DeepSeek 响应缺少 choices[0].message.content: %s response_chars=%s",
                     ke,
-                    raw[:4000],
+                    len(raw),
                 )
                 break
             usage = result.get("usage") if isinstance(result, dict) else None
@@ -1875,14 +1907,15 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                         cache_miss_tokens,
                         cache_hit_ratio,
                     )
-            preview_out = content[:3000] + ("…[截断]" if len(content) > 3000 else "")
             logger.info(
-                "DeepSeek 响应: attempt=%s/%s response_chars=%s 输出预览=%s",
+                "DeepSeek 响应: attempt=%s/%s response_chars=%s response_sha256=%s",
                 attempt,
                 DEEPSEEK_HTTP_RETRIES,
                 len(content),
-                preview_out,
+                hashlib.sha256(content.encode('utf-8')).hexdigest()[:16],
             )
+            if content_debug:
+                logger.info("DeepSeek 输出全文:\n%s", content)
             return content
         except urllib.error.HTTPError as e:
             last_err = e
@@ -2002,8 +2035,9 @@ def deepseek_generate_word_entries(words: List[str], level: str = "") -> Optiona
         json_match = re.search(r'\[[\s\S]*\]', reply)
         if not json_match:
             logger.error(
-                "DeepSeek 返回格式不含JSON数组，reply 前 800 字: %s",
-                reply[:800],
+                "DeepSeek 返回格式不含JSON数组: chars=%s sha256=%s",
+                len(reply),
+                hashlib.sha256(reply.encode('utf-8')).hexdigest()[:16],
             )
             return None
         try:
@@ -2085,10 +2119,9 @@ def deepseek_generate_word_entries_v2(
         "true",
         "yes",
     )
-    preview_words = words_str if len(words_str) <= 240 else words_str[:240] + "…"
     logger.info(
-        "DeepSeek v2 请求: words_preview=%r count=%s level=%r max_tokens=%s prompt_chars=%s debug_full=%s",
-        preview_words,
+        "DeepSeek v2 请求: words_sha256=%s count=%s level=%r max_tokens=%s prompt_chars=%s debug_full=%s",
+        hashlib.sha256(words_str.encode('utf-8')).hexdigest()[:16],
         len(words),
         level or "",
         max_out,
@@ -2102,15 +2135,19 @@ def deepseek_generate_word_entries_v2(
         if not reply:
             logger.warning("DeepSeek v2 词汇生成: 无有效回复")
             return None
-        _rp_prev = reply if len(reply) <= 600 else reply[:600] + "…[截断]"
-        logger.info("DeepSeek v2 原始回复: chars=%s preview=%s", len(reply), _rp_prev)
+        logger.info(
+            "DeepSeek v2 原始回复: chars=%s sha256=%s",
+            len(reply),
+            hashlib.sha256(reply.encode('utf-8')).hexdigest()[:16],
+        )
         if _v2_dbg:
             logger.info("DeepSeek v2 原始回复全文:\n%s", reply)
         json_match = re.search(r'\[[\s\S]*\]', reply)
         if not json_match:
             logger.error(
-                "DeepSeek v2 返回格式不含JSON数组，reply 前 800 字: %s",
-                reply[:800],
+                "DeepSeek v2 返回格式不含JSON数组: chars=%s sha256=%s",
+                len(reply),
+                hashlib.sha256(reply.encode('utf-8')).hexdigest()[:16],
             )
             return None
         _json_slice = json_match.group(0)
@@ -2267,10 +2304,51 @@ _invites_lock = threading.Lock()
 _invite_crypto_lock = threading.Lock()
 _invite_fernet_cache = None
 
-# 每用户背诵器缓存 + 互斥锁（避免并发写 JSON 与重复初始化）
+# 每用户背诵器缓存 + 互斥锁（缓存有界，锁保留以保护并发请求）
 _reciter_registry_lock = threading.Lock()
 _user_reciter_locks: Dict[str, threading.Lock] = {}
-_user_reciter_cache: Dict[str, WordReciter] = {}
+_user_reciter_cache: "OrderedDict[str, WordReciter]" = OrderedDict()
+_user_reciter_cache_access: Dict[str, float] = {}
+
+
+def _positive_env_int(name: str, default: int, maximum: int) -> int:
+    try:
+        value = int(str(os.getenv(name, '')).strip())
+    except (TypeError, ValueError):
+        value = default
+    return max(1, min(maximum, value))
+
+
+def _reciter_cache_max_users() -> int:
+    return _positive_env_int('RECITER_CACHE_MAX_USERS', 24, 1000)
+
+
+def _reciter_cache_ttl_seconds() -> int:
+    return _positive_env_int('RECITER_CACHE_TTL_SECONDS', 1800, 86400)
+
+
+def _get_cached_user_reciter(username: str) -> Optional[WordReciter]:
+    now = time()
+    with _reciter_registry_lock:
+        reciter = _user_reciter_cache.get(username)
+        accessed = _user_reciter_cache_access.get(username, 0.0)
+        if reciter is None or now - accessed > _reciter_cache_ttl_seconds():
+            _user_reciter_cache.pop(username, None)
+            _user_reciter_cache_access.pop(username, None)
+            return None
+        _user_reciter_cache.move_to_end(username)
+        _user_reciter_cache_access[username] = now
+        return reciter
+
+
+def _put_cached_user_reciter(username: str, reciter: WordReciter) -> None:
+    with _reciter_registry_lock:
+        _user_reciter_cache[username] = reciter
+        _user_reciter_cache.move_to_end(username)
+        _user_reciter_cache_access[username] = time()
+        while len(_user_reciter_cache) > _reciter_cache_max_users():
+            evicted, _ = _user_reciter_cache.popitem(last=False)
+            _user_reciter_cache_access.pop(evicted, None)
 
 
 def _client_ip() -> str:
@@ -2947,6 +3025,7 @@ def _revoke_user_tokens(username: str) -> None:
 def _invalidate_user_reciter_cache(username: str) -> None:
     with _reciter_registry_lock:
         _user_reciter_cache.pop(username, None)
+        _user_reciter_cache_access.pop(username, None)
 
 
 def _purge_student_account_completely(username: str) -> None:
@@ -3020,6 +3099,7 @@ def _purge_student_account_completely(username: str) -> None:
             logger.exception("删除用户后撤销会话失败: user=%s", username)
         with _reciter_registry_lock:
             _user_reciter_cache.pop(username, None)
+            _user_reciter_cache_access.pop(username, None)
             _user_reciter_locks.pop(username, None)
         try:
             challenges_mod.purge_user_challenges_refs(DATA_DIR, username)
@@ -3128,17 +3208,15 @@ def verify_admin_credentials(username: str, password: str) -> bool:
 
 
 def _learning_data_summary(username: str) -> Dict[str, int]:
-    path = DATA_DIR / username / 'learning_data.json'
-    if not path.exists():
+    user_dir = DATA_DIR / username
+    path = user_dir / 'learning_data.json'
+    db_path = user_dir / 'learning.sqlite3'
+    if not path.exists() and not db_path.exists():
         return {'pending': 0, 'mastered': 0}
     try:
-        with open(path, 'r', encoding='utf-8') as f:
-            d = json.load(f)
-        return {
-            'pending': len(d.get('all_words', [])),
-            'mastered': len(d.get('mastered_words', [])),
-        }
+        return LearningSQLiteStore(db_path, path).summary()
     except Exception:
+        logger.exception("读取用户学习数据统计失败: user=%s", username)
         return {'pending': 0, 'mastered': 0}
 
 
@@ -3266,6 +3344,7 @@ def _build_user_config(username: str) -> Config:
         min(MAX_DAILY_REVIEW_LIMIT, daily_review_limit),
     )
     config.DATA_FILE = str(user_dir / "learning_data.json")
+    config.LEARNING_DB_FILE = str(user_dir / "learning.sqlite3")
     config.EXAMPLE_DB = str(user_dir / "word_examples.json")
     return config
 
@@ -3319,6 +3398,10 @@ def _user_learning_interprocess_lock(username: str) -> Generator[None, None, Non
 
 
 def _learning_data_mtime_ns(username: str) -> int:
+    db_path = DATA_DIR / username / 'learning.sqlite3'
+    revision = learning_store_revision(db_path)
+    if revision:
+        return revision
     path = DATA_DIR / username / 'learning_data.json'
     try:
         stat = path.stat()
@@ -3339,21 +3422,32 @@ def _user_reciter_source_signature(username: str) -> Tuple[int, int]:
 def user_reciter_session(username: str) -> Generator[WordReciter, None, None]:
     """Serialize learning data and refresh stale per-worker caches."""
     lock = _user_mutex(username)
+    wait_started = time()
     with lock:
         with _user_learning_interprocess_lock(username):
+            g.learning_lock_wait_ms = round((time() - wait_started) * 1000, 1)
             source_signature = _user_reciter_source_signature(username)
-            reciter = _user_reciter_cache.get(username)
+            reciter = _get_cached_user_reciter(username)
             if (
                 reciter is None
                 or getattr(reciter, '_source_signature', None) != source_signature
             ):
                 reciter = _build_user_reciter(username)
                 reciter._source_signature = source_signature
-                _user_reciter_cache[username] = reciter
+                _put_cached_user_reciter(username, reciter)
+                g.learning_load_ms = reciter.repository.last_load_ms
+            else:
+                g.learning_load_ms = 0.0
             reciter.refresh_for_new_day()
+            save_count = reciter.repository.save_count
             try:
                 yield reciter
             finally:
+                g.learning_save_ms = (
+                    reciter.repository.last_save_ms
+                    if reciter.repository.save_count != save_count
+                    else 0.0
+                )
                 reciter._source_signature = _user_reciter_source_signature(username)
 
 
@@ -3533,12 +3627,14 @@ def send_static(path):
     ext = path.rsplit('.', 1)[-1].lower() if '.' in path else ''
     if ext in ('css', 'js'):
         resp.cache_control.no_cache = None
-        resp.cache_control.max_age = 3600
+        resp.cache_control.max_age = 31536000
         resp.cache_control.public = True
+        resp.cache_control.immutable = True
     elif ext in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'woff', 'woff2'):
         resp.cache_control.no_cache = None
-        resp.cache_control.max_age = 86400
+        resp.cache_control.max_age = 31536000
         resp.cache_control.public = True
+        resp.cache_control.immutable = True
     return resp
 
 
@@ -5119,7 +5215,12 @@ def speak_text_audio(username):
         if not wav:
             return jsonify({'error': '语音合成失败'}), 503
 
-        return Response(wav, mimetype='audio/wav')
+        response = Response(wav, mimetype='audio/wav')
+        if piper_last_result_metadata is not None:
+            metadata = piper_last_result_metadata()
+            response.headers['X-TTS-Cache'] = 'HIT' if metadata.get('cache_hit') else 'MISS'
+            response.headers['Server-Timing'] = f"piper;dur={float(metadata.get('duration_ms') or 0):.1f}"
+        return response
     except Exception as e:
         logger.error(f"Piper 朗读失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -5582,8 +5683,9 @@ def _wordbank_lemma_spacy_enabled() -> bool:
 
 def _get_spacy_nlp():
     """懒加载 en_core_web_sm；缺失时尝试 spacy download 一次；再失败则仅用启发式。"""
+    global spacy, _spacy_import_attempted
     global _spacy_nlp, _spacy_nlp_load_failed, _spacy_download_attempted
-    if spacy is None or _spacy_nlp_load_failed:
+    if _spacy_nlp_load_failed:
         return None
     if _spacy_nlp is not None:
         return _spacy_nlp
@@ -5592,6 +5694,17 @@ def _get_spacy_nlp():
             return None
         if _spacy_nlp is not None:
             return _spacy_nlp
+        if not _spacy_import_attempted:
+            _spacy_import_attempted = True
+            try:
+                import spacy as spacy_module
+
+                spacy = spacy_module
+            except ImportError:
+                _spacy_nlp_load_failed = True
+                return None
+        if spacy is None:
+            return None
         try:
             # 句法分析与 NER 不参与英语 lemma；禁用可明显加速（尤其批量分词）
             _spacy_nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
@@ -5748,8 +5861,6 @@ def _spacy_lemma_map_for_surfaces(surfaces: List[str]) -> Dict[str, str]:
 
 def spacy_extract_lemmas_from_article(text: str) -> Optional[List[str]]:
     """用 spaCy 对全文分词，取各 token 的 lemma，去重保序（用于 VIP 课文导入「spaCy 分词」）。"""
-    if spacy is None:
-        return None
     nlp = _get_spacy_nlp()
     if nlp is None:
         return None
@@ -5772,8 +5883,6 @@ def spacy_extract_lemmas_from_article(text: str) -> Optional[List[str]]:
 
 def spacy_extract_surfaces_from_article(text: str) -> Optional[List[str]]:
     """用 spaCy 对全文分词，取各 token 的表面形（小写），去重保序；停用词与词形过滤与 lemma 版一致。"""
-    if spacy is None:
-        return None
     nlp = _get_spacy_nlp()
     if nlp is None:
         return None
@@ -6151,7 +6260,8 @@ def import_from_article(username):
     - VIP：默认 extract_mode=spacy；extract_mode=ai 仅当管理后台开启且请求携带有效管理员 token
     前端拿到词条列表后注入选框，让用户确认后再加入待复习。
     """
-    if not _rate_allow(f"article_import:{username}", _RATE_MAX_ARTICLE_IMPORT):
+    internal_job = bool(getattr(g, 'import_job_execution', False))
+    if not internal_job and not _rate_allow(f"article_import:{username}", _RATE_MAX_ARTICLE_IMPORT):
         return jsonify({'error': '文章提取过于频繁，请稍后再试'}), 429
     data = request.get_json(silent=True) or {}
     text = str(data.get('text', '')).strip()
@@ -6175,13 +6285,25 @@ def import_from_article(username):
                 return jsonify({
                     'error': '未配置 DeepSeek API，无法使用 AI 分词',
                 }), 400
-            if not verify_admin_token(admin_tok):
+            if not internal_job and not verify_admin_token(admin_tok):
                 return jsonify({
                     'error': 'AI 分词仅限管理员：请先登录管理后台并保持会话有效',
                 }), 403
             extract_mode = 'ai'
         else:
             extract_mode = 'spacy'
+        if _import_jobs_async_enabled() and not internal_job:
+            job = _import_job_store().enqueue(
+                'article_extract',
+                username,
+                {'text': text, 'extract_mode': extract_mode},
+            )
+            _IMPORT_JOB_WAKE_EVENT.set()
+            return jsonify({
+                'job_id': job['job_id'],
+                'status': job['status'],
+                'message': '文章已提交后台提取',
+            }), 202
         if extract_mode == 'spacy':
             lemmas = spacy_extract_lemmas_from_article(text)
             if lemmas is None:
@@ -6389,10 +6511,9 @@ def gaokao_question_sources(level: str = "") -> List[dict]:
 
 def gaokao_failed_question_sources(sources: List[dict]) -> List[dict]:
     """Return failures explicitly produced by the current generation pipeline."""
-    bank = gaokao_questions.load_bank()
     failure_keys = {
         gaokao_questions.normalize_word(key)
-        for key, failure in (bank.get("failures") or {}).items()
+        for key, failure in gaokao_questions.failure_records().items()
         if gaokao_questions.normalize_word(key)
         and isinstance(failure, dict)
         and failure.get("auto_retry_pipeline_version")
@@ -6731,6 +6852,122 @@ def _run_gaokao_auto_backfill_once(
 _GAOKAO_BACKFILL_THREAD_LOCK = threading.Lock()
 _GAOKAO_BACKFILL_STOP_EVENT = threading.Event()
 _gaokao_backfill_thread: Optional[threading.Thread] = None
+_IMPORT_JOB_STOP_EVENT = threading.Event()
+_IMPORT_JOB_WAKE_EVENT = threading.Event()
+_IMPORT_JOB_THREAD_LOCK = threading.Lock()
+_import_job_thread: Optional[threading.Thread] = None
+
+
+def _import_job_store() -> ImportJobStore:
+    return ImportJobStore(DATA_DIR / '_shared' / 'import_jobs.sqlite3')
+
+
+def _import_jobs_async_enabled() -> bool:
+    raw = os.getenv('IMPORT_JOBS_ASYNC', '1').strip().lower()
+    return not app.testing and raw not in ('0', 'false', 'no', 'off')
+
+
+def _execute_vocab_import_job(username: str, payload: dict) -> dict:
+    with app.test_request_context(
+        '/api/wordbank/csv/import-words',
+        method='POST',
+        json=payload,
+    ):
+        g.import_job_execution = True
+        value = import_vocab_to_csv.__wrapped__(username)
+        status = 200
+        response = value
+        if isinstance(value, tuple):
+            response = value[0]
+            if len(value) > 1:
+                status = int(value[1])
+        body = response.get_json() if hasattr(response, 'get_json') else response
+        body = dict(body) if isinstance(body, dict) else {'error': '导入任务返回无效响应'}
+        if status >= 400:
+            raise RuntimeError(str(body.get('error') or f'导入失败（HTTP {status}）'))
+        return body
+
+
+def _execute_article_import_job(username: str, payload: dict) -> dict:
+    with app.test_request_context(
+        '/api/words/import-from-article',
+        method='POST',
+        json=payload,
+    ):
+        g.import_job_execution = True
+        value = import_from_article.__wrapped__(username)
+        status = 200
+        response = value
+        if isinstance(value, tuple):
+            response = value[0]
+            if len(value) > 1:
+                status = int(value[1])
+        body = response.get_json() if hasattr(response, 'get_json') else response
+        body = dict(body) if isinstance(body, dict) else {'error': '文章提取任务返回无效响应'}
+        if status >= 400:
+            raise RuntimeError(str(body.get('error') or f'文章提取失败（HTTP {status}）'))
+        return body
+
+
+def _import_job_loop() -> None:
+    store = _import_job_store()
+    try:
+        store.cleanup(_positive_env_int('IMPORT_JOB_RETENTION_DAYS', 14, 90))
+    except Exception:
+        logger.exception("清理历史导入任务失败")
+    while not _IMPORT_JOB_STOP_EVENT.is_set():
+        try:
+            job = store.claim_next()
+        except Exception:
+            logger.exception("领取导入任务失败")
+            job = None
+        if not job:
+            _IMPORT_JOB_WAKE_EVENT.wait(1.0)
+            _IMPORT_JOB_WAKE_EVENT.clear()
+            continue
+        started = time()
+        try:
+            if job.get('kind') == 'vocab_import':
+                result = _execute_vocab_import_job(job['username'], job.get('payload') or {})
+            elif job.get('kind') == 'article_extract':
+                result = _execute_article_import_job(job['username'], job.get('payload') or {})
+            else:
+                raise RuntimeError('未知导入任务类型')
+            result['job_duration_ms'] = round((time() - started) * 1000, 1)
+            store.complete(job['job_id'], result)
+        except Exception as exc:
+            logger.exception("导入任务失败: job=%s", job.get('job_id'))
+            try:
+                store.fail(job['job_id'], str(exc))
+            except Exception:
+                logger.exception("记录导入任务失败状态失败: job=%s", job.get('job_id'))
+
+
+def start_import_job_runner() -> bool:
+    global _import_job_thread
+    with _IMPORT_JOB_THREAD_LOCK:
+        if _import_job_thread and _import_job_thread.is_alive():
+            return False
+        _IMPORT_JOB_STOP_EVENT.clear()
+        _import_job_thread = threading.Thread(
+            target=_import_job_loop,
+            name='vocab-import-jobs',
+            daemon=True,
+        )
+        _import_job_thread.start()
+    logger.info("词汇导入任务执行器已启动")
+    return True
+
+
+def stop_import_job_runner() -> None:
+    global _import_job_thread
+    _IMPORT_JOB_STOP_EVENT.set()
+    _IMPORT_JOB_WAKE_EVENT.set()
+    with _IMPORT_JOB_THREAD_LOCK:
+        thread = _import_job_thread
+        _import_job_thread = None
+    if thread and thread.is_alive() and thread is not threading.current_thread():
+        thread.join(timeout=3.0)
 
 
 def _gaokao_auto_backfill_loop() -> None:
@@ -6782,6 +7019,7 @@ def stop_gaokao_auto_backfill_scheduler() -> None:
 
 
 atexit.register(stop_gaokao_auto_backfill_scheduler)
+atexit.register(stop_import_job_runner)
 
 
 @app.before_request
@@ -6789,6 +7027,7 @@ def _ensure_gaokao_auto_backfill_scheduler() -> None:
     """Lazily start the scheduler when Gunicorn serves its first request."""
     if not app.testing:
         start_gaokao_auto_backfill_scheduler()
+        start_import_job_runner()
 
 
 @app.route('/api/wordbank/ocr-extract', methods=['POST'])
@@ -6854,10 +7093,12 @@ def import_vocab_to_csv(username):
     - 新写入 v2 的词会继续生成高考题候选，并自动审查；通过后写入私有题库正式区。
     - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
     """
-    if not _rate_allow(f"vocab_import:{username}", _RATE_MAX_VOCAB_IMPORT):
-        return jsonify({'error': '词汇导入过于频繁，请稍后再试'}), 429
-    if not is_paid_user(username):
-        return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
+    internal_job = bool(getattr(g, 'import_job_execution', False))
+    if not internal_job:
+        if not _rate_allow(f"vocab_import:{username}", _RATE_MAX_VOCAB_IMPORT):
+            return jsonify({'error': '词汇导入过于频繁，请稍后再试'}), 429
+        if not is_paid_user(username):
+            return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
 
     body = request.get_json(silent=True) or {}
     raw = str(body.get('words', '')).strip()
@@ -6873,6 +7114,23 @@ def import_vocab_to_csv(username):
         return jsonify({'error': '未解析到有效单词'}), 400
     if len(input_surfaces) > 500:
         return jsonify({'error': '单次最多处理 500 个单词'}), 400
+
+    if _import_jobs_async_enabled() and not internal_job:
+        job = _import_job_store().enqueue(
+            'vocab_import',
+            username,
+            {
+                'words': raw,
+                'level': level_hint,
+                'also_add_to_queue': also_queue,
+            },
+        )
+        _IMPORT_JOB_WAKE_EVENT.set()
+        return jsonify({
+            'job_id': job['job_id'],
+            'status': job['status'],
+            'message': f"已提交 {len(input_surfaces)} 个单词，正在后台处理",
+        }), 202
 
     # 是否调用 AI：仅看新词库 v2；老 CSV 仅有仍会生成并写入 v2
     v2_keys = wordbank_v2.get_v2_english_key_set()
@@ -7119,6 +7377,17 @@ def import_vocab_to_csv(username):
         'also_add_to_queue': also_queue,
         'gaokao_questions': gaokao_result,
     }), 200
+
+
+@app.route('/api/wordbank/import-jobs/<job_id>', methods=['GET'])
+@token_required
+def get_vocab_import_job(username, job_id: str):
+    if not re.fullmatch(r'[0-9a-f]{32}', str(job_id or '')):
+        return jsonify({'error': '导入任务不存在'}), 404
+    job = _import_job_store().get(job_id, username)
+    if not job:
+        return jsonify({'error': '导入任务不存在'}), 404
+    return jsonify(job), 200
 
 
 @app.route('/api/wordbank/csv/trouble-status', methods=['GET'])
@@ -8363,6 +8632,7 @@ if __name__ == '__main__':
     _debug = os.getenv("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
     if not _debug or os.getenv("WERKZEUG_RUN_MAIN") == "true":
         start_gaokao_auto_backfill_scheduler()
+        start_import_job_runner()
     app.run(
         host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", "8000")),
