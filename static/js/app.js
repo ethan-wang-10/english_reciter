@@ -5041,7 +5041,7 @@ async function showMainPage() {
     let boot = null;
     if (token) {
         try {
-            boot = await apiRequest('/bootstrap');
+            boot = await apiRequest(reviewQueueEndpoint('/bootstrap'));
             if (!isReviewContextCurrent(reviewContext)) return;
             applyBootstrapPayload(boot);
         } catch (bootErr) {
@@ -5913,6 +5913,11 @@ function getNewWordsFirstEnabled() {
     return localStorage.getItem(REVIEW_NEW_WORDS_FIRST_STORAGE_KEY) === '1';
 }
 
+function reviewQueueEndpoint(path) {
+    const enabled = getNewWordsFirstEnabled() ? '1' : '0';
+    return `${path}?new_words_first=${enabled}`;
+}
+
 function invalidateReviewDataAfterImport() {
     preloadedReviewData = null;
     reviewDataStaleAfterImport = true;
@@ -6696,7 +6701,7 @@ async function loadReviewList() {
         hideReviewSessionSummary();
         reviewSessionMode = 'daily';
 
-        const data = preloadedReviewData || await apiRequest('/words/review');
+        const data = preloadedReviewData || await apiRequest(reviewQueueEndpoint('/words/review'));
         if (
             !isReviewContextCurrent(reviewContext) ||
             requestSequence !== reviewDataRequestSequence
@@ -9652,7 +9657,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 REVIEW_NEW_WORDS_FIRST_STORAGE_KEY,
                 newWordsFirstCb.checked ? '1' : '0',
             );
-            reorderRemainingReviewWords();
+            if (reviewSessionMode === 'daily' && wrongRoundNumber === 0) {
+                preloadedReviewData = null;
+                void loadReviewList();
+            } else {
+                reorderRemainingReviewWords();
+            }
         });
     }
 

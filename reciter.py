@@ -1288,6 +1288,19 @@ class WordReciter:
         added_at = str(getattr(word, 'added_at', '') or '').strip()
         return bool(added_at and added_at[:10] == self.today.isoformat())
 
+    def word_has_no_learning_attempt(self, word: Word) -> bool:
+        mastery = mastery_snapshot(self.get_review_state(word))
+        attempted = sum(
+            int(dimension.get('attempts') or 0)
+            for dimension in mastery.get('by_type', {}).values()
+            if isinstance(dimension, dict)
+        )
+        return bool(
+            word.success_count <= 0
+            and word.review_count <= 0
+            and attempted <= 0
+        )
+
     def _daily_task_item_from_candidate(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
         word = candidate['word']
         return {
@@ -1307,8 +1320,9 @@ class WordReciter:
         task: Dict[str, Any],
         *,
         listening_available: bool = False,
+        new_words_first: bool = False,
     ) -> int:
-        """Fill today's remaining new-word slots with words imported today."""
+        """Refresh new words without replacing completed or started task items."""
         items = task.get('items')
         if not isinstance(items, list):
             return 0
@@ -1320,18 +1334,26 @@ class WordReciter:
             for item in items
             if isinstance(item, dict)
         }
-        imported = [
+        available_new_words = [
             candidate
             for candidate in candidates
             if candidate.get('reason') == 'new'
-            and candidate.get('imported_today')
             and self.word_state_key(candidate['word']) not in task_keys
         ]
         available_keys = task_keys | {
             self.word_state_key(candidate['word']) for candidate in candidates
         }
         task['available_at_creation'] = max(len(items), len(available_keys))
-        if not imported:
+        selected_candidates = (
+            available_new_words
+            if new_words_first
+            else [
+                candidate
+                for candidate in available_new_words
+                if candidate.get('imported_today')
+            ]
+        )
+        if not selected_candidates:
             return 0
 
         try:
@@ -1342,28 +1364,44 @@ class WordReciter:
             new_word_target = self.automatic_new_word_target()
             task['new_word_target'] = new_word_target
         limit = max(1, int(self.config.DAILY_REVIEW_LIMIT or 1))
-        non_new_count = sum(
-            1 for item in items
-            if isinstance(item, dict) and item.get('reason') != 'new'
-        )
-        allowed_new_total = min(new_word_target, max(0, limit - non_new_count))
+        if new_words_first:
+            allowed_new_total = limit
+        else:
+            non_new_count = sum(
+                1 for item in items
+                if isinstance(item, dict) and item.get('reason') != 'new'
+            )
+            allowed_new_total = min(new_word_target, max(0, limit - non_new_count))
         current_new_count = sum(
             1 for item in items
             if isinstance(item, dict) and item.get('reason') == 'new'
         )
-        replaceable = [
-            item
-            for item in reversed(items)
-            if isinstance(item, dict)
-            and item.get('reason') == 'new'
-            and not item.get('imported_today')
-            and item.get('status') == 'pending'
-            and item.get('phase') == 'main'
-            and self.task_attempt_count(item) == 0
-        ]
+        if new_words_first:
+            replaceable = [
+                item
+                for item in reversed(items)
+                if isinstance(item, dict)
+                and item.get('reason') != 'new'
+                and item.get('status') == 'pending'
+                and item.get('phase') == 'main'
+                and self.task_attempt_count(item) == 0
+                and not item.get('last_event_id')
+            ]
+        else:
+            replaceable = [
+                item
+                for item in reversed(items)
+                if isinstance(item, dict)
+                and item.get('reason') == 'new'
+                and not item.get('imported_today')
+                and item.get('status') == 'pending'
+                and item.get('phase') == 'main'
+                and self.task_attempt_count(item) == 0
+                and not item.get('last_event_id')
+            ]
 
         inserted = 0
-        for candidate in imported:
+        for candidate in selected_candidates:
             new_item = self._daily_task_item_from_candidate(candidate)
             if current_new_count < allowed_new_total and len(items) < limit:
                 items.append(new_item)
@@ -1371,18 +1409,23 @@ class WordReciter:
             elif replaceable:
                 old_item = replaceable.pop(0)
                 items[items.index(old_item)] = new_item
+                if old_item.get('reason') != 'new':
+                    current_new_count += 1
             else:
                 break
             inserted += 1
             task_keys.add(new_item['word_key'])
         if inserted:
             task['status'] = 'active'
+            if new_words_first:
+                task['new_word_target'] = max(new_word_target, current_new_count)
         return inserted
 
     def _create_today_task(
         self,
         *,
         listening_available: bool = False,
+        new_words_first: bool = False,
     ) -> Optional[Dict[str, Any]]:
         previous_task = self.learning_state_v2.get('daily_task')
         self._archive_daily_task(previous_task)
@@ -1396,10 +1439,18 @@ class WordReciter:
         new_capacity = max(0, limit - review_reserve)
         overdue_count = sum(1 for item in non_new if item['reason'] == 'overdue')
         new_word_target = self.automatic_new_word_target(overdue_count)
-        selected_new = new_words[: min(new_capacity, new_word_target)]
+        if new_words_first:
+            selected_new = new_words[:limit]
+            new_word_target = len(selected_new)
+        else:
+            selected_new = new_words[: min(new_capacity, new_word_target)]
         remaining_slots = max(0, limit - len(selected_new))
         selected_non_new = non_new[:remaining_slots]
-        selected = selected_non_new + selected_new
+        selected = (
+            selected_new + selected_non_new
+            if new_words_first
+            else selected_non_new + selected_new
+        )
         if not selected:
             self.learning_state_v2['daily_task'] = None
             return None
@@ -1433,6 +1484,7 @@ class WordReciter:
         self,
         *,
         listening_available: bool = False,
+        new_words_first: bool = False,
     ) -> Optional[Dict[str, Any]]:
         task = self.learning_state_v2.get('daily_task')
         if not isinstance(task, dict) or task.get('date') != self.today.isoformat():
@@ -1500,6 +1552,7 @@ class WordReciter:
         self._refresh_today_imported_words(
             task,
             listening_available=listening_available,
+            new_words_first=new_words_first,
         )
         try:
             cluster_order_version = int(task.get('spelling_cluster_order_version') or 0)
@@ -1540,12 +1593,15 @@ class WordReciter:
         self,
         *,
         listening_available: bool = False,
+        new_words_first: bool = False,
     ) -> Dict[str, Any]:
         """Return a persistent, bounded task and its remaining word objects."""
         task = self._current_today_task(
             listening_available=listening_available,
+            new_words_first=new_words_first,
         ) or self._create_today_task(
             listening_available=listening_available,
+            new_words_first=new_words_first,
         )
         if not task:
             return {
@@ -1574,14 +1630,46 @@ class WordReciter:
         items = task['items']
         pending_items = [item for item in items if item.get('status') == 'pending']
         completed = len(items) - len(pending_items)
-        words: List[Word] = []
-        active_items: List[Dict[str, Any]] = []
+        active_rows = []
         for item in pending_items:
             word = self.find_word(item.get('word_key', ''))
             if word is None:
                 continue
-            words.append(word)
-            active_items.append(item)
+            active_rows.append((item, word))
+        if new_words_first:
+            reason_rank = {
+                'overdue': 2,
+                'weak': 3,
+                'reinforcement': 4,
+                'due': 5,
+                'maintenance': 6,
+                'new': 7,
+            }
+
+            def task_order(row: Any) -> Any:
+                item, word = row
+                if (
+                    item.get('phase') == 'remedial'
+                    or self.task_attempt_count(item) >= exercise_attempt_limit(
+                        str(item.get('exercise_type') or 'spelling')
+                    )
+                ):
+                    return (-1, 0, word.english.casefold())
+                if self.word_has_no_learning_attempt(word):
+                    return (
+                        0,
+                        0 if self.word_was_added_today(word) else 1,
+                        word.english.casefold(),
+                    )
+                return (
+                    reason_rank.get(str(item.get('reason') or 'due'), 5),
+                    0,
+                    word.english.casefold(),
+                )
+
+            active_rows.sort(key=task_order)
+        active_items = [item for item, _word in active_rows]
+        words = [word for _item, word in active_rows]
 
         buckets: Dict[str, int] = defaultdict(int)
         exercise_mix: Dict[str, int] = defaultdict(int)

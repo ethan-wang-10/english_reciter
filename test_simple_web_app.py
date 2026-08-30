@@ -297,8 +297,11 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260830-unlearned-first-v1" in html
+    assert "/static/js/app.js?v=20260830-unlearned-queue-v2" in html
     assert "function reviewWordHasNoLearningAttempt(word)" in javascript
+    assert "function reviewQueueEndpoint(path)" in javascript
+    assert "reviewQueueEndpoint('/bootstrap')" in javascript
+    assert "reviewQueueEndpoint('/words/review')" in javascript
     assert "word?.mastery?.by_type" in javascript
     assert "Number(word?.review_count)" in javascript
     assert "Number(word?.success_count)" in javascript
@@ -311,6 +314,30 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet
     assert "flex: 1 1 100%" in stylesheet
+
+
+def test_review_endpoint_forwards_new_words_first_preference(client, monkeypatch) -> None:
+    class ReviewPlanReciter:
+        def __init__(self) -> None:
+            self.received_new_words_first = None
+
+        def get_today_learning_plan(self, **kwargs):
+            self.received_new_words_first = kwargs.get('new_words_first')
+            return {'words': [], 'items': [], 'plan': {'task_id': 'task-1'}}
+
+        def save_learning_data(self, backup=False) -> None:
+            return None
+
+    reciter = ReviewPlanReciter()
+    _mock_student_session(monkeypatch, reciter)
+
+    response = client.get(
+        '/api/words/review?new_words_first=1',
+        headers={'Authorization': 'Bearer test'},
+    )
+
+    assert response.status_code == 200
+    assert reciter.received_new_words_first is True
 
 
 def test_leaderboard_podium_exposes_avatar_reward_dialog(client) -> None:

@@ -669,6 +669,85 @@ class TestWordReciter(unittest.TestCase):
         self.assertNotIn('future', english)
         self.assertEqual(task['plan']['backlog_after_task'], 1)
 
+    def test_new_words_first_overrides_full_overdue_task(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 3
+        today = reciter.today
+        reciter.all_words = [
+            Word(
+                f'overdue-{index}',
+                f'逾期{index}',
+                success_count=1,
+                review_count=1,
+                next_review_date=today - timedelta(days=1),
+            )
+            for index in range(3)
+        ] + [
+            Word(f'new-{index}', f'新词{index}', next_review_date=today)
+            for index in range(2)
+        ]
+
+        task = reciter.get_today_learning_plan(new_words_first=True)
+
+        self.assertEqual(
+            [word.english for word in task['words']],
+            ['new-0', 'new-1', 'overdue-0'],
+        )
+        self.assertEqual(task['plan']['new_word_target'], 2)
+
+    def test_new_words_first_replaces_only_untouched_existing_items(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 3
+        today = reciter.today
+        overdue = [
+            Word(
+                f'overdue-{index}',
+                f'逾期{index}',
+                success_count=1,
+                review_count=1,
+                next_review_date=today - timedelta(days=1),
+            )
+            for index in range(3)
+        ]
+        new_words = [
+            Word(f'new-{index}', f'新词{index}', next_review_date=today)
+            for index in range(2)
+        ]
+        reciter.all_words = overdue + new_words
+        initial = reciter.get_today_learning_plan()
+        started_item = initial['items'][0]
+        started_item['attempts'] = 1
+
+        refreshed = reciter.get_today_learning_plan(new_words_first=True)
+
+        self.assertEqual(
+            [word.english for word in refreshed['words']],
+            ['new-0', 'new-1', 'overdue-0'],
+        )
+        self.assertIn(started_item, refreshed['items'])
+        self.assertNotIn('overdue-1', [word.english for word in refreshed['words']])
+        self.assertNotIn('overdue-2', [word.english for word in refreshed['words']])
+
+    def test_new_word_loses_priority_after_first_learning_attempt(self):
+        reciter = WordReciter(self.config)
+        reciter.config.DAILY_REVIEW_LIMIT = 2
+        new_word = Word('new-word', '新词', next_review_date=reciter.today)
+        due_word = Word(
+            'due-word',
+            '复习词',
+            success_count=1,
+            review_count=1,
+            next_review_date=reciter.today,
+        )
+        reciter.all_words = [due_word, new_word]
+        initial = reciter.get_today_learning_plan(new_words_first=True)
+        self.assertEqual([word.english for word in initial['words']], ['new-word', 'due-word'])
+
+        new_word.review_count = 1
+        refreshed = reciter.get_today_learning_plan(new_words_first=True)
+
+        self.assertEqual([word.english for word in refreshed['words']], ['due-word', 'new-word'])
+
     def test_today_import_replaces_untouched_regular_new_word(self):
         reciter = WordReciter(self.config)
         reciter.config.DAILY_REVIEW_LIMIT = 2

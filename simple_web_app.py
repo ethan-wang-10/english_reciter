@@ -3599,6 +3599,15 @@ def _review_words_payload(
     return payload
 
 
+def _new_words_first_requested() -> bool:
+    return request.args.get('new_words_first', '').strip().lower() in (
+        '1',
+        'true',
+        'yes',
+        'on',
+    )
+
+
 def _reliable_listening_available() -> bool:
     if piper_runtime_ready is None:
         return False
@@ -3942,6 +3951,7 @@ def bootstrap(username):
             else:
                 task_bundle = reciter.get_today_learning_plan(
                     listening_available=listening_available,
+                    new_words_first=_new_words_first_requested(),
                 )
                 review = _review_words_payload(
                     reciter,
@@ -4729,6 +4739,7 @@ def get_review_list(username):
         with user_reciter_session(username) as reciter:
             task_bundle = reciter.get_today_learning_plan(
                 listening_available=listening_available,
+                new_words_first=_new_words_first_requested(),
             )
             payload = _review_words_payload(
                 reciter,
