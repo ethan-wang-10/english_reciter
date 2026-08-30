@@ -5918,11 +5918,23 @@ function invalidateReviewDataAfterImport() {
     reviewDataStaleAfterImport = true;
 }
 
+function reviewWordHasNoLearningAttempt(word) {
+    const masteryAttempts = Object.values(word?.mastery?.by_type || {})
+        .reduce(
+            (total, dimension) => total + Math.max(0, Number(dimension?.attempts) || 0),
+            0,
+        );
+    return (
+        (Number(word?.review_count) || 0) <= 0
+        && (Number(word?.success_count) || 0) <= 0
+        && masteryAttempts <= 0
+    );
+}
+
 function reviewReasonOrder(word, newWordsFirst = getNewWordsFirstEnabled()) {
     if (word?.task_remedial) return -1;
     const reason = String(word?.task_reason || 'due');
-    if (newWordsFirst && word?.task_imported_today) return 0;
-    if (newWordsFirst && reason === 'new') return 1;
+    if (newWordsFirst && reviewWordHasNoLearningAttempt(word)) return 0;
     const base = {
         overdue: 2,
         weak: 3,

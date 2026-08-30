@@ -297,8 +297,13 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260828-performance-v1" in html
-    assert "word?.task_imported_today" in javascript
+    assert "/static/js/app.js?v=20260830-unlearned-first-v1" in html
+    assert "function reviewWordHasNoLearningAttempt(word)" in javascript
+    assert "word?.mastery?.by_type" in javascript
+    assert "Number(word?.review_count)" in javascript
+    assert "Number(word?.success_count)" in javascript
+    assert "newWordsFirst && reviewWordHasNoLearningAttempt(word)" in javascript
+    assert "newWordsFirst && word?.task_imported_today" not in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
     assert "/static/css/style.css?v=20260825-instant-remedial-v1" in html
