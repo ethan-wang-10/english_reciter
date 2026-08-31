@@ -286,6 +286,11 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     stylesheet = css_response.get_data(as_text=True)
     assert "handleSemanticQuestionKeydown" in javascript
     assert "aria-keyshortcuts" in javascript
+    assert 'id="new-word-study-start"' in html
+    assert 'aria-keyshortcuts="Enter"' in html
+    assert "newWordStudy?.hidden === false" in javascript
+    assert "newWordStudyStart.click()" in javascript
+    assert "actionableTarget !== newWordStudyStart" in javascript
     assert "['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']" in javascript
     assert "event.key === 'Enter'" in javascript
     assert "event.code === 'Space'" in javascript
@@ -297,7 +302,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260830-unlearned-queue-v2" in html
+    assert "/static/js/app.js?v=20260831-new-word-enter-v1" in html
     assert "function reviewWordHasNoLearningAttempt(word)" in javascript
     assert "function reviewQueueEndpoint(path)" in javascript
     assert "reviewQueueEndpoint('/bootstrap')" in javascript

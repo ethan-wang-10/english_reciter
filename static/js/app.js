@@ -5843,7 +5843,30 @@ function handleSemanticQuestionKeydown(event) {
         || isRemedialOfferModalOpen()
     ) return;
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+    const typingTarget = target?.closest('input, textarea, select, [contenteditable="true"]');
+    const actionableTarget = target?.closest('button, a[href], [role="button"]');
+
+    const newWordStudy = document.getElementById('new-word-study');
+    const newWordStudyStart = document.getElementById('new-word-study-start');
+    if (
+        event.key === 'Enter'
+        && newWordStudy?.hidden === false
+        && newWordStudyStart
+        && !newWordStudyStart.disabled
+    ) {
+        // The spelling input can retain focus while its row is hidden for the study card.
+        if (typingTarget && !typingTarget.closest('[hidden]')) return;
+        if (
+            actionableTarget
+            && actionableTarget !== newWordStudyStart
+            && !actionableTarget.closest('[hidden]')
+        ) return;
+        event.preventDefault();
+        newWordStudyStart.click();
+        return;
+    }
+
+    if (typingTarget) return;
 
     if (event.key === 'Enter' && isReviewSectionBreakOpen()) {
         event.preventDefault();
