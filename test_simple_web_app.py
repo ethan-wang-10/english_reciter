@@ -209,6 +209,37 @@ def test_password_reset_policy_reads_environment(monkeypatch) -> None:
     assert web._password_reset_policy() == (45, 90)
 
 
+def test_rapidocr_image_to_string_joins_nonempty_lines(monkeypatch) -> None:
+    class FakeRapidOCREngine:
+        def __call__(self, image):
+            assert image.shape == (8, 12, 3)
+            return SimpleNamespace(txts=(" First line ", "", "Second line"))
+
+    monkeypatch.setattr(web, "_get_rapidocr_engine", lambda: FakeRapidOCREngine())
+    image = web.PILImage.new("RGB", (12, 8), "white")
+
+    assert web._rapidocr_image_to_string(image) == "First line\nSecond line"
+
+
+def test_recognize_ocr_image_prefers_rapidocr(monkeypatch) -> None:
+    monkeypatch.setattr(web, "_rapidocr_image_to_string", lambda image: "Rapid text")
+    monkeypatch.setattr(
+        web,
+        "_tesseract_image_to_string",
+        lambda image: pytest.fail("Tesseract should not run when RapidOCR succeeds"),
+    )
+
+    assert web._recognize_ocr_image(object()) == ("Rapid text", "rapidocr")
+
+
+def test_recognize_ocr_image_falls_back_to_tesseract(monkeypatch) -> None:
+    monkeypatch.setattr(web, "_rapidocr_image_to_string", lambda image: None)
+    monkeypatch.setattr(web, "pytesseract", object())
+    monkeypatch.setattr(web, "_tesseract_image_to_string", lambda image: "Fallback text")
+
+    assert web._recognize_ocr_image(object()) == ("Fallback text", "tesseract")
+
+
 def test_smtp_from_email_accepts_display_name(monkeypatch) -> None:
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("SMTP_PORT", "465")
@@ -302,7 +333,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260831-new-word-enter-v1" in html
+    assert "/static/js/app.js?v=20260901-rapidocr-v1" in html
     assert "function reviewWordHasNoLearningAttempt(word)" in javascript
     assert "function reviewQueueEndpoint(path)" in javascript
     assert "reviewQueueEndpoint('/bootstrap')" in javascript

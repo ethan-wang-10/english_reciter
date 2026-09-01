@@ -130,6 +130,8 @@ python3 scripts/generate_gaokao_questions.py --stage generate --level "" --batch
 
 `en_core_web_sm` spaCy 模型不作为必装依赖，避免国内/离线服务器因 GitHub wheel 下载失败而部署中断；模型缺失时会降级为启发式词形处理。需要 VIP 课文 spaCy 分词时，在网络可用环境执行 `.venv/bin/python -m spacy download en_core_web_sm`。
 
+图片文字识别默认使用 RapidOCR 内置 PP-OCR 模型和 ONNX Runtime，首次识别时懒加载，不需要运行时下载模型。推理默认使用 2 个 CPU 线程，可通过 `OCR_ONNX_THREADS=1..8` 调整。RapidOCR 不可用或识别为空时会自动尝试 Tesseract；Docker 镜像已包含 OpenCV 和 Tesseract 所需的系统包。PM2/原生 Gunicorn 部署还需安装 OpenCV 运行库：Debian/Ubuntu 使用 `apt install libgl1 libglib2.0-0`，OpenCloudOS/RHEL 使用 `dnf install libglvnd-glx glib2`。
+
 ## 更多文档
 
 - [QUICK_START.md](QUICK_START.md) — 启动步骤与使用流程

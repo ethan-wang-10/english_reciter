@@ -9516,7 +9516,7 @@ async function runImportOcrToTextarea(file) {
         }
         if (!raw) {
             showImportNotice(
-                '未识别到文字。可换一张更清晰的图片，或检查服务端是否已安装 Tesseract。',
+                '未识别到文字。可换一张更清晰的图片，或检查服务端 OCR 依赖。',
                 { title: '图片识别完成', isError: false }
             );
         } else {

@@ -422,6 +422,9 @@ smoke_check() {
       gamification.py challenges.py leaderboard_periods.py chat_room.py performance_store.py \
       app_time.py project_paths.py tts_piper.py learning_sqlite_store.py \
       question_sqlite_store.py import_job_store.py gaokao_questions.py gaokao_backfill.py
+    if [ "$MODE" = "pm2" ] || [ "$MODE" = "native" ]; then
+      run "$py" -c "import cv2, onnxruntime, rapidocr"
+    fi
   elif [ "$MODE" = "docker" ]; then
     warn "Python not available on host; Docker build will validate Python dependencies"
   else
