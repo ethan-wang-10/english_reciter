@@ -114,9 +114,10 @@ except ImportError:
     piper_last_result_metadata = None  # type: ignore[misc, assignment]
 
 try:
-    from PIL import Image as PILImage
+    from PIL import Image as PILImage, ImageOps as PILImageOps
 except ImportError:
     PILImage = None  # type: ignore
+    PILImageOps = None  # type: ignore
 
 try:
     import pytesseract
@@ -6404,16 +6405,109 @@ def import_from_article(username):
     return jsonify(ok_out), 200
 
 
-# 词汇导入：本地 Tesseract OCR（需系统安装 tesseract 与 eng.traineddata）
+# 词汇导入：RapidOCR + ONNX Runtime，Tesseract 作为降级引擎。
 _OCR_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 _OCR_MAX_SIDE = 2400
 _OCR_MAX_TOKENS = 500
 _OCR_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
 _GAOKAO_IMPORT_BATCH_WORDS = 5
+_rapidocr_engine = None
+_rapidocr_load_attempted = False
+_rapidocr_load_error = ""
+_rapidocr_engine_lock = threading.Lock()
+_rapidocr_inference_lock = threading.Lock()
+
+
+class OCRUnavailableError(RuntimeError):
+    pass
 
 
 def _ocr_stack_ready() -> bool:
-    return PILImage is not None and pytesseract is not None
+    if PILImage is None:
+        return False
+    if pytesseract is not None:
+        return True
+    return _get_rapidocr_engine() is not None
+
+
+def _get_rapidocr_engine():
+    """Lazily load the bundled PP-OCR models with the ONNX Runtime backend."""
+    global _rapidocr_engine, _rapidocr_load_attempted, _rapidocr_load_error
+    if _rapidocr_load_attempted:
+        return _rapidocr_engine
+    with _rapidocr_engine_lock:
+        if _rapidocr_load_attempted:
+            return _rapidocr_engine
+        _rapidocr_load_attempted = True
+        try:
+            from rapidocr import EngineType, RapidOCR
+
+            onnx_threads = _positive_env_int("OCR_ONNX_THREADS", 2, 8)
+            _rapidocr_engine = RapidOCR(params={
+                "Global.log_level": "warning",
+                "Det.engine_type": EngineType.ONNXRUNTIME,
+                "Cls.engine_type": EngineType.ONNXRUNTIME,
+                "Rec.engine_type": EngineType.ONNXRUNTIME,
+                "EngineConfig.onnxruntime.intra_op_num_threads": onnx_threads,
+                "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+            })
+            logger.info("RapidOCR ONNX Runtime 引擎加载完成")
+        except Exception as e:
+            _rapidocr_load_error = str(e)
+            logger.warning("RapidOCR 不可用，将降级使用 Tesseract: %s", e)
+            _rapidocr_engine = None
+        return _rapidocr_engine
+
+
+def _rapidocr_image_to_string(im: Any) -> Optional[str]:
+    """Return None when RapidOCR is unavailable, or recognized text (possibly empty)."""
+    engine = _get_rapidocr_engine()
+    if engine is None:
+        return None
+    try:
+        import numpy as np
+
+        image_array = np.asarray(im)
+        with _rapidocr_inference_lock:
+            result = engine(image_array)
+        texts = getattr(result, "txts", None)
+        if not texts:
+            return ""
+        return "\n".join(str(text).strip() for text in texts if str(text).strip())
+    except Exception as e:
+        logger.exception("RapidOCR 识别失败，将降级使用 Tesseract: %s", e)
+        return None
+
+
+def _tesseract_image_to_string(im: Any) -> str:
+    if pytesseract is None:
+        raise OCRUnavailableError("pytesseract 未安装")
+    return pytesseract.image_to_string(
+        im,
+        lang="eng",
+        config="--psm 6",
+    )
+
+
+def _recognize_ocr_image(im: Any) -> Tuple[str, str]:
+    """Prefer RapidOCR; retry with Tesseract when it is unavailable or finds no text."""
+    rapid_text = _rapidocr_image_to_string(im)
+    if rapid_text is not None and rapid_text.strip():
+        return rapid_text, "rapidocr"
+
+    if pytesseract is not None:
+        try:
+            return _tesseract_image_to_string(im), "tesseract"
+        except Exception:
+            if rapid_text is not None:
+                logger.exception("Tesseract 降级识别失败，返回 RapidOCR 空结果")
+                return rapid_text, "rapidocr"
+            raise
+
+    if rapid_text is not None:
+        return rapid_text, "rapidocr"
+    detail = f"：{_rapidocr_load_error}" if _rapidocr_load_error else ""
+    raise OCRUnavailableError(f"未检测到可用的 OCR 引擎{detail}")
 
 
 def _prepare_image_for_ocr(stream) -> Any:
@@ -6424,6 +6518,8 @@ def _prepare_image_for_ocr(stream) -> Any:
     if not raw:
         raise ValueError("文件为空")
     im = PILImage.open(BytesIO(raw))
+    if PILImageOps is not None:
+        im = PILImageOps.exif_transpose(im)
     im = im.convert("RGB")
     w, h = im.size
     if max(w, h) > _OCR_MAX_SIDE:
@@ -7044,12 +7140,12 @@ def _ensure_gaokao_auto_backfill_scheduler() -> None:
 @app.route('/api/wordbank/ocr-extract', methods=['POST'])
 @token_required
 def wordbank_ocr_extract(username):
-    """上传图片，本地 Tesseract 识别英文并返回 raw_text 与词列表（不入库；供从图片导入流程使用）。"""
+    """上传图片，优先用 RapidOCR 识别英文，失败时降级到 Tesseract。"""
     if not _rate_allow(f"ocr:{username}", _RATE_MAX_OCR):
         return jsonify({'error': '图片识别过于频繁，请稍后再试'}), 429
     if not _ocr_stack_ready():
         return jsonify({
-            'error': '服务器未启用图片识别：请安装 Pillow、pytesseract，并在系统安装 Tesseract（含 eng 语言包）',
+            'error': '服务器未启用图片识别：请安装 Pillow 与 RapidOCR/ONNX Runtime，或安装 Tesseract 降级引擎',
         }), 503
     if 'file' not in request.files:
         return jsonify({'error': '缺少 file 字段'}), 400
@@ -7071,15 +7167,12 @@ def wordbank_ocr_extract(username):
         logger.exception("OCR 图片解析失败: %s", e)
         return jsonify({'error': '无法解析图片'}), 400
     try:
-        assert pytesseract is not None
-        raw_text = pytesseract.image_to_string(
-            im,
-            lang="eng",
-            config="--psm 6",
-        )
+        raw_text, ocr_engine = _recognize_ocr_image(im)
+    except OCRUnavailableError as e:
+        return jsonify({'error': f'服务器未启用可用的图片识别引擎：{e}'}), 503
     except TesseractNotFoundError:
         return jsonify({
-            'error': '未检测到 Tesseract。请在服务器安装（如 macOS: brew install tesseract；Linux: apt install tesseract-ocr tesseract-ocr-eng）',
+            'error': 'RapidOCR 不可用，且未检测到降级引擎 Tesseract。请检查 OCR 依赖安装。',
         }), 503
     except Exception as e:
         logger.exception("OCR 识别失败: %s", e)
@@ -7088,6 +7181,7 @@ def wordbank_ocr_extract(username):
     return jsonify({
         'raw_text': (raw_text or "").strip(),
         'tokens': tokens,
+        'ocr_engine': ocr_engine,
     }), 200
 
 

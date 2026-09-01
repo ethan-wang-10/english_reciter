@@ -29,6 +29,9 @@ pyspellchecker>=0.8.0
 # 部署时不强制安装模型，应用会降级为启发式词形处理。需要 VIP 课文 spaCy 分词时再手动安装模型。
 spacy==3.8.13
 
-# 头像：压缩与按需缩放（WebP）；词汇导入「从图片识别」需系统安装 Tesseract（如 brew install tesseract）
+# 头像：压缩与按需缩放（WebP）；词汇导入默认使用 RapidOCR + ONNX Runtime
 Pillow==12.0.0
+rapidocr==3.9.2
+onnxruntime>=1.20,<2
+# OCR 降级引擎；还需系统安装 Tesseract 与 eng 语言包
 pytesseract>=0.3.10
