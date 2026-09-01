@@ -5,6 +5,7 @@ import os
 import tempfile
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
@@ -240,6 +241,68 @@ def test_recognize_ocr_image_falls_back_to_tesseract(monkeypatch) -> None:
     assert web._recognize_ocr_image(object()) == ("Fallback text", "tesseract")
 
 
+def test_english_only_ocr_text_removes_ipa_chinese_numbers_and_pos() -> None:
+    raw = """33. personality /p3:sə'næləti/ n.
+性格；个性
+34. ability /ə'bɪləti/ n.
+能力
+35. easy–going /'i:zi 'gəʊɪŋ/ adj.
+随和的
+36. accept /ək'sept/ v.
+接受；同意"""
+
+    assert web._english_only_ocr_text(raw) == (
+        "personality\nability\neasy-going\naccept"
+    )
+
+
+def test_english_only_ocr_text_keeps_readable_english_sentences() -> None:
+    raw = "The student's easy-going nature helps in class.\n他很随和。\nI accept the offer."
+
+    assert web._english_only_ocr_text(raw) == (
+        "The student's easy-going nature helps in class\nI accept the offer"
+    )
+
+
+@pytest.mark.parametrize(
+    ("english_only", "expected_text", "expected_enabled"),
+    (
+        ("1", "ability", True),
+        ("0", "34. ability /ə/ n.\n能力", False),
+    ),
+)
+def test_ocr_extract_applies_english_only_when_requested(
+    client, monkeypatch, english_only, expected_text, expected_enabled,
+) -> None:
+    monkeypatch.setattr(web, "verify_token", lambda token: "alice")
+    monkeypatch.setattr(web, "get_user", lambda username: {"enabled": True})
+    monkeypatch.setattr(web, "_rate_allow", lambda *args: True)
+    monkeypatch.setattr(web, "_ocr_stack_ready", lambda: True)
+    monkeypatch.setattr(web, "_prepare_image_for_ocr", lambda stream: object())
+    monkeypatch.setattr(
+        web,
+        "_recognize_ocr_image",
+        lambda image: ("34. ability /ə/ n.\n能力", "rapidocr"),
+    )
+
+    response = client.post(
+        "/api/wordbank/ocr-extract",
+        data={
+            "file": (BytesIO(b"image"), "words.png"),
+            "english_only": english_only,
+        },
+        headers={"Authorization": "Bearer test"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "english_only": expected_enabled,
+        "ocr_engine": "rapidocr",
+        "raw_text": expected_text,
+        "tokens": ["ability"],
+    }
+
+
 def test_smtp_from_email_accepts_display_name(monkeypatch) -> None:
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("SMTP_PORT", "465")
@@ -333,7 +396,10 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "setReviewSubmitButtonState('next')" in javascript
     assert 'id="review-number-direct-submit"' in html
     assert "数字即提交" in html
-    assert "/static/js/app.js?v=20260901-rapidocr-v1" in html
+    assert 'id="import-ocr-english-only"' in html
+    assert "仅提取英文" in html
+    assert "fd.append('english_only', englishOnly ? '1' : '0')" in javascript
+    assert "/static/js/app.js?v=20260901-ocr-english-only-v1" in html
     assert "function reviewWordHasNoLearningAttempt(word)" in javascript
     assert "function reviewQueueEndpoint(path)" in javascript
     assert "reviewQueueEndpoint('/bootstrap')" in javascript
@@ -345,7 +411,8 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "newWordsFirst && word?.task_imported_today" not in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260825-instant-remedial-v1" in html
+    assert "/static/css/style.css?v=20260901-ocr-english-only-v1" in html
+    assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
     assert ".semantic-option:focus-visible" in stylesheet

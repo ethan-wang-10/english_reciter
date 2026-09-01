@@ -6410,6 +6410,13 @@ _OCR_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 _OCR_MAX_SIDE = 2400
 _OCR_MAX_TOKENS = 500
 _OCR_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
+_OCR_ENGLISH_ONLY_WORD_RE = re.compile(r"[A-Za-z]+(?:['-][A-Za-z]+)*")
+_OCR_IPA_DELIMITED_RE = re.compile(r"/[^/\r\n]*/|\[[^\]\r\n]*\]")
+_OCR_IPA_TOKEN_RE = re.compile(r"\S*[\u0250-\u02af\u1d00-\u1dbf]\S*")
+_OCR_PART_OF_SPEECH_LABELS = {
+    "adj", "adv", "art", "aux", "conj", "det", "int", "interj",
+    "n", "num", "phr", "prep", "pron", "v", "vi", "vt",
+}
 _GAOKAO_IMPORT_BATCH_WORDS = 5
 _rapidocr_engine = None
 _rapidocr_load_attempted = False
@@ -6546,6 +6553,36 @@ def _english_tokens_from_ocr_text(text: str) -> List[str]:
         if len(out) >= _OCR_MAX_TOKENS:
             break
     return out
+
+
+def _english_only_ocr_text(text: str) -> str:
+    """Keep readable ASCII English words while removing IPA and dictionary metadata."""
+    output_lines: List[str] = []
+    for raw_line in (text or "").splitlines():
+        line = (
+            raw_line
+            .replace("\u2018", "'")
+            .replace("\u2019", "'")
+            .replace("\u2010", "-")
+            .replace("\u2011", "-")
+            .replace("\u2012", "-")
+            .replace("\u2013", "-")
+            .replace("\u2014", "-")
+        )
+        line = _OCR_IPA_DELIMITED_RE.sub(" ", line)
+        line = _OCR_IPA_TOKEN_RE.sub(" ", line)
+        words: List[str] = []
+        for match in _OCR_ENGLISH_ONLY_WORD_RE.finditer(line):
+            word = match.group(0)
+            key = word.casefold()
+            if key in _OCR_PART_OF_SPEECH_LABELS:
+                continue
+            if len(word) == 1 and key not in ("a", "i"):
+                continue
+            words.append(word)
+        if words:
+            output_lines.append(" ".join(words))
+    return "\n".join(output_lines)
 
 
 def _publish_combined_gaokao_questions_for_new_entries(
@@ -7177,11 +7214,17 @@ def wordbank_ocr_extract(username):
     except Exception as e:
         logger.exception("OCR 识别失败: %s", e)
         return jsonify({'error': '文字识别失败'}), 500
+    english_only = (request.form.get('english_only') or '').strip().lower() in {
+        '1', 'true', 'yes', 'on',
+    }
+    if english_only:
+        raw_text = _english_only_ocr_text(raw_text)
     tokens = _english_tokens_from_ocr_text(raw_text)
     return jsonify({
         'raw_text': (raw_text or "").strip(),
         'tokens': tokens,
         'ocr_engine': ocr_engine,
+        'english_only': english_only,
     }), 200
 
 

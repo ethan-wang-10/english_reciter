@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260825-instant-remedial-v1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260901-ocr-english-only-v1">
 </head>
 <body>
     <div id="app">
@@ -479,6 +479,10 @@
                                 <button type="button" id="import-ocr-pick-img-btn" class="import-article-source-file-btn">
                                     选择图片…
                                 </button>
+                                <label class="import-ocr-english-only" for="import-ocr-english-only">
+                                    <input type="checkbox" id="import-ocr-english-only" />
+                                    <span>仅提取英文</span>
+                                </label>
                                 <p class="import-nc-lesson-hint import-article-source-hint">
                                     本地 RapidOCR 识别英文填入下方文本框，必要时降级使用 Tesseract；支持 JPEG / PNG / WebP / GIF，可再编辑。
                                 </p>
@@ -1237,7 +1241,7 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20260901-rapidocr-v1" defer></script>
+    <script src="/static/js/app.js?v=20260901-ocr-english-only-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js" defer></script>

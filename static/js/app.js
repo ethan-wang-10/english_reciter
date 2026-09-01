@@ -9508,6 +9508,8 @@ async function runImportOcrToTextarea(file) {
     }
     const fd = new FormData();
     fd.append('file', file);
+    const englishOnly = document.getElementById('import-ocr-english-only')?.checked === true;
+    fd.append('english_only', englishOnly ? '1' : '0');
     try {
         const data = await apiRequest('/wordbank/ocr-extract', { method: 'POST', body: fd });
         const raw = data.raw_text != null ? String(data.raw_text).trim() : '';
