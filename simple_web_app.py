@@ -1752,8 +1752,10 @@ def _deepseek_error_is_retryable(err: BaseException) -> bool:
     if "timed out" in msg or "timeout" in msg:
         return True
     if isinstance(err, urllib.error.HTTPError):
-        return err.code in (429, 502, 503, 504)
-    if isinstance(err, urllib.error.URLError) and isinstance(err.reason, TimeoutError):
+        return err.code in (429, 500, 502, 503, 504)
+    if isinstance(err, (TimeoutError, ConnectionError)):
+        return True
+    if isinstance(err, urllib.error.URLError) and isinstance(err.reason, (TimeoutError, ConnectionError)):
         return True
     return False
 
@@ -1783,6 +1785,13 @@ def _deepseek_http_error_body_for_log(e: urllib.error.HTTPError) -> str:
     except json.JSONDecodeError:
         pass
     return body
+
+
+class _DeepSeekResponse(str):
+    def __new__(cls, content: str, finish_reason: str = ""):
+        response = super().__new__(cls, content)
+        response.finish_reason = finish_reason
+        return response
 
 
 def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
@@ -1862,6 +1871,8 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                 choice = result["choices"][0]
                 message = choice["message"]
                 content = message["content"]
+                if not isinstance(content, str) or not content.strip():
+                    raise TypeError("assistant content must be a nonempty string")
             except (KeyError, IndexError, TypeError) as ke:
                 last_err = ke
                 logger.error(
@@ -1918,7 +1929,7 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
             )
             if content_debug:
                 logger.info("DeepSeek 输出全文:\n%s", content)
-            return content
+            return _DeepSeekResponse(content, choice.get("finish_reason") or "")
         except urllib.error.HTTPError as e:
             last_err = e
             detail = _deepseek_http_error_body_for_log(e)
@@ -6704,6 +6715,17 @@ def _gaokao_generation_chat(messages: List[dict], max_tokens: int):
     )
 
 
+def _gaokao_audit_chat(messages: List[dict], max_tokens: int):
+    return _deepseek_chat(
+        messages,
+        model=os.getenv("GAOKAO_AUDIT_MODEL", "").strip() or None,
+        max_tokens=max_tokens,
+        temperature=0.0,
+        thinking=False,
+        timeout_sec=300,
+    )
+
+
 def generate_gaokao_question_batches(
     sources: List[dict],
     *,
@@ -6727,7 +6749,7 @@ def generate_gaokao_question_batches(
             result = gaokao_questions.generate_audited_and_persist(
                 batch,
                 _gaokao_generation_chat,
-                audit_chat=_gaokao_generation_chat,
+                audit_chat=_gaokao_audit_chat,
                 force=force,
                 refresh_prompt=refresh_prompt,
                 diagnostic=diagnostic,
@@ -6791,16 +6813,18 @@ def audit_gaokao_candidate_pool_batches(
             accepted_rows, rejected_rows, retry_rows = (
                 gaokao_questions.audit_generation_candidate_pools(
                     batch,
-                    _gaokao_generation_chat,
+                    _gaokao_audit_chat,
                     diagnostic=diagnostic,
                 )
             )
-            gaokao_questions.persist_candidate_pool_audit_result(
+            published_keys = gaokao_questions.persist_candidate_pool_audit_result(
                 accepted_rows,
                 rejected_rows,
                 retry_rows,
                 expected_pools=batch,
             )
+            retry_rows.update({key: "candidate changed before publication" for key in accepted_rows if key not in published_keys})
+            accepted_rows = {key: record for key, record in accepted_rows.items() if key in published_keys}
         except Exception as exc:
             accepted_rows = {}
             rejected_rows = {}
@@ -6850,6 +6874,7 @@ def _gaokao_auto_backfill_settings() -> dict:
         "trigger_words": 30,
         "job_words": 30,
         "request_words": gaokao_questions.GENERATION_REQUEST_WORDS,
+        "max_wait_seconds": _env_int("GAOKAO_AUTO_BACKFILL_MAX_WAIT_SECONDS", 3600, 60, 86400),
         "check_interval_seconds": _env_int(
             "GAOKAO_AUTO_BACKFILL_CHECK_SECONDS",
             300,
@@ -6899,19 +6924,35 @@ def _run_gaokao_auto_backfill_once(
         sources = gaokao_question_sources("")
         pending_pools = gaokao_questions.pending_candidate_pools()
         pending_generation = gaokao_failed_question_sources(sources)
+        queue = gaokao_questions.automatic_retry_queue(current)
+        pending_pools = {key: pool for key, pool in pending_pools.items() if key in queue}
+        pending_generation = [source for source in pending_generation if source["english"] in queue]
         pending_count = len(pending_pools) + len(pending_generation)
-        if pending_count < settings["trigger_words"]:
+        due_keys = set(pending_pools) | {source["english"] for source in pending_generation}
+        oldest_wait = 0.0
+        for key in due_keys:
+            try:
+                queued_at = datetime.fromisoformat(queue[key]["first_pending_at"])
+                if queued_at.tzinfo is None:
+                    queued_at = queued_at.replace(tzinfo=timezone.utc)
+                oldest_wait = max(oldest_wait, (current - queued_at).total_seconds())
+            except (KeyError, TypeError, ValueError):
+                continue
+        if pending_count == 0 or (
+            pending_count < settings["trigger_words"]
+            and oldest_wait < settings.get("max_wait_seconds", 3600)
+        ):
             return {
                 "status": "below_threshold",
                 "pending": pending_count,
                 "threshold": settings["trigger_words"],
             }
 
-        selected_pools = dict(
-            list(pending_pools.items())[: settings["job_words"]]
-        )
-        remaining_slots = settings["job_words"] - len(selected_pools)
-        selected_generation = pending_generation[:max(0, remaining_slots)]
+        selected_keys = set(sorted(
+            due_keys, key=lambda key: (queue[key].get("last_attempt_at", ""), key),
+        )[:settings["job_words"]])
+        selected_pools = {key: pool for key, pool in pending_pools.items() if key in selected_keys}
+        selected_generation = [source for source in pending_generation if source["english"] in selected_keys]
         selected_words = [
             *selected_pools,
             *(source["english"] for source in selected_generation),

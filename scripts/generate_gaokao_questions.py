@@ -6,8 +6,8 @@ Examples:
   python scripts/generate_gaokao_questions.py --stage generate --level '' --refresh-prompt-version
   python scripts/generate_gaokao_questions.py --stage audit --audit-batch-size 10
 
-Generation uses one request for each ten-word candidate batch, then an
-independent semantic audit before publishing. Import-created candidates can be
+Generation uses one request for each candidate batch of up to ten words, then
+separate recognition/context blind audits and a feedback audit before publishing. Import-created candidates can be
 audited later in off-peak batches with the audit stage.
 """
 
@@ -105,7 +105,7 @@ def _run_audit(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="单次 AI 批量生成并发布英文识义与语境选词题库",
+        description="批量生成、盲审并校对英文识义与语境选词题库",
     )
     parser.add_argument(
         "--stage",
@@ -159,7 +159,7 @@ def main() -> int:
     pending_generation = (
         questions.sources_needing_prompt_refresh(all_sources)
         if args.refresh_prompt_version
-        else questions.missing_sources(all_sources, force=args.force)
+        else all_sources if args.force else questions.sources_needing_prompt_refresh(all_sources)
     )
     pending_audit = questions.pending_candidate_pools()
     if args.limit > 0 and args.stage in {"generate", "all"}:

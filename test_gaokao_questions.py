@@ -68,6 +68,12 @@ def _audited(
     context_allowed = set(context_acceptable or (context_answer,))
     return json.dumps([{
         'item_id': 'q1',
+        'recognition_valid_definition': [option['text'] in recognition_allowed for option in recognition['options']],
+        'recognition_parallel_form': [True] * 4,
+        'context_grammatical': [True] * 4,
+        'context_meaning_fits': [option['text'] in context_allowed for option in context['options']],
+        'context_quality': {'natural': True, 'decisive_clues': True, 'answer_revealed': False, 'reason_zh': '存在明确线索。'},
+        'feedback_quality': _feedback_quality(),
         'recognition_verdicts': [
             {
                 'option': option['text'],
@@ -87,6 +93,17 @@ def _audited(
     }], ensure_ascii=False)
 
 
+def _feedback_quality():
+    return {
+        'recognition_explanation_correct': True,
+        'recognition_options_parallel': True,
+        'translation_correct': True,
+        'context_explanation_correct': True,
+        'answer_matches_headword': True,
+        'reason_zh': '译文和解析与最终题目一致。',
+    }
+
+
 def _pool_audited(
     source: dict,
     raw: dict,
@@ -103,16 +120,17 @@ def _pool_audited(
         raw['recognition_distractors'],
     )
     assert recognition_error == ''
-    recognition_options = [correct_zh, *(row[1] for row in recognition_rows)]
-    context_options = [
-        source['context_answer'],
-        *questions._clean_distinct_list(
+    recognition_options = [row['text'] for row in questions._option_rows(
+        [row[1] for row in recognition_rows], correct_zh, f"{source['english']}:pool:recognition",
+    )[0]]
+    context_options = [row['text'] for row in questions._option_rows(
+        questions._clean_distinct_list(
             raw['context_distractors'],
             forbidden=[source['context_answer'], source['english']],
             require_cjk=False,
             limit=12,
-        ),
-    ]
+        ), source['context_answer'], f"{source['english']}:pool:context",
+    )[0]]
     valid_recognition = set(recognition_valid or (correct_zh,))
     fitting_context = set(context_fits or (source['context_answer'],))
     grammatical_context = set(context_grammatical or context_options)
@@ -135,6 +153,7 @@ def _pool_audited(
             option in fitting_context for option in context_options
         ],
         'context_quality': quality,
+        'feedback_quality': _feedback_quality(),
     }], ensure_ascii=False)
 
 
@@ -237,16 +256,18 @@ def test_generation_publishes_only_after_independent_audit(private_question_bank
 
     def chat(messages, max_tokens):
         calls.append(messages[-1]['content'])
-        if '独立的高考英语单选题语义审计员' in messages[-1]['content']:
+        if '独立英语试题质检员' in messages[-1]['content']:
             return _pool_audited(source, _generated('novel'))
         return json.dumps([_generated('novel')], ensure_ascii=False)
 
     result = questions.generate_prompt_checked_and_persist([source], chat)
 
     assert result['generated_words'] == ['novel']
-    assert len(calls) == 2
+    assert len(calls) == 4
     assert '先在内部生成候选' in calls[0]
-    assert '独立的高考英语单选题语义审计员' in calls[1]
+    assert '识义盲审' in calls[1]
+    assert '语境选词盲审' in calls[2]
+    assert '译文与解析' in calls[3]
     bank = questions.load_bank()
     record = bank['questions']['novel']
     assert record['generation_prompt_version'] == questions.GENERATION_PROMPT_VERSION
@@ -435,7 +456,10 @@ def test_prompt_version_refresh_is_resumable(private_question_bank):
 
     assert questions.sources_needing_prompt_refresh([source]) == [source]
 
-    questions.persist_generation_result({'novel': record}, {})
+    approved, _, _ = questions.audit_question_records(
+        {'novel': record}, lambda *args: _audited(source, _generated('novel')),
+    )
+    questions.persist_generation_result(approved, {})
 
     assert questions.sources_needing_prompt_refresh([source]) == []
 
@@ -519,12 +543,13 @@ def test_pool_audit_uses_compact_arrays_and_observed_counterexamples() -> None:
     assert retry == {}
     prompt, max_tokens = requests[0]
     assert '"recognition_valid_definition"' in prompt
-    assert '"context_meaning_fits"' in prompt
+    context_prompt = requests[1][0]
+    assert '"context_meaning_fits"' in context_prompt
     assert 'recognition_verdicts' not in prompt
-    assert 'cannot ____ his complaining because it wastes time' in prompt
-    assert 'stone walls、arches 和 ruins' in prompt
-    assert 'Her criticism ____ him' in prompt
-    assert max_tokens == 1150
+    assert 'cannot ____ his complaining because it wastes time' in context_prompt
+    assert 'stone walls、arches 和 ruins' in context_prompt
+    assert 'Her criticism ____ him' in context_prompt
+    assert max_tokens == 1300
 
 
 def test_pool_audit_retries_malformed_boolean_array() -> None:
@@ -562,7 +587,7 @@ def test_rejected_pool_is_regenerated_once_before_publish(private_question_bank)
         nonlocal audit_calls
         audit_calls += 1
         quality = None
-        if audit_calls == 1:
+        if audit_calls <= 2:
             quality = {
                 'natural': True,
                 'decisive_clues': False,
@@ -579,7 +604,7 @@ def test_rejected_pool_is_regenerated_once_before_publish(private_question_bank)
     )
 
     assert generation_calls == 2
-    assert audit_calls == 2
+    assert audit_calls == 5
     assert '"previous_failure_to_fix":' not in generation_prompts[0]
     assert '"previous_failure_to_fix":' in generation_prompts[1]
     assert '首轮语境缺少形成唯一答案的决定性线索' in generation_prompts[1]
@@ -671,7 +696,10 @@ def test_failure_attempts_increment_without_removing_completed_questions(
 ):
     source = _source('stable', 'adj. 稳定的')
     record, _ = questions.finalize_generated_questions(source, _generated('stable'))
-    questions.persist_generation_result({'stable': record}, {'pending': 'timeout'})
+    approved, _, _ = questions.audit_question_records(
+        {'stable': record}, lambda *args: _audited(source, _generated('stable')),
+    )
+    questions.persist_generation_result(approved, {'pending': 'timeout'})
     questions.persist_generation_result({}, {'pending': 'connection reset'})
 
     bank = questions.load_bank()
@@ -872,3 +900,243 @@ def test_old_pending_candidate_does_not_block_balanced_regeneration(private_ques
     assert questions.has_pending_candidate('apple') is False
     assert questions.pending_candidate_records() == {}
     assert questions.missing_sources([source]) == [source]
+
+
+@pytest.mark.parametrize(('field', 'value'), [
+    ('context_sentence', 'During class, the teacher wrote benefit on the board and asked every student to explain ____ in detail.'),
+    ('context_sentence', {'text': 'benefit'}),
+    ('recognition_explanation_zh', ''),
+    ('context_translation_zh', ['错误译文']),
+    ('context_explanation_zh', 'English only'),
+    ('recognition_distractors', [{'text': '风险'}, '负担', '限制']),
+    ('context_distractors', ['wrong_1', 'bad2', 'risk 中文']),
+])
+def test_generation_rejects_malformed_fields(field, value):
+    raw = {**_generated('benefit'), field: value}
+    record, error = questions.finalize_generated_questions(_source('benefit', 'n. 益处'), raw)
+    assert record is None
+    assert error
+
+
+def test_blind_context_cannot_see_headword_or_feedback():
+    source = dict(_source('apply', 'v. 申请'), context_answer='applied')
+    raw = {**_generated('apply'), 'context_sentence': _generated('applied')['context_sentence']}
+    pool, error = questions.build_generation_candidate_pool(source, raw)
+    assert not error
+    requests = []
+
+    def chat(messages, max_tokens):
+        requests.append(messages[-1]['content'])
+        return _pool_audited(source, raw)
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools({'apply': pool}, chat)
+    assert list(approved) == ['apply']
+    assert not rejected and not retry
+    assert len(requests) == 3
+    context_data = json.loads(requests[1].split('待审数据 JSON：\n')[1])[0]
+    assert set(context_data) == {'item_id', 'prompt', 'options'}
+    assert 'apply' not in json.dumps(context_data)
+    assert '申请' not in requests[1]
+    assert {row['text'] for row in context_data['options']} == {'applied', 'choicea', 'choiceb', 'choicec'}
+    assert all(set(row) == {'id', 'text'} for row in context_data['options'])
+
+
+@pytest.mark.parametrize('failed_field', [
+    'recognition_explanation_correct', 'recognition_options_parallel', 'translation_correct',
+    'context_explanation_correct', 'answer_matches_headword',
+])
+def test_feedback_failure_blocks_publication(private_question_bank, failed_field):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    pool, _ = questions.build_generation_candidate_pool(source, raw)
+    questions.persist_candidate_pool_result({'benefit': pool}, {})
+    captured = []
+
+    def audit(messages, max_tokens):
+        captured.append(messages[-1]['content'])
+        reply = json.loads(_pool_audited(source, raw))
+        reply[0]['feedback_quality'][failed_field] = False
+        return json.dumps(reply)
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools({'benefit': pool}, audit)
+    assert not approved and not retry
+    assert failed_field in rejected['benefit']
+    payload = json.loads(captured[-1].split('待审数据 JSON：\n')[1])[0]
+    assert payload['context']['translation_zh'] == raw['context_translation_zh']
+    assert payload['context']['explanation_zh'] == raw['context_explanation_zh']
+    assert payload['recognition']['explanation_zh'] == raw['recognition_explanation_zh']
+    assert len(payload['context']['options']) == 4
+    questions.persist_candidate_pool_audit_result(approved, rejected, retry, expected_pools={'benefit': pool})
+    assert questions.get_question('benefit', 'context') is None
+
+
+@pytest.mark.parametrize('bad_response', ['missing', 'duplicate', 'malformed'])
+def test_partial_audit_retries_only_unreliable_item(bad_response):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    record, _ = questions.finalize_generated_questions(source, raw)
+    calls = []
+
+    def chat(messages, max_tokens):
+        items = json.loads(messages[-1]['content'].split('待审数据 JSON：\n')[1])
+        calls.append([item['item_id'] for item in items])
+        rows = [{**json.loads(_audited(source, raw))[0], 'item_id': item['item_id']} for item in items]
+        if len(calls) == 1:
+            if bad_response == 'missing':
+                rows = rows[:1]
+            elif bad_response == 'duplicate':
+                rows.append(rows[1])
+            else:
+                rows[1]['recognition_valid_definition'] = ['true'] * 4
+        return json.dumps(rows)
+
+    approved, errors = questions._blind_option_audit(
+        {'benefit': record['recognition'], 'second': record['recognition']}, chat, 'recognition',
+    )
+    assert set(approved) == {'benefit', 'second'}
+    assert not errors
+    assert calls == [['q1', 'q2'], ['q2']]
+
+
+def test_failed_audit_resumes_existing_candidate(private_question_bank):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    generation_calls = []
+
+    def generate(*args):
+        generation_calls.append(1)
+        return json.dumps([raw])
+
+    first = questions.generate_audited_and_persist([source], generate, audit_chat=lambda *args: None)
+    assert first['audit_retry_words'] == ['benefit']
+    second = questions.generate_audited_and_persist(
+        [source], generate, audit_chat=lambda *args: _pool_audited(source, raw),
+    )
+    assert second['generated_words'] == ['benefit']
+    assert len(generation_calls) == 1
+
+
+def test_truncated_generation_splits_retry_and_keeps_feedback(private_question_bank):
+    sources = [_source(word, 'n. 益处') for word in ('alpha', 'bravo', 'charlie', 'delta')]
+    sizes = []
+
+    class Truncated(str):
+        finish_reason = 'length'
+
+    def chat(messages, max_tokens):
+        items = json.loads(messages[-1]['content'].split('输入（必须为以下 JSON 数组中的每个对象输出一个结果，保持原顺序）：\n')[1])
+        sizes.append(len(items))
+        if len(sizes) == 1:
+            return Truncated('[]')
+        assert all('truncated' in item['previous_failure_to_fix'] for item in items)
+        return '[]'
+
+    questions.generate_audited_and_persist(sources, chat)
+    assert sizes == [4, 2, 2]
+
+
+def test_feedback_change_invalidates_in_flight_audit(private_question_bank):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    original, _ = questions.build_generation_candidate_pool(source, raw)
+    questions.persist_candidate_pool_result({'benefit': original}, {})
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'benefit': original}, lambda *args: _pool_audited(source, raw),
+    )
+    changed, _ = questions.build_generation_candidate_pool(source, {**raw, 'context_translation_zh': '新译文，必须重新审核。'})
+    questions.persist_candidate_pool_result({'benefit': changed}, {})
+    questions.persist_candidate_pool_audit_result(approved, rejected, retry, expected_pools={'benefit': original})
+    assert questions.get_question('benefit', 'context') is None
+
+
+def test_publish_cannot_stamp_an_unaudited_record(private_question_bank):
+    record, _ = questions.finalize_generated_questions(_source('benefit', 'n. 益处'), _generated('benefit'))
+    with pytest.raises(ValueError, match='complete audit'):
+        questions.persist_generation_result({'benefit': record}, {})
+
+
+def test_auto_retry_budget_survives_semantic_regeneration(private_question_bank):
+    from datetime import datetime, timedelta, timezone
+
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    pool, _ = questions.build_generation_candidate_pool(source, raw)
+    for attempt in range(questions.AUTO_RETRY_LIMIT):
+        questions.persist_candidate_pool_result({'benefit': pool}, {})
+        questions.persist_candidate_pool_audit_result({}, {'benefit': 'ambiguous'}, {})
+        failure = questions.failure_records()['benefit']
+        assert failure['automatic_attempts'] == attempt + 1
+    assert failure['manual_review_required'] is True
+    assert questions.automatic_retry_queue(datetime.now(timezone.utc) + timedelta(days=2)) == {}
+
+
+def test_feedback_repair_preserves_approved_stem_and_options(private_question_bank):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    generation_calls, feedback_calls = [], []
+
+    def generate(messages, max_tokens):
+        generation_calls.append(messages[-1]['content'])
+        if len(generation_calls) == 1:
+            return json.dumps([raw])
+        assert '"repair_only_fields": ["context_translation_zh"]' in generation_calls[-1]
+        return json.dumps([{
+            **raw,
+            'context_translation_zh': '修正后的准确译文。',
+            'context_sentence': 'A changed and invalid stem.',
+            'context_distractors': ['wrong'],
+        }])
+
+    def audit(messages, max_tokens):
+        reply = json.loads(_pool_audited(source, raw))
+        if '校对最终四选项' in messages[-1]['content']:
+            feedback_calls.append(1)
+            if len(feedback_calls) == 1:
+                reply[0]['feedback_quality']['translation_correct'] = False
+        return json.dumps(reply)
+
+    result = questions.generate_audited_and_persist([source], generate, audit_chat=audit)
+    assert result['generated_words'] == ['benefit']
+    published = questions.get_question('benefit', 'context')
+    assert published['translation_zh'] == '修正后的准确译文。'
+    assert published['prompt'] == raw['context_sentence'].replace('benefit', '____')
+    assert len(published['options']) == 4
+
+
+def test_existing_candidate_with_old_fingerprint_can_be_reaudited(private_question_bank):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    pool, _ = questions.build_generation_candidate_pool(source, raw)
+    questions.persist_candidate_pool_result({'benefit': pool}, {})
+    bank = questions.load_bank()
+    bank['candidates']['benefit']['candidate_id'] = 'legacy-fingerprint'
+    questions._write_bank_unlocked(bank)
+    result = questions.generate_audited_and_persist(
+        [source], lambda *args: pytest.fail('existing candidate must not be regenerated'),
+        audit_chat=lambda *args: _pool_audited(source, raw),
+    )
+    assert result['generated_words'] == ['benefit']
+    assert questions.get_question('benefit', 'context') is not None
+
+
+def test_new_structural_failure_is_rejected_for_regeneration():
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    pool, _ = questions.build_generation_candidate_pool(source, raw)
+    pool['raw']['recognition_explanation_zh'] = ''
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'benefit': pool}, lambda *args: pytest.fail('invalid structure must not reach AI'),
+    )
+    assert not approved and not retry
+    assert 'recognition_explanation_zh' in rejected['benefit']
+
+
+def test_concurrent_candidate_change_is_not_counted_as_published(private_question_bank):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+
+    def audit(messages, max_tokens):
+        if '校对最终四选项' in messages[-1]['content']:
+            replacement, _ = questions.build_generation_candidate_pool(
+                source, {**raw, 'context_translation_zh': '并发修改后的待审译文。'},
+            )
+            questions.persist_candidate_pool_result({'benefit': replacement}, {})
+        return _pool_audited(source, raw)
+
+    result = questions.generate_audited_and_persist(
+        [source], lambda *args: json.dumps([raw]), audit_chat=audit,
+    )
+    assert result['generated'] == 0
+    assert result['audit_retry_words'] == ['benefit']
+    assert questions.get_question('benefit', 'context') is None

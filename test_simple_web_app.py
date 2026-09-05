@@ -146,7 +146,7 @@ def _semantic_record():
         },
     )
     assert error == ''
-    return record
+    return web.gaokao_questions._mark_independently_audited(record)
 
 
 def _new_v2_entry(english='novel'):
@@ -1802,7 +1802,7 @@ def test_generate_gaokao_question_batches_uses_three_ten_word_requests(monkeypat
     ] * 3
     assert all(
         kwargs == {
-            'audit_chat': web._gaokao_generation_chat,
+            'audit_chat': web._gaokao_audit_chat,
             'force': False,
             'refresh_prompt': False,
             'diagnostic': diagnostics.append,
@@ -1878,6 +1878,9 @@ def test_auto_backfill_claims_only_thirty_and_obeys_cooldown(
     tmp_path,
 ) -> None:
     sources = [{'english': f'word-{index:02d}'} for index in range(35)]
+    monkeypatch.setattr(web.gaokao_questions, 'automatic_retry_queue', lambda now: {
+        row['english']: {'first_pending_at': now.isoformat(), 'last_attempt_at': ''} for row in sources
+    })
     calls = []
     monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
     monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
@@ -1931,6 +1934,9 @@ def test_auto_backfill_audits_thirty_import_candidates_off_peak(
     tmp_path,
 ) -> None:
     pools = {f'word-{index:02d}': {'pool': index} for index in range(30)}
+    monkeypatch.setattr(web.gaokao_questions, 'automatic_retry_queue', lambda now: {
+        key: {'first_pending_at': now.isoformat(), 'last_attempt_at': ''} for key in pools
+    })
     calls = []
     monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
     monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
@@ -1985,6 +1991,9 @@ def test_auto_backfill_audits_thirty_import_candidates_off_peak(
 
 def test_auto_backfill_waits_until_thirty_are_pending(monkeypatch, tmp_path) -> None:
     sources = [{'english': f'word-{index:02d}'} for index in range(29)]
+    monkeypatch.setattr(web.gaokao_questions, 'automatic_retry_queue', lambda now: {
+        row['english']: {'first_pending_at': now.isoformat(), 'last_attempt_at': ''} for row in sources
+    })
     monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
     monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
     monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
@@ -2049,3 +2058,73 @@ def test_testing_request_does_not_start_auto_backfill_scheduler(monkeypatch) -> 
 
     assert response.status_code == 200
     assert starts == []
+
+
+def test_auto_backfill_drains_one_old_failure_after_backoff(monkeypatch, tmp_path):
+    from datetime import timedelta
+
+    _use_private_question_bank(monkeypatch, tmp_path)
+    web.gaokao_questions.persist_candidate_pool_result({}, {'benefit': 'temporary failure'})
+    monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
+    monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    source = _semantic_source()
+    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level: [source])
+    monkeypatch.setattr(web.gaokao_backfill, 'GENERATION_LOCK_FILE', tmp_path / '.job.lock')
+    monkeypatch.setattr(web.gaokao_backfill, 'AUTO_STATE_FILE', tmp_path / 'state.json')
+    calls = []
+
+    def generate(sources, **kwargs):
+        calls.append(sources)
+        return {'generated': 1, 'failed': 0, 'generated_words': ['benefit']}
+
+    monkeypatch.setattr(web, 'generate_gaokao_question_batches', generate)
+    now = datetime.now(timezone.utc)
+    assert web._run_gaokao_auto_backfill_once(now)['status'] == 'below_threshold'
+    result = web._run_gaokao_auto_backfill_once(now + timedelta(hours=2))
+    assert result['status'] == 'completed'
+    assert result['generated'] == 1
+    assert calls == [[source]]
+
+
+def test_auto_backfill_drains_one_old_candidate(monkeypatch, tmp_path):
+    from datetime import timedelta
+
+    _use_private_question_bank(monkeypatch, tmp_path)
+    raw = _new_v2_entry()
+    entry = web.wordbank_v2.finalize_v2_entry_from_deepseek(raw)
+    pools, errors = web.finalize_combined_gaokao_candidates([raw], [entry])
+    assert not errors
+    web.gaokao_questions.persist_candidate_pool_result(pools, {})
+    monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
+    monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level: [])
+    monkeypatch.setattr(web.gaokao_backfill, 'GENERATION_LOCK_FILE', tmp_path / '.job.lock')
+    monkeypatch.setattr(web.gaokao_backfill, 'AUTO_STATE_FILE', tmp_path / 'state.json')
+    calls = []
+
+    def audit(selected, **kwargs):
+        calls.append(list(selected))
+        return {'approved': 1, 'rejected': 0, 'retry': 0, 'approved_words': ['novel']}
+
+    monkeypatch.setattr(web, 'audit_gaokao_candidate_pool_batches', audit)
+    now = datetime.now(timezone.utc)
+    assert web._run_gaokao_auto_backfill_once(now)['status'] == 'below_threshold'
+    assert web._run_gaokao_auto_backfill_once(now + timedelta(hours=2))['status'] == 'completed'
+    assert calls == [['novel']]
+
+
+def test_deepseek_transient_errors_are_retryable():
+    assert web._deepseek_error_is_retryable(web.urllib.error.HTTPError('https://test', 500, 'server error', {}, None))
+    assert web._deepseek_error_is_retryable(ConnectionResetError('reset'))
+    assert not web._deepseek_error_is_retryable(web.urllib.error.HTTPError('https://test', 401, 'unauthorized', {}, None))
+
+
+def test_gaokao_audit_model_can_be_configured_independently(monkeypatch):
+    monkeypatch.setenv('GAOKAO_AUDIT_MODEL', 'audit-model')
+    calls = []
+    monkeypatch.setattr(web, '_deepseek_chat', lambda *args, **kwargs: calls.append(kwargs))
+    web._gaokao_audit_chat([], 2000)
+    assert calls[0]['model'] == 'audit-model'
+    assert calls[0]['temperature'] == 0
