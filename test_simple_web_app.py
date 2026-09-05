@@ -1807,6 +1807,7 @@ def test_generate_gaokao_question_batches_uses_three_ten_word_requests(monkeypat
             'refresh_prompt': False,
             'diagnostic': diagnostics.append,
             'max_generation_attempts': 2,
+            'audit_identity': web._gaokao_audit_identity(),
         }
         for _, kwargs in batches
     )
@@ -2128,3 +2129,97 @@ def test_gaokao_audit_model_can_be_configured_independently(monkeypatch):
     web._gaokao_audit_chat([], 2000)
     assert calls[0]['model'] == 'audit-model'
     assert calls[0]['temperature'] == 0
+
+
+def test_question_refresh_dry_run_plans_reuse_without_full_bank_load(monkeypatch, tmp_path, capsys):
+    from scripts import generate_gaokao_questions as script
+
+    _use_private_question_bank(monkeypatch, tmp_path)
+    source = _semantic_source()
+    record = {**_semantic_record(), 'audit_version': 4, 'quality_gate': 'independent-semantic-audit-v4'}
+    bank = web.gaokao_questions.empty_bank()
+    bank['questions']['benefit'] = record
+    web.gaokao_questions._write_bank_unlocked(bank)
+    revision = web.gaokao_questions._question_store().revision()
+    monkeypatch.setattr(script, '_sources', lambda level: [source])
+    monkeypatch.setattr(web.gaokao_questions, 'load_bank', lambda: pytest.fail('dry-run must not decode the full bank'))
+    monkeypatch.setattr(web, '_deepseek_chat', lambda *args, **kwargs: pytest.fail('dry-run must not call AI'))
+    monkeypatch.setattr(sys, 'argv', ['generate', '--refresh-prompt-version', '--dry-run'])
+    assert script.main() == 0
+    output = capsys.readouterr().out
+    assert '复用旧题=1' in output and '需要生成=0' in output
+    assert 'reaudit benefit' in output
+    assert web.gaokao_questions._question_store().revision() == revision
+
+
+def test_question_script_all_shares_limit_and_does_not_repeat_failed_audit(monkeypatch, tmp_path):
+    from scripts import generate_gaokao_questions as script
+
+    _use_private_question_bank(monkeypatch, tmp_path)
+    source = _semantic_source()
+    monkeypatch.setattr(script, '_sources', lambda level: [source, {**source, 'english': 'second'}])
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web.gaokao_backfill, 'GENERATION_LOCK_FILE', tmp_path / '.job.lock')
+    monkeypatch.setattr(sys, 'argv', ['generate', '--stage', 'all', '--limit', '1'])
+    calls = []
+
+    def generate(selected, **kwargs):
+        calls.append(selected)
+        pool = web.gaokao_questions.candidate_pool_from_published(source, _semantic_record())
+        web.gaokao_questions.persist_candidate_pool_result({'benefit': pool}, {})
+        return 0, 1
+
+    monkeypatch.setattr(script, '_run_generation', generate)
+    monkeypatch.setattr(script, '_run_audit', lambda *args, **kwargs: pytest.fail('all must not re-audit a processed word'))
+    assert script.main() == 2
+    assert calls == [[source]]
+
+
+def test_question_audit_stage_respects_selected_sources(monkeypatch, tmp_path):
+    from scripts import generate_gaokao_questions as script
+
+    _use_private_question_bank(monkeypatch, tmp_path)
+    source = _semantic_source()
+    pool = web.gaokao_questions.candidate_pool_from_published(source, _semantic_record())
+    web.gaokao_questions.persist_candidate_pool_result({'benefit': pool, 'unrelated': pool}, {})
+    monkeypatch.setattr(script, '_sources', lambda level: [source])
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web.gaokao_backfill, 'GENERATION_LOCK_FILE', tmp_path / '.job.lock')
+    monkeypatch.setattr(sys, 'argv', ['generate', '--stage', 'audit', '--limit', '1'])
+    calls = []
+
+    def audit(selected, **kwargs):
+        calls.append((list(selected), kwargs['batch_size']))
+        return 1, 0, 0
+
+    monkeypatch.setattr(script, '_run_audit', audit)
+    assert script.main() == 0
+    assert calls == [(['benefit'], 10)]
+
+
+def test_question_refresh_peak_hours_stops_before_ai(monkeypatch, tmp_path):
+    from scripts import generate_gaokao_questions as script
+
+    _use_private_question_bank(monkeypatch, tmp_path)
+    monkeypatch.setattr(script, '_sources', lambda level: [_semantic_source()])
+    monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda: False)
+    monkeypatch.setattr(script, '_run_generation', lambda *args, **kwargs: pytest.fail('peak hours must not generate'))
+    monkeypatch.setattr(sys, 'argv', ['generate', '--refresh-prompt-version', '--off-peak-only'])
+    assert script.main() == 4
+
+
+def test_question_refresh_peak_transition_restores_callbacks(monkeypatch):
+    from scripts import generate_gaokao_questions as script
+
+    def chat(messages, max_tokens):
+        return 'reply'
+
+    monkeypatch.setattr(web, '_gaokao_generation_chat', chat)
+    monkeypatch.setattr(web, '_gaokao_audit_chat', chat)
+    states = iter([True, False])
+    monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda: next(states))
+    with pytest.raises(script._PeakHoursPause), script._off_peak_requests(True):
+        assert web._gaokao_generation_chat([], 100) == 'reply'
+        web._gaokao_audit_chat([], 100)
+    assert web._gaokao_generation_chat is chat
+    assert web._gaokao_audit_chat is chat

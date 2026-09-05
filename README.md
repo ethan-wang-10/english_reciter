@@ -112,7 +112,11 @@ python3 scripts/generate_gaokao_questions.py --stage generate --level 高中 --b
 
 VIP 词汇导入每批使用一次组合请求，同时生成 `words_v2.json` 词条和 6+6 高考题候选。词条立即落盘，题目只写入服务端候选区，不在用户请求内追加审计调用；候选累计后由低峰后台异步审计，通过后才发布。
 
-重新运行 `generate` 时会自动跳过已通过当前生成和审计版本的题，并优先续审同一词库版本的已有候选，不重复生成；配合 `--limit 200` 可分批处理。需要重建旧质量版本时使用 `--refresh-prompt-version`，该模式会跳过已经升级完成的题，适合断点续跑。`--stage audit` 可手工处理词汇导入留下的异步候选。
+重新运行 `generate` 时会自动跳过已通过当前生成和审计版本的题，并优先续审同一词库版本的已有候选，不重复生成；配合 `--limit 200` 可分批处理。刷新旧题使用 `--refresh-prompt-version`：优先复用词库来源一致、答案匹配且结构完整的旧四选项题，直接执行三阶段审计，避免再支付生成六组候选的输入与输出费用。源词库已变更、旧题不完整或重审拒绝时才生成新题；已在当前版本被拒绝的旧内容不会在下次刷新中反复重审。原始生成/审计版本保留在 `refreshed_from` 中。配合 `--force` 可跳过复用与审计断点，强制重生成尚未升级的题。
+
+识义盲审、语境盲审和讲解校对的有效响应逐批保存到候选记录的 `audit_progress`；中断续跑只补未完成的阶段。断点绑定审计版本、模型配置、Prompt 和实际题面，不依赖批次位置。修改译文只会使讲解校对失效；更换模型或审计规则会使相应断点失效。题目仍需通过全部当前质量门才能发布。
+
+脚本按键分块读取题库，达到 `--limit` 后停止扫描，不为打印汇总而解压整份题库和失败记录。`--stage audit` 也遵守 `--level` 与来源版本限制，默认每请求 10 题；`--stage all` 两个阶段共用 `--limit`，不会在同次运行中重复审计已经处理过的词。运行日志显示旧题复用数、候选续审数、生成/审计逻辑请求数与复用的逐题审计阶段数；请求数不包含底层 HTTP 重试，也不等同于实际 token 账单。
 
 Web 直跑时会启动高考题后台调度器；Gunicorn worker 在首次收到请求时启动调度器。当前流水线中已到重试时间的候选与失败题累计达到 30 个，或最老的待处理题已等待 1 小时，调度器就在 DeepSeek 官方低峰时段领取最多 30 个。按最近处理时间排序，避免反复失败的题阻塞后续题；已有候选只续审，语义拒绝或生成失败才重生成。历史未标记失败和全词库缺题不会被自动领取，历史全量升级仍由手工脚本控制。按 [DeepSeek 官方计费说明](https://api-docs.deepseek.com/quick_start/pricing)，当前高峰为工作日 UTC `01:00-04:00` 和 `06:00-10:00`，即北京时间工作日 `09:00-12:00` 和 `14:00-18:00`，其余时间及周末为低峰。多个 Gunicorn worker 和手工脚本共用跨进程任务锁，不会并行补题。
 
@@ -121,10 +125,11 @@ Web 直跑时会启动高考题后台调度器；Gunicorn worker 在首次收到
 线上服务只提供通过当前独立审计质量门的题目。缺题或候选待审时当前任务会立即降级为拼写，不在学生请求中调用 AI。升级时不要让旧版批处理脚本与新脚本并行生成同一题库。
 
 ```bash
-python3 scripts/generate_gaokao_questions.py --stage generate --level "" --batch-size 10 --limit 200 --refresh-prompt-version --pause 1
+python3 scripts/generate_gaokao_questions.py --level "" --limit 200 --refresh-prompt-version --dry-run
+python3 scripts/generate_gaokao_questions.py --level "" --limit 200 --refresh-prompt-version --off-peak-only --pause 1
 ```
 
-脚本出现生成失败时返回退出码 `2`；直接再次执行同一命令即可续跑。题库 JSON 中的 `questions` 保存已通过独立审计的题目，`candidates` 保存异步待审候选，`rejections` 保存审计拒绝记录，`failures` 保存等待后续重生成的失败项。
+`--dry-run` 只显示复用、续审和生成计划，不调用 AI 或改写题目；首次访问旧 JSON 时，底层存储仍可能初始化 SQLite。`--off-peak-only` 在每次模型请求前检查时段，遇到高峰返回退出码 `4`，保留已生成候选和审计断点；低峰时重跑相同命令即可。生成失败返回 `2`，任务锁被占用返回 `3`，手工中断返回 `130`。题库的 `questions` 保存已发布题目，`candidates` 保存异步候选和审计进度，`rejections` 保存拒绝记录，`failures` 保存后续重生成的失败项。
 
 ## 依赖说明
 

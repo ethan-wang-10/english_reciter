@@ -6726,6 +6726,11 @@ def _gaokao_audit_chat(messages: List[dict], max_tokens: int):
     )
 
 
+def _gaokao_audit_identity() -> str:
+    model = os.getenv("GAOKAO_AUDIT_MODEL", "").strip() or DEEPSEEK_CHAT_MODEL
+    return f"{DEEPSEEK_API_URL}|{model}|temperature=0|thinking=disabled"
+
+
 def generate_gaokao_question_batches(
     sources: List[dict],
     *,
@@ -6742,6 +6747,8 @@ def generate_gaokao_question_batches(
     generated_words: List[str] = []
     failed_words: List[str] = []
     failure_errors: Dict[str, str] = {}
+    reused_questions = 0
+    resumed_candidates = 0
     size = gaokao_questions.GENERATION_REQUEST_WORDS
     for start in range(0, len(sources), size):
         batch = sources[start : start + size]
@@ -6754,6 +6761,7 @@ def generate_gaokao_question_batches(
                 refresh_prompt=refresh_prompt,
                 diagnostic=diagnostic,
                 max_generation_attempts=2,
+                audit_identity=_gaokao_audit_identity(),
             )
         except Exception as exc:
             errors = {
@@ -6773,6 +6781,8 @@ def generate_gaokao_question_batches(
         generated_words.extend(result.get("generated_words") or [])
         failed_words.extend(result.get("failed_words") or [])
         failure_errors.update(result.get("failure_errors") or {})
+        reused_questions += int(result.get("reused_questions") or 0)
+        resumed_candidates += int(result.get("resumed_candidates") or 0)
         done = min(start + len(batch), len(sources))
         if progress is not None:
             progress(done, len(sources), result)
@@ -6785,6 +6795,8 @@ def generate_gaokao_question_batches(
         "generated_words": sorted(set(generated_words)),
         "failed_words": sorted(set(failed_words)),
         "failure_errors": failure_errors,
+        "reused_questions": reused_questions,
+        "resumed_candidates": resumed_candidates,
     }
 
 
@@ -6815,6 +6827,7 @@ def audit_gaokao_candidate_pool_batches(
                     batch,
                     _gaokao_audit_chat,
                     diagnostic=diagnostic,
+                    audit_identity=_gaokao_audit_identity(),
                 )
             )
             published_keys = gaokao_questions.persist_candidate_pool_audit_result(

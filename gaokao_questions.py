@@ -864,6 +864,48 @@ def _quality_error(value: Any, fields: Iterable[str]) -> str:
     return ""
 
 
+class AuditProgress:
+    """Persist validated per-item responses without tying them to a batch position."""
+
+    def __init__(self, pools: Dict[str, dict], identity: str):
+        self.pools = pools
+        self.identity = identity
+        stored = _question_store().get_many("candidates", pools)
+        self.values = {
+            key: dict(value.get("audit_progress") or {})
+            for key, value in stored.items() if isinstance(value, dict)
+        }
+
+    def fingerprint(self, instructions: str, item: dict) -> str:
+        content = {key: value for key, value in item.items() if key != "item_id"}
+        return hashlib.sha256(json.dumps(
+            [AUDIT_VERSION, self.identity, instructions, content],
+            ensure_ascii=False, sort_keys=True,
+        ).encode("utf-8")).hexdigest()
+
+    def read(self, key: str, stage: str, fingerprint: str) -> Optional[dict]:
+        entry = self.values.get(key, {}).get(stage)
+        if isinstance(entry, dict) and entry.get("fingerprint") == fingerprint:
+            row = entry.get("response")
+            return dict(row) if isinstance(row, dict) else None
+        return None
+
+    def save(self, stage: str, updates: Dict[str, dict]) -> None:
+        if not updates:
+            return
+        with _thread_lock:
+            with _interprocess_lock():
+                bank = _read_bank_keys_unlocked(updates)
+                for key, entry in updates.items():
+                    current = bank["candidates"].get(key)
+                    pool = _candidate_pool(current)
+                    if not pool or _candidate_pool_fingerprint(pool) != _candidate_pool_fingerprint(self.pools[key]):
+                        continue
+                    current.setdefault("audit_progress", {})[stage] = entry
+                    self.values.setdefault(key, {})[stage] = entry
+                _write_bank_keys_unlocked(bank, updates)
+
+
 def _request_audit_rows(
     items: List[dict],
     chat: ChatFunction,
@@ -872,11 +914,27 @@ def _request_audit_rows(
     *,
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
     stage: str,
+    progress: Optional[AuditProgress] = None,
+    item_keys: Optional[Dict[str, str]] = None,
 ) -> Tuple[Dict[str, dict], Dict[str, str]]:
     """Keep valid items and retry only unreliable results in smaller batches."""
     accepted: Dict[str, dict] = {}
     errors: Dict[str, str] = {}
-    remaining = items
+    fingerprints = {}
+    if progress is not None:
+        for item in items:
+            item_id = item["item_id"]
+            fingerprints[item_id] = progress.fingerprint(instructions, item)
+            row = progress.read(item_keys[item_id], stage, fingerprints[item_id])
+            if row is not None:
+                row["item_id"] = item_id
+                if not validate(row, item):
+                    accepted[item_id] = row
+        if accepted:
+            _emit_generation_diagnostic(diagnostic, {
+                "event": "audit_cache_hit", "stage": stage, "item_count": len(accepted),
+            })
+    remaining = [item for item in items if item["item_id"] not in accepted]
     size = GENERATION_REQUEST_WORDS
     for attempt in range(2):
         for offset in range(0, len(remaining), size):
@@ -893,6 +951,7 @@ def _request_audit_rows(
             })
             parsed = None if getattr(reply, "finish_reason", "") == "length" else _extract_json_array(reply or "")
             returned: Dict[str, List[dict]] = {}
+            updates = {}
             for row in parsed or []:
                 if isinstance(row, dict) and isinstance(row.get("item_id"), str):
                     returned.setdefault(row["item_id"], []).append(row)
@@ -910,6 +969,13 @@ def _request_audit_rows(
                 else:
                     accepted[item_id] = rows[0]
                     errors.pop(item_id, None)
+                    if progress is not None:
+                        updates[item_keys[item_id]] = {
+                            "fingerprint": fingerprints[item_id],
+                            "response": {key: value for key, value in rows[0].items() if key != "item_id"},
+                        }
+            if progress is not None:
+                progress.save(stage, updates)
         remaining = [item for item in items if item["item_id"] not in accepted]
         if not remaining:
             break
@@ -922,6 +988,7 @@ def _blind_option_audit(
     chat: ChatFunction,
     question_type: str,
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
+    progress: Optional[AuditProgress] = None,
 ) -> Tuple[Dict[str, dict], Dict[str, str]]:
     # Separate requests prevent the recognition headword or feedback from
     # revealing the intended answer to the context reviewer.
@@ -965,6 +1032,7 @@ Her criticism ____ him 中 proud、calm、happy 不能作谓语，不得标 gram
     rows, errors = _request_audit_rows(
         items, chat, instructions, validate, diagnostic=diagnostic,
         stage=f"{question_type}_blind",
+        progress=progress, item_keys=item_keys,
     )
     return (
         {item_keys[item_id]: row for item_id, row in rows.items()},
@@ -976,6 +1044,7 @@ def _audit_feedback(
     records: Dict[str, dict],
     chat: ChatFunction,
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
+    progress: Optional[AuditProgress] = None,
 ) -> Tuple[Dict[str, dict], Dict[str, str], Dict[str, str]]:
     item_keys = {f"q{index}": key for index, key in enumerate(sorted(records), 1)}
     items = [{
@@ -999,6 +1068,7 @@ def _audit_feedback(
 
     rows, retry = _request_audit_rows(
         items, chat, instructions, validate, diagnostic=diagnostic, stage="feedback",
+        progress=progress, item_keys=item_keys,
     )
     approved, rejected = {}, {}
     for item_id, row in rows.items():
@@ -1032,6 +1102,7 @@ def _audit_records_or_pools(
     chat: ChatFunction,
     pools: Optional[Dict[str, dict]] = None,
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
+    progress: Optional[AuditProgress] = None,
 ) -> Tuple[Dict[str, dict], Dict[str, str], Dict[str, str]]:
     if not records:
         return {}, {}, {}
@@ -1057,7 +1128,7 @@ def _audit_records_or_pools(
                 option_sets[kind][key].update(options=options, answer_option_id=answer_id)
     results, retry, rejected = {}, {}, {}
     for kind in QUESTION_TYPES:
-        results[kind], errors = _blind_option_audit(option_sets[kind], chat, kind, diagnostic)
+        results[kind], errors = _blind_option_audit(option_sets[kind], chat, kind, diagnostic, progress)
         retry.update(errors)
     selected = {}
     for key, original_record in records.items():
@@ -1112,7 +1183,9 @@ def _audit_records_or_pools(
                 rejected[key] = f"semantic audit found insufficient safe options: {error}"
                 continue
             selected[key] = {**record, "candidate_id": _candidate_pool_fingerprint(pool)}
-    approved, feedback_rejected, feedback_retry = _audit_feedback(selected, chat, diagnostic)
+            if pool.get("refreshed_from"):
+                selected[key]["refreshed_from"] = pool["refreshed_from"]
+    approved, feedback_rejected, feedback_retry = _audit_feedback(selected, chat, diagnostic, progress)
     rejected.update(feedback_rejected)
     retry.update(feedback_retry)
     for status, rows in (("approved", approved), ("rejected", rejected), ("retry", retry)):
@@ -1135,6 +1208,7 @@ def audit_generation_candidate_pools(
     chat: ChatFunction,
     *,
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
+    audit_identity: str = "",
 ) -> Tuple[Dict[str, dict], Dict[str, str], Dict[str, str]]:
     validated, errors = {}, {}
     for key, pool in pools.items():
@@ -1149,6 +1223,7 @@ def audit_generation_candidate_pools(
     approved, rejected, retry = _audit_records_or_pools(
         {key: pool["record"] for key, pool in validated.items()},
         chat, validated, diagnostic,
+        AuditProgress(validated, audit_identity) if audit_identity and validated else None,
     )
     rejected.update(errors)
     return approved, rejected, retry
@@ -1322,21 +1397,86 @@ def missing_sources(sources: Iterable[dict], force: bool = False) -> List[dict]:
     ]
 
 
-def sources_needing_prompt_refresh(sources: Iterable[dict]) -> List[dict]:
+def sources_needing_prompt_refresh(sources: Iterable[dict], limit: int = 0) -> List[dict]:
     """Return sources not yet published by the current generation and audit gate."""
     source_rows = [source for source in sources if source]
-    keys = [normalize_word(source.get("english")) for source in source_rows]
-    bank = empty_bank()
-    bank["questions"] = _question_store().get_many("questions", keys)
-    return [
-        source
-        for source in source_rows
-        if not has_current_prompt_questions(
-            source["english"],
-            bank,
-            str(source.get("source_hash") or ""),
-        )
-    ]
+    pending = []
+    for start in range(0, len(source_rows), 200):
+        batch = source_rows[start:start + 200]
+        records = _question_store().get_many("questions", [source["english"] for source in batch])
+        for source in batch:
+            if not _is_approved_record(records.get(source["english"]), source.get("source_hash", "")):
+                pending.append(source)
+                if limit > 0 and len(pending) >= limit:
+                    return pending
+    return pending
+
+
+def candidate_pool_from_published(source: dict, record: Any) -> Optional[dict]:
+    """Reuse an old four-option question only when its source and answers still match."""
+    if not isinstance(record, dict) or record.get("source_hash") != source.get("source_hash"):
+        return None
+    if record.get("word_key") != source["english"]:
+        return None
+    raw = {"english": source["english"]}
+    for kind, expected_answer in (
+        ("recognition", _recognition_core_sense(source["chinese"])),
+        ("context", source["context_answer"]),
+    ):
+        question = record.get(kind)
+        if not isinstance(question, dict):
+            return None
+        options = question.get("options")
+        if not isinstance(options, list) or len(options) != 4:
+            return None
+        if any(not isinstance(row, dict) or not isinstance(row.get("id"), str)
+               or not isinstance(row.get("text"), str) for row in options):
+            return None
+        if len({row["id"] for row in options}) != 4 or len({normalize_word(row["text"]) for row in options}) != 4:
+            return None
+        answer = next((row for row in options if row["id"] == question.get("answer_option_id")), None)
+        if answer is None or answer["text"] != expected_answer:
+            return None
+        raw[f"{kind}_distractors"] = [row["text"] for row in options if row is not answer]
+        raw[f"{kind}_explanation_zh"] = question.get("explanation_zh")
+        if kind == "recognition":
+            if question.get("prompt") != source["english"]:
+                return None
+        else:
+            prompt = question.get("prompt")
+            if not isinstance(prompt, str) or prompt.count("____") != 1:
+                return None
+            raw["context_sentence"] = prompt.replace("____", expected_answer)
+            raw["context_translation_zh"] = question.get("translation_zh")
+    pool, _ = build_generation_candidate_pool(source, raw)
+    if not pool:
+        return None
+    # Preserve the original generation version as provenance, while requiring
+    # all current validation and audit gates before the reused content is served.
+    pool["refreshed_from"] = {
+        "generation_prompt_version": record.get("generation_prompt_version"),
+        "audit_version": record.get("audit_version"),
+        "question_ids": [record[kind].get("question_id") for kind in QUESTION_TYPES],
+    }
+    return pool
+
+
+def reusable_refresh_pools(sources: List[dict]) -> Dict[str, dict]:
+    keys = [source["english"] for source in sources]
+    records = _question_store().get_many("questions", keys)
+    rejections = _question_store().get_many("rejections", keys)
+    reusable = {}
+    for source in sources:
+        key = source["english"]
+        rejected = rejections.get(key) or {}
+        rejected_pool = _candidate_pool(rejected)
+        if (rejected.get("audit_version") == AUDIT_VERSION and rejected_pool
+                and rejected_pool["source"].get("source_hash") == source.get("source_hash")):
+            continue
+        pool = candidate_pool_from_published(source, records.get(key))
+        if pool:
+            reusable[key] = pool
+    return reusable
 
 
 def pending_candidate_records(
@@ -1349,7 +1489,9 @@ def pending_candidate_records(
         else None
     )
     records: Dict[str, dict] = {}
-    for key, value in _question_store().load_namespace("candidates").items():
+    values = (_question_store().get_many("candidates", allowed) if allowed is not None
+              else _question_store().load_namespace("candidates"))
+    for key, value in sorted(values.items()):
         if allowed is not None and key not in allowed:
             continue
         record = _candidate_record(value)
@@ -1374,7 +1516,9 @@ def pending_candidate_pools(
         else None
     )
     pools: Dict[str, dict] = {}
-    for key, value in _question_store().load_namespace("candidates").items():
+    values = (_question_store().get_many("candidates", allowed) if allowed is not None
+              else _question_store().load_namespace("candidates"))
+    for key, value in sorted(values.items()):
         if allowed is not None and key not in allowed:
             continue
         pool = _candidate_pool(value)
@@ -1477,6 +1621,8 @@ def persist_candidate_result(records: Dict[str, dict], errors: Dict[str, str]) -
 def persist_candidate_pool_result(
     pools: Dict[str, dict],
     errors: Dict[str, str],
+    *,
+    preserve_audit_progress: bool = True,
 ) -> None:
     mutation_keys = _mutation_keys(pools, errors)
     with _thread_lock:
@@ -1492,6 +1638,7 @@ def persist_candidate_pool_result(
                     continue
                 previous = candidates.get(normalized)
                 retry_history = previous if isinstance(previous, dict) else failures.get(normalized, {})
+                prior_audit = previous if isinstance(previous, dict) else bank["rejections"].get(normalized, {})
                 generation_attempts = (
                     int(previous.get("generation_attempts") or 0)
                     if isinstance(previous, dict)
@@ -1507,6 +1654,7 @@ def persist_candidate_pool_result(
                     "last_audit_error": "",
                     "automatic_attempts": int(retry_history.get("automatic_attempts") or 0),
                     "first_pending_at": retry_history.get("first_pending_at") or now,
+                    "audit_progress": dict(prior_audit.get("audit_progress") or {}) if preserve_audit_progress else {},
                 }
                 failures.pop(normalized, None)
             for key, error in errors.items():
@@ -1684,6 +1832,8 @@ def persist_candidate_pool_audit_result(
                 )
                 rejections[normalized] = {
                     "attempts": rejection_attempts + 1,
+                    "audit_version": AUDIT_VERSION,
+                    "audit_progress": dict(current.get("audit_progress") or {}),
                     "rejected_at": now,
                     "candidate_id": current.get("candidate_id"),
                     "last_error": str(error or "semantic pool audit rejected candidate")[:500],
@@ -1723,6 +1873,7 @@ def audit_candidate_pools_and_persist(
     *,
     limit: int = 0,
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
+    audit_identity: str = "",
 ) -> dict:
     pools = pending_candidate_pools(limit=limit)
     if not pools:
@@ -1731,6 +1882,7 @@ def audit_candidate_pools_and_persist(
         pools,
         chat,
         diagnostic=diagnostic,
+        audit_identity=audit_identity,
     )
     published_keys = persist_candidate_pool_audit_result(
         approved,
@@ -1804,6 +1956,7 @@ def generate_audited_and_persist(
     refresh_prompt: bool = False,
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
     max_generation_attempts: int = 2,
+    audit_identity: str = "",
 ) -> dict:
     """Generate, independently audit, repair once, and publish approved records."""
     pending = list(sources) if force and not refresh_prompt else sources_needing_prompt_refresh(sources)
@@ -1816,7 +1969,7 @@ def generate_audited_and_persist(
     final_errors: Dict[str, str] = {}
     rejected_all: Dict[str, str] = {}
     retry_all: Dict[str, str] = {}
-    failures = failure_records()
+    failures = _question_store().get_many("failures", source_by_key)
     repair_feedback: Dict[str, str] = {
         key: str(failures[key].get("last_error") or "")
         for key in source_by_key if isinstance(failures.get(key), dict)
@@ -1825,6 +1978,14 @@ def generate_audited_and_persist(
         key: pool for key, pool in pending_candidate_pools(word_keys=source_by_key).items()
         if pool["source"].get("source_hash") == source_by_key[key].get("source_hash")
     }
+    resumed_candidates = len(reusable)
+    reused_questions = {}
+    if refresh_prompt and not force:
+        reused_questions = reusable_refresh_pools([
+            source for source in pending if source["english"] not in reusable
+        ])
+        persist_candidate_pool_result(reused_questions, {})
+        reusable.update(reused_questions)
     for attempt in range(1, attempts + 1):
         pools = dict(reusable) if attempt == 1 else {}
         to_generate = [source for source in remaining if source["english"] not in pools]
@@ -1845,13 +2006,14 @@ def generate_audited_and_persist(
                 diagnostic=diagnostic, repair_feedback=repair_feedback,
                 repair_candidates=repair_candidates,
             )
-            persist_candidate_pool_result(generated_pools, errors)
+            persist_candidate_pool_result(generated_pools, errors, preserve_audit_progress=not force)
             pools.update(generated_pools)
             generation_errors.update(errors)
         approved, rejected, retry_errors = audit_generation_candidate_pools(
             pools,
             audit_chat or chat,
             diagnostic=diagnostic,
+            audit_identity=audit_identity if not force else "",
         )
         published_keys = persist_candidate_pool_audit_result(
             approved,
@@ -1892,6 +2054,8 @@ def generate_audited_and_persist(
         "requested": len(sources),
         "pending": len(pending),
         "generated": len(approved_all),
+        "reused_questions": len(reused_questions),
+        "resumed_candidates": resumed_candidates,
         "failed": len(final_errors),
         "generated_words": sorted(approved_all),
         "failed_words": sorted(final_errors),

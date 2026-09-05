@@ -1140,3 +1140,262 @@ def test_concurrent_candidate_change_is_not_counted_as_published(private_questio
     assert result['generated'] == 0
     assert result['audit_retry_words'] == ['benefit']
     assert questions.get_question('benefit', 'context') is None
+
+
+def _legacy_record(source):
+    record, error = questions.finalize_generated_questions(source, _generated(source['english']))
+    assert not error
+    return {**questions._mark_independently_audited(record), 'audit_version': 4,
+            'quality_gate': 'independent-semantic-audit-v4'}
+
+
+def _put_legacy_record(source, record=None):
+    bank = questions.empty_bank()
+    bank['questions'][source['english']] = record or _legacy_record(source)
+    questions._write_bank_unlocked(bank)
+
+
+def _blind_reply(messages, correct_words=('benefit',)):
+    prompt = messages[-1]['content']
+    items = json.loads(prompt.split('待审数据 JSON：\n')[1])
+    rows = []
+    for item in items:
+        row = {'item_id': item['item_id']}
+        if '英文识义盲审' in prompt:
+            row.update(
+                recognition_valid_definition=[option['text'] == '益处' for option in item['options']],
+                recognition_parallel_form=[True] * len(item['options']),
+            )
+        elif '语境选词盲审' in prompt:
+            row.update(
+                context_grammatical=[True] * len(item['options']),
+                context_meaning_fits=[option['text'] in correct_words for option in item['options']],
+                context_quality={'natural': True, 'decisive_clues': True, 'answer_revealed': False, 'reason_zh': '线索充分。'},
+            )
+        else:
+            row['feedback_quality'] = _feedback_quality()
+        rows.append(row)
+    return json.dumps(rows)
+
+
+def test_refresh_reaudits_legacy_content_without_generation(private_question_bank):
+    source = _source('benefit', 'n. 益处')
+    _put_legacy_record(source)
+    calls = []
+
+    def audit(messages, max_tokens):
+        calls.append(messages)
+        return _blind_reply(messages)
+
+    result = questions.generate_audited_and_persist(
+        [source], lambda *args: pytest.fail('old valid content must not be regenerated'),
+        audit_chat=audit, refresh_prompt=True, audit_identity='test-model',
+    )
+    assert result['generated_words'] == ['benefit']
+    assert result['reused_questions'] == 1
+    assert len(calls) == 3
+    record = questions.load_bank()['questions']['benefit']
+    assert record['refreshed_from']['audit_version'] == 4
+    assert questions.has_current_prompt_questions('benefit')
+
+
+@pytest.mark.parametrize('change', ['source', 'translation', 'answer', 'blank', 'duplicate'])
+def test_refresh_regenerates_unusable_legacy_content(private_question_bank, change):
+    source = _source('benefit', 'n. 益处')
+    record = _legacy_record(source)
+    if change == 'source':
+        record['source_hash'] = 'old-source'
+    elif change == 'translation':
+        record['context']['translation_zh'] = ''
+    elif change == 'answer':
+        record['context']['answer_option_id'] = 'unknown'
+    elif change == 'blank':
+        record['context']['prompt'] += ' ____'
+    else:
+        record['context']['options'][1] = record['context']['options'][0]
+    _put_legacy_record(source, record)
+    generated = []
+
+    def generate(*args):
+        generated.append(1)
+        return json.dumps([_generated('benefit')])
+
+    result = questions.generate_audited_and_persist(
+        [source], generate, audit_chat=lambda messages, _: _blind_reply(messages),
+        refresh_prompt=True, audit_identity='test-model',
+    )
+    assert result['generated_words'] == ['benefit']
+    assert result['reused_questions'] == 0
+    assert len(generated) == 1
+
+
+def test_refresh_checkpoints_survive_interruption(private_question_bank):
+    source = _source('benefit', 'n. 益处')
+    _put_legacy_record(source)
+
+    def interrupted(messages, max_tokens):
+        if '校对最终四选项' in messages[-1]['content']:
+            raise KeyboardInterrupt()
+        return _blind_reply(messages)
+
+    with pytest.raises(KeyboardInterrupt):
+        questions.generate_audited_and_persist(
+            [source], lambda *args: pytest.fail('no generation expected'),
+            audit_chat=interrupted, refresh_prompt=True, audit_identity='model-a',
+        )
+    assert set(questions.load_bank()['candidates']['benefit']['audit_progress']) == {
+        'recognition_blind', 'context_blind',
+    }
+    calls = []
+
+    def resumed(messages, max_tokens):
+        calls.append(messages[-1]['content'])
+        return _blind_reply(messages)
+
+    result = questions.generate_audited_and_persist(
+        [source], lambda *args: pytest.fail('no generation expected'),
+        audit_chat=resumed, refresh_prompt=True, audit_identity='model-a',
+    )
+    assert result['generated_words'] == ['benefit']
+    assert len(calls) == 1
+    assert '校对最终四选项' in calls[0]
+
+
+def test_audit_checkpoint_invalidates_only_changed_content(private_question_bank, monkeypatch):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    pool, _ = questions.build_generation_candidate_pool(source, raw)
+    questions.persist_candidate_pool_result({'benefit': pool}, {})
+    calls = []
+
+    def audit(messages, max_tokens):
+        calls.append(messages[-1]['content'])
+        return _blind_reply(messages)
+
+    def run(pool, identity):
+        approved, rejected, retry = questions.audit_generation_candidate_pools(
+            {'benefit': pool}, audit, audit_identity=identity,
+        )
+        assert approved and not rejected and not retry
+
+    run(pool, 'model-a')
+    assert len(calls) == 3
+    calls.clear()
+    run(pool, 'model-a')
+    assert calls == []
+
+    changed, _ = questions.build_generation_candidate_pool(source, {**raw, 'context_translation_zh': '更新后的译文。'})
+    questions.persist_candidate_pool_result({'benefit': changed}, {})
+    run(changed, 'model-a')
+    assert len(calls) == 1 and '校对最终四选项' in calls[0]
+    calls.clear()
+    run(changed, 'model-b')
+    assert len(calls) == 3
+    calls.clear()
+    monkeypatch.setattr(questions, 'AUDIT_VERSION', questions.AUDIT_VERSION + 1)
+    run(changed, 'model-b')
+    assert len(calls) == 3
+
+
+def test_audit_checkpoint_is_independent_of_batch_position(private_question_bank):
+    sources = [_source(word, 'n. 益处') for word in ('alpha', 'bravo')]
+    pools = {source['english']: questions.build_generation_candidate_pool(source, _generated(source['english']))[0] for source in sources}
+    questions.persist_candidate_pool_result(pools, {})
+    approved, _, _ = questions.audit_generation_candidate_pools(
+        pools, lambda messages, _: _blind_reply(messages, ('alpha', 'bravo')), audit_identity='model-a',
+    )
+    assert set(approved) == {'alpha', 'bravo'}
+    approved, rejected, retry = questions.audit_generation_candidate_pools(
+        {'bravo': pools['bravo']}, lambda *args: pytest.fail('batch item_id must not invalidate content cache'),
+        audit_identity='model-a',
+    )
+    assert list(approved) == ['bravo']
+    assert not rejected and not retry
+
+
+def test_small_refresh_never_loads_full_namespaces(private_question_bank, monkeypatch):
+    source = _source('benefit', 'n. 益处')
+    _put_legacy_record(source)
+    store = questions._question_store()
+    monkeypatch.setattr(store, 'load_namespace', lambda *args: pytest.fail('bounded refresh must use keyed reads'))
+    result = questions.generate_audited_and_persist(
+        [source], lambda *args: pytest.fail('no generation expected'),
+        audit_chat=lambda messages, _: _blind_reply(messages), refresh_prompt=True, audit_identity='model-a',
+    )
+    assert result['generated'] == 1
+
+
+def test_prompt_refresh_scan_stops_at_limit(private_question_bank, monkeypatch):
+    store = questions._question_store()
+    batches = []
+    original = store.get_many
+
+    def get_many(namespace, keys):
+        keys = list(keys)
+        batches.append((namespace, len(keys)))
+        return original(namespace, keys)
+
+    monkeypatch.setattr(store, 'get_many', get_many)
+    sources = [_source(f'word-{index}', 'n. 益处') for index in range(1000)]
+    assert len(questions.sources_needing_prompt_refresh(sources, limit=30)) == 30
+    assert batches == [('questions', 200)]
+
+
+def test_rejected_legacy_question_is_not_reaudited_on_next_run(private_question_bank):
+    source = _source('benefit', 'n. 益处')
+    _put_legacy_record(source)
+
+    def reject_context(messages, max_tokens):
+        rows = json.loads(_blind_reply(messages))
+        if '语境选词盲审' in messages[-1]['content']:
+            rows[0]['context_meaning_fits'] = [True] * 4
+        return json.dumps(rows)
+
+    first = questions.generate_audited_and_persist(
+        [source], lambda *args: pytest.fail('first attempt reuses old content'),
+        audit_chat=reject_context, refresh_prompt=True, max_generation_attempts=1,
+        audit_identity='model-a',
+    )
+    assert first['failed'] == 1
+    assert questions.reusable_refresh_pools([source]) == {}
+    generated = []
+
+    def generate(*args):
+        generated.append(1)
+        raw = _generated('benefit')
+        raw['context_sentence'] = 'Afterward, ' + raw['context_sentence']
+        return json.dumps([raw])
+
+    second = questions.generate_audited_and_persist(
+        [source], generate, audit_chat=lambda messages, _: _blind_reply(messages),
+        refresh_prompt=True, audit_identity='model-a',
+    )
+    assert second['generated'] == 1 and second['reused_questions'] == 0
+    assert generated == [1]
+
+
+def test_refresh_saves_generation_requests_for_thirty_old_words(private_question_bank):
+    words = [f'word{chr(97 + index // 26)}{chr(97 + index % 26)}' for index in range(30)]
+    sources = [_source(word, 'n. 益处') for word in words]
+    counts_by_mode = []
+    for force in (True, False):
+        bank = questions.empty_bank()
+        bank['questions'] = {source['english']: _legacy_record(source) for source in sources}
+        questions._write_bank_unlocked(bank)
+        counts = {'generation': 0, 'audit': 0}
+
+        def generate(messages, max_tokens):
+            counts['generation'] += 1
+            items = json.loads(messages[-1]['content'].split('输入（必须为以下 JSON 数组中的每个对象输出一个结果，保持原顺序）：\n')[1])
+            return json.dumps([_generated(item['english']) for item in items])
+
+        def audit(messages, max_tokens):
+            counts['audit'] += 1
+            return _blind_reply(messages, words)
+
+        result = questions.generate_audited_and_persist(
+            sources, generate, audit_chat=audit, refresh_prompt=True,
+            force=force, audit_identity='model-a',
+        )
+        assert result['generated'] == 30
+        counts_by_mode.append(counts)
+    assert counts_by_mode == [{'generation': 3, 'audit': 9}, {'generation': 0, 'audit': 9}]
