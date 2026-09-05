@@ -132,6 +132,10 @@ python3 scripts/generate_gaokao_questions.py --stage generate --level "" --batch
 
 图片文字识别默认使用 RapidOCR 内置 PP-OCR 模型和 ONNX Runtime，首次识别时懒加载，不需要运行时下载模型。推理默认使用 2 个 CPU 线程，可通过 `OCR_ONNX_THREADS=1..8` 调整。RapidOCR 不可用或识别为空时会自动尝试 Tesseract；Docker 镜像已包含 OpenCV 和 Tesseract 所需的系统包。PM2/原生 Gunicorn 部署还需安装 OpenCV 运行库：Debian/Ubuntu 使用 `apt install libgl1 libglib2.0-0`，OpenCloudOS/RHEL 使用 `dnf install libglvnd-glx glib2`。
 
+图片导入默认勾选「仅提取英文」和「手写增强」。手写模式保留原图读法，并对文字区域裁剪、增强对比度后再次识别；按位置合并结果，用随项目提供的词表及当前词库生成拼写候选。中文释义仅在本地辅助候选排序，正文仅输出英文，短语保持整行。候选不会自动写入正文：可在「识别校对」中查看原图局部、选词、编辑、删除或补充，再点击「应用校对」。关闭「仅提取英文」后返回原始中英文本，手写增强不启用。
+
+OCR 运行时不调用云 API，也不自动下载模型；固定读取 `rapidocr==3.9.2` 包内的 `PP-OCRv6_det_small.onnx`、`PP-OCRv6_rec_small.onnx` 和方向分类模型，缺失时尝试本地 Tesseract。离线部署需事先准备 Python 依赖及模型文件。增强失败保留原图结果。图片提取后的常规词库匹配仍在本地完成；独立的 VIP 新词自动补全功能仍使用 DeepSeek。
+
 ## 更多文档
 
 - [QUICK_START.md](QUICK_START.md) — 启动步骤与使用流程

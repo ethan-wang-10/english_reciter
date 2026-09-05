@@ -9059,6 +9059,7 @@ async function onImportNceLessonChange() {
     if (!sel || !ta) return;
     const raw = sel.value;
     if (!raw) return;
+    clearImportOcrReview();
 
     if (articleImportPickMode) {
         resetArticleImportPickUI();
@@ -9104,11 +9105,17 @@ let articleImportWords = [];
 let articleImportBusy = false;
 let articleConfirmImportBusy = false;
 let importOcrBusy = false;
+let importOcrVersion = 0;
+let importOcrRows = [];
+let importOcrImage = null;
+let importOcrImageUrl = '';
+let importOcrReviewDirty = false;
 let importVocabBusy = false;
 /** @type {Set<number>} */
 let articleImportSelectedIdx = new Set();
 /** 导入成功且结果对话框已打开时，finally 不再恢复「确认导入」按钮 */
 function resetArticleImportPickUI() {
+    clearImportOcrReview();
     articleImportPickMode = false;
     articleImportBusy = false;
     articleConfirmImportBusy = false;
@@ -9217,6 +9224,7 @@ function initImportArticleSelectAllCheckbox() {
 }
 
 function applyArticleExtractResult(words, data) {
+    clearImportOcrReview();
     const ta = document.getElementById('import-article-textarea');
     const wrap = document.getElementById('import-article-pick-wrap');
     const btnA = document.getElementById('import-article-btn');
@@ -9343,6 +9351,11 @@ async function confirmArticleImportFromPicks() {
 }
 
 async function importFromArticle() {
+    if (importOcrBusy) return;
+    if (importOcrReviewDirty) {
+        showImportNotice('校对内容尚未应用。', { title: '识别校对', isError: true });
+        return;
+    }
     if (articleImportPickMode) {
         await confirmArticleImportFromPicks();
         return;
@@ -9492,44 +9505,187 @@ function applyImportVocabTextareaNormalize() {
     if (cur !== n) ta.value = n;
 }
 
-/** 从图片 OCR 填入「从文章导入」文本框（整段 raw_text） */
+function clearImportOcrReview() {
+    importOcrVersion += 1;
+    importOcrRows = [];
+    importOcrImage = null;
+    importOcrReviewDirty = false;
+    if (importOcrImageUrl) URL.revokeObjectURL(importOcrImageUrl);
+    importOcrImageUrl = '';
+    const review = document.getElementById('import-ocr-review');
+    if (review) review.hidden = true;
+    document.getElementById('import-ocr-review-lines')?.replaceChildren();
+    document.getElementById('import-ocr-original')?.removeAttribute('href');
+    const status = document.getElementById('import-ocr-status');
+    if (status) status.hidden = true;
+}
+
+function setImportOcrStatus(text) {
+    const status = document.getElementById('import-ocr-status');
+    if (status) {
+        status.textContent = text;
+        status.hidden = !text;
+    }
+}
+
+function renderImportOcrRows() {
+    const list = document.getElementById('import-ocr-review-lines');
+    if (!list) return;
+    list.replaceChildren();
+    document.getElementById('import-ocr-review-count').textContent = `${importOcrRows.length} 行`;
+    importOcrRows.forEach((row, index) => {
+        const line = document.createElement('div');
+        line.className = 'import-ocr-review-line';
+        const canvas = document.createElement('canvas');
+        canvas.width = 288;
+        canvas.height = 128;
+        canvas.setAttribute('role', 'img');
+        canvas.setAttribute('aria-label', `第 ${index + 1} 行原图`);
+        const context = canvas.getContext('2d');
+        if (context && importOcrImage && Array.isArray(row.box) && row.box.length === 4) {
+            const image = importOcrImage;
+            const [x, y, w, h] = row.box;
+            const sx = Math.max(0, x * image.naturalWidth - 6);
+            const sy = Math.max(0, y * image.naturalHeight - 6);
+            const sw = Math.min(image.naturalWidth - sx, w * image.naturalWidth + 12);
+            const sh = Math.min(image.naturalHeight - sy, h * image.naturalHeight + 12);
+            const scale = Math.min(canvas.width / sw, canvas.height / sh);
+            context.drawImage(image, sx, sy, sw, sh,
+                (canvas.width - sw * scale) / 2, (canvas.height - sh * scale) / 2, sw * scale, sh * scale);
+        }
+        const fields = document.createElement('div');
+        fields.className = 'import-ocr-review-fields';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = row.text;
+        input.placeholder = '待补充';
+        input.spellcheck = false;
+        input.autocomplete = 'off';
+        input.setAttribute('autocapitalize', 'none');
+        input.lang = 'en';
+        input.setAttribute('aria-label', `第 ${index + 1} 行英文`);
+        input.setAttribute('aria-invalid', row.needs_review ? 'true' : 'false');
+        input.addEventListener('input', () => {
+            row.text = input.value;
+            row.needs_review = false;
+            input.setAttribute('aria-invalid', 'false');
+            importOcrReviewDirty = true;
+        });
+        fields.append(input);
+        if (row.alternatives?.length) {
+            const select = document.createElement('select');
+            select.setAttribute('aria-label', `第 ${index + 1} 行候选`);
+            select.add(new Option('候选词', ''));
+            row.alternatives.forEach((text) => select.add(new Option(text, text)));
+            select.addEventListener('change', () => {
+                if (!select.value) return;
+                row.text = select.value;
+                row.needs_review = false;
+                input.value = row.text;
+                input.setAttribute('aria-invalid', 'false');
+                importOcrReviewDirty = true;
+                select.value = '';
+            });
+            fields.append(select);
+        }
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'import-ocr-delete';
+        remove.textContent = '×';
+        remove.title = `删除第 ${index + 1} 行`;
+        remove.setAttribute('aria-label', remove.title);
+        remove.addEventListener('click', () => {
+            importOcrRows.splice(index, 1);
+            importOcrReviewDirty = true;
+            renderImportOcrRows();
+        });
+        line.append(canvas, fields, remove);
+        list.append(line);
+    });
+}
+
+async function showImportOcrReview(rows, file, version) {
+    if (!Array.isArray(rows) || !rows.length) return;
+    importOcrRows = rows.map((row) => ({ ...row }));
+    importOcrImageUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.src = importOcrImageUrl;
+    await image.decode().catch(() => {});
+    if (version !== importOcrVersion) return;
+    importOcrImage = image.naturalWidth ? image : null;
+    document.getElementById('import-ocr-original').href = importOcrImageUrl;
+    renderImportOcrRows();
+    const review = document.getElementById('import-ocr-review');
+    review.hidden = false;
+    review.open = true;
+}
+
+function applyImportOcrReview() {
+    const text = importOcrRows.map((row) => row.text.trim()).filter(Boolean).join('\n');
+    const textarea = document.getElementById('import-article-textarea');
+    if (textarea) textarea.value = text;
+    importOcrReviewDirty = false;
+    document.getElementById('import-ocr-review').open = false;
+    setImportOcrStatus('校对已应用');
+}
+
 async function runImportOcrToTextarea(file) {
-    if (importOcrBusy) return;
+    if (importOcrBusy || articleImportBusy || articleConfirmImportBusy) return;
     if (!file || !file.size) {
         showImportNotice('请选择有效的图片文件', { isError: true });
         return;
     }
+    if (articleImportPickMode) resetArticleImportPickUI();
+    clearImportOcrReview();
+    const version = importOcrVersion;
     importOcrBusy = true;
     const btn = document.getElementById('import-ocr-pick-img-btn');
     const ta = document.getElementById('import-article-textarea');
+    const lockedControls = ['import-article-btn', 'import-nc-lesson-select', 'import-ocr-english-only', 'import-ocr-handwriting']
+        .map((id) => document.getElementById(id)).filter(Boolean);
+    const previousDisabled = lockedControls.map((control) => control.disabled);
+    lockedControls.forEach((control) => { control.disabled = true; });
+    if (ta) ta.disabled = true;
     if (btn) {
         btn.disabled = true;
         btn.textContent = '识别中…';
     }
     const fd = new FormData();
     fd.append('file', file);
-    const englishOnly = document.getElementById('import-ocr-english-only')?.checked === true;
+    const englishOnly = document.getElementById('import-ocr-english-only')?.checked !== false;
     fd.append('english_only', englishOnly ? '1' : '0');
+    fd.append('handwriting', document.getElementById('import-ocr-handwriting')?.checked !== false ? '1' : '0');
+    setImportOcrStatus('正在识别…');
     try {
         const data = await apiRequest('/wordbank/ocr-extract', { method: 'POST', body: fd });
+        if (version !== importOcrVersion) return;
         const raw = data.raw_text != null ? String(data.raw_text).trim() : '';
         if (ta) {
             ta.value = raw;
         }
-        if (!raw) {
+        const localExtract = document.getElementById('import-article-extract-spacy');
+        if (localExtract) localExtract.checked = true;
+        await showImportOcrReview(data.review_lines, file, version);
+        if (version !== importOcrVersion) return;
+        if (!raw && !data.review_lines?.length) {
+            setImportOcrStatus('未识别到文字');
             showImportNotice(
                 '未识别到文字。可换一张更清晰的图片，或检查服务端 OCR 依赖。',
                 { title: '图片识别完成', isError: false }
             );
         } else {
-            showImportNotice('已填入识别文本，可编辑后点击「从文章提取词汇」。', {
-                title: '图片识别完成',
-                isError: false,
-            });
+            const count = (data.review_lines || []).filter((row) => row.needs_review).length;
+            const resultStatus = data.handwriting && !data.enhancement_applied
+                ? '增强未完成，已保留原图结果' : '识别完成';
+            setImportOcrStatus(count ? `${resultStatus}，${count} 行待校对` : resultStatus);
         }
     } catch (error) {
+        if (version !== importOcrVersion) return;
+        setImportOcrStatus('识别失败');
         showImportNotice(error.message || '识别失败', { title: '图片识别失败', isError: true });
     } finally {
+        lockedControls.forEach((control, index) => { control.disabled = previousDisabled[index]; });
+        if (ta) ta.disabled = false;
         if (btn) {
             btn.disabled = false;
             btn.textContent = '选择图片…';
@@ -10323,6 +10479,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     const importOcrPickImgBtn = document.getElementById('import-ocr-pick-img-btn');
     const importOcrFileInput = document.getElementById('import-ocr-file-input');
+    document.getElementById('import-ocr-apply')?.addEventListener('click', applyImportOcrReview);
+    document.getElementById('import-ocr-add-line')?.addEventListener('click', () => {
+        importOcrRows.push({ text: '', alternatives: [], needs_review: true, box: null });
+        importOcrReviewDirty = true;
+        renderImportOcrRows();
+        document.querySelector('#import-ocr-review-lines .import-ocr-review-line:last-child input')?.focus();
+    });
+    document.getElementById('import-ocr-english-only')?.addEventListener('change', (event) => {
+        const handwriting = document.getElementById('import-ocr-handwriting');
+        if (handwriting) handwriting.disabled = !event.target.checked;
+    });
     if (importOcrPickImgBtn && importOcrFileInput) {
         importOcrPickImgBtn.addEventListener('click', () => importOcrFileInput.click());
         importOcrFileInput.addEventListener('change', () => {

@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 import tempfile
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
@@ -290,6 +291,7 @@ def test_ocr_extract_applies_english_only_when_requested(
         data={
             "file": (BytesIO(b"image"), "words.png"),
             "english_only": english_only,
+            "handwriting": "0",
         },
         headers={"Authorization": "Bearer test"},
     )
@@ -300,7 +302,58 @@ def test_ocr_extract_applies_english_only_when_requested(
         "ocr_engine": "rapidocr",
         "raw_text": expected_text,
         "tokens": ["ability"],
+        "handwriting": False,
+        "enhancement_applied": False,
+        "review_lines": [],
     }
+
+
+def test_ocr_extract_defaults_to_offline_english_handwriting(client, monkeypatch):
+    monkeypatch.setattr(web, "verify_token", lambda token: "alice")
+    monkeypatch.setattr(web, "get_user", lambda username: {"enabled": True})
+    monkeypatch.setattr(web, "_rate_allow", lambda *args: True)
+    monkeypatch.setattr(web, "_ocr_stack_ready", lambda: True)
+    monkeypatch.setattr(web, "_prepare_image_for_ocr", lambda stream: object())
+    review = [{"text": "guide", "alternatives": [], "needs_review": False, "box": None}]
+    monkeypatch.setattr(web, "_recognize_handwriting", lambda image: ("guide 指南", "rapidocr", review, True))
+    monkeypatch.setattr(web, "_deepseek_chat", lambda *args, **kwargs: pytest.fail("OCR must stay offline"))
+    response = client.post("/api/wordbank/ocr-extract", data={"file": (BytesIO(b"image"), "words.png")},
+                           headers={"Authorization": "Bearer test"})
+    assert response.status_code == 200
+    assert response.json["english_only"] is True
+    assert response.json["handwriting"] is True
+    assert response.json["raw_text"] == "guide"
+    assert response.json["review_lines"] == review
+
+
+def test_handwriting_keeps_original_when_enhancement_fails(monkeypatch):
+    monkeypatch.setattr(web, "_rapidocr_image_to_lines", lambda image: [
+        {"text": "guide 指南", "score": .95, "box": None},
+    ])
+    monkeypatch.setattr(web.ocr_import, "enhanced_image", lambda *args: (_ for _ in ()).throw(ValueError("bad crop")))
+    monkeypatch.setattr(web.ocr_import, "bundled_vocabulary", lambda root: {"guide": "指南"})
+    monkeypatch.setattr(web, "merge_wordbank_rows_for_search", lambda: ([], set()))
+    text, engine, review, enhanced = web._recognize_handwriting(object())
+    assert (text, engine, enhanced) == ("guide", "rapidocr", False)
+    assert review[0]["text"] == "guide"
+
+
+def test_handwriting_falls_back_when_rapidocr_unavailable(monkeypatch):
+    monkeypatch.setattr(web, "_rapidocr_image_to_lines", lambda image: None)
+    monkeypatch.setattr(web, "_recognize_ocr_image", lambda image: ("fallback", "tesseract"))
+    assert web._recognize_handwriting(object()) == ("fallback", "tesseract", [], False)
+
+
+def test_rapidocr_missing_local_models_never_initializes_downloader(monkeypatch, tmp_path):
+    fake = SimpleNamespace(__file__=str(tmp_path / "__init__.py"), EngineType=object(),
+                           RapidOCR=lambda **kwargs: pytest.fail("Missing models must not trigger initialization/download"))
+    monkeypatch.setitem(sys.modules, "rapidocr", fake)
+    monkeypatch.setitem(sys.modules, "onnxruntime", SimpleNamespace(disable_telemetry_events=lambda: None))
+    monkeypatch.setattr(web, "_rapidocr_load_attempted", False)
+    monkeypatch.setattr(web, "_rapidocr_engine", None)
+    monkeypatch.setattr(web, "_rapidocr_load_error", "")
+    assert web._get_rapidocr_engine() is None
+    assert "本地 OCR 模型缺失" in web._rapidocr_load_error
 
 
 def test_smtp_from_email_accepts_display_name(monkeypatch) -> None:
@@ -399,7 +452,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert 'id="import-ocr-english-only"' in html
     assert "仅提取英文" in html
     assert "fd.append('english_only', englishOnly ? '1' : '0')" in javascript
-    assert "/static/js/app.js?v=20260901-ocr-english-only-v1" in html
+    assert "/static/js/app.js?v=20260905-offline-handwriting-v1" in html
     assert "function reviewWordHasNoLearningAttempt(word)" in javascript
     assert "function reviewQueueEndpoint(path)" in javascript
     assert "reviewQueueEndpoint('/bootstrap')" in javascript
@@ -411,7 +464,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "newWordsFirst && word?.task_imported_today" not in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260901-ocr-english-only-v1" in html
+    assert "/static/css/style.css?v=20260905-offline-handwriting-v1" in html
     assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet

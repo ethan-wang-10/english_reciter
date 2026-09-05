@@ -9240,6 +9240,117 @@ button.import-article-chip--selected:hover {
     accent-color: var(--primary-color);
     cursor: pointer;
 }
+.import-ocr-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 20px;
+}
+.import-ocr-review {
+    margin: 12px 0 20px;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+.import-ocr-review summary {
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 700;
+    padding: 4px 0 10px;
+}
+#import-ocr-review-count {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+#import-ocr-original {
+    display: inline-block;
+    margin: 0 0 8px;
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+}
+.import-ocr-review-lines {
+    max-height: 420px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.import-ocr-review-line {
+    display: grid;
+    grid-template-columns: 144px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 2px;
+    border-bottom: 1px solid var(--border);
+}
+.import-ocr-review-line canvas {
+    width: 144px;
+    height: 64px;
+    background: #f2f4f5;
+    object-fit: contain;
+}
+.import-ocr-review-fields {
+    min-width: 0;
+    display: grid;
+    gap: 6px;
+}
+.import-ocr-review-fields input,
+.import-ocr-review-fields select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    font: inherit;
+    font-size: 0.9rem;
+    background: var(--surface);
+    color: var(--text-primary);
+}
+.import-ocr-review-fields input[aria-invalid="true"] {
+    border-color: #b27519;
+}
+.import-ocr-delete {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 24px;
+    cursor: pointer;
+}
+.import-ocr-delete:hover {
+    color: #bc3434;
+}
+.import-ocr-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+}
+.import-ocr-review-actions > .btn {
+    width: auto;
+    min-height: 44px;
+}
+@media (max-width: 540px) {
+    .import-ocr-review-lines {
+        max-height: 320px;
+    }
+    .import-ocr-review-line {
+        grid-template-columns: 88px minmax(0, 1fr) 28px;
+        gap: 6px;
+    }
+    .import-ocr-review-line canvas {
+        width: 88px;
+        height: 64px;
+    }
+    .import-ocr-review-fields input,
+    .import-ocr-review-fields select {
+        font-size: 16px;
+    }
+    .import-ocr-delete {
+        width: 28px;
+    }
+}
 .article-import-result {
     margin-top: 12px;
     padding: 12px 16px;

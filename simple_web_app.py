@@ -57,6 +57,7 @@ import chat_room
 import wordbank_v2
 import gaokao_questions
 import gaokao_backfill
+import ocr_import
 from review_scheduler import EXERCISE_TYPES, ReviewEventConflict
 from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
 from auth_session_store import (
@@ -6410,13 +6411,6 @@ _OCR_MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 _OCR_MAX_SIDE = 2400
 _OCR_MAX_TOKENS = 500
 _OCR_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
-_OCR_ENGLISH_ONLY_WORD_RE = re.compile(r"[A-Za-z]+(?:['-][A-Za-z]+)*")
-_OCR_IPA_DELIMITED_RE = re.compile(r"/[^/\r\n]*/|\[[^\]\r\n]*\]")
-_OCR_IPA_TOKEN_RE = re.compile(r"\S*[\u0250-\u02af\u1d00-\u1dbf]\S*")
-_OCR_PART_OF_SPEECH_LABELS = {
-    "adj", "adv", "art", "aux", "conj", "det", "int", "interj",
-    "n", "num", "phr", "prep", "pron", "v", "vi", "vt",
-}
 _GAOKAO_IMPORT_BATCH_WORDS = 5
 _rapidocr_engine = None
 _rapidocr_load_attempted = False
@@ -6447,10 +6441,23 @@ def _get_rapidocr_engine():
             return _rapidocr_engine
         _rapidocr_load_attempted = True
         try:
+            import rapidocr
+            import onnxruntime
             from rapidocr import EngineType, RapidOCR
 
+            model_dir = Path(rapidocr.__file__).parent / "models"
+            model_paths = {
+                "Det.model_path": model_dir / "PP-OCRv6_det_small.onnx",
+                "Cls.model_path": model_dir / "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+                "Rec.model_path": model_dir / "PP-OCRv6_rec_small.onnx",
+            }
+            for path in model_paths.values():
+                if not path.is_file():
+                    raise OCRUnavailableError(f"本地 OCR 模型缺失：{path.name}，请重新安装 rapidocr==3.9.2")
+            onnxruntime.disable_telemetry_events()
             onnx_threads = _positive_env_int("OCR_ONNX_THREADS", 2, 8)
             _rapidocr_engine = RapidOCR(params={
+                **{key: str(path) for key, path in model_paths.items()},
                 "Global.log_level": "warning",
                 "Det.engine_type": EngineType.ONNXRUNTIME,
                 "Cls.engine_type": EngineType.ONNXRUNTIME,
@@ -6466,8 +6473,8 @@ def _get_rapidocr_engine():
         return _rapidocr_engine
 
 
-def _rapidocr_image_to_string(im: Any) -> Optional[str]:
-    """Return None when RapidOCR is unavailable, or recognized text (possibly empty)."""
+def _rapidocr_image_to_lines(im: Any) -> Optional[List[dict]]:
+    """Keep geometry and scores for offline review; None means engine failure."""
     engine = _get_rapidocr_engine()
     if engine is None:
         return None
@@ -6477,13 +6484,52 @@ def _rapidocr_image_to_string(im: Any) -> Optional[str]:
         image_array = np.asarray(im)
         with _rapidocr_inference_lock:
             result = engine(image_array)
-        texts = getattr(result, "txts", None)
-        if not texts:
-            return ""
-        return "\n".join(str(text).strip() for text in texts if str(text).strip())
+        return ocr_import.normalize_result(result, im.size)
     except Exception as e:
         logger.exception("RapidOCR 识别失败，将降级使用 Tesseract: %s", e)
         return None
+
+
+def _rapidocr_image_to_string(im: Any) -> Optional[str]:
+    lines = _rapidocr_image_to_lines(im)
+    return None if lines is None else "\n".join(line["text"] for line in lines)
+
+
+def _recognize_handwriting(im: Any) -> Tuple[str, str, List[dict], bool]:
+    original = _rapidocr_image_to_lines(im)
+    if original is None:
+        text, engine = _recognize_ocr_image(im)
+        return text, engine, [], False
+    enhanced = []
+    enhancement_applied = False
+    try:
+        picture, region = ocr_import.enhanced_image(im, original)
+        alternate = _rapidocr_image_to_lines(picture)
+        if alternate is not None:
+            enhanced = ocr_import.map_crop_lines(alternate, region, im.size)
+            enhancement_applied = True
+    except Exception:
+        logger.exception("手写增强失败，保留原图识别结果")
+    if not original and not enhanced:
+        text, engine = _recognize_ocr_image(im)
+        return text, engine, [], enhancement_applied
+    entries = {}
+    try:
+        entries.update(ocr_import.bundled_vocabulary(STATIC_WB_DIR))
+        rows, _ = merge_wordbank_rows_for_search()
+        for row in rows:
+            key = str(row.get("english", "")).strip().casefold()
+            if key:
+                entries[key] = str(row.get("chinese", ""))
+    except Exception:
+        logger.exception("本地 OCR 纠错词库读取失败，保留识别结果")
+
+    def surface_variants(word):
+        return (_contraction_stem_variants(word) + _plural_stem_variants(word)
+                + _past_tense_stem_variants(word) + _ing_stem_variants(word))
+
+    review = ocr_import.build_review(original, enhanced, ocr_import.Vocabulary(entries, surface_variants))
+    return "\n".join(line["text"] for line in review if line["text"]), "rapidocr", review, enhancement_applied
 
 
 def _tesseract_image_to_string(im: Any) -> str:
@@ -6557,32 +6603,7 @@ def _english_tokens_from_ocr_text(text: str) -> List[str]:
 
 def _english_only_ocr_text(text: str) -> str:
     """Keep readable ASCII English words while removing IPA and dictionary metadata."""
-    output_lines: List[str] = []
-    for raw_line in (text or "").splitlines():
-        line = (
-            raw_line
-            .replace("\u2018", "'")
-            .replace("\u2019", "'")
-            .replace("\u2010", "-")
-            .replace("\u2011", "-")
-            .replace("\u2012", "-")
-            .replace("\u2013", "-")
-            .replace("\u2014", "-")
-        )
-        line = _OCR_IPA_DELIMITED_RE.sub(" ", line)
-        line = _OCR_IPA_TOKEN_RE.sub(" ", line)
-        words: List[str] = []
-        for match in _OCR_ENGLISH_ONLY_WORD_RE.finditer(line):
-            word = match.group(0)
-            key = word.casefold()
-            if key in _OCR_PART_OF_SPEECH_LABELS:
-                continue
-            if len(word) == 1 and key not in ("a", "i"):
-                continue
-            words.append(word)
-        if words:
-            output_lines.append(" ".join(words))
-    return "\n".join(output_lines)
+    return ocr_import.english_only_text(text)
 
 
 def _publish_combined_gaokao_questions_for_new_entries(
@@ -7177,7 +7198,7 @@ def _ensure_gaokao_auto_backfill_scheduler() -> None:
 @app.route('/api/wordbank/ocr-extract', methods=['POST'])
 @token_required
 def wordbank_ocr_extract(username):
-    """上传图片，优先用 RapidOCR 识别英文，失败时降级到 Tesseract。"""
+    """默认离线英文手写识别，返回可编辑的原图读法与词库候选。"""
     if not _rate_allow(f"ocr:{username}", _RATE_MAX_OCR):
         return jsonify({'error': '图片识别过于频繁，请稍后再试'}), 429
     if not _ocr_stack_ready():
@@ -7203,8 +7224,19 @@ def wordbank_ocr_extract(username):
     except Exception as e:
         logger.exception("OCR 图片解析失败: %s", e)
         return jsonify({'error': '无法解析图片'}), 400
+    english_only = (request.form.get('english_only', '1') or '').strip().lower() in {
+        '1', 'true', 'yes', 'on',
+    }
+    handwriting = english_only and (request.form.get('handwriting', '1') or '').strip().lower() in {
+        '1', 'true', 'yes', 'on',
+    }
+    review_lines = []
+    enhancement_applied = False
     try:
-        raw_text, ocr_engine = _recognize_ocr_image(im)
+        if handwriting:
+            raw_text, ocr_engine, review_lines, enhancement_applied = _recognize_handwriting(im)
+        else:
+            raw_text, ocr_engine = _recognize_ocr_image(im)
     except OCRUnavailableError as e:
         return jsonify({'error': f'服务器未启用可用的图片识别引擎：{e}'}), 503
     except TesseractNotFoundError:
@@ -7214,9 +7246,6 @@ def wordbank_ocr_extract(username):
     except Exception as e:
         logger.exception("OCR 识别失败: %s", e)
         return jsonify({'error': '文字识别失败'}), 500
-    english_only = (request.form.get('english_only') or '').strip().lower() in {
-        '1', 'true', 'yes', 'on',
-    }
     if english_only:
         raw_text = _english_only_ocr_text(raw_text)
     tokens = _english_tokens_from_ocr_text(raw_text)
@@ -7225,6 +7254,9 @@ def wordbank_ocr_extract(username):
         'tokens': tokens,
         'ocr_engine': ocr_engine,
         'english_only': english_only,
+        'handwriting': handwriting,
+        'enhancement_applied': enhancement_applied,
+        'review_lines': review_lines,
     }), 200
 
 
