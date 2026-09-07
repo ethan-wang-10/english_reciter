@@ -57,6 +57,7 @@ import chat_room
 import wordbank_v2
 import gaokao_questions
 import gaokao_backfill
+import deepseek_policy
 import ocr_import
 from review_scheduler import EXERCISE_TYPES, ReviewEventConflict
 from project_paths import STATIC_WB_DIR, WORDS_INTERPROCESS_LOCKFILE
@@ -1748,16 +1749,7 @@ def _ssl_context_for_https() -> ssl.SSLContext:
 
 def _deepseek_error_is_retryable(err: BaseException) -> bool:
     """超时、限流、网关错误时可重试。"""
-    msg = str(err).lower()
-    if "timed out" in msg or "timeout" in msg:
-        return True
-    if isinstance(err, urllib.error.HTTPError):
-        return err.code in (429, 500, 502, 503, 504)
-    if isinstance(err, (TimeoutError, ConnectionError)):
-        return True
-    if isinstance(err, urllib.error.URLError) and isinstance(err.reason, (TimeoutError, ConnectionError)):
-        return True
-    return False
+    return deepseek_policy.request_error(err).retryable
 
 
 def _deepseek_http_error_body_for_log(e: urllib.error.HTTPError) -> str:
@@ -1797,11 +1789,16 @@ class _DeepSeekResponse(str):
 def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                    max_tokens: int = 4096, temperature: float = 0.7,
                    thinking: bool = False,
-                   timeout_sec: Optional[float] = None) -> Optional[str]:
-    """调用 DeepSeek Chat API，返回助手回复文本；失败返回 None。"""
+                   timeout_sec: Optional[float] = None,
+                   strict_errors: bool = False) -> Optional[str]:
+    """调用 DeepSeek Chat API；批处理可用 strict_errors 接收分类错误。"""
     api_key = get_deepseek_api_key()
     if not api_key:
         logger.warning("DEEPSEEK_API_KEY 未配置，无法调用 DeepSeek API")
+        if strict_errors:
+            raise deepseek_policy.DeepSeekRequestError(
+                "configuration", "DEEPSEEK_API_KEY is not configured",
+            )
         return None
     model = (model or DEEPSEEK_CHAT_MODEL).strip() or DEEPSEEK_CHAT_MODEL
     user_text = ""
@@ -1839,34 +1836,38 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
     for attempt in range(1, DEEPSEEK_HTTP_RETRIES + 1):
         req = urllib.request.Request(DEEPSEEK_API_URL, data=payload, headers=headers, method="POST")
         try:
+            deepseek_policy.check_before_request()
             with urllib.request.urlopen(
                 req,
                 timeout=effective_timeout,
                 context=_ssl_context_for_https(),
             ) as resp:
-                raw = resp.read().decode("utf-8")
+                raw_bytes = resp.read()
             try:
+                raw = raw_bytes.decode("utf-8")
                 result = json.loads(raw)
-            except json.JSONDecodeError as je:
-                last_err = je
+            except (json.JSONDecodeError, UnicodeDecodeError) as je:
+                last_err = deepseek_policy.DeepSeekRequestError(
+                    "response_format", f"DeepSeek response is not valid JSON: {je}",
+                    retryable=True,
+                )
                 logger.error(
                     "DeepSeek 响应非合法 JSON: %s chars=%s sha256=%s",
                     je,
-                    len(raw),
-                    hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16],
+                    len(raw_bytes),
+                    hashlib.sha256(raw_bytes).hexdigest()[:16],
                 )
                 if content_debug:
-                    logger.info("DeepSeek 非法 JSON 响应全文:\n%s", raw)
+                    logger.info("DeepSeek 非法 JSON 响应全文:\n%s", raw_bytes.decode("utf-8", errors="replace"))
                 break
             if isinstance(result, dict) and result.get("error"):
                 err_obj = result["error"]
-                last_err = ValueError(str(err_obj))
                 logger.error(
                     "DeepSeek API 返回 error 字段: %s response_chars=%s",
                     err_obj,
                     len(raw),
                 )
-                break
+                raise deepseek_policy.api_error(err_obj)
             try:
                 choice = result["choices"][0]
                 message = choice["message"]
@@ -1874,7 +1875,10 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                 if not isinstance(content, str) or not content.strip():
                     raise TypeError("assistant content must be a nonempty string")
             except (KeyError, IndexError, TypeError) as ke:
-                last_err = ke
+                last_err = deepseek_policy.DeepSeekRequestError(
+                    "response_format", f"DeepSeek response has no assistant content: {ke}",
+                    retryable=True,
+                )
                 logger.error(
                     "DeepSeek 响应缺少 choices[0].message.content: %s response_chars=%s",
                     ke,
@@ -1930,8 +1934,10 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
             if content_debug:
                 logger.info("DeepSeek 输出全文:\n%s", content)
             return _DeepSeekResponse(content, choice.get("finish_reason") or "")
+        except deepseek_policy.JobPaused:
+            raise
         except urllib.error.HTTPError as e:
-            last_err = e
+            last_err = deepseek_policy.request_error(e)
             detail = _deepseek_http_error_body_for_log(e)
             logger.warning(
                 "DeepSeek HTTP 错误: attempt=%s/%s code=%s %s",
@@ -1940,8 +1946,14 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                 e.code,
                 detail,
             )
-            if attempt < DEEPSEEK_HTTP_RETRIES and _deepseek_error_is_retryable(e):
-                wait = DEEPSEEK_RETRY_BACKOFF_SEC * (2 ** (attempt - 1))
+            if attempt < DEEPSEEK_HTTP_RETRIES and last_err.retryable:
+                wait = max(
+                    0.0, DEEPSEEK_RETRY_BACKOFF_SEC * (2 ** (attempt - 1)),
+                    last_err.retry_after_sec or 0.0,
+                )
+                if wait > 60:
+                    logger.info("DeepSeek 重试需等待 %.1f 秒，暂停当前请求供后续续跑", wait)
+                    break
                 logger.info("DeepSeek 可重试错误，%.1f 秒后第 %s 次重试", wait, attempt + 1)
                 sleep(wait)
                 continue
@@ -1953,21 +1965,26 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
             )
             break
         except Exception as e:
-            last_err = e
+            last_err = deepseek_policy.request_error(e)
             logger.warning(
                 "DeepSeek 请求失败: attempt=%s/%s err=%s",
                 attempt,
                 DEEPSEEK_HTTP_RETRIES,
                 e,
             )
-            if attempt < DEEPSEEK_HTTP_RETRIES and _deepseek_error_is_retryable(e):
-                wait = DEEPSEEK_RETRY_BACKOFF_SEC * (2 ** (attempt - 1))
+            if attempt < DEEPSEEK_HTTP_RETRIES and last_err.retryable:
+                wait = max(0.0, DEEPSEEK_RETRY_BACKOFF_SEC * (2 ** (attempt - 1)))
+                if wait > 60:
+                    logger.info("DeepSeek 重试需等待 %.1f 秒，暂停当前请求供后续续跑", wait)
+                    break
                 logger.info("DeepSeek 可重试错误，%.1f 秒后第 %s 次重试", wait, attempt + 1)
                 sleep(wait)
                 continue
             break
     if last_err is not None and not isinstance(last_err, urllib.error.HTTPError):
         logger.error("DeepSeek API 调用失败: %s", last_err)
+    if strict_errors and last_err is not None:
+        raise deepseek_policy.request_error(last_err)
     return None
 
 
@@ -3591,7 +3608,9 @@ def _review_words_payload(
                 'examples': list(item.get('examples') or []),
             }
         if item['exercise_type'] in gaokao_questions.QUESTION_TYPES:
-            question = gaokao_questions.get_question(w.english, item['exercise_type'])
+            question = gaokao_questions.get_question(
+                w.english, item['exercise_type'], source=_current_gaokao_source(w.english),
+            )
             if question:
                 item['question'] = gaokao_questions.public_question(question)
                 item['question_required'] = False
@@ -4873,7 +4892,9 @@ def get_or_generate_word_question(username):
             if not word:
                 return jsonify({'error': '单词未找到'}), 404
 
-            question = gaokao_questions.get_question(word.english, exercise_type)
+            question = gaokao_questions.get_question(
+                word.english, exercise_type, source=_current_gaokao_source(word.english),
+            )
             if not question:
                 reciter.mark_exercise_unavailable(word, exercise_type)
                 task_item['exercise_type'] = 'spelling'
@@ -5020,7 +5041,9 @@ def practice_word(username):
             if exercise_type in gaokao_questions.QUESTION_TYPES:
                 if not task_item or not question_id or not selected_option_id:
                     return jsonify({'error': '选择题作答参数不完整，请重新加载题目'}), 400
-                question = gaokao_questions.get_question(word.english, exercise_type)
+                question = gaokao_questions.get_question(
+                    word.english, exercise_type, source=_current_gaokao_source(word.english),
+                )
                 bound_question_id = str(task_item.get('question_id') or '')
                 if (
                     not question
@@ -6670,6 +6693,11 @@ def _publish_combined_gaokao_questions_for_new_entries(
     }
 
 
+def _current_gaokao_source(word_key: str) -> Optional[dict]:
+    row = lookup_csv_word(word_key)
+    return gaokao_questions.source_from_wordbank_row(row) if row else None
+
+
 def gaokao_question_sources(level: str = "") -> List[dict]:
     """Build stable, de-duplicated question sources from the merged wordbank."""
     rows, _ = merge_wordbank_rows_for_search(level)
@@ -6706,16 +6734,19 @@ def gaokao_failed_question_sources(sources: List[dict]) -> List[dict]:
 
 def _gaokao_generation_chat(messages: List[dict], max_tokens: int):
     """Adapt the question generator callback to _deepseek_chat's signature."""
+    deepseek_policy.check_before_request()
     return _deepseek_chat(
         messages,
         max_tokens=max_tokens,
         temperature=0.0,
         thinking=False,
         timeout_sec=300,
+        strict_errors=True,
     )
 
 
 def _gaokao_audit_chat(messages: List[dict], max_tokens: int):
+    deepseek_policy.check_before_request()
     return _deepseek_chat(
         messages,
         model=os.getenv("GAOKAO_AUDIT_MODEL", "").strip() or None,
@@ -6723,6 +6754,7 @@ def _gaokao_audit_chat(messages: List[dict], max_tokens: int):
         temperature=0.0,
         thinking=False,
         timeout_sec=300,
+        strict_errors=True,
     )
 
 
@@ -6740,6 +6772,7 @@ def generate_gaokao_question_batches(
     refresh_prompt: bool = False,
     progress=None,
     diagnostic=None,
+    retry_failed: bool = False,
 ) -> dict:
     """Generate, independently audit, repair, and publish bounded batches."""
     generated = 0
@@ -6762,7 +6795,11 @@ def generate_gaokao_question_batches(
                 diagnostic=diagnostic,
                 max_generation_attempts=2,
                 audit_identity=_gaokao_audit_identity(),
+                retry_failed=retry_failed,
+                source_lookup=_current_gaokao_source,
             )
+        except (deepseek_policy.DeepSeekRequestError, deepseek_policy.JobPaused):
+            raise
         except Exception as exc:
             errors = {
                 source["english"]: f"batch exception: {exc}"
@@ -6821,7 +6858,29 @@ def audit_gaokao_candidate_pool_batches(
     size = max(1, min(gaokao_questions.GENERATION_REQUEST_WORDS, int(batch_size)))
     for start in range(0, len(items), size):
         batch = dict(items[start : start + size])
+        original_keys = set(batch)
+        current_sources = {key: _current_gaokao_source(key) for key in batch}
+        plans = gaokao_questions.plan_generated_sources([
+            source for source in current_sources.values() if source
+        ])
+        batch = {
+            key: plans[key]['pool'] for key in batch
+            if key in plans and plans[key]['action'] in {'resume', 'reaudit'}
+        }
+        skipped = {
+            key: (plans.get(key, {}).get('error') or 'source changed or content requires field repair; retained')
+            for key in original_keys - set(batch)
+        }
+        rejected += len(skipped)
+        rejected_words.extend(skipped)
+        rejection_errors.update(skipped)
+        gaokao_questions._hold_generated_content(
+            current_sources, {key: error for key, error in skipped.items() if current_sources.get(key)},
+        )
+        if not batch:
+            continue
         try:
+            gaokao_questions._stage_existing_pools(batch)
             accepted_rows, rejected_rows, retry_rows = (
                 gaokao_questions.audit_generation_candidate_pools(
                     batch,
@@ -6835,9 +6894,16 @@ def audit_gaokao_candidate_pool_batches(
                 rejected_rows,
                 retry_rows,
                 expected_pools=batch,
+                expected_sources={key: _current_gaokao_source(key) for key in batch},
             )
             retry_rows.update({key: "candidate changed before publication" for key in accepted_rows if key not in published_keys})
             accepted_rows = {key: record for key, record in accepted_rows.items() if key in published_keys}
+            gaokao_questions._hold_generated_content(current_sources, {
+                key: error for key, error in rejected_rows.items()
+                if not gaokao_questions._feedback_repair_fields(error)
+            })
+        except (deepseek_policy.DeepSeekRequestError, deepseek_policy.JobPaused):
+            raise
         except Exception as exc:
             accepted_rows = {}
             rejected_rows = {}
@@ -6935,7 +7001,19 @@ def _run_gaokao_auto_backfill_once(
             }
 
         sources = gaokao_question_sources("")
+        source_by_key = {source['english']: source for source in sources}
         pending_pools = gaokao_questions.pending_candidate_pools()
+        stale_pools = {
+            key: 'source content changed; existing candidate retained for manual review'
+            for key, pool in pending_pools.items() if key in source_by_key
+            and gaokao_questions.source_content_hash(pool.get('source') or {})
+            != gaokao_questions.source_content_hash(source_by_key[key])
+        }
+        gaokao_questions._hold_generated_content(source_by_key, stale_pools)
+        pending_pools = {
+            key: pool for key, pool in pending_pools.items()
+            if key in source_by_key and key not in stale_pools
+        }
         pending_generation = gaokao_failed_question_sources(sources)
         queue = gaokao_questions.automatic_retry_queue(current)
         pending_pools = {key: pool for key, pool in pending_pools.items() if key in queue}
@@ -6985,30 +7063,34 @@ def _run_gaokao_auto_backfill_once(
             settings["request_words"],
         )
         try:
-            audit_result = audit_gaokao_candidate_pool_batches(
-                selected_pools,
-                batch_size=settings["request_words"],
-                pause=DEEPSEEK_BATCH_PAUSE_SEC,
-            ) if selected_pools else {
-                "approved": 0,
-                "rejected": 0,
-                "retry": 0,
-                "approved_words": [],
-                "rejected_words": [],
-                "retry_words": [],
-            }
-            generation_result = generate_gaokao_question_batches(
-                selected_generation,
-                batch_size=settings["request_words"],
-                pause=DEEPSEEK_BATCH_PAUSE_SEC,
-            ) if selected_generation else {
-                "requested": 0,
-                "generated": 0,
-                "failed": 0,
-                "generated_words": [],
-                "failed_words": [],
-                "failure_errors": {},
-            }
+            with deepseek_policy.off_peak_requests(
+                predicate=lambda: gaokao_backfill.is_deepseek_off_peak(),
+            ):
+                audit_result = audit_gaokao_candidate_pool_batches(
+                    selected_pools,
+                    batch_size=settings["request_words"],
+                    pause=DEEPSEEK_BATCH_PAUSE_SEC,
+                ) if selected_pools else {
+                    "approved": 0,
+                    "rejected": 0,
+                    "retry": 0,
+                    "approved_words": [],
+                    "rejected_words": [],
+                    "retry_words": [],
+                }
+                generation_result = generate_gaokao_question_batches(
+                    selected_generation,
+                    batch_size=settings["request_words"],
+                    pause=DEEPSEEK_BATCH_PAUSE_SEC,
+                    retry_failed=True,
+                ) if selected_generation else {
+                    "requested": 0,
+                    "generated": 0,
+                    "failed": 0,
+                    "generated_words": [],
+                    "failed_words": [],
+                    "failure_errors": {},
+                }
             result = {
                 "requested": len(selected_words),
                 "generated": (
@@ -7033,6 +7115,15 @@ def _run_gaokao_auto_backfill_once(
                 "audit_rejected": int(audit_result.get("rejected") or 0),
                 "audit_retry": int(audit_result.get("retry") or 0),
             }
+        except (deepseek_policy.JobPaused, deepseek_policy.DeepSeekRequestError) as exc:
+            status = 'paused' if isinstance(exc, deepseek_policy.JobPaused) else 'service_error'
+            state.update({
+                'status': status,
+                'last_finished_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                'last_error': str(exc)[:500],
+            })
+            gaokao_backfill.save_auto_state(state)
+            return {'status': status, 'pending': pending_count, 'error': str(exc)}
         except Exception as exc:
             state.update({
                 "status": "failed",

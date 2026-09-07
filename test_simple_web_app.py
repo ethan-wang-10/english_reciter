@@ -196,6 +196,7 @@ def _use_private_question_bank(monkeypatch, tmp_path):
     monkeypatch.setattr(questions, 'QUESTION_BANK_LOCK_FILE', tmp_path / '.questions.lock')
     monkeypatch.setattr(questions, '_cache', None)
     monkeypatch.setattr(questions, '_cache_mtime_ns', -1)
+    monkeypatch.setattr(web, '_current_gaokao_source', lambda key: _semantic_source() if key == 'benefit' else None)
 
 
 @pytest.fixture
@@ -1797,6 +1798,7 @@ def test_generate_gaokao_question_batches_uses_three_ten_word_requests(monkeypat
                 'temperature': 0.0,
                 'thinking': False,
                 'timeout_sec': 300,
+                'strict_errors': True,
             },
         ),
     ] * 3
@@ -1808,6 +1810,8 @@ def test_generate_gaokao_question_batches_uses_three_ten_word_requests(monkeypat
             'diagnostic': diagnostics.append,
             'max_generation_attempts': 2,
             'audit_identity': web._gaokao_audit_identity(),
+            'retry_failed': False,
+            'source_lookup': web._current_gaokao_source,
         }
         for _, kwargs in batches
     )
@@ -1934,7 +1938,9 @@ def test_auto_backfill_audits_thirty_import_candidates_off_peak(
     monkeypatch,
     tmp_path,
 ) -> None:
-    pools = {f'word-{index:02d}': {'pool': index} for index in range(30)}
+    _use_private_question_bank(monkeypatch, tmp_path)
+    sources = [{'english': f'word-{index:02d}'} for index in range(30)]
+    pools = {source['english']: {'pool': index, 'source': source} for index, source in enumerate(sources)}
     monkeypatch.setattr(web.gaokao_questions, 'automatic_retry_queue', lambda now: {
         key: {'first_pending_at': now.isoformat(), 'last_attempt_at': ''} for key in pools
     })
@@ -1942,7 +1948,7 @@ def test_auto_backfill_audits_thirty_import_candidates_off_peak(
     monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
     monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
     monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
-    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level='': [])
+    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level='': sources)
     monkeypatch.setattr(web, 'gaokao_failed_question_sources', lambda sources: [])
     monkeypatch.setattr(web.gaokao_questions, 'pending_candidate_pools', lambda: pools)
     monkeypatch.setattr(
@@ -2100,7 +2106,7 @@ def test_auto_backfill_drains_one_old_candidate(monkeypatch, tmp_path):
     monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', _auto_backfill_settings)
     monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda now: True)
     monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
-    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level: [])
+    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level: [pools['novel']['source']])
     monkeypatch.setattr(web.gaokao_backfill, 'GENERATION_LOCK_FILE', tmp_path / '.job.lock')
     monkeypatch.setattr(web.gaokao_backfill, 'AUTO_STATE_FILE', tmp_path / 'state.json')
     calls = []
@@ -2208,18 +2214,190 @@ def test_question_refresh_peak_hours_stops_before_ai(monkeypatch, tmp_path):
     assert script.main() == 4
 
 
-def test_question_refresh_peak_transition_restores_callbacks(monkeypatch):
-    from scripts import generate_gaokao_questions as script
-
-    def chat(messages, max_tokens):
-        return 'reply'
-
-    monkeypatch.setattr(web, '_gaokao_generation_chat', chat)
-    monkeypatch.setattr(web, '_gaokao_audit_chat', chat)
+def test_question_refresh_peak_transition_guards_each_adapter_without_replacing_callbacks(monkeypatch):
+    monkeypatch.setattr(web, '_deepseek_chat', lambda *args, **kwargs: 'reply')
+    generation_chat = web._gaokao_generation_chat
+    audit_chat = web._gaokao_audit_chat
     states = iter([True, False])
-    monkeypatch.setattr(web.gaokao_backfill, 'is_deepseek_off_peak', lambda: next(states))
-    with pytest.raises(script._PeakHoursPause), script._off_peak_requests(True):
+    with pytest.raises(web.deepseek_policy.JobPaused), web.deepseek_policy.off_peak_requests(
+        predicate=lambda: next(states),
+    ):
         assert web._gaokao_generation_chat([], 100) == 'reply'
         web._gaokao_audit_chat([], 100)
-    assert web._gaokao_generation_chat is chat
-    assert web._gaokao_audit_chat is chat
+    assert web._gaokao_generation_chat is generation_chat
+    assert web._gaokao_audit_chat is audit_chat
+    assert web._gaokao_audit_chat([], 100) == 'reply'
+
+
+@pytest.mark.parametrize('access', ['payload', 'question', 'practice'])
+@pytest.mark.parametrize('source_change', ['semantic', 'metadata', 'missing'])
+def test_student_question_paths_validate_current_source_without_regeneration(
+    client, monkeypatch, tmp_path, access, source_change,
+):
+    _use_private_question_bank(monkeypatch, tmp_path)
+    record = _semantic_record()
+    questions = web.gaokao_questions
+    questions.persist_generation_result({'benefit': record}, {})
+    revision = questions._question_store().revision()
+    source = _semantic_source()
+    if source_change == 'semantic':
+        source = {**source, 'chinese': 'v. 获益', 'pos': 'v', 'source_hash': 'changed-meaning'}
+    elif source_change == 'metadata':
+        source = {**source, 'phonetic': '/corrected/', 'level': '大学', 'source_hash': 'changed-display'}
+    else:
+        source = None
+    monkeypatch.setattr(web, '_current_gaokao_source', lambda key: source)
+    monkeypatch.setattr(web, 'lookup_csv_word', lambda key: None)
+    monkeypatch.setattr(web, '_deepseek_chat', lambda *args, **kwargs: pytest.fail('student request must stay offline'))
+    reciter = _SemanticReciter('recognition')
+    reciter.task_item['question_id'] = record['recognition']['question_id']
+    _mock_student_session(monkeypatch, reciter)
+    usable = source_change == 'metadata'
+
+    if access == 'payload':
+        task = {'items': [reciter.task_item], 'plan': {'task_id': 'task-1'}}
+        item = web._review_words_payload(reciter, [reciter.word], task)['words'][0]
+        assert bool(item.get('question')) is usable
+        assert item['question_required'] is not usable
+        if usable:
+            assert item['question']['phonetic'] == '/corrected/'
+    else:
+        body = {
+            'word_id': 'question:item-1',
+            'task_id': 'task-1',
+            'task_item_id': 'item-1',
+            'exercise_type': 'recognition',
+            'question_id': record['recognition']['question_id'],
+            'selected_option_id': record['recognition']['answer_option_id'],
+            'review_event_id': 'source-change-event',
+        }
+        response = client.post(
+            f'/api/words/{access}', headers={'Authorization': 'Bearer test'}, json=body,
+        )
+        if access == 'question':
+            assert response.status_code == 200
+            assert response.get_json()['fallback'] is not usable
+            if usable:
+                assert response.get_json()['question']['question_id'] == record['recognition']['question_id']
+                assert response.get_json()['question']['phonetic'] == '/corrected/'
+        else:
+            assert response.status_code == (200 if usable else 409)
+            assert (reciter.last_apply is not None) is usable
+    assert questions._question_store().revision() == revision
+    assert questions._question_store().get('questions', 'benefit') == record
+
+
+@pytest.mark.parametrize('stage', ['generate', 'audit'])
+@pytest.mark.parametrize('error', [
+    web.deepseek_policy.DeepSeekRequestError('configuration', 'HTTP 401'),
+    web.deepseek_policy.DeepSeekRequestError('transport', 'timeout', retryable=True),
+    web.deepseek_policy.JobPaused('peak hours started'),
+])
+def test_question_batch_wrappers_propagate_request_failures_without_quality_penalty(
+    monkeypatch, tmp_path, stage, error,
+):
+    _use_private_question_bank(monkeypatch, tmp_path)
+    questions = web.gaokao_questions
+    source = _semantic_source()
+    pool = questions.candidate_pool_from_published(source, _semantic_record())
+    questions.persist_candidate_pool_result({'benefit': pool}, {})
+    previous_failures = questions.failure_records()
+    previous_rejections = questions._question_store().get_many('rejections', ['benefit'])
+    attempts = []
+    progress = []
+
+    def interrupted(*args, **kwargs):
+        attempts.append(True)
+        raise error
+
+    monkeypatch.setattr(web, '_deepseek_chat', lambda *args, **kwargs: pytest.fail('unexpected real request'))
+    if stage == 'generate':
+        monkeypatch.setattr(questions, 'generate_audited_and_persist', interrupted)
+        invoke = lambda: web.generate_gaokao_question_batches(
+            [{**source, 'english': f'word-{index}'} for index in range(11)],
+            progress=lambda *args: progress.append(args),
+        )
+    else:
+        monkeypatch.setattr(questions, 'audit_generation_candidate_pools', interrupted)
+        invoke = lambda: web.audit_gaokao_candidate_pool_batches(
+            {'benefit': pool}, progress=lambda *args: progress.append(args),
+        )
+
+    with pytest.raises(type(error)) as captured:
+        invoke()
+
+    assert captured.value is error
+    assert attempts == [True]
+    assert progress == []
+    assert questions.failure_records() == previous_failures
+    assert questions._question_store().get_many('rejections', ['benefit']) == previous_rejections
+    assert questions._question_store().get('candidates', 'benefit') is not None
+
+
+def test_audit_wrapper_preserves_incompatible_candidate_without_request(monkeypatch, tmp_path):
+    _use_private_question_bank(monkeypatch, tmp_path)
+    questions = web.gaokao_questions
+    pool = questions.candidate_pool_from_published(_semantic_source(), _semantic_record())
+    questions.persist_candidate_pool_result({'benefit': pool}, {})
+    original = questions._question_store().get('candidates', 'benefit')
+    source = {**_semantic_source(), 'chinese': 'v. 获益', 'pos': 'v', 'source_hash': 'changed'}
+    monkeypatch.setattr(web, '_current_gaokao_source', lambda key: source)
+    monkeypatch.setattr(web, '_deepseek_chat', lambda *args, **kwargs: pytest.fail('incompatible history must stay offline'))
+
+    result = web.audit_gaokao_candidate_pool_batches({'benefit': pool})
+
+    assert result['approved'] == result['retry'] == 0
+    assert result['rejected_words'] == ['benefit']
+    saved = questions._question_store().get('candidates', 'benefit')
+    assert saved == {**original, 'manual_review_required': True}
+    failure = questions.failure_records()['benefit']
+    assert failure['generated_content_retained'] is True
+    assert failure['manual_review_required'] is True
+
+
+@pytest.mark.parametrize('failure_kind', ['peak', 'configuration', 'transport'])
+def test_background_audit_stops_requests_and_preserves_candidate_attempts(
+    monkeypatch, tmp_path, failure_kind,
+):
+    _use_private_question_bank(monkeypatch, tmp_path)
+    questions = web.gaokao_questions
+    source = _semantic_source()
+    pool = questions.candidate_pool_from_published(source, _semantic_record())
+    questions.persist_candidate_pool_result({'benefit': pool}, {})
+    previous_failures = questions.failure_records()
+    monkeypatch.setattr(web, '_gaokao_auto_backfill_settings', lambda: {
+        **_auto_backfill_settings(), 'trigger_words': 1,
+    })
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: 'test-key')
+    monkeypatch.setattr(web, 'gaokao_question_sources', lambda level='': [source])
+    monkeypatch.setattr(web.gaokao_backfill, 'GENERATION_LOCK_FILE', tmp_path / '.job.lock')
+    monkeypatch.setattr(web.gaokao_backfill, 'AUTO_STATE_FILE', tmp_path / 'state.json')
+    states = iter([True, True, False])
+    monkeypatch.setattr(
+        web.gaokao_backfill, 'is_deepseek_off_peak',
+        lambda now=None: next(states) if failure_kind == 'peak' else True,
+    )
+    calls = []
+
+    def chat(*args, **kwargs):
+        calls.append(True)
+        if failure_kind != 'peak':
+            raise web.deepseek_policy.DeepSeekRequestError(failure_kind, 'test service failure')
+        return 'first stage completed'
+
+    def audit(pools, chat, **kwargs):
+        chat([], 100)
+        chat([], 100)
+        pytest.fail('second request must not finish')
+
+    monkeypatch.setattr(web, '_deepseek_chat', chat)
+    monkeypatch.setattr(questions, 'audit_generation_candidate_pools', audit)
+
+    result = web._run_gaokao_auto_backfill_once(datetime.now(timezone.utc))
+
+    expected_status = 'paused' if failure_kind == 'peak' else 'service_error'
+    assert result['status'] == expected_status
+    assert web.gaokao_backfill.load_auto_state()['status'] == expected_status
+    assert calls == [True]
+    assert questions.failure_records() == previous_failures
+    assert questions._question_store().get('candidates', 'benefit') is not None

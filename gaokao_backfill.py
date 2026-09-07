@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Generator, Optional
 
 import gaokao_questions
+from deepseek_policy import JobPaused, is_deepseek_off_peak, off_peak_requests
 
 
 GENERATION_LOCK_FILE = (
@@ -21,25 +22,6 @@ GENERATION_LOCK_FILE = (
 AUTO_STATE_FILE = (
     gaokao_questions.DATA_DIR / "_shared" / "gaokao_backfill_state.json"
 )
-
-
-def is_deepseek_off_peak(moment: Optional[datetime] = None) -> bool:
-    """Return whether DeepSeek currently charges off-peak rates.
-
-    DeepSeek defines weekday 01:00-04:00 and 06:00-10:00 UTC as peak
-    periods. Weekends and all remaining weekday hours are off-peak.
-    """
-    current = moment or datetime.now(timezone.utc)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    current_utc = current.astimezone(timezone.utc)
-    if current_utc.weekday() >= 5:
-        return True
-    minute_of_day = current_utc.hour * 60 + current_utc.minute
-    return not (
-        60 <= minute_of_day < 240
-        or 360 <= minute_of_day < 600
-    )
 
 
 @contextmanager

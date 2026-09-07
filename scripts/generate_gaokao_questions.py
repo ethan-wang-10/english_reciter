@@ -6,9 +6,9 @@ Examples:
   python scripts/generate_gaokao_questions.py --stage generate --level '' --refresh-prompt-version
   python scripts/generate_gaokao_questions.py --stage audit --audit-batch-size 10
 
-Generation uses one request for each candidate batch of up to ten words, then
-separate recognition/context blind audits and a feedback audit before publishing. Import-created candidates can be
-audited later in off-peak batches with the audit stage.
+First-time generation uses one request for each batch of up to ten words, then
+separate recognition/context blind audits and a feedback audit before publishing.
+Existing questions are reused; the audit stage only audits reusable content.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -24,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import deepseek_policy  # noqa: E402
 import gaokao_questions as questions  # noqa: E402
 import simple_web_app as web  # noqa: E402
 
@@ -36,12 +36,15 @@ class _Diagnostics:
     def __init__(self, debug: bool = False):
         self.debug = debug
         self.generation_requests = 0
+        self.repair_requests = 0
         self.audit_requests = 0
         self.cached_items = 0
 
     def __call__(self, event: dict) -> None:
         if event.get("event") == "request":
             self.generation_requests += 1
+        elif event.get("event") == "field_repair_request":
+            self.repair_requests += 1
         elif event.get("event") == "audit_request":
             self.audit_requests += 1
         elif event.get("event") == "audit_cache_hit":
@@ -51,67 +54,31 @@ class _Diagnostics:
 
     def report(self) -> None:
         print(
-            f"[requests] generation={self.generation_requests} audit={self.audit_requests} "
+            f"[requests] generation={self.generation_requests} repair={self.repair_requests} audit={self.audit_requests} "
             f"cached_item_stages={self.cached_items}", flush=True,
         )
 
 
-def _pending_audits(sources: list[dict], limit: int = 0) -> dict[str, dict]:
+def _pending_audits(sources: list[dict], limit: int = 0, *, retry_failed: bool = False) -> dict[str, dict]:
     pending = {}
-    for start in range(0, len(sources), 200):
-        batch = {source["english"]: source for source in sources[start:start + 200]}
-        keys = list(batch)
-        for key, pool in questions.pending_candidate_pools(word_keys=keys).items():
-            if pool["source"].get("source_hash") != batch[key].get("source_hash"):
+    eligible_sources = questions.sources_needing_prompt_refresh(sources, retry_failed=retry_failed)
+    for start in range(0, len(eligible_sources), 200):
+        plans = questions.plan_generated_sources(eligible_sources[start:start + 200])
+        for key, plan in plans.items():
+            if plan["action"] not in {"resume", "reaudit"} or not plan.get("pool"):
                 continue
-            pending[key] = pool
+            pending[key] = plan["pool"]
             if limit > 0 and len(pending) >= limit:
                 return pending
     return pending
 
 
-def _refresh_actions(sources: list[dict], *, force: bool, refresh: bool) -> dict[str, str]:
+def _refresh_actions(sources: list[dict]) -> dict[str, str]:
     actions = {}
     for start in range(0, len(sources), 200):
-        batch = sources[start:start + 200]
-        pending = {} if force else questions.pending_candidate_pools(
-            word_keys=[source["english"] for source in batch],
-        )
-        pending = {
-            source["english"]: pending[source["english"]] for source in batch
-            if source["english"] in pending
-            and pending[source["english"]]["source"].get("source_hash") == source.get("source_hash")
-        }
-        reusable = questions.reusable_refresh_pools([
-            source for source in batch if source["english"] not in pending
-        ]) if refresh and not force else {}
-        for source in batch:
-            key = source["english"]
-            actions[key] = "resume" if key in pending else "reaudit" if key in reusable else "generate"
+        plans = questions.plan_generated_sources(sources[start:start + 200])
+        actions.update({key: plan["action"] for key, plan in plans.items()})
     return actions
-
-
-class _PeakHoursPause(KeyboardInterrupt):
-    pass
-
-
-@contextmanager
-def _off_peak_requests(enabled: bool):
-    originals = (web._gaokao_generation_chat, web._gaokao_audit_chat)
-
-    def guarded(chat):
-        def call(messages, max_tokens):
-            if enabled and not web.gaokao_backfill.is_deepseek_off_peak():
-                raise _PeakHoursPause()
-            return chat(messages, max_tokens)
-        return call
-
-    if enabled:
-        web._gaokao_generation_chat, web._gaokao_audit_chat = map(guarded, originals)
-    try:
-        yield
-    finally:
-        web._gaokao_generation_chat, web._gaokao_audit_chat = originals
 
 
 def _run_generation(
@@ -121,6 +88,7 @@ def _run_generation(
     pause: float,
     force: bool,
     refresh_prompt: bool,
+    retry_failed: bool,
     debug_generation: bool,
 ) -> tuple[int, int]:
     def report(done: int, total: int, result: dict) -> None:
@@ -128,6 +96,7 @@ def _run_generation(
             f"[generate {done}/{total}] "
             f"published={result.get('generated', 0)} failed={result.get('failed', 0)} "
             f"reused={result.get('reused_questions', 0)} resumed={result.get('resumed_candidates', 0)} "
+            f"repaired={len(result.get('field_repaired_words') or [])} "
             f"ok={','.join(result.get('generated_words') or []) or '-'} "
             f"fail={','.join(result.get('failed_words') or []) or '-'}",
             flush=True,
@@ -145,16 +114,19 @@ def _run_generation(
             print(f"[generate errors] {summary}", flush=True)
 
     diagnostic = _Diagnostics(debug_generation)
-    result = web.generate_gaokao_question_batches(
-        pending,
-        batch_size=batch_size,
-        pause=pause,
-        force=force,
-        refresh_prompt=refresh_prompt,
-        progress=report,
-        diagnostic=diagnostic,
-    )
-    diagnostic.report()
+    try:
+        result = web.generate_gaokao_question_batches(
+            pending,
+            batch_size=batch_size,
+            pause=pause,
+            force=force,
+            refresh_prompt=refresh_prompt,
+            retry_failed=retry_failed,
+            progress=report,
+            diagnostic=diagnostic,
+        )
+    finally:
+        diagnostic.report()
     return int(result["generated"]), int(result["failed"])
 
 
@@ -175,14 +147,16 @@ def _run_audit(
         )
 
     diagnostic = _Diagnostics(debug_generation)
-    result = web.audit_gaokao_candidate_pool_batches(
-        pending,
-        batch_size=batch_size,
-        pause=pause,
-        progress=report,
-        diagnostic=diagnostic,
-    )
-    diagnostic.report()
+    try:
+        result = web.audit_gaokao_candidate_pool_batches(
+            pending,
+            batch_size=batch_size,
+            pause=pause,
+            progress=report,
+            diagnostic=diagnostic,
+        )
+    finally:
+        diagnostic.report()
     return int(result["approved"]), int(result["rejected"]), int(result["retry"])
 
 
@@ -194,7 +168,7 @@ def main() -> int:
         "--stage",
         choices=("generate", "audit", "all"),
         default="generate",
-        help="generate 生成、独立审计并发布；audit 审查异步候选；all 依次执行两者",
+        help="generate 首次生成或复用已有题并审计发布；audit 仅复审已有题或候选；all 依次执行两者",
     )
     parser.add_argument("--level", default="高中", help="词库级别，默认：高中")
     parser.add_argument(
@@ -216,12 +190,13 @@ def main() -> int:
         help="每次集中审查的候选题数，默认及最大：10",
     )
     parser.add_argument("--pause", type=float, default=0.0, help="批次间暂停秒数")
-    parser.add_argument("--force", action="store_true", help="重新生成已有正式题或候选题")
+    parser.add_argument("--force", action="store_true", help="包含当前版本题；已有生成记录只复审或定向修复，不重新生成")
     parser.add_argument(
         "--refresh-prompt-version",
         action="store_true",
-        help="仅刷新旧版本题，优先复用旧内容重审，不合格再生成；配合 force 可强制重生成",
+        help="仅刷新旧版本题，复用已有内容续审或定向修复；只有从未生成的词才生成",
     )
+    parser.add_argument("--retry-failed", action="store_true", help="包含历史失败词；已有生成记录仍只复审或定向修复")
     parser.add_argument("--off-peak-only", action="store_true", help="只在低峰发起模型请求；进入高峰时保留进度退出")
     parser.add_argument("--dry-run", action="store_true", help="只规划，不调用 AI、不改写题目")
     parser.add_argument(
@@ -241,12 +216,14 @@ def main() -> int:
         )
     batch_size = questions.GENERATION_REQUEST_WORDS
     audit_batch_size = max(1, min(10, args.audit_batch_size))
-    all_sources = _sources(args.level.strip())
+    all_sources = list({source["english"]: source for source in _sources(args.level.strip())}.values())
     pending_generation = []
     if args.stage in {"generate", "all"}:
-        pending_generation = (
-            all_sources[:args.limit or None] if args.force and not args.refresh_prompt_version
-            else questions.sources_needing_prompt_refresh(all_sources, limit=args.limit)
+        pending_generation = questions.sources_needing_prompt_refresh(
+            all_sources,
+            limit=args.limit,
+            retry_failed=args.retry_failed,
+            force=args.force and not args.refresh_prompt_version,
         )
     selected_keys = {source["english"] for source in pending_generation}
     remaining_limit = max(0, args.limit - len(selected_keys))
@@ -255,8 +232,9 @@ def main() -> int:
         pending_audit = _pending_audits(
             [source for source in all_sources if source["english"] not in selected_keys],
             limit=remaining_limit,
+            retry_failed=args.retry_failed,
         )
-    actions = _refresh_actions(pending_generation, force=args.force, refresh=args.refresh_prompt_version)
+    actions = _refresh_actions(pending_generation)
     print(
         f"题库={questions.QUESTION_BANK_FILE} 级别={args.level or '全部'} "
         f"可用词={len(all_sources)} "
@@ -268,6 +246,8 @@ def main() -> int:
     print(
         f"刷新计划：复用旧题={sum(action == 'reaudit' for action in actions.values())} "
         f"续审候选={sum(action == 'resume' for action in actions.values())} "
+        f"定向修复={sum(action == 'repair' for action in actions.values())} "
+        f"人工检查={sum(action == 'manual' for action in actions.values())} "
         f"需要生成={sum(action == 'generate' for action in actions.values())}"
     )
     if args.dry_run:
@@ -290,7 +270,9 @@ def main() -> int:
         print("未配置 DeepSeek API Key，无法生成或审查题库", file=sys.stderr)
         return 2
 
-    with web.gaokao_backfill.generation_job_lock(blocking=False) as acquired, _off_peak_requests(args.off_peak_only):
+    with web.gaokao_backfill.generation_job_lock(blocking=False) as acquired, deepseek_policy.off_peak_requests(
+        args.off_peak_only, predicate=lambda: web.gaokao_backfill.is_deepseek_off_peak(),
+    ):
         if not acquired:
             print("已有后台或手工补题任务正在运行，请稍后重试。", file=sys.stderr)
             return 3
@@ -308,6 +290,7 @@ def main() -> int:
                     pause=args.pause,
                     force=args.force,
                     refresh_prompt=args.refresh_prompt_version,
+                    retry_failed=args.retry_failed,
                     debug_generation=args.debug_generation,
                 )
             if args.stage in {"audit", "all"} and pending_audit:
@@ -317,9 +300,20 @@ def main() -> int:
                     pause=args.pause,
                     debug_generation=args.debug_generation,
                 )
-        except _PeakHoursPause:
+        except deepseek_policy.JobPaused:
             print("\n已进入高峰时段，候选与审计进度已保留；低峰时重跑同一命令即可。", file=sys.stderr)
             return 4
+        except deepseek_policy.DeepSeekRequestError as exc:
+            hint = (
+                "请检查 API Key、余额及模型配置后重试。"
+                if exc.kind == "configuration"
+                else "请检查网络或服务状态后重跑同一命令。"
+            )
+            print(
+                f"\nDeepSeek 请求已停止：{exc}。已保存进度，本次服务故障不计入题目失败次数。{hint}",
+                file=sys.stderr,
+            )
+            return 2
         except KeyboardInterrupt:
             print("\n已中断；候选和已发布题目均已原子保存，下次可继续。", file=sys.stderr)
             return 130

@@ -55,6 +55,8 @@ class QuestionSQLiteStore:
             );
             CREATE INDEX IF NOT EXISTS records_namespace_key
                 ON records(namespace, word_key);
+            CREATE INDEX IF NOT EXISTS records_word_key
+                ON records(word_key);
             CREATE TABLE IF NOT EXISTS question_ids (
                 question_id TEXT PRIMARY KEY,
                 word_key TEXT NOT NULL,

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from question_sqlite_store import QuestionSQLiteStore
+from deepseek_policy import DeepSeekRequestError, JobPaused
 
 
 BANK_SCHEMA = "gaokao-question-bank-v2"
@@ -245,6 +246,22 @@ def source_from_wordbank_row(row: dict) -> Optional[dict]:
     return source
 
 
+def source_content_hash(source: dict) -> str:
+    content = {field: source.get(field) or "" for field in (
+        "english", "chinese", "pos", "context_sentence", "context_answer",
+    )}
+    return hashlib.sha256(json.dumps(content, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+
+
+def record_matches_source(record: dict, source: Optional[dict]) -> bool:
+    if not source or record.get("word_key") != source.get("english"):
+        return False
+    content_hash = record.get("source_content_hash")
+    if content_hash:
+        return content_hash == source_content_hash(source)
+    return record.get("source_hash") == source.get("source_hash")
+
+
 def _option_rows(values: List[str], correct: str, seed: str) -> Tuple[List[dict], str]:
     combined = [(str(correct).strip(), True)] + [
         (str(value).strip(), False) for value in values
@@ -450,6 +467,8 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
     return {
         "word_key": key,
         "source_hash": source["source_hash"],
+        "source_content_hash": source_content_hash(source),
+        "source_snapshot": dict(source),
         "recognition_format_version": RECOGNITION_FORMAT_VERSION,
         "generated_at": generated_at,
         "recognition": {
@@ -725,6 +744,7 @@ def generate_candidate_pools(
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
     repair_feedback: Optional[Dict[str, str]] = None,
     repair_candidates: Optional[Dict[str, dict]] = None,
+    raw_results: Optional[Dict[str, dict]] = None,
 ) -> Tuple[Dict[str, dict], Dict[str, str]]:
     if not sources:
         return {}, {}
@@ -745,10 +765,14 @@ def generate_candidate_pools(
         "prompt_chars": len(prompt),
         "prompt": prompt,
     })
-    reply = chat(
-        [{"role": "user", "content": prompt}],
-        max_tokens,
-    )
+    try:
+        reply = chat([{"role": "user", "content": prompt}], max_tokens)
+    except DeepSeekRequestError as exc:
+        if exc.kind != "response_format":
+            raise
+        reply = ""
+    if reply is None:
+        raise DeepSeekRequestError("transport", "generation request returned no usable response", retryable=True)
     _emit_generation_diagnostic(diagnostic, {
         "event": "response",
         "response_type": type(reply).__name__,
@@ -799,6 +823,11 @@ def generate_candidate_pools(
     errors: Dict[str, str] = {}
     for source in sources:
         key = source["english"]
+        if raw_results is not None and isinstance(raw_by_key.get(key), dict):
+            raw_results[key] = {
+                "source": dict(source), "raw": dict(raw_by_key[key]), "record": {},
+                "generation_prompt_version": GENERATION_PROMPT_VERSION,
+            }
         if key in duplicate_keys:
             errors[key] = "AI response returned this word more than once"
             continue
@@ -818,6 +847,68 @@ def generate_candidate_pools(
             _generation_validation_diagnostic(source, raw, record, error),
         )
     return pools, errors
+
+
+def generate_field_repairs(
+    plans: Dict[str, dict], chat: ChatFunction,
+    diagnostic: Optional[GenerationDiagnosticFunction] = None,
+) -> Tuple[Dict[str, dict], Dict[str, str]]:
+    repaired, errors = {}, {}
+    keys = list(plans)
+    for start in range(0, len(keys), GENERATION_REQUEST_WORDS):
+        batch = keys[start:start + GENERATION_REQUEST_WORDS]
+        items = []
+        for key in batch:
+            plan = plans[key]
+            pool, fields = plan["pool"], plan["repair_fields"]
+            item = {"english": key, "fields": fields, "error": plan.get("error", "")}
+            if "recognition_explanation_zh" in fields:
+                item["definition_zh"] = pool["source"]["chinese"]
+            if any(field.startswith("context_") for field in fields):
+                item["context_sentence"] = pool["raw"]["context_sentence"]
+                item["context_answer"] = pool["source"]["context_answer"]
+            item["previous_values"] = {field: pool["raw"].get(field) for field in fields}
+            items.append(item)
+        prompt = (
+            "你是英语题目讲解校对员。已有英文题干和选项必须保留，仅修复 fields 指定的中文译文或解析。"
+            "译文须准确，解析只说明正确义项与实际题面线索，不引用候选或添加背景。"
+            "仅输出 JSON 数组，每项只包含 english 和 fields 指定字段，不输出题干、候选或任何其他字段。\n"
+            + json.dumps(items, ensure_ascii=False)
+        )
+        max_tokens = min(8192, 400 + sum(220 * len(item["fields"]) for item in items))
+        _emit_generation_diagnostic(diagnostic, {
+            "event": "field_repair_request", "words": batch, "max_tokens": max_tokens, "prompt": prompt,
+        })
+        try:
+            reply = chat([{"role": "user", "content": prompt}], max_tokens)
+        except DeepSeekRequestError as exc:
+            if exc.kind != "response_format":
+                raise
+            reply = ""
+        if reply is None:
+            raise DeepSeekRequestError("transport", "field repair returned no response", retryable=True)
+        rows = _extract_json_array(reply) if getattr(reply, "finish_reason", "") != "length" else None
+        by_key = {}
+        for row in rows or []:
+            if isinstance(row, dict) and isinstance(row.get("english"), str):
+                by_key.setdefault(normalize_word(row["english"]), []).append(row)
+        for key in batch:
+            plan = plans[key]
+            returned = by_key.get(key, [])
+            if len(returned) != 1:
+                errors[key] = "field repair did not return this word exactly once"
+                continue
+            fields = plan["repair_fields"]
+            if set(returned[0]) != {"english", *fields}:
+                errors[key] = "field repair returned unexpected or missing fields"
+                continue
+            raw = {**plan["pool"]["raw"], **{field: returned[0][field] for field in fields}}
+            pool, error = build_generation_candidate_pool(plan["pool"]["source"], raw)
+            if pool:
+                repaired[key] = {**plan["pool"], **pool}
+            else:
+                errors[key] = error
+    return repaired, errors
 
 
 def generate_candidate_records(
@@ -945,7 +1036,14 @@ def _request_audit_rows(
                 "event": "audit_request", "stage": stage, "attempt": attempt + 1,
                 "item_count": len(batch), "max_tokens": max_tokens, "prompt": prompt,
             })
-            reply = chat([{"role": "user", "content": prompt}], max_tokens)
+            try:
+                reply = chat([{"role": "user", "content": prompt}], max_tokens)
+            except DeepSeekRequestError as exc:
+                if exc.kind != "response_format":
+                    raise
+                reply = ""
+            if reply is None:
+                raise DeepSeekRequestError("transport", "audit request returned no response", retryable=True)
             _emit_generation_diagnostic(diagnostic, {
                 "event": "audit_response", "stage": stage, "raw_response": reply,
             })
@@ -1126,17 +1224,16 @@ def _audit_records_or_pools(
                     original_candidates[key][kind], answer, f"{key}:pool:{kind}",
                 )
                 option_sets[kind][key].update(options=options, answer_option_id=answer_id)
-    results, retry, rejected = {}, {}, {}
+    retry, rejected, safe_by_key = {}, {}, {}
     for kind in QUESTION_TYPES:
-        results[kind], errors = _blind_option_audit(option_sets[kind], chat, kind, diagnostic, progress)
+        eligible = {
+            key: question for key, question in option_sets[kind].items()
+            if key not in rejected and key not in retry
+        }
+        verdicts, errors = _blind_option_audit(eligible, chat, kind, diagnostic, progress)
         retry.update(errors)
-    selected = {}
-    for key, original_record in records.items():
-        if key in retry:
-            continue
-        safe_options = {}
-        for kind in QUESTION_TYPES:
-            question, verdict = option_sets[kind][key], results[kind][key]
+        for key, verdict in verdicts.items():
+            question = eligible[key]
             valid = verdict["recognition_valid_definition" if kind == "recognition" else "context_meaning_fits"]
             parallel = verdict["recognition_parallel_form" if kind == "recognition" else "context_grammatical"]
             answer_index = next(
@@ -1145,12 +1242,12 @@ def _audit_records_or_pools(
             )
             if not (valid[answer_index] and parallel[answer_index]):
                 rejected[key] = f"semantic audit rejected {kind} correct answer"
-                break
+                continue
             if kind == "context":
                 quality = verdict["context_quality"]
                 if not (quality["natural"] and quality["decisive_clues"] and not quality["answer_revealed"]):
                     rejected[key] = f"semantic audit rejected context quality: {quality['reason_zh']}"
-                    break
+                    continue
             safe = {
                 option["text"] for index, option in enumerate(question["options"])
                 if parallel[index] and not valid[index]
@@ -1164,9 +1261,12 @@ def _audit_records_or_pools(
                     f"semantic audit rejected {kind}; insufficient safe options "
                     f"({len(safe)}/3); acceptable options: {acceptable}"
                 )
-                break
-            safe_options[kind] = safe
-        if key in rejected:
+                continue
+            safe_by_key.setdefault(key, {})[kind] = safe
+
+    selected = {}
+    for key, original_record in records.items():
+        if key in rejected or key in retry:
             continue
         if pools is None:
             selected[key] = original_record
@@ -1175,7 +1275,8 @@ def _audit_records_or_pools(
             raw = {
                 **pool["raw"],
                 **{f"{kind}_distractors": [
-                    value for value in original_candidates[key][kind] if value in safe_options[kind]
+                    value for value in original_candidates[key][kind]
+                    if value in safe_by_key[key][kind]
                 ] for kind in QUESTION_TYPES},
             }
             record, error = finalize_generated_questions(pool["source"], raw)
@@ -1302,6 +1403,7 @@ def _is_approved_record(row: Any, source_hash: str = "") -> bool:
     return bool(
         isinstance(row, dict)
         and quality_gate_ok
+        and not row.get("withdrawn_at")
         and row.get("recognition_format_version") == RECOGNITION_FORMAT_VERSION
         and (not source_hash or row.get("source_hash") == source_hash)
         and all(isinstance(row.get(question_type), dict) for question_type in QUESTION_TYPES)
@@ -1397,26 +1499,40 @@ def missing_sources(sources: Iterable[dict], force: bool = False) -> List[dict]:
     ]
 
 
-def sources_needing_prompt_refresh(sources: Iterable[dict], limit: int = 0) -> List[dict]:
-    """Return sources not yet published by the current generation and audit gate."""
+def sources_needing_prompt_refresh(
+    sources: Iterable[dict], limit: int = 0, retry_failed: bool = False, force: bool = False,
+) -> List[dict]:
+    """Select untouched work first; retry historical failures only when requested."""
+    fresh, retry = [], []
     source_rows = [source for source in sources if source]
-    pending = []
     for start in range(0, len(source_rows), 200):
         batch = source_rows[start:start + 200]
-        records = _question_store().get_many("questions", [source["english"] for source in batch])
+        bank = _read_bank_keys_unlocked([source["english"] for source in batch])
         for source in batch:
-            if not _is_approved_record(records.get(source["english"]), source.get("source_hash", "")):
-                pending.append(source)
-                if limit > 0 and len(pending) >= limit:
-                    return pending
-    return pending
+            key = source["english"]
+            record = bank["questions"].get(key)
+            if not force and _is_approved_record(record) and record_matches_source(record, source):
+                continue
+            failure = bank["failures"].get(key) or {}
+            candidate = bank["candidates"].get(key) or {}
+            blocked = failure or candidate.get("manual_review_required")
+            if blocked and not retry_failed:
+                continue
+            last_attempt = (
+                candidate.get("last_audit_at") or failure.get("last_attempt_at") or ""
+            )
+            if blocked or last_attempt:
+                retry.append((last_attempt, key, source))
+            else:
+                fresh.append(source)
+                if limit > 0 and len(fresh) >= limit:
+                    return fresh
+    pending = fresh + [source for _, _, source in sorted(retry, key=lambda row: row[:2])]
+    return pending[:limit] if limit > 0 else pending
 
 
-def candidate_pool_from_published(source: dict, record: Any) -> Optional[dict]:
-    """Reuse an old four-option question only when its source and answers still match."""
-    if not isinstance(record, dict) or record.get("source_hash") != source.get("source_hash"):
-        return None
-    if record.get("word_key") != source["english"]:
+def _raw_from_published(source: dict, record: Any) -> Optional[dict]:
+    if not isinstance(record, dict) or record.get("word_key") != source["english"]:
         return None
     raw = {"english": source["english"]}
     for kind, expected_answer in (
@@ -1448,35 +1564,118 @@ def candidate_pool_from_published(source: dict, record: Any) -> Optional[dict]:
                 return None
             raw["context_sentence"] = prompt.replace("____", expected_answer)
             raw["context_translation_zh"] = question.get("translation_zh")
-    pool, _ = build_generation_candidate_pool(source, raw)
-    if not pool:
-        return None
-    # Preserve the original generation version as provenance, while requiring
-    # all current validation and audit gates before the reused content is served.
-    pool["refreshed_from"] = {
-        "generation_prompt_version": record.get("generation_prompt_version"),
-        "audit_version": record.get("audit_version"),
-        "question_ids": [record[kind].get("question_id") for kind in QUESTION_TYPES],
+    return raw
+
+
+def _feedback_fields_needing_repair(raw: dict) -> List[str]:
+    return [
+        field for field in (
+            "recognition_explanation_zh", "context_translation_zh", "context_explanation_zh",
+        )
+        if not isinstance(raw.get(field), str) or not raw[field].strip()
+        or len(raw[field]) > 500 or not re.search(r"[\u3400-\u9fff]", raw[field])
+    ]
+
+
+def _prepare_existing_pool(source: dict, pool: dict) -> Tuple[Optional[dict], List[str], str]:
+    old_source = pool.get("source")
+    raw = pool.get("raw")
+    if not isinstance(raw, dict):
+        return None, [], "existing generated content is incomplete; retained for manual review"
+    if isinstance(old_source, dict) and source_content_hash(old_source) != source_content_hash(source):
+        return None, [], "source meaning or example changed; existing generated content retained"
+    fields = _feedback_fields_needing_repair(raw)
+    # A placeholder is used only to validate the rest of the structure. It is
+    # never persisted or published; actual feedback must be repaired and audited.
+    validation_raw = {**raw, **{field: "待校对" for field in fields}}
+    rebuilt, error = build_generation_candidate_pool(source, validation_raw)
+    if not rebuilt:
+        return None, [], f"existing generated content needs manual review: {error}"
+    prepared = {
+        **pool, "source": dict(source), "raw": dict(raw),
+        "record": rebuilt["record"] if not fields else dict(pool.get("record") or {}),
+        "generation_prompt_version": GENERATION_PROMPT_VERSION,
     }
-    return pool
+    return prepared, fields, ""
+
+
+def candidate_pool_from_published(source: dict, record: Any) -> Optional[dict]:
+    """Convert retained questions without invoking generation, including legacy records."""
+    raw = _raw_from_published(source, record)
+    if raw is None:
+        return None
+    old_source = record.get("source_snapshot")
+    if record.get("source_content_hash") and record["source_content_hash"] != source_content_hash(source):
+        return None
+    pool = {
+        "source": old_source if isinstance(old_source, dict) else dict(source),
+        "raw": raw, "record": record,
+        "refreshed_from": {
+            "generation_prompt_version": record.get("generation_prompt_version"),
+            "audit_version": record.get("audit_version"),
+            "question_ids": [record[kind].get("question_id") for kind in QUESTION_TYPES],
+        },
+    }
+    prepared, _, _ = _prepare_existing_pool(source, pool)
+    return prepared
+
+
+def plan_generated_sources(sources: List[dict]) -> Dict[str, dict]:
+    """Any existing generation evidence prevents another full-generation request."""
+    bank = _read_bank_keys_unlocked([source["english"] for source in sources])
+    plans = {}
+    for source in sources:
+        key = source["english"]
+        candidate = bank["candidates"].get(key)
+        rejection = bank["rejections"].get(key)
+        published = bank["questions"].get(key)
+        failure = bank["failures"].get(key) or {}
+        evidence = any(key in bank[namespace] for namespace in ("questions", "candidates", "rejections", "failures"))
+        pool, origin = None, ""
+        for value, name in ((candidate, "resume"), (rejection, "reaudit")):
+            if isinstance(value, dict):
+                found = _candidate_pool(value)
+                if found:
+                    pool, origin = found, name
+                    break
+                old_record = _candidate_record(value)
+                if old_record:
+                    pool = candidate_pool_from_published(source, old_record)
+                    origin = name
+                    break
+        if pool is None and not candidate and not rejection and isinstance(published, dict):
+            pool = candidate_pool_from_published(source, published)
+            origin = "reaudit"
+        if not evidence:
+            plans[key] = {"action": "generate", "pool": None, "error": ""}
+            continue
+        if pool is None:
+            plans[key] = {
+                "action": "manual", "pool": None,
+                "error": "previous generation exists but cannot be safely reused; retained for manual review",
+            }
+            continue
+        prepared, missing_fields, error = _prepare_existing_pool(source, pool)
+        if not prepared:
+            plans[key] = {"action": "manual", "pool": pool, "error": error}
+            continue
+        last_error = str(failure.get("last_error") or (
+            rejection.get("last_error") if isinstance(rejection, dict) else ""
+        ) or "")
+        repair_fields = missing_fields or _feedback_repair_fields(last_error)
+        plans[key] = {
+            "action": "repair" if repair_fields else origin,
+            "pool": prepared, "repair_fields": repair_fields,
+            "error": last_error if repair_fields else "",
+        }
+    return plans
 
 
 def reusable_refresh_pools(sources: List[dict]) -> Dict[str, dict]:
-    keys = [source["english"] for source in sources]
-    records = _question_store().get_many("questions", keys)
-    rejections = _question_store().get_many("rejections", keys)
-    reusable = {}
-    for source in sources:
-        key = source["english"]
-        rejected = rejections.get(key) or {}
-        rejected_pool = _candidate_pool(rejected)
-        if (rejected.get("audit_version") == AUDIT_VERSION and rejected_pool
-                and rejected_pool["source"].get("source_hash") == source.get("source_hash")):
-            continue
-        pool = candidate_pool_from_published(source, records.get(key))
-        if pool:
-            reusable[key] = pool
-    return reusable
+    return {
+        key: plan["pool"] for key, plan in plan_generated_sources(sources).items()
+        if plan["action"] in {"resume", "reaudit"}
+    }
 
 
 def pending_candidate_records(
@@ -1623,6 +1822,7 @@ def persist_candidate_pool_result(
     errors: Dict[str, str],
     *,
     preserve_audit_progress: bool = True,
+    generated: bool = True,
 ) -> None:
     mutation_keys = _mutation_keys(pools, errors)
     with _thread_lock:
@@ -1649,7 +1849,7 @@ def persist_candidate_pool_result(
                     "record": record,
                     "pool": pool,
                     "created_at": now,
-                    "generation_attempts": generation_attempts + 1,
+                    "generation_attempts": generation_attempts + int(generated),
                     "audit_attempts": 0,
                     "last_audit_error": "",
                     "automatic_attempts": int(retry_history.get("automatic_attempts") or 0),
@@ -1677,7 +1877,8 @@ def generate_candidates_and_persist(
     *,
     force: bool = False,
 ) -> dict:
-    pending = missing_sources(sources, force=force)
+    plans = plan_generated_sources(sources)
+    pending = [source for source in sources if plans[source["english"]]["action"] == "generate"]
     if not pending:
         return {"requested": len(sources), "pending": 0, "generated": 0, "failed": 0}
     records, errors = generate_candidate_records(pending, chat)
@@ -1768,6 +1969,7 @@ def persist_candidate_pool_audit_result(
     retry_errors: Dict[str, str],
     *,
     expected_pools: Optional[Dict[str, dict]] = None,
+    expected_sources: Optional[Dict[str, dict]] = None,
 ) -> List[str]:
     """Atomically publish approved pool selections and queue rejected words."""
     mutation_keys = _mutation_keys(approved, rejected, retry_errors)
@@ -1808,6 +2010,7 @@ def persist_candidate_pool_audit_result(
                     and candidate_id
                     and _candidate_pool_fingerprint(current_pool) == candidate_id
                     and _is_approved_record(record)
+                    and (expected_sources is None or record_matches_source(record, expected_sources.get(normalized)))
                 ):
                     continue
                 published = dict(record)
@@ -1840,6 +2043,15 @@ def persist_candidate_pool_audit_result(
                     "record": pool["record"],
                     "pool": pool,
                 }
+                published = questions.get(normalized)
+                original_ids = (pool.get("refreshed_from") or {}).get("question_ids")
+                if isinstance(published, dict) and original_ids == [
+                    (published.get(kind) or {}).get("question_id") for kind in QUESTION_TYPES
+                ]:
+                    questions[normalized] = {
+                        **published, "withdrawn_at": now,
+                        "withdrawal_reason": str(error)[:500],
+                    }
                 candidates.pop(normalized, None)
                 previous_failure = failures.get(normalized)
                 failure_attempts = (
@@ -1947,6 +2159,37 @@ def persist_generation_result(records: Dict[str, dict], errors: Dict[str, str]) 
             _write_bank_keys_unlocked(bank, mutation_keys)
 
 
+def _stage_existing_pools(pools: Dict[str, dict]) -> None:
+    current = _question_store().get_many("candidates", pools)
+    changed = {
+        key: pool for key, pool in pools.items()
+        if not _candidate_pool(current.get(key))
+        or _candidate_pool_fingerprint(_candidate_pool(current[key])) != _candidate_pool_fingerprint(pool)
+    }
+    if changed:
+        persist_candidate_pool_result(changed, {}, generated=False)
+
+
+def _hold_generated_content(sources: Dict[str, dict], errors: Dict[str, str]) -> None:
+    if not errors:
+        return
+    with _thread_lock:
+        with _interprocess_lock():
+            bank = _read_bank_keys_unlocked(errors)
+            now = datetime.now().astimezone().isoformat(timespec="seconds")
+            for key, error in errors.items():
+                previous = bank["failures"].get(key) or {}
+                bank["failures"][key] = {
+                    **previous, "last_attempt_at": now, "last_error": error,
+                    "manual_review_required": True, "generated_content_retained": True,
+                    "source_content_hash": source_content_hash(sources[key]),
+                    "auto_retry_pipeline_version": AUTO_RETRY_PIPELINE_VERSION,
+                }
+                if isinstance(bank["candidates"].get(key), dict):
+                    bank["candidates"][key]["manual_review_required"] = True
+            _write_bank_keys_unlocked(bank, errors)
+
+
 def generate_audited_and_persist(
     sources: List[dict],
     chat: ChatFunction,
@@ -1957,69 +2200,72 @@ def generate_audited_and_persist(
     diagnostic: Optional[GenerationDiagnosticFunction] = None,
     max_generation_attempts: int = 2,
     audit_identity: str = "",
+    retry_failed: bool = False,
+    source_lookup: Optional[Callable[[str], Optional[dict]]] = None,
 ) -> dict:
-    """Generate, independently audit, repair once, and publish approved records."""
-    pending = list(sources) if force and not refresh_prompt else sources_needing_prompt_refresh(sources)
+    """Generate only absent words; existing content is audited or repaired in place."""
+    pending = sources_needing_prompt_refresh(
+        sources, retry_failed=retry_failed, force=force and not refresh_prompt,
+    )
     if not pending:
         return {"requested": len(sources), "pending": 0, "generated": 0, "failed": 0}
-    attempts = max(1, min(2, int(max_generation_attempts)))
     source_by_key = {source["english"]: source for source in pending}
-    remaining = list(pending)
-    approved_all: Dict[str, dict] = {}
-    final_errors: Dict[str, str] = {}
-    rejected_all: Dict[str, str] = {}
-    retry_all: Dict[str, str] = {}
-    failures = _question_store().get_many("failures", source_by_key)
-    repair_feedback: Dict[str, str] = {
-        key: str(failures[key].get("last_error") or "")
-        for key in source_by_key if isinstance(failures.get(key), dict)
-    }
-    reusable = {} if force else {
-        key: pool for key, pool in pending_candidate_pools(word_keys=source_by_key).items()
-        if pool["source"].get("source_hash") == source_by_key[key].get("source_hash")
-    }
-    resumed_candidates = len(reusable)
-    reused_questions = {}
-    if refresh_prompt and not force:
-        reused_questions = reusable_refresh_pools([
-            source for source in pending if source["english"] not in reusable
-        ])
-        persist_candidate_pool_result(reused_questions, {})
-        reusable.update(reused_questions)
-    for attempt in range(1, attempts + 1):
-        pools = dict(reusable) if attempt == 1 else {}
-        to_generate = [source for source in remaining if source["english"] not in pools]
-        generation_errors = {}
-        previous_rejections = _question_store().get_many("rejections", [source["english"] for source in to_generate])
-        repair_candidates = {
-            key: rejected_pool["raw"]
-            for key, rejection in previous_rejections.items()
-            if (rejected_pool := _candidate_pool(rejection)) is not None
-            and rejected_pool["source"].get("source_hash") == source_by_key[key].get("source_hash")
-        }
-        size = GENERATION_REQUEST_WORDS if attempt == 1 else max(
-            1, min(GENERATION_REQUEST_WORDS // 2, (len(to_generate) + 1) // 2),
-        )
-        for offset in range(0, len(to_generate), size):
-            generated_pools, errors = generate_candidate_pools(
-                to_generate[offset:offset + size], chat,
-                diagnostic=diagnostic, repair_feedback=repair_feedback,
-                repair_candidates=repair_candidates,
+    plans = plan_generated_sources(pending)
+    resumed_candidates = sum(plan["action"] == "resume" for plan in plans.values())
+    reused_questions = sum(plan["action"] == "reaudit" for plan in plans.values())
+    approved_all, final_errors, rejected_all, retry_all = {}, {}, {}, {}
+    full_generation_words = []
+    field_repaired_words = []
+    rounds = max(1, min(2, int(max_generation_attempts)))
+
+    for attempt in range(rounds):
+        manual = {key: plan["error"] for key, plan in plans.items() if plan["action"] == "manual"}
+        _hold_generated_content(source_by_key, manual)
+        final_errors.update(manual)
+        pools = {key: plan["pool"] for key, plan in plans.items() if plan["action"] in {"resume", "reaudit"}}
+        _stage_existing_pools(pools)
+
+        new_sources = [source_by_key[key] for key, plan in plans.items() if plan["action"] == "generate"]
+        for start in range(0, len(new_sources), GENERATION_REQUEST_WORDS):
+            batch = new_sources[start:start + GENERATION_REQUEST_WORDS]
+            # Recheck immediately before the paid call so a prior batch or import
+            # cannot cause already-persisted content to be generated again.
+            checked = plan_generated_sources(batch)
+            batch = [source for source in batch if checked[source["english"]]["action"] == "generate"]
+            if not batch:
+                continue
+            raw_results = {}
+            generated, errors = generate_candidate_pools(
+                batch, chat, diagnostic=diagnostic, raw_results=raw_results,
             )
-            persist_candidate_pool_result(generated_pools, errors, preserve_audit_progress=not force)
-            pools.update(generated_pools)
-            generation_errors.update(errors)
+            full_generation_words.extend(source["english"] for source in batch)
+            persist_candidate_pool_result({**raw_results, **generated}, errors)
+            pools.update(generated)
+            final_errors.update(errors)
+            for key in errors:
+                updated = plan_generated_sources([source_by_key[key]])[key]
+                if updated["action"] == "repair":
+                    plans[key] = updated
+                else:
+                    _hold_generated_content(source_by_key, {key: errors[key]})
+
+        repair_plans = {key: plan for key, plan in plans.items() if plan["action"] == "repair"}
+        if repair_plans:
+            repaired, repair_errors = generate_field_repairs(repair_plans, chat, diagnostic)
+            persist_candidate_pool_result(repaired, {}, generated=False)
+            pools.update(repaired)
+            field_repaired_words.extend(repaired)
+            final_errors.update(repair_errors)
+            _hold_generated_content(source_by_key, repair_errors)
+
         approved, rejected, retry_errors = audit_generation_candidate_pools(
-            pools,
-            audit_chat or chat,
-            diagnostic=diagnostic,
-            audit_identity=audit_identity if not force else "",
+            pools, audit_chat or chat, diagnostic=diagnostic, audit_identity=audit_identity,
         )
         published_keys = persist_candidate_pool_audit_result(
-            approved,
-            rejected,
-            retry_errors,
-            expected_pools=pools,
+            approved, rejected, retry_errors, expected_pools=pools,
+            expected_sources=(
+                {key: source_lookup(key) for key in pools} if source_lookup else source_by_key
+            ),
         )
         retry_errors.update({key: "candidate changed before publication" for key in approved if key not in published_keys})
         approved = {key: record for key, record in approved.items() if key in published_keys}
@@ -2028,38 +2274,28 @@ def generate_audited_and_persist(
             final_errors.pop(key, None)
             rejected_all.pop(key, None)
             retry_all.pop(key, None)
-        final_errors.update(generation_errors)
         final_errors.update(rejected)
         final_errors.update(retry_errors)
         rejected_all.update(rejected)
         retry_all.update(retry_errors)
-        if attempt >= attempts:
+
+        semantic_holds = {key: error for key, error in rejected.items() if not _feedback_repair_fields(error)}
+        _hold_generated_content(source_by_key, semantic_holds)
+        repairable = {key for key, error in rejected.items() if _feedback_repair_fields(error)}
+        if attempt + 1 >= rounds or not repairable:
             break
-        repair_keys = sorted(set(generation_errors) | set(rejected))
-        remaining = [source_by_key[key] for key in repair_keys if key in source_by_key]
-        if not remaining:
-            break
-        repair_feedback = {
-            key: error
-            for key, error in {**generation_errors, **rejected}.items()
-            if key in repair_keys
-        }
-        _emit_generation_diagnostic(diagnostic, {
-            "event": "repair",
-            "attempt": attempt + 1,
-            "words": [source["english"] for source in remaining],
-            "failure_feedback": dict(repair_feedback),
-        })
+        plans = plan_generated_sources([source_by_key[key] for key in sorted(repairable)])
+        # Rejected content is never converted back into a full generation task.
+        plans = {key: plan for key, plan in plans.items() if plan["action"] == "repair"}
+
     return {
-        "requested": len(sources),
-        "pending": len(pending),
-        "generated": len(approved_all),
-        "reused_questions": len(reused_questions),
-        "resumed_candidates": resumed_candidates,
-        "failed": len(final_errors),
-        "generated_words": sorted(approved_all),
-        "failed_words": sorted(final_errors),
-        "failure_errors": dict(final_errors),
+        "requested": len(sources), "pending": len(pending),
+        "generated": len(approved_all), "failed": len(final_errors),
+        "reused_questions": reused_questions, "resumed_candidates": resumed_candidates,
+        "full_generation_words": sorted(set(full_generation_words)),
+        "field_repaired_words": sorted(set(field_repaired_words)),
+        "generated_words": sorted(approved_all), "failed_words": sorted(final_errors),
+        "failure_errors": final_errors,
         "audit_rejected_words": sorted(set(rejected_all) - set(approved_all)),
         "audit_retry_words": sorted(set(retry_all) - set(approved_all)),
     }
@@ -2127,32 +2363,28 @@ def generate_and_persist(
     force: bool = False,
     audit_chat: Optional[ChatFunction] = None,
 ) -> dict:
-    pending = missing_sources(sources, force=force)
-    if not pending:
-        return {"requested": len(sources), "pending": 0, "generated": 0, "failed": 0}
-    records, errors = generate_question_records(pending, chat, audit_chat=audit_chat)
-    persist_generation_result(records, errors)
-    return {
-        "requested": len(sources),
-        "pending": len(pending),
-        "generated": len(records),
-        "failed": len(errors),
-        "generated_words": sorted(records),
-        "failed_words": sorted(errors),
-    }
+    """Compatibility entry point retaining the same no-regeneration guarantee."""
+    return generate_audited_and_persist(sources, chat, force=force, audit_chat=audit_chat)
 
 
-def get_question(word_key: str, question_type: str) -> Optional[dict]:
+_SOURCE_UNSET = object()
+
+
+def get_question(word_key: str, question_type: str, *, source: Any = _SOURCE_UNSET) -> Optional[dict]:
     if question_type not in QUESTION_TYPES:
         return None
     row = _question_store().get("questions", normalize_word(word_key))
     if not _is_approved_record(row):
         return None
+    if source is not _SOURCE_UNSET and not record_matches_source(row, source):
+        return None
     question = row.get(question_type) if isinstance(row, dict) else None
+    if isinstance(question, dict) and isinstance(source, dict) and question_type == "recognition":
+        question = {**question, "phonetic": source.get("phonetic") or ""}
     return question if isinstance(question, dict) else None
 
 
-def get_question_by_id(question_id: str) -> Optional[dict]:
+def get_question_by_id(question_id: str, *, source: Any = _SOURCE_UNSET) -> Optional[dict]:
     target = str(question_id or "").strip()
     if not target:
         return None
@@ -2160,6 +2392,8 @@ def get_question_by_id(question_id: str) -> Optional[dict]:
     if not found:
         return None
     question, record = found
+    if source is not _SOURCE_UNSET and not record_matches_source(record, source):
+        return None
     return question if _is_approved_record(record) else None
 
 

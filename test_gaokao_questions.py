@@ -3,6 +3,7 @@ import json
 import pytest
 
 import gaokao_questions as questions
+from deepseek_policy import DeepSeekRequestError
 
 
 @pytest.fixture
@@ -213,14 +214,14 @@ def test_recognition_rejects_option_length_leak():
     assert 'option lengths differ' in error
 
 
-def test_generation_is_reentrant_after_partial_batch_success(private_question_bank):
+def test_partial_generation_keeps_completed_content_and_holds_missing_results(private_question_bank):
     apple = _source('apple', 'n. 苹果')
     book = _source('book', 'n. 书')
     calls = []
 
     def partial_chat(messages, max_tokens):
         if '独立英语试题质检员' in messages[-1]['content']:
-            return _audited(apple, _generated('apple'))
+            return _pool_audited(apple, _generated('apple'))
         calls.append(messages[-1]['content'])
         return json.dumps([_generated('apple')], ensure_ascii=False)
 
@@ -232,19 +233,20 @@ def test_generation_is_reentrant_after_partial_batch_success(private_question_ba
     assert bank['failures']['book']['attempts'] == 1
 
     def resumed_chat(messages, max_tokens):
-        if '独立英语试题质检员' in messages[-1]['content']:
-            return _audited(book, _generated('book'))
-        calls.append(messages[-1]['content'])
-        return json.dumps([_generated('book')], ensure_ascii=False)
+        pytest.fail('a previous paid generation must not be repeated')
 
     second = questions.generate_and_persist([apple, book], resumed_chat)
-    assert second['pending'] == 1
-    assert second['generated_words'] == ['book']
-    assert '"english": "book"' in calls[-1]
-    assert '"english": "apple"' not in calls[-1]
+    assert second['pending'] == 0
+    assert second['generated'] == 0
+    assert len(calls) == 1
+    retried = questions.generate_audited_and_persist(
+        [apple, book], resumed_chat, retry_failed=True,
+    )
+    assert retried['failed_words'] == ['book']
+    assert retried['full_generation_words'] == []
     bank = questions.load_bank()
-    assert set(bank['questions']) == {'apple', 'book'}
-    assert 'book' not in bank['failures']
+    assert set(bank['questions']) == {'apple'}
+    assert bank['failures']['book']['manual_review_required'] is True
 
     changed_book = dict(book, source_hash='hash-book-updated')
     assert questions.missing_sources([apple, changed_book]) == [changed_book]
@@ -570,7 +572,7 @@ def test_pool_audit_retries_malformed_boolean_array() -> None:
     assert 'expected 4 JSON booleans' in retry['novel']
 
 
-def test_rejected_pool_is_regenerated_once_before_publish(private_question_bank) -> None:
+def test_semantically_rejected_pool_is_retained_without_regeneration(private_question_bank) -> None:
     source = _source('novel', 'n. 小说')
     raw = _generated('novel')
     generation_calls = 0
@@ -603,15 +605,17 @@ def test_rejected_pool_is_regenerated_once_before_publish(private_question_bank)
         max_generation_attempts=2,
     )
 
-    assert generation_calls == 2
-    assert audit_calls == 5
+    assert generation_calls == 1
+    assert audit_calls == 2
     assert '"previous_failure_to_fix":' not in generation_prompts[0]
-    assert '"previous_failure_to_fix":' in generation_prompts[1]
-    assert '首轮语境缺少形成唯一答案的决定性线索' in generation_prompts[1]
-    assert result['generated_words'] == ['novel']
-    assert result['failed_words'] == []
-    assert questions.get_question('novel', 'context') is not None
+    assert result['generated_words'] == []
+    assert result['failed_words'] == ['novel']
+    assert '首轮语境缺少形成唯一答案的决定性线索' in result['failure_errors']['novel']
+    assert questions.get_question('novel', 'context') is None
     assert questions.pending_candidate_pools() == {}
+    bank = questions.load_bank()
+    assert bank['rejections']['novel']['pool']['raw'] == raw
+    assert bank['failures']['novel']['manual_review_required'] is True
 
 
 def test_current_pool_failures_are_tagged_for_automatic_retry(
@@ -1004,8 +1008,11 @@ def test_failed_audit_resumes_existing_candidate(private_question_bank):
         generation_calls.append(1)
         return json.dumps([raw])
 
-    first = questions.generate_audited_and_persist([source], generate, audit_chat=lambda *args: None)
-    assert first['audit_retry_words'] == ['benefit']
+    with pytest.raises(DeepSeekRequestError, match='audit request returned no response') as raised:
+        questions.generate_audited_and_persist([source], generate, audit_chat=lambda *args: None)
+    assert raised.value.kind == 'transport'
+    assert questions.failure_records() == {}
+    assert questions.pending_candidate_pools()['benefit']['raw'] == raw
     second = questions.generate_audited_and_persist(
         [source], generate, audit_chat=lambda *args: _pool_audited(source, raw),
     )
@@ -1013,7 +1020,7 @@ def test_failed_audit_resumes_existing_candidate(private_question_bank):
     assert len(generation_calls) == 1
 
 
-def test_truncated_generation_splits_retry_and_keeps_feedback(private_question_bank):
+def test_truncated_generation_is_held_without_another_paid_generation(private_question_bank):
     sources = [_source(word, 'n. 益处') for word in ('alpha', 'bravo', 'charlie', 'delta')]
     sizes = []
 
@@ -1023,13 +1030,19 @@ def test_truncated_generation_splits_retry_and_keeps_feedback(private_question_b
     def chat(messages, max_tokens):
         items = json.loads(messages[-1]['content'].split('输入（必须为以下 JSON 数组中的每个对象输出一个结果，保持原顺序）：\n')[1])
         sizes.append(len(items))
-        if len(sizes) == 1:
-            return Truncated('[]')
-        assert all('truncated' in item['previous_failure_to_fix'] for item in items)
-        return '[]'
+        assert len(sizes) == 1
+        return Truncated('[]')
 
-    questions.generate_audited_and_persist(sources, chat)
-    assert sizes == [4, 2, 2]
+    result = questions.generate_audited_and_persist(sources, chat)
+    assert sizes == [4]
+    assert result['generated'] == 0
+    assert result['failed'] == 4
+    failures = questions.failure_records()
+    assert all('truncated' in failures[source['english']]['last_error'] for source in sources)
+    assert all(failures[source['english']]['manual_review_required'] for source in sources)
+    resumed = questions.generate_audited_and_persist(sources, chat, retry_failed=True)
+    assert resumed['full_generation_words'] == []
+    assert sizes == [4]
 
 
 def test_feedback_change_invalidates_in_flight_audit(private_question_bank):
@@ -1073,12 +1086,11 @@ def test_feedback_repair_preserves_approved_stem_and_options(private_question_ba
         generation_calls.append(messages[-1]['content'])
         if len(generation_calls) == 1:
             return json.dumps([raw])
-        assert '"repair_only_fields": ["context_translation_zh"]' in generation_calls[-1]
+        assert '"fields": ["context_translation_zh"]' in generation_calls[-1]
+        assert max_tokens < 1000
         return json.dumps([{
-            **raw,
+            'english': 'benefit',
             'context_translation_zh': '修正后的准确译文。',
-            'context_sentence': 'A changed and invalid stem.',
-            'context_distractors': ['wrong'],
         }])
 
     def audit(messages, max_tokens):
@@ -1095,6 +1107,9 @@ def test_feedback_repair_preserves_approved_stem_and_options(private_question_ba
     assert published['translation_zh'] == '修正后的准确译文。'
     assert published['prompt'] == raw['context_sentence'].replace('benefit', '____')
     assert len(published['options']) == 4
+    assert result['full_generation_words'] == ['benefit']
+    assert result['field_repaired_words'] == ['benefit']
+    assert len(generation_calls) == 2
 
 
 def test_existing_candidate_with_old_fingerprint_can_be_reaudited(private_question_bank):
@@ -1199,34 +1214,75 @@ def test_refresh_reaudits_legacy_content_without_generation(private_question_ban
     assert questions.has_current_prompt_questions('benefit')
 
 
-@pytest.mark.parametrize('change', ['source', 'translation', 'answer', 'blank', 'duplicate'])
-def test_refresh_regenerates_unusable_legacy_content(private_question_bank, change):
+def test_refresh_reuses_legacy_content_after_display_source_hash_changes(private_question_bank):
     source = _source('benefit', 'n. 益处')
     record = _legacy_record(source)
-    if change == 'source':
-        record['source_hash'] = 'old-source'
-    elif change == 'translation':
-        record['context']['translation_zh'] = ''
-    elif change == 'answer':
+    record['source_hash'] = 'old-source'
+    _put_legacy_record(source, record)
+
+    result = questions.generate_audited_and_persist(
+        [source], lambda *args: pytest.fail('display-only changes must preserve generation'),
+        audit_chat=lambda messages, _: _blind_reply(messages),
+        refresh_prompt=True, audit_identity='test-model',
+    )
+    assert result['generated_words'] == ['benefit']
+    assert result['reused_questions'] == 1
+    assert result['full_generation_words'] == []
+
+
+def test_refresh_repairs_only_missing_legacy_translation(private_question_bank):
+    source = _source('benefit', 'n. 益处')
+    record = _legacy_record(source)
+    record['context']['translation_zh'] = ''
+    _put_legacy_record(source, record)
+    calls = []
+
+    def repair(messages, max_tokens):
+        items = json.loads(messages[-1]['content'].split('\n', 1)[1])
+        assert items[0]['fields'] == ['context_translation_zh']
+        assert items[0]['previous_values'] == {'context_translation_zh': ''}
+        calls.append(items)
+        return json.dumps([{'english': 'benefit', 'context_translation_zh': '修正后的准确译文。'}])
+
+    result = questions.generate_audited_and_persist(
+        [source], repair, audit_chat=lambda messages, _: _blind_reply(messages),
+        refresh_prompt=True, audit_identity='test-model',
+    )
+    assert result['generated_words'] == ['benefit']
+    assert result['full_generation_words'] == []
+    assert result['field_repaired_words'] == ['benefit']
+    assert len(calls) == 1
+    published = questions.get_question('benefit', 'context')
+    assert published['translation_zh'] == '修正后的准确译文。'
+    assert published['prompt'] == record['context']['prompt']
+    assert {option['text'] for option in published['options']} == {
+        option['text'] for option in record['context']['options']
+    }
+
+
+@pytest.mark.parametrize('change', ['answer', 'blank', 'duplicate'])
+def test_refresh_holds_unusable_legacy_content_without_paid_calls(private_question_bank, change):
+    source = _source('benefit', 'n. 益处')
+    record = _legacy_record(source)
+    if change == 'answer':
         record['context']['answer_option_id'] = 'unknown'
     elif change == 'blank':
         record['context']['prompt'] += ' ____'
     else:
         record['context']['options'][1] = record['context']['options'][0]
     _put_legacy_record(source, record)
-    generated = []
-
-    def generate(*args):
-        generated.append(1)
-        return json.dumps([_generated('benefit')])
-
     result = questions.generate_audited_and_persist(
-        [source], generate, audit_chat=lambda messages, _: _blind_reply(messages),
+        [source], lambda *args: pytest.fail('unusable legacy content must stay retained'),
+        audit_chat=lambda *args: pytest.fail('invalid structure needs manual review'),
         refresh_prompt=True, audit_identity='test-model',
     )
-    assert result['generated_words'] == ['benefit']
+    assert result['generated_words'] == []
+    assert result['failed_words'] == ['benefit']
     assert result['reused_questions'] == 0
-    assert len(generated) == 1
+    assert result['full_generation_words'] == []
+    bank = questions.load_bank()
+    assert bank['questions']['benefit'] == record
+    assert bank['failures']['benefit']['manual_review_required'] is True
 
 
 def test_refresh_checkpoints_survive_interruption(private_question_bank):
@@ -1327,17 +1383,17 @@ def test_small_refresh_never_loads_full_namespaces(private_question_bank, monkey
 def test_prompt_refresh_scan_stops_at_limit(private_question_bank, monkeypatch):
     store = questions._question_store()
     batches = []
-    original = store.get_many
+    original = store.load_keys
 
-    def get_many(namespace, keys):
+    def load_keys(keys):
         keys = list(keys)
-        batches.append((namespace, len(keys)))
-        return original(namespace, keys)
+        batches.append(len(keys))
+        return original(keys)
 
-    monkeypatch.setattr(store, 'get_many', get_many)
+    monkeypatch.setattr(store, 'load_keys', load_keys)
     sources = [_source(f'word-{index}', 'n. 益处') for index in range(1000)]
     assert len(questions.sources_needing_prompt_refresh(sources, limit=30)) == 30
-    assert batches == [('questions', 200)]
+    assert batches == [200]
 
 
 def test_rejected_legacy_question_is_not_reaudited_on_next_run(private_question_bank):
@@ -1356,21 +1412,24 @@ def test_rejected_legacy_question_is_not_reaudited_on_next_run(private_question_
         audit_identity='model-a',
     )
     assert first['failed'] == 1
-    assert questions.reusable_refresh_pools([source]) == {}
-    generated = []
+    retained = questions.load_bank()['rejections']['benefit']['pool']['raw']
+    assert questions.reusable_refresh_pools([source])['benefit']['raw'] == retained
 
     def generate(*args):
-        generated.append(1)
-        raw = _generated('benefit')
-        raw['context_sentence'] = 'Afterward, ' + raw['context_sentence']
-        return json.dumps([raw])
+        pytest.fail('previously generated content must never be regenerated')
 
     second = questions.generate_audited_and_persist(
-        [source], generate, audit_chat=lambda messages, _: _blind_reply(messages),
+        [source], generate, audit_chat=lambda *args: pytest.fail('rejected legacy is skipped by default'),
         refresh_prompt=True, audit_identity='model-a',
     )
-    assert second['generated'] == 1 and second['reused_questions'] == 0
-    assert generated == [1]
+    assert second['generated'] == 0 and second['pending'] == 0
+    retried = questions.generate_audited_and_persist(
+        [source], generate, audit_chat=lambda messages, _: _blind_reply(messages),
+        refresh_prompt=True, audit_identity='model-b', retry_failed=True,
+    )
+    assert retried['generated_words'] == ['benefit']
+    assert retried['full_generation_words'] == []
+    assert questions.get_question('benefit', 'context')['prompt'] == retained['context_sentence'].replace('benefit', '____')
 
 
 def test_refresh_saves_generation_requests_for_thirty_old_words(private_question_bank):
@@ -1398,4 +1457,87 @@ def test_refresh_saves_generation_requests_for_thirty_old_words(private_question
         )
         assert result['generated'] == 30
         counts_by_mode.append(counts)
-    assert counts_by_mode == [{'generation': 3, 'audit': 9}, {'generation': 0, 'audit': 9}]
+    assert counts_by_mode == [{'generation': 0, 'audit': 9}, {'generation': 0, 'audit': 9}]
+
+
+@pytest.mark.parametrize('kind', ['configuration', 'transport'])
+def test_request_failure_stops_logical_audit_without_quality_attempts(private_question_bank, kind):
+    sources = [_source(f'word{chr(97 + index)}', 'n. 益处') for index in range(10)]
+    pools = {}
+    for source in sources:
+        pool, error = questions.build_generation_candidate_pool(source, _generated(source['english']))
+        assert not error
+        pools[source['english']] = pool
+    questions.persist_candidate_pool_result(pools, {})
+    calls = []
+    failure = DeepSeekRequestError(kind, 'service failure', retryable=kind == 'transport')
+
+    def audit(*args):
+        calls.append(1)
+        raise failure
+
+    with pytest.raises(DeepSeekRequestError) as raised:
+        questions.generate_audited_and_persist(
+            sources, lambda *args: pytest.fail('retained candidates must not regenerate'),
+            audit_chat=audit,
+        )
+    assert raised.value is failure
+    assert len(calls) == 1
+    bank = questions.load_bank()
+    assert bank['failures'] == {}
+    assert bank['rejections'] == {}
+    for key, candidate in bank['candidates'].items():
+        assert candidate['pool']['raw'] == pools[key]['raw']
+        assert candidate.get('audit_attempts', 0) == 0
+        assert candidate.get('automatic_attempts', 0) == 0
+        assert not candidate.get('manual_review_required')
+
+
+def test_recognition_rejection_skips_context_even_when_context_service_would_fail():
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    pool, _ = questions.build_generation_candidate_pool(source, raw)
+    calls = []
+
+    def audit(messages, max_tokens):
+        prompt = messages[-1]['content']
+        calls.append(prompt)
+        if '英文识义盲审' not in prompt:
+            raise DeepSeekRequestError('transport', 'context service unavailable', retryable=True)
+        return _pool_audited(source, raw, recognition_valid=['益处', *raw['recognition_distractors']])
+
+    approved, rejected, retry = questions.audit_generation_candidate_pools({'benefit': pool}, audit)
+    assert len(calls) == 1
+    assert approved == retry == {}
+    assert 'semantic audit rejected recognition' in rejected['benefit']
+
+
+def test_compact_feedback_repair_rejects_extra_fields_and_retains_original(private_question_bank):
+    source, raw = _source('benefit', 'n. 益处'), _generated('benefit')
+    calls = []
+
+    def generate(messages, max_tokens):
+        calls.append(messages[-1]['content'])
+        if len(calls) == 1:
+            return json.dumps([raw])
+        assert '"fields": ["context_translation_zh"]' in calls[-1]
+        return json.dumps([{
+            'english': 'benefit',
+            'context_translation_zh': '修正后的准确译文。',
+            'context_sentence': 'This unexpected replacement must never be accepted.',
+        }])
+
+    def audit(messages, max_tokens):
+        rows = json.loads(_pool_audited(source, raw))
+        if '校对最终四选项' in messages[-1]['content']:
+            rows[0]['feedback_quality']['translation_correct'] = False
+        return json.dumps(rows)
+
+    result = questions.generate_audited_and_persist([source], generate, audit_chat=audit)
+    assert len(calls) == 2
+    assert result['generated'] == 0
+    assert result['field_repaired_words'] == []
+    assert 'unexpected or missing fields' in result['failure_errors']['benefit']
+    assert questions.get_question('benefit', 'context') is None
+    bank = questions.load_bank()
+    assert bank['rejections']['benefit']['pool']['raw'] == raw
+    assert bank['failures']['benefit']['manual_review_required'] is True
