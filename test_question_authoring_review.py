@@ -50,6 +50,26 @@ def test_feedback_claim_becomes_conflict_when_prior_instructions_change(authorin
     assert questions.load_bank() == before
 
 
+def test_context_claim_cannot_submit_after_rubric_clarification(authoring, monkeypatch):
+    service, _ = authoring
+    _generated(service)
+    recognition = _claim(service, "recognition_blind", "recognition-reviewer")
+    _submit(service, recognition, _verdict(recognition))
+    context = _claim(service, "context_blind", "context-reviewer")
+    before = copy.deepcopy(questions.load_bank())
+    original = questions._blind_audit_spec
+
+    def clarified(kind):
+        fields, instructions = original(kind)
+        return fields, instructions + ("\nRecheck contextual evidence under the clarified rubric." if kind == "context" else "")
+
+    monkeypatch.setattr(questions, "_blind_audit_spec", clarified)
+    with pytest.raises(AuthoringError, match="audit instructions or inputs changed") as raised:
+        _submit(service, context, _verdict(context))
+    assert raised.value.status == 409
+    assert questions.load_bank() == before
+
+
 def test_multiple_item_generation_validation_is_atomic(authoring):
     service, sources = authoring
     sources["bonus"] = questions.source_from_wordbank_row({
