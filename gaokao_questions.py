@@ -323,7 +323,7 @@ _RECOGNITION_POS_RE = re.compile(
     re.IGNORECASE,
 )
 _RECOGNITION_SENSE_SEPARATOR_RE = re.compile(r"[；;、/，,]+")
-_RECOGNITION_METADATA_LABELS = {"人名", "姓氏", "男名", "女名", "男子名", "女子名", "地名", "城市名", "州名", "国家名", "朝代", "英国城市", "心理学", "英式", "美式"}
+_RECOGNITION_METADATA_LABELS = {"人名", "姓氏", "男名", "女名", "男子名", "女子名", "地名", "城市名", "州名", "国家名", "朝代", "英国城市", "心理学", "英式", "美式", "表感叹"}
 
 
 def _recognition_text(value: Any) -> str:

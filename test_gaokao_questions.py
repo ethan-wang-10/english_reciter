@@ -386,6 +386,7 @@ def test_recognition_core_sense_strips_regional_usage_metadata() -> None:
     assert questions._recognition_core_sense('adj. 行为的（英式）') == '行为的'
     assert questions._recognition_core_sense('n. 电梯（美式）') == '电梯'
     assert questions._recognition_core_sense('n. 银行（河岸）') == '银行（河岸）'
+    assert questions._recognition_core_sense('int. 啊（表感叹）') == '啊'
 
 
 def test_recognition_uses_later_candidates_when_earlier_values_are_invalid() -> None:
