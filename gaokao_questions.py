@@ -285,6 +285,7 @@ def _clean_distinct_list(
     forbidden: Iterable[str],
     require_cjk: bool,
     limit: int = 3,
+    correct_answer: str = "",
 ) -> List[str]:
     if not isinstance(raw, list):
         return []
@@ -300,8 +301,14 @@ def _clean_distinct_list(
             continue
         if require_cjk and not re.search(r"[\u3400-\u9fff]", text):
             continue
-        if not require_cjk and not re.fullmatch(r"[A-Za-z]+(?:['’-][A-Za-z]+)*(?: [A-Za-z]+(?:['’-][A-Za-z]+)*)*", text):
-            continue
+        if not require_cjk:
+            pattern = r"[A-Za-z]+(?:['’-][A-Za-z]+)*(?: [A-Za-z]+(?:['’-][A-Za-z]+)*)*"
+            if re.fullmatch(r"[A-Za-z]+-", correct_answer):
+                pattern = r"[A-Za-z]+-"
+            elif re.fullmatch(r"-[A-Za-z]+", correct_answer):
+                pattern = r"-[A-Za-z]+"
+            if not re.fullmatch(pattern, text):
+                continue
         seen.add(key)
         out.append(text)
         if limit > 0 and len(out) == limit:
@@ -311,24 +318,38 @@ def _clean_distinct_list(
 
 _RECOGNITION_POS_RE = re.compile(
     r"^(?:(?:auxiliary|determiner|article|interj|modal|abbr|prep|conj|pron|"
-    r"adj|adv|num|phr|aux|det|int|art|noun|verb|n|v|vi|vt)"
+    r"adj|adv|num|phr|aux|det|int|art|noun|verb|prefix|suffix|n|v|vi|vt)"
     r"(?:\.\s*|:\s*|\s+))+",
     re.IGNORECASE,
 )
 _RECOGNITION_SENSE_SEPARATOR_RE = re.compile(r"[；;、/，,]+")
+_RECOGNITION_NAME_LABELS = {"人名", "姓氏", "男名", "女名", "男子名", "女子名", "地名", "城市名", "州名", "国家名", "朝代", "英国城市"}
+
+
+def _recognition_text(value: Any) -> str:
+    text = " ".join(str(value or "").strip().split())
+    text = _RECOGNITION_POS_RE.sub("", text).strip()
+
+    def name_annotation(match):
+        core, note = (part.strip() for part in match.groups())
+        if core in {"人名", "姓氏", "男名", "女名", "男子名", "女子名"} and note not in _RECOGNITION_NAME_LABELS and re.fullmatch(r"[\u3400-\u9fff]+", note):
+            return note
+        labels = {part.strip() for part in re.split(r"[/／、,，;；]", note)}
+        return core if labels and labels.issubset(_RECOGNITION_NAME_LABELS) else match.group(0)
+
+    return re.sub(r"([^()（）;；,/，、]+)[(（]([^()（）]*)[)）]", name_annotation, text)
 
 
 def _recognition_core_sense(value: Any) -> str:
     """Keep one concise sense so option length cannot reveal the answer."""
-    text = " ".join(str(value or "").strip().split())
-    text = _RECOGNITION_POS_RE.sub("", text).strip()
+    text = _recognition_text(value)
     first = _RECOGNITION_SENSE_SEPARATOR_RE.split(text, maxsplit=1)[0].strip(" ，,。.")
     return first[:40]
 
 
 def _recognition_senses(value: Any) -> List[str]:
     """Return all explicit dictionary senses without part-of-speech prefixes."""
-    text = " ".join(str(value or "").strip().split())
+    text = _recognition_text(value)
     senses: List[str] = []
     seen = set()
     for part in _RECOGNITION_SENSE_SEPARATOR_RE.split(text):
@@ -421,6 +442,7 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
         raw.get("context_distractors"),
         forbidden=[source["context_answer"], source["english"]],
         require_cjk=False,
+        correct_answer=source["context_answer"],
     )
     if not recognition_values:
         return None, recognition_error
@@ -732,6 +754,7 @@ def _generation_validation_diagnostic(
                 context_raw,
                 forbidden=[answer, source.get("english")],
                 require_cjk=False,
+                correct_answer=answer,
             ),
         },
     }
@@ -1227,7 +1250,7 @@ def _candidate_pool_audit_questions(pool: dict) -> Tuple[dict, dict]:
         "recognition": [row[1] for row in rows],
         "context": _clean_distinct_list(
             raw["context_distractors"], forbidden=[source["context_answer"], key],
-            require_cjk=False, limit=12,
+            require_cjk=False, limit=12, correct_answer=source["context_answer"],
         ),
     }
     questions = {}

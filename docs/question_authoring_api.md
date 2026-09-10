@@ -191,6 +191,16 @@ python3 scripts/question_authoring_client.py claim \
 
 ## 租约与中断恢复
 
+### 已核对的词库纠错
+
+`scripts/repair_wordbank_headwords.py` 处理已核对的 15 个错误词头：优先保留已有规范词条，只补充缺失的规范词条，并保留词库与学习数据库备份。默认仅生成计划；计划含学习记录快照，应存放在服务器私有目录，不提交到仓库。
+
+```bash
+python3 scripts/repair_wordbank_headwords.py --data-dir user_data_simple --plan /private/path/headwords-plan.json
+```
+
+应用前必须停止应用，随后以同样参数增加 `--apply --service-stopped`。脚本校验来源文件与学习记录没有变化，保留学习次数、状态、排期和任务引用；发现同一用户已有正确词进度等冲突时会中止，不能自动覆盖。迁移日志支持从同一计划恢复。完成后重启应用，再通过 API 领取纠正后的词条。
+
 处理中定期检查 `expires_at`，在到期前续租。下面的操作都使用领取时的相同 `worker_id`：
 
 ```bash
