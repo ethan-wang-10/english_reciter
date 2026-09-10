@@ -318,7 +318,7 @@ def _clean_distinct_list(
 
 _RECOGNITION_POS_RE = re.compile(
     r"^(?:(?:auxiliary|determiner|article|interj|modal|abbr|prep|conj|pron|"
-    r"adj|adv|num|phr|aux|det|int|art|noun|verb|prefix|suffix|n|v|vi|vt)"
+    r"adj|adv|num|phr|aux|det|int|art|noun|verb|pronoun|numeral|interjection|exclamation|particle|prefix|suffix|n|v|vi|vt)"
     r"(?:\.\s*|:\s*|\s+))+",
     re.IGNORECASE,
 )
