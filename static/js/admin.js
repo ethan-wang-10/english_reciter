@@ -743,7 +743,7 @@ function buildAdminAuthoringRequest(action, state) {
     const root = '/admin/gaokao/authoring';
     const worker_id = identifier(state.worker_id, '执行者标识');
     if (action === 'pending' || action === 'claim') {
-        if (!['generation', 'recognition_blind', 'context_blind', 'feedback'].includes(state.kind)) {
+        if (!['generation', 'revision', 'recognition_blind', 'context_blind', 'feedback'].includes(state.kind)) {
             throw new Error('任务阶段不正确');
         }
         const parameters = {

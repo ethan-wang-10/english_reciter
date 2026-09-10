@@ -19,7 +19,7 @@ import uuid
 
 API_ROOT = "/api/admin/gaokao/authoring"
 DEFAULT_BASE_URL = "https://english.itorange.online"
-KINDS = ("generation", "recognition_blind", "context_blind", "feedback")
+KINDS = ("generation", "revision", "recognition_blind", "context_blind", "feedback")
 TOKEN_ENV = "ENGLISH_RECITER_ADMIN_TOKEN"
 
 
@@ -150,6 +150,7 @@ def _parser() -> argparse.ArgumentParser:
             command.add_argument("--kind", choices=KINDS, default="generation")
             command.add_argument("--level", default="")
             command.add_argument("--limit", type=_bounded_int(1, 10), default=10)
+            command.add_argument("--words", nargs="+", help="Restrict to 1 to 10 specific word keys")
         else:
             command.add_argument("job_id")
         if name in ("claim", "renew"):
@@ -213,6 +214,17 @@ def _build_request(args) -> tuple[str, str, dict | None, dict | None, dict]:
                 submission_id = args.submission_id or str(uuid.uuid4())
                 body.update(submission_id=submission_id, items=_submission_items(args.input))
                 metadata["submission_id"] = submission_id
+    if args.command in ("pending", "claim") and args.words is not None:
+        words = [" ".join(word.strip().casefold().split()) for word in args.words]
+        if (not 1 <= len(words) <= 10 or len(set(words)) != len(words) or any(
+                not word or len(original) > 128 or any(ord(char) < 32 or ord(char) == 127 for char in original)
+                for word, original in zip(words, args.words))):
+            raise ClientError("--words requires 1 to 10 unique nonempty word keys of at most 128 characters")
+        words.sort()
+        if args.command == "pending":
+            query["words"] = json.dumps(words, ensure_ascii=False)
+        else:
+            body["words"] = words
     return method, path, body, query, {"method": method, "path": path, **metadata}
 
 

@@ -67,6 +67,25 @@ def _pool(value: Optional[dict]) -> Optional[dict]:
     return pool if isinstance(pool, dict) and pool.get("audit_provider") == "external" else None
 
 
+def _revision_records(bank: dict, key: str) -> dict:
+    return {name: copy.deepcopy(bank[name][key]) for name in ("candidates", "rejections", "failures")
+            if key in bank[name]}
+
+
+def _revision_owned(records: dict, job_id: str) -> dict:
+    owned = copy.deepcopy(records)
+    for value in owned.values():
+        value.update(audit_provider="external", revision_job_id=job_id)
+    return owned
+
+
+def _has_raw(value) -> bool:
+    if not isinstance(value, dict):
+        return False
+    return any(value.get(field) for field in ("raw", "raw_output", "raw_response")) or any(
+        _has_raw(child) for child in value.values())
+
+
 class QuestionAuthoringService:
     def __init__(self, sources: Callable[[str], list[dict]], source_lookup: Callable[[str], Optional[dict]]):
         self.sources = sources
@@ -97,11 +116,22 @@ class QuestionAuthoringService:
         level = data.get("level", "高中")
         if not isinstance(level, str) or len(level) > 40:
             raise AuthoringError("level must be a string of at most 40 characters")
-        return {
+        params = {
             "kind": kind, "worker_id": _identifier(data.get("worker_id"), "worker_id"),
             "level": level.strip(), "limit": _integer(data.get("limit", 5), "limit", 1, 10),
             "ttl_seconds": _integer(data.get("ttl_seconds", 3600), "ttl_seconds", 60, 86400),
         }
+        if "words" in data:
+            words = data["words"]
+            if (not isinstance(words, list) or not 1 <= len(words) <= 10 or any(
+                    not isinstance(word, str) or not word.strip() or len(word) > 128
+                    or any(ord(char) < 32 or ord(char) == 127 for char in word) for word in words)):
+                raise AuthoringError("words must contain 1 to 10 nonempty word strings of at most 128 characters")
+            normalized = [questions.normalize_word(word) for word in words]
+            if len(set(normalized)) != len(normalized):
+                raise AuthoringError("words must contain unique normalized keys")
+            params["words"] = sorted(normalized)
+        return params
 
     @staticmethod
     def _prior(value: dict) -> dict:
@@ -124,7 +154,7 @@ class QuestionAuthoringService:
     @staticmethod
     def _reviewer_allowed(value: dict, stage: str, worker: str) -> bool:
         metadata = _meta(value)
-        if worker == metadata.get("generator_id"):
+        if worker == metadata.get("generator_id") or worker in metadata.get("author_ids", []):
             return False
         if stage == "recognition_blind":
             context = metadata.get("audits", {}).get("context_blind", {})
@@ -139,7 +169,15 @@ class QuestionAuthoringService:
     def _eligible(self, params: dict, now: datetime, count: int) -> list[dict]:
         kind, worker = params["kind"], params["worker_id"]
         active = self._jobs().active_words(now=now, kind=kind)
+        if kind == "revision":
+            for other in JOB_KINDS:
+                active.update(self._jobs().active_words(now=now, kind=other))
+        else:
+            active.update(self._jobs().active_words(now=now, kind="revision"))
         sources = self.sources(params["level"])
+        if "words" in params:
+            wanted = set(params["words"])
+            sources = [source for source in sources if source["english"] in wanted]
         selected = []
         for offset in range(0, len(sources), 200):
             batch = sources[offset:offset + 200]
@@ -159,9 +197,18 @@ class QuestionAuthoringService:
                     ):
                         continue
                     selected.append({"english": key, "source": source})
+                elif kind == "revision":
+                    records = _revision_records(bank, key)
+                    if key in bank["questions"] or not records:
+                        continue
+                    if metadata.get("state") == "claimed" and not _has_raw(records):
+                        continue
+                    selected.append({"english": key, "source": source, "previous_records": records,
+                                     "mode": "repair" if _has_raw(records) else "generate"})
                 else:
                     pool = _pool(candidate)
-                    if not pool or candidate.get("manual_review_required") or metadata.get("state") != "generated":
+                    if (not pool or candidate.get("manual_review_required") or candidate.get("revision_job_id")
+                            or metadata.get("state") != "generated"):
                         continue
                     if questions.source_content_hash(pool["source"]) != questions.source_content_hash(source):
                         continue
@@ -190,9 +237,13 @@ class QuestionAuthoringService:
         result = {key: job[key] for key in (
             "job_id", "kind", "worker_id", "request_id", "created_at", "expires_at", "status",
         )}
-        if kind == "generation":
+        if kind in {"generation", "revision"}:
             result["instructions"] = questions.build_generation_prompt([item["source"] for item in job["items"]])
             result["items"] = [{"item_id": item["item_id"], "source": item["source"]} for item in job["items"]]
+            if kind == "revision":
+                result["instructions"] += "\nRepair existing raw content when mode is repair; retain its useful material and correct errors. Generate only when mode is generate. All independent audits will restart."
+                for visible, item in zip(result["items"], job["items"]):
+                    visible.update(previous_records=item["previous_records"], mode=item["mode"])
         else:
             result["instructions"] = job["items"][0]["protocol"]["instructions"] if job["items"] else ""
             result["items"] = [{"item_id": item["item_id"], **item["protocol"]["task"]} for item in job["items"]]
@@ -203,16 +254,40 @@ class QuestionAuthoringService:
 
     def pending(self, data: dict, now: Optional[datetime] = None) -> dict:
         now = now or datetime.now(timezone.utc)
+        if isinstance(data.get("words"), str):
+            try:
+                if len(data["words"]) > 10000:
+                    raise ValueError("oversized words filter")
+                data = {**data, "words": json.loads(data["words"])}
+            except (ValueError, RecursionError) as exc:
+                raise AuthoringError("words must be a JSON array") from exc
         params = self._parameters(data)
         items = self._eligible(params, now, params["limit"] + 1)
         visible = items[:params["limit"]]
         return {
             "kind": params["kind"], "has_more": len(items) > len(visible),
-            "items": ([{"source": item["source"]} for item in visible] if params["kind"] == "generation"
+            "items": ([{key: value for key, value in item.items() if key != "english"} for item in visible] if params["kind"] in {"generation", "revision"}
                       else [item["protocol"]["task"] for item in visible]),
         }
 
     def _reserve(self, job: dict) -> None:
+        if job["kind"] == "revision" and job["items"] and job["status"] == "active":
+            # The immutable job items are the durable archive, committed before ownership changes.
+            with self._bank([item["english"] for item in job["items"]]) as bank:
+                for item in job["items"]:
+                    key = item["english"]
+                    previous = item["previous_records"]
+                    owned = _revision_owned(previous, job["job_id"])
+                    current = _revision_records(bank, key)
+                    if any(_meta(value).get("generation_job_id") == job["job_id"]
+                           and _meta(value).get("state") in {"generated", "manual"}
+                           for value in current.values()):
+                        continue
+                    if key in bank["questions"] or current not in (previous, owned):
+                        raise AuthoringError("question state changed before revision reservation", 409)
+                    for name, value in owned.items():
+                        bank[name][key] = value
+            return
         if job["kind"] != "generation" or not job["items"] or job["status"] != "active":
             return
         with self._bank([item["english"] for item in job["items"]]) as bank:
@@ -364,12 +439,27 @@ class QuestionAuthoringService:
                             raise AuthoringError("wordbank source changed; upload was not applied", 409)
                         candidate = bank["candidates"].get(key)
                         pool = _pool(candidate)
-                        if not pool:
+                        if job["kind"] == "revision":
+                            if (key in bank["questions"] or _revision_records(bank, key) !=
+                                    _revision_owned(item["previous_records"], job_id)):
+                                raise AuthoringError("revision source records changed; overwrite refused", 409)
+                            authors = {job["worker_id"]}
+                            for old in item["previous_records"].values():
+                                authors.update(_meta(old).get("author_ids", []))
+                                if _meta(old).get("generator_id"):
+                                    authors.add(_meta(old)["generator_id"])
+                            metadata = {"state": "claimed", "generator_id": job["worker_id"],
+                                        "generation_job_id": job_id, "author_ids": sorted(authors),
+                                        "revision_archive_job_id": job_id, "audits": {}, "receipts": {}}
+                        elif not pool:
                             raise AuthoringError("candidate no longer belongs to external authoring", 409)
-                        metadata = copy.deepcopy(_meta(candidate))
+                        else:
+                            if candidate.get("revision_job_id"):
+                                raise AuthoringError("candidate is reserved for revision", 409)
+                            metadata = copy.deepcopy(_meta(candidate))
                         payload = by_id[item["item_id"]]
-                        if job["kind"] == "generation":
-                            if (metadata.get("generation_job_id") != job_id or metadata.get("state") != "claimed"
+                        if job["kind"] in {"generation", "revision"}:
+                            if job["kind"] == "generation" and (metadata.get("generation_job_id") != job_id or metadata.get("state") != "claimed"
                                     or pool.get("raw") or key in bank["questions"] or key in bank["rejections"]):
                                 raise AuthoringError("generated content already exists; overwrite refused", 409)
                             if set(payload) != GENERATION_FIELDS or payload.get("english") != key:
@@ -414,6 +504,9 @@ class QuestionAuthoringService:
 
                     for item, pool, metadata, outcome, record in prepared:
                         key = item["english"]
+                        if job["kind"] == "revision":
+                            for namespace in ("candidates", "rejections", "failures"):
+                                bank[namespace].pop(key, None)
                         metadata.setdefault("receipts", {})[receipt_key] = {"digest": digest, "result": outcome}
                         pool.update(audit_provider="external", external_authoring=metadata)
                         value = {"pool": pool, "record": pool["record"], "audit_provider": "external", "created_at": now.isoformat()}

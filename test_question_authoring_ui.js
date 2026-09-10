@@ -91,6 +91,21 @@ test('pending and existing-job requests use the selected worker and correct path
     assert.deepEqual(JSON.parse(ui.calls[3].options.body), { worker_id: 'reviewer-a' });
 });
 
+test('revision claim preserves original records and restores the selected mode', async () => {
+    const ui = workbench();
+    ui.field('kind').value = 'revision';
+    const items = [{ item_id: 'item-a', mode: 'repair', previous_records: {
+        rejections: { raw: { english: 'benefit' }, last_error: 'ambiguous' },
+    } }];
+    ui.state.respond = () => ({ ok: true, status: 200, json: async () => ({ job_id: 'revision-a', items }) });
+    await ui.context.runAdminAuthoringAction('claim');
+    assert.equal(JSON.parse(ui.calls[0].options.body).kind, 'revision');
+    assert.deepEqual(JSON.parse(ui.field('output').value).items, items);
+    const restored = workbench(Object.fromEntries(ui.storage));
+    assert.equal(restored.field('kind').value, 'revision');
+    assert.equal(restored.field('job-id').value, 'revision-a');
+});
+
 test('duplicate clicks cannot issue a second in-flight request', async () => {
     const ui = workbench();
     let finish;

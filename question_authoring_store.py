@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 
-JOB_KINDS = ("generation", "recognition_blind", "context_blind", "feedback")
+JOB_KINDS = ("generation", "revision", "recognition_blind", "context_blind", "feedback")
 
 
 def _timestamp(value: datetime) -> str:

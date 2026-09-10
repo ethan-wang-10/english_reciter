@@ -70,6 +70,32 @@ def test_claim_explicit_id_survives_network_error_without_automatic_retry(http, 
     assert json.loads(output.out)["client_request"]["request_id"] == "retry-claim-1"
 
 
+def test_revision_claim_preserves_raw_history_in_response(http, capsys):
+    item = {"item_id": "old-a", "mode": "repair", "source": {"english": "benefit"},
+            "previous_records": {"rejections": {"raw": {"english": "benefit"}, "last_error": "ambiguous"}}}
+    http["payload"] = {"job_id": "revision-a", "kind": "revision", "items": [item]}
+    assert client.main(["claim", "--worker-id", "editor-a", "--kind", "revision"]) == 0
+    assert json.loads(http["calls"][0][0].data)["kind"] == "revision"
+    assert json.loads(capsys.readouterr().out)["items"] == [item]
+
+
+@pytest.mark.parametrize("command", ["pending", "claim"])
+def test_word_filters_are_normalized_and_encoded(http, command):
+    assert client.main([command, "--worker-id", "editor", "--words", " Benefit ", "ice cream"]) == 0
+    request = http["calls"][0][0]
+    if command == "pending":
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)
+        assert json.loads(query["words"][0]) == ["benefit", "ice cream"]
+    else:
+        assert json.loads(request.data)["words"] == ["benefit", "ice cream"]
+
+
+@pytest.mark.parametrize("words", [["Benefit", "benefit"], [""], ["x" * 129], [str(i) for i in range(11)]])
+def test_invalid_word_filters_never_call_http(http, words):
+    assert client.main(["claim", "--worker-id", "editor", "--words", *words]) == 1
+    assert not http["calls"]
+
+
 @pytest.mark.parametrize("wrapped", [True, False])
 def test_submit_sends_all_items_and_explicit_submission_id(http, tmp_path, wrapped, capsys):
     items = [{"item_id": f"item-{index}", "result": {"english": f"word{index}"}} for index in (1, 2)]

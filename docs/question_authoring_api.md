@@ -43,6 +43,10 @@ Authorization: Bearer <admin_access_token>
 
 `generation` 不返回已有题目、已生成候选、拒绝记录或失败记录的词。领取操作会预留该词，现有 DeepSeek 自动流程也不会抢占这些外部任务。尚未上传任何结果的预留可以释放或到期后重新领取。
 
+恢复已有候选、拒绝或失败记录时，领取 `revision`（工作台中的“恢复与修订”）。每项返回 `{item_id, source, previous_records, mode}`：`previous_records` 完整保留各命名空间的原稿、错误与旧审核；`mode=repair` 要求复用原稿修订，只有 `mode=generate` 表示没有原稿可用。提交仍采用生成任务的七个字段。领取时，服务器先将旧记录存入不可变任务快照，再标记外部流程所有权；之后可通过原任务的查询接口读取历史。释放任务不会删除历史记录或撤销外部所有权，继续修订需重新领取。
+
+修订上传会检查当前词库来源与领取时的完整记录，任一变化均返回 `409`，已发布题目不可修订覆盖。修订保存后必须重新完成全部三轮独立审核，旧审核结论不能复用，原作者和修订作者都不能审核该题。租约及幂等标识规则同样适用；请求超时后应查询原任务并复用上传文件，避免重复生成。
+
 领取与上传使用同一词库来源：同键优先采用 v2，CSV 重复键采用最后一条，再按级别筛选。新版来源缺少有效释义或可定位答案的例句时，不回退到旧 CSV 出题。其他进程更新 v2 后，查询会检查文件时间并刷新缓存。
 
 外部流程自身不调用 DeepSeek。服务器若仍有旧 DeepSeek 队列，可用已有配置 `GAOKAO_AUTO_BACKFILL_ENABLED=false` 停止旧队列；外部 API 与工作台继续可用。词库联合导入遇到外部任务拥有的词，也不会再次生成或覆盖其选择题。
@@ -64,7 +68,7 @@ Authorization: Bearer <admin_access_token>
 | `POST /claims/<job_id>/release` | `worker_id` |
 | `POST /claims/<job_id>/submissions` | `worker_id`、`submission_id`、`items` |
 
-`kind` 可为 `generation`、`recognition_blind`、`context_blind` 或 `feedback`。`limit` 为 1 至 10，租约默认 3600 秒，可设为 60 至 86400 秒。`level` 为空字符串表示所有级别，`高中` 表示高中词库。服务端省略 `level` 时默认高中、省略 `limit` 时默认 5；CLI 显式发送其默认值：全部级别、10 个任务。
+`kind` 可为 `generation`、`revision`、`recognition_blind`、`context_blind` 或 `feedback`。`limit` 为 1 至 10，租约默认 3600 秒，可设为 60 至 86400 秒。`level` 为空字符串表示所有级别，`高中` 表示高中词库。服务端省略 `level` 时默认高中、省略 `limit` 时默认 5；CLI 显式发送其默认值：全部级别、10 个任务。
 
 `worker_id`、`request_id`、`submission_id` 等标识最长 128 个字符，以英文字母或数字开头，其余字符可使用英文字母、数字、点、下划线、冒号或连字符。
 
