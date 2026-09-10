@@ -57,6 +57,7 @@ import chat_room
 import wordbank_v2
 import gaokao_questions
 import gaokao_backfill
+from question_authoring_routes import register_question_authoring_routes
 import deepseek_policy
 import ocr_import
 from review_scheduler import EXERCISE_TYPES, ReviewEventConflict
@@ -2257,6 +2258,9 @@ def finalize_combined_gaokao_candidates(
     finalized_entries: List[dict],
 ) -> Tuple[Dict[str, dict], Dict[str, str]]:
     """Validate question candidates carried by the combined word-entry response."""
+    protected = gaokao_questions.externally_authored_words(
+        entry.get("english") for entry in finalized_entries
+    )
     raw_by_key = {
         wordbank_v2.normalize_english_key(raw.get("english", "")): raw
         for raw in raw_entries or []
@@ -2269,7 +2273,7 @@ def finalize_combined_gaokao_candidates(
         flat = wordbank_v2.v2_entry_to_flat_csv_row(entry)
         source = gaokao_questions.source_from_wordbank_row(flat)
         key = gaokao_questions.normalize_word(flat.get("english"))
-        if not key:
+        if not key or key in protected:
             continue
         if not source:
             errors[key] = "combined generation produced no usable source example"
@@ -3317,6 +3321,13 @@ def admin_required(f):
             return jsonify({'error': '无效或过期的管理员会话'}), 401
         return f(*args, **kwargs)
     return decorated_function
+
+
+register_question_authoring_routes(
+    app, admin_required,
+    lambda level: gaokao_question_sources(level),
+    lambda key: _current_gaokao_source(key),
+)
 
 # ==================== 用户数据管理 ====================
 
@@ -7536,64 +7547,77 @@ def import_vocab_to_csv(username):
 
         for i in range(0, len(to_generate), _GAOKAO_IMPORT_BATCH_WORDS):
             batch_surfaces = to_generate[i : i + _GAOKAO_IMPORT_BATCH_WORDS]
-            batch = [surface_to_target[s] for s in batch_surfaces]
-            entries = deepseek_generate_word_entries_v2(
-                batch,
-                level=level_hint,
-                include_gaokao_candidate=True,
-            )
-            batch_lower = {b.lower() for b in batch}
-            if entries is not None:
-                rows, success = accumulate_valid_deepseek_v2_entries(
-                    entries,
-                    level_hint=level_hint,
-                    v2_so_far=wordbank_so_far,
-                    batch_lower=batch_lower,
-                )
-                if rows:
-                    try:
-                        _, skipped_dup = wordbank_v2.append_words_v2_entries(rows)
-                        wordbank_v2.invalidate_words_v2_cache()
-                        invalidate_merge_wordbank_rows_cache()
-                        if skipped_dup:
-                            logger.info("words_v2 批次落盘，跳过已存在键: %s", skipped_dup[:20])
-                    except Exception as e:
-                        logger.error("写入 words_v2.json 失败（本批落盘）: %s", e)
-                        return jsonify(
-                            {
-                                'error': f'写入新词库失败（此前批次若已成功则已保存）: {e}',
-                            }
-                        ), 500
-                    generated_records, generation_errors = finalize_combined_gaokao_candidates(
-                        entries,
-                        rows,
+            batch_words = [surface_to_target[s] for s in batch_surfaces]
+            # Keep ownership stable until both vocabulary and candidate writes finish.
+            with gaokao_backfill.generation_job_lock(blocking=False) as acquired:
+                if not acquired:
+                    return jsonify({'error': '题目任务正在处理，请稍后重试；此前已导入的批次已保存'}), 409
+                protected = gaokao_questions.externally_authored_words(batch_words)
+                for include_gaokao in (True, False):
+                    batch = [
+                        word for word in batch_words
+                        if (gaokao_questions.normalize_word(word) not in protected) == include_gaokao
+                    ]
+                    if not batch:
+                        continue
+                    entries = deepseek_generate_word_entries_v2(
+                        batch,
+                        level=level_hint,
+                        include_gaokao_candidate=include_gaokao,
                     )
-                    try:
-                        gaokao_questions.persist_candidate_pool_result(
-                            generated_records,
-                            generation_errors,
+                    batch_lower = {b.lower() for b in batch}
+                    if entries is not None:
+                        rows, success = accumulate_valid_deepseek_v2_entries(
+                            entries,
+                            level_hint=level_hint,
+                            v2_so_far=wordbank_so_far,
+                            batch_lower=batch_lower,
                         )
-                        gaokao_generated_records.update(generated_records)
-                        gaokao_generation_errors.update(generation_errors)
-                    except Exception as exc:
-                        logger.exception(
-                            "新词已写入 words_v2，但高考题发布失败: %s",
-                            exc,
-                        )
-                        for row in rows:
-                            key = gaokao_questions.normalize_word(row.get("english"))
-                            if key:
-                                gaokao_generation_errors[key] = (
-                                    f"combined question persistence failed: {exc}"
+                        if rows:
+                            try:
+                                _, skipped_dup = wordbank_v2.append_words_v2_entries(rows)
+                                wordbank_v2.invalidate_words_v2_cache()
+                                invalidate_merge_wordbank_rows_cache()
+                                if skipped_dup:
+                                    logger.info("words_v2 批次落盘，跳过已存在键: %s", skipped_dup[:20])
+                            except Exception as e:
+                                logger.error("写入 words_v2.json 失败（本批落盘）: %s", e)
+                                return jsonify(
+                                    {
+                                        'error': f'写入新词库失败（此前批次若已成功则已保存）: {e}',
+                                    }
+                                ), 500
+                            generated_records, generation_errors = finalize_combined_gaokao_candidates(
+                                entries,
+                                rows,
+                            )
+                            try:
+                                if generated_records or generation_errors:
+                                    gaokao_questions.persist_candidate_pool_result(
+                                        generated_records,
+                                        generation_errors,
+                                    )
+                                gaokao_generated_records.update(generated_records)
+                                gaokao_generation_errors.update(generation_errors)
+                            except Exception as exc:
+                                logger.exception(
+                                    "新词已写入 words_v2，但高考题发布失败: %s",
+                                    exc,
                                 )
-                    generated_entries.extend(rows)
-                    wordbank_so_far = wordbank_v2.get_v2_english_key_set()
-                miss_lemmas = [b for b in batch if b.lower() not in success]
-            else:
-                miss_lemmas = list(batch)
-            for key in miss_lemmas:
-                surf = gen_key_to_surface.get(key, key)
-                failed_surfaces.append(surf)
+                                for row in rows:
+                                    key = gaokao_questions.normalize_word(row.get("english"))
+                                    if key and key not in protected:
+                                        gaokao_generation_errors[key] = (
+                                            f"combined question persistence failed: {exc}"
+                                        )
+                            generated_entries.extend(rows)
+                            wordbank_so_far = wordbank_v2.get_v2_english_key_set()
+                        miss_lemmas = [b for b in batch if b.lower() not in success]
+                    else:
+                        miss_lemmas = list(batch)
+                    for key in miss_lemmas:
+                        surf = gen_key_to_surface.get(key, key)
+                        failed_surfaces.append(surf)
 
         failed_surfaces = _dedupe_preserve_order(failed_surfaces)
         if failed_surfaces:

@@ -648,9 +648,234 @@ async function loadAdminSystemBroadcast() {
     }
 }
 
+const ADMIN_AUTHORING_STORAGE_KEY = 'adminQuestionAuthoringDraftV1';
+const ADMIN_AUTHORING_FIELDS = {
+    kind: 'kind', worker_id: 'worker-id', level: 'level', limit: 'limit', ttl_seconds: 'ttl',
+    request_id: 'request-id', job_id: 'job-id', submission_id: 'submission-id',
+    input: 'input', output: 'output',
+};
+let adminAuthoringBound = false;
+let adminAuthoringBusy = false;
+let adminAuthoringSessionRevision = 0;
+
+function adminAuthoringElement(field) {
+    return document.getElementById(`admin-authoring-${ADMIN_AUTHORING_FIELDS[field] || field}`);
+}
+
+function adminAuthoringId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function redactAdminAuthoringText(value, token = getAdminToken()) {
+    const text = String(value || '');
+    return token ? text.split(token).join('[REDACTED]') : text;
+}
+
+function readAdminAuthoringState() {
+    return Object.fromEntries(Object.keys(ADMIN_AUTHORING_FIELDS).map((key) => [
+        key, adminAuthoringElement(key)?.value || '',
+    ]));
+}
+
+function saveAdminAuthoringDraft() {
+    const state = readAdminAuthoringState();
+    state.output = redactAdminAuthoringText(state.output);
+    try {
+        sessionStorage.setItem(ADMIN_AUTHORING_STORAGE_KEY, JSON.stringify(state));
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function showAdminAuthoringStatus(text, state = '') {
+    const status = adminAuthoringElement('status');
+    if (status) {
+        status.textContent = redactAdminAuthoringText(text);
+        status.dataset.state = state;
+    }
+}
+
+function resetAdminAuthoringBatch(clearSession = false) {
+    if (adminAuthoringBusy && !clearSession) return;
+    if (clearSession) {
+        adminAuthoringSessionRevision += 1;
+        adminAuthoringBusy = false;
+        const controls = adminAuthoringElement('controls');
+        if (controls) controls.disabled = false;
+        for (const [key, value] of Object.entries({
+            kind: 'generation', worker_id: '', level: '高中', limit: '3', ttl_seconds: '3600',
+        })) {
+            if (adminAuthoringElement(key)) adminAuthoringElement(key).value = value;
+        }
+    }
+    for (const [key, value] of Object.entries({
+        request_id: adminAuthoringId(), submission_id: adminAuthoringId(), job_id: '',
+        input: JSON.stringify({ items: [] }, null, 2), output: '',
+    })) {
+        if (adminAuthoringElement(key)) adminAuthoringElement(key).value = value;
+    }
+    showAdminAuthoringStatus('');
+    if (clearSession) {
+        sessionStorage.removeItem(ADMIN_AUTHORING_STORAGE_KEY);
+    } else if (!saveAdminAuthoringDraft()) {
+        showAdminAuthoringStatus('本地草稿保存失败', 'error');
+    }
+}
+
+function buildAdminAuthoringRequest(action, state) {
+    const identifier = (value, label) => {
+        const text = String(value || '').trim();
+        if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(text)) throw new Error(`${label}格式不正确`);
+        return text;
+    };
+    const integer = (value, minimum, maximum, label) => {
+        if (!/^\d+$/.test(value) || Number(value) < minimum || Number(value) > maximum) {
+            throw new Error(`${label}须为 ${minimum} 至 ${maximum} 的整数`);
+        }
+        return Number(value);
+    };
+    const root = '/admin/gaokao/authoring';
+    const worker_id = identifier(state.worker_id, '执行者标识');
+    if (action === 'pending' || action === 'claim') {
+        if (!['generation', 'recognition_blind', 'context_blind', 'feedback'].includes(state.kind)) {
+            throw new Error('任务阶段不正确');
+        }
+        const parameters = {
+            kind: state.kind, worker_id, level: state.level,
+            limit: integer(state.limit, 1, 10, '每批数量'),
+        };
+        if (action === 'pending') {
+            return { endpoint: `${root}/pending?${new URLSearchParams(parameters)}`, options: { redirect: 'error' } };
+        }
+        return {
+            endpoint: `${root}/claims`,
+            options: { method: 'POST', redirect: 'error', body: JSON.stringify({
+                ...parameters, request_id: identifier(state.request_id, '领取标识'),
+                ttl_seconds: integer(state.ttl_seconds, 60, 86400, '租约秒数'),
+            }) },
+        };
+    }
+    const job = `${root}/claims/${encodeURIComponent(identifier(state.job_id, '任务标识'))}`;
+    if (action === 'get') {
+        return { endpoint: `${job}?${new URLSearchParams({ worker_id })}`, options: { redirect: 'error' } };
+    }
+    let body = { worker_id };
+    let suffix = action;
+    if (action === 'renew') {
+        body.ttl_seconds = integer(state.ttl_seconds, 60, 86400, '租约秒数');
+    } else if (action === 'submit') {
+        let payload;
+        try {
+            payload = JSON.parse(state.input);
+        } catch (_) {
+            throw new Error('上传内容不是有效的 JSON');
+        }
+        if (!payload || Array.isArray(payload) || typeof payload !== 'object'
+            || Object.keys(payload).length !== 1 || !Array.isArray(payload.items)
+            || payload.items.length < 1 || payload.items.length > 10) {
+            throw new Error('上传 JSON 须仅包含 items 数组，共 1 至 10 项');
+        }
+        const ids = payload.items.map((item) => {
+            if (!item || typeof item !== 'object' || Object.keys(item).length !== 2
+                || !item.result || typeof item.result !== 'object' || Array.isArray(item.result)) {
+                throw new Error('每项须包含 item_id 和 result 对象');
+            }
+            return identifier(item.item_id, 'item_id');
+        });
+        if (new Set(ids).size !== ids.length) throw new Error('上传内容有重复 item_id');
+        body = { ...body, submission_id: identifier(state.submission_id, '上传标识'), items: payload.items };
+        suffix = 'submissions';
+        if (new TextEncoder().encode(JSON.stringify(body)).length > 256 * 1024) {
+            throw new Error('上传内容超过 256 KB');
+        }
+    } else if (action !== 'release') {
+        throw new Error('未知题目任务操作');
+    }
+    return { endpoint: `${job}/${suffix}`, options: { method: 'POST', redirect: 'error', body: JSON.stringify(body) } };
+}
+
+async function runAdminAuthoringAction(action) {
+    if (adminAuthoringBusy) return;
+    const token = getAdminToken();
+    const revision = adminAuthoringSessionRevision;
+    const state = readAdminAuthoringState();
+    try {
+        if (!token) throw new Error('管理员登录已失效');
+        const request = buildAdminAuthoringRequest(action, state);
+        if (!saveAdminAuthoringDraft()) throw new Error('本地草稿保存失败');
+        adminAuthoringBusy = true;
+        adminAuthoringElement('controls').disabled = true;
+        showAdminAuthoringStatus('请求中');
+        const data = await apiAdminRequest(request.endpoint, request.options);
+        if (revision !== adminAuthoringSessionRevision) return;
+        if (!data || !Array.isArray(data.items) || (action !== 'pending' && typeof data.job_id !== 'string')) {
+            throw new Error('服务器响应格式不正确');
+        }
+        if (data.job_id) adminAuthoringElement('job_id').value = data.job_id;
+        adminAuthoringElement('output').value = redactAdminAuthoringText(JSON.stringify(data, null, 2), token);
+        const labels = { pending: '待办', claim: '已领取', get: '已读取', renew: '已续租', release: '已释放', submit: '已提交' };
+        showAdminAuthoringStatus(`${labels[action]}: ${data.items.length} 项${data.expires_at ? `，到期 ${data.expires_at}` : ''}`);
+        if (!saveAdminAuthoringDraft()) showAdminAuthoringStatus('请求成功，本地草稿保存失败', 'error');
+    } catch (error) {
+        if (revision !== adminAuthoringSessionRevision) return;
+        const message = redactAdminAuthoringText(error.message || '请求失败', token);
+        adminAuthoringElement('output').value = redactAdminAuthoringText(JSON.stringify({
+            error: message, action, request_id: state.request_id,
+            submission_id: state.submission_id, job_id: state.job_id,
+        }, null, 2), token);
+        showAdminAuthoringStatus(message, 'error');
+        saveAdminAuthoringDraft();
+    } finally {
+        if (revision === adminAuthoringSessionRevision) {
+            adminAuthoringBusy = false;
+            adminAuthoringElement('controls').disabled = false;
+        }
+    }
+}
+
+function bindAdminAuthoringOnce() {
+    if (adminAuthoringBound || !adminAuthoringElement('controls')) return;
+    adminAuthoringBound = true;
+    let saved = {};
+    try {
+        saved = JSON.parse(sessionStorage.getItem(ADMIN_AUTHORING_STORAGE_KEY) || '{}') || {};
+    } catch (_) {
+        /* Keep usable defaults when a stored draft cannot be decoded. */
+    }
+    for (const key of Object.keys(ADMIN_AUTHORING_FIELDS)) {
+        const element = adminAuthoringElement(key);
+        if (!element) continue;
+        if (typeof saved[key] === 'string') element.value = redactAdminAuthoringText(saved[key]);
+        if (key !== 'output') {
+            for (const event of ['input', 'change']) {
+                element.addEventListener(event, () => {
+                    if (!saveAdminAuthoringDraft()) showAdminAuthoringStatus('本地草稿保存失败', 'error');
+                });
+            }
+        }
+    }
+    for (const key of ['request_id', 'submission_id']) {
+        if (!adminAuthoringElement(key).value) adminAuthoringElement(key).value = adminAuthoringId();
+    }
+    if (!adminAuthoringElement('input').value) adminAuthoringElement('input').value = JSON.stringify({ items: [] }, null, 2);
+    for (const action of ['pending', 'claim', 'get', 'renew', 'release', 'submit']) {
+        adminAuthoringElement(action).addEventListener('click', () => runAdminAuthoringAction(action));
+    }
+    adminAuthoringElement('new').addEventListener('click', () => resetAdminAuthoringBatch());
+    document.getElementById('admin-logout')?.addEventListener('click', () => resetAdminAuthoringBatch(true));
+    saveAdminAuthoringDraft();
+}
+
 async function loadAdminDashboard() {
     bindAdminDeleteUserOnce();
     bindAdminSystemBroadcastOnce();
+    bindAdminAuthoringOnce();
     const [usersRes, invRes, cfgRes] = await Promise.all([
         apiAdminRequest('/admin/users'),
         apiAdminRequest('/admin/invites'),

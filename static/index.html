@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260905-offline-handwriting-v1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260910-authoring-v2">
 </head>
 <body>
     <div id="app">
@@ -1035,6 +1035,82 @@
                     </div>
                     <div id="admin-invite-once" class="admin-invite-once" style="display: none;"></div>
 
+                    <details id="admin-authoring-details" class="admin-words-details">
+                        <summary class="admin-words-details-summary">
+                            <span class="admin-subtitle">题目任务</span>
+                        </summary>
+                        <div class="admin-authoring-panel">
+                            <fieldset id="admin-authoring-controls" class="admin-authoring-controls">
+                                <div class="admin-authoring-grid">
+                                    <div class="form-group">
+                                        <label for="admin-authoring-kind">任务阶段</label>
+                                        <select id="admin-authoring-kind">
+                                            <option value="generation">生成题目</option>
+                                            <option value="recognition_blind">识义盲审</option>
+                                            <option value="context_blind">语境盲审</option>
+                                            <option value="feedback">译文与解析审核</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="admin-authoring-worker-id">执行者标识</label>
+                                        <input id="admin-authoring-worker-id" type="text" maxlength="128" autocomplete="off" spellcheck="false" />
+                                    </div>
+                                </div>
+                                <div class="admin-authoring-grid admin-authoring-grid--limits">
+                                    <div class="form-group">
+                                        <label for="admin-authoring-level">词库级别</label>
+                                        <select id="admin-authoring-level">
+                                            <option value="高中">高中</option>
+                                            <option value="">全部</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="admin-authoring-limit">每批数量</label>
+                                        <input id="admin-authoring-limit" type="number" min="1" max="10" step="1" value="3" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="admin-authoring-ttl">租约秒数</label>
+                                        <input id="admin-authoring-ttl" type="number" min="60" max="86400" step="1" value="3600" />
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="admin-authoring-request-id">领取标识</label>
+                                    <input id="admin-authoring-request-id" type="text" maxlength="128" autocomplete="off" spellcheck="false" />
+                                </div>
+                                <div class="admin-authoring-actions">
+                                    <button id="admin-authoring-pending" type="button" class="btn btn-secondary">查看待办</button>
+                                    <button id="admin-authoring-claim" type="button" class="btn btn-primary">领取任务</button>
+                                    <button id="admin-authoring-new" type="button" class="btn btn-secondary">新批次</button>
+                                </div>
+                                <div class="form-group">
+                                    <label for="admin-authoring-job-id">任务标识</label>
+                                    <input id="admin-authoring-job-id" type="text" maxlength="128" autocomplete="off" spellcheck="false" />
+                                </div>
+                                <div class="admin-authoring-actions">
+                                    <button id="admin-authoring-get" type="button" class="btn btn-secondary">读取任务</button>
+                                    <button id="admin-authoring-renew" type="button" class="btn btn-secondary">续租</button>
+                                    <button id="admin-authoring-release" type="button" class="btn btn-secondary">释放</button>
+                                </div>
+                                <div class="form-group">
+                                    <label for="admin-authoring-submission-id">上传标识</label>
+                                    <input id="admin-authoring-submission-id" type="text" maxlength="128" autocomplete="off" spellcheck="false" />
+                                </div>
+                                <div class="form-group">
+                                    <label for="admin-authoring-input">上传 JSON</label>
+                                    <textarea id="admin-authoring-input" class="admin-authoring-json" rows="10" autocomplete="off" spellcheck="false"></textarea>
+                                </div>
+                                <div class="admin-authoring-actions">
+                                    <button id="admin-authoring-submit" type="button" class="btn btn-primary">提交结果</button>
+                                </div>
+                            </fieldset>
+                            <div id="admin-authoring-status" class="admin-authoring-status" role="status" aria-live="polite"></div>
+                            <div class="form-group">
+                                <label for="admin-authoring-output">接口结果 JSON</label>
+                                <textarea id="admin-authoring-output" class="admin-authoring-json" rows="12" readonly spellcheck="false"></textarea>
+                            </div>
+                        </div>
+                    </details>
+
                     <h3 class="admin-subtitle">系统广播</h3>
                     <div class="admin-config-section">
                         <p class="admin-hint">发布后，用户下次登录进入主界面时会居中弹窗显示；点击「确定」后不再显示该条。再次发布会生成新广播，未读用户将再次看到。留空并保存可清空当前广播。</p>
@@ -1257,6 +1333,6 @@
     <script src="/static/js/app.js?v=20260905-offline-handwriting-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
-    <script src="/static/js/admin.js" defer></script>
+    <script src="/static/js/admin.js?v=20260910-authoring-v1" defer></script>
 </body>
 </html>

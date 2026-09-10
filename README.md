@@ -10,6 +10,7 @@
 | 自适应复习 | 使用可解释的 `adaptive-sm2-v1` 排期，根据答题结果动态调整间隔（不是 FSRS） |
 | 高考多维掌握 | Web 端以英文识义、语境选词和拼写作为掌握门槛；可靠音频可用时，听写作为已掌握词的增强练习 |
 | 私有选择题库 | 英文识义与语境选词由服务端判分；支持离线批量生成、断点续跑和缺题时在线补题 |
+| 外部题目编写 | 管理员 API 支持领取未生成词、上传题目和分阶段独立审核；该流程不调用 DeepSeek |
 | 关联复习顺序 | 每日任务选词不变；任务内按本地拼写相似度将近形词排在一起，便于对比记忆 |
 | 例句 | 本地例句库（`word_examples.json`），离线可用 |
 | Web 版 | Flask 应用、注册登录、多用户数据隔离（`user_data_simple/`）、静态前端 |
@@ -91,6 +92,7 @@ cp config.example.json config.json
 | `static/wordbanks/words.csv` | 内置词库（**不随 Git 发布**；本地从 `words.csv.example` 复制或自备；线上勿被 `git pull` 覆盖，由服务器文件或管理后台「增量上传」维护） |
 | `static/wordbanks/words_v2.json` | 新版内置词库（线上运行时数据；仓库只保留空占位，部署脚本会保护服务器本地文件） |
 | `user_data_simple/_shared/gaokao_questions_v2.json` | 服务端私有的版本化高考选择题库，包含答案，不得放入 `static/` |
+| `user_data_simple/_shared/question_authoring.sqlite3` | 外部题目任务的租约、阶段快照和幂等上传回执，服务端私有 |
 | `user_data_simple/_shared/performance/` | Web 性能采集 JSONL 日志（见 [docs/performance-monitoring.md](docs/performance-monitoring.md)） |
 | `backups/` | 学习数据自动备份（若开启） |
 | `reciter.log` | 运行日志 |
@@ -98,6 +100,8 @@ cp config.example.json config.json
 **已有服务器升级到此版本时**：拉取前请先备份 `static/wordbanks/words.csv` 和 `static/wordbanks/words_v2.json`。`words_v2.json` 若已在服务器由后台生成大量词条，首次部署前可执行 `git update-index --skip-worktree static/wordbanks/words_v2.json`，后续 `scripts/deploy.sh` 会自动保护该本地词库文件，避免 `git pull` 因本地词库变更中断。
 
 ## 高考选择题库生成
+
+使用 Codex 等外部执行者生成和审核时，参见[外部生成与独立审核 API](docs/question_authoring_api.md)。可直接使用管理后台“题目任务”工作台，或运行 `scripts/question_authoring_client.py`。该流程沿用管理员认证，支持领取、续租、上传及中断恢复，三阶段审核全部通过后才发布。外部任务与原有 DeepSeek 队列隔离；无需配置 DeepSeek Key。下面的 DeepSeek 生成方式仍可用于其他未被外部流程领取的词。
 
 先配置 `DEEPSEEK_API_KEY` 或 `config.json` 中的 `deepseek_api_key`，在服务器项目根目录执行：
 

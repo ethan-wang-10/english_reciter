@@ -465,7 +465,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "newWordsFirst && word?.task_imported_today" not in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260905-offline-handwriting-v1" in html
+    assert "/static/css/style.css?v=20260910-authoring-v2" in html
     assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet

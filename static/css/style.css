@@ -9058,6 +9058,96 @@ button.import-article-chip--selected:hover {
     margin-top: 10px;
 }
 
+.admin-authoring-panel {
+    margin-top: 14px;
+    padding: 16px 0 4px;
+    border-top: 1px solid var(--border);
+    min-width: 0;
+}
+.admin-authoring-controls {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+}
+.admin-authoring-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 14px;
+}
+.admin-authoring-grid--limits {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.admin-authoring-panel .form-group,
+.admin-authoring-panel input,
+.admin-authoring-panel select,
+.admin-authoring-panel textarea {
+    min-width: 0;
+    max-width: 100%;
+}
+.admin-authoring-panel input,
+.admin-authoring-panel select,
+.admin-authoring-panel textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+.admin-authoring-panel input,
+.admin-authoring-panel select {
+    height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    font: inherit;
+    font-size: 14px;
+    letter-spacing: 0;
+}
+.admin-authoring-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.admin-authoring-actions .btn {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
+    padding: 9px 14px;
+    font-size: 0.9rem;
+    min-height: 40px;
+    border-radius: 6px;
+}
+.admin-authoring-json {
+    min-height: 180px;
+    max-height: 560px;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+}
+.admin-authoring-json[readonly] {
+    background: var(--background);
+}
+.admin-authoring-status {
+    min-height: 24px;
+    margin: 0 0 12px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    color: var(--text-secondary);
+}
+.admin-authoring-status[data-state="error"] {
+    color: var(--error-color);
+}
+@media (max-width: 520px) {
+    .admin-authoring-grid,
+    .admin-authoring-grid--limits {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .admin-words-toolbar {
     display: flex;
     flex-wrap: wrap;
