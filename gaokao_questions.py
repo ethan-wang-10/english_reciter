@@ -323,21 +323,21 @@ _RECOGNITION_POS_RE = re.compile(
     re.IGNORECASE,
 )
 _RECOGNITION_SENSE_SEPARATOR_RE = re.compile(r"[；;、/，,]+")
-_RECOGNITION_NAME_LABELS = {"人名", "姓氏", "男名", "女名", "男子名", "女子名", "地名", "城市名", "州名", "国家名", "朝代", "英国城市"}
+_RECOGNITION_METADATA_LABELS = {"人名", "姓氏", "男名", "女名", "男子名", "女子名", "地名", "城市名", "州名", "国家名", "朝代", "英国城市", "心理学"}
 
 
 def _recognition_text(value: Any) -> str:
     text = " ".join(str(value or "").strip().split())
     text = _RECOGNITION_POS_RE.sub("", text).strip()
 
-    def name_annotation(match):
+    def metadata_annotation(match):
         core, note = (part.strip() for part in match.groups())
-        if core in {"人名", "姓氏", "男名", "女名", "男子名", "女子名"} and note not in _RECOGNITION_NAME_LABELS and re.fullmatch(r"[\u3400-\u9fff]+", note):
+        if core in {"人名", "姓氏", "男名", "女名", "男子名", "女子名"} and note not in _RECOGNITION_METADATA_LABELS and re.fullmatch(r"[\u3400-\u9fff]+", note):
             return note
         labels = {part.strip() for part in re.split(r"[/／、,，;；]", note)}
-        return core if labels and labels.issubset(_RECOGNITION_NAME_LABELS) else match.group(0)
+        return core if labels and labels.issubset(_RECOGNITION_METADATA_LABELS) else match.group(0)
 
-    return re.sub(r"([^()（）;；,/，、]+)[(（]([^()（）]*)[)）]", name_annotation, text)
+    return re.sub(r"([^()（）;；,/，、]+)[(（]([^()（）]*)[)）]", metadata_annotation, text)
 
 
 def _recognition_core_sense(value: Any) -> str:

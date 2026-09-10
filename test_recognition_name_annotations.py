@@ -7,6 +7,7 @@ def test_name_metadata_does_not_expose_the_correct_option():
     assert questions._recognition_core_sense("n. 约克（英国城市）") == "约克"
     assert questions._recognition_senses("n. 汉（姓氏/朝代）") == ["汉"]
     assert questions._recognition_core_sense("n. 姓氏（人名）") == "姓氏"
+    assert questions._recognition_core_sense("adj. 行为的（心理学）") == "行为的"
 
 
 def test_meaningful_qualifiers_are_preserved():
