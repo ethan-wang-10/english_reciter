@@ -6710,17 +6710,20 @@ def _current_gaokao_source(word_key: str) -> Optional[dict]:
 
 
 def gaokao_question_sources(level: str = "") -> List[dict]:
-    """Build stable, de-duplicated question sources from the merged wordbank."""
-    rows, _ = merge_wordbank_rows_for_search(level)
+    """Use the same canonical rows as lookup_csv_word, then filter by level."""
+    csv_by_key = load_words_csv_by_key()
+    v2_by_key = wordbank_v2.load_words_v2_by_key()
+    level = level.strip()
     sources: List[dict] = []
-    seen = set()
-    for row in rows:
-        source = gaokao_questions.source_from_wordbank_row(row)
-        if not source or source["english"] in seen:
+    # Resolve overrides and duplicate rows before filtering, as uploads do.
+    for key in sorted(csv_by_key.keys() | v2_by_key.keys()):
+        v2 = v2_by_key.get(key)
+        row = wordbank_v2.v2_entry_to_flat_csv_row(v2) if v2 else csv_by_key[key]
+        if level and (row.get("level") or "").strip() != level:
             continue
-        seen.add(source["english"])
-        sources.append(source)
-    sources.sort(key=lambda row: row["english"])
+        source = gaokao_questions.source_from_wordbank_row(row)
+        if source:
+            sources.append(source)
     return sources
 
 

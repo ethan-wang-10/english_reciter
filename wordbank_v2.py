@@ -414,9 +414,7 @@ def load_words_v2_list() -> List[dict]:
 def load_words_v2_by_key() -> Dict[str, dict]:
     """english 规范化键 -> 完整 v2 条目。"""
     global _words_v2_by_key
-    with _words_v2_lock:
-        if _words_v2_by_key is not None:
-            return _words_v2_by_key
+    # Check mtime even with a cached index: another worker may have edited it.
     load_words_v2_list()
     with _words_v2_lock:
         if _words_v2_by_key is None:
