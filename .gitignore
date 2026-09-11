@@ -56,3 +56,7 @@ Thumbs.db
 *.tar.gz
 *.zip
 DESIGN.md
+
+# Authoring materials are preserved in verified versioned archives.
+/output/question-authoring/
+!/archives/question-authoring-*.tar.gz

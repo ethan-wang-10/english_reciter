@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import ipaddress
 import json
 import math
 import os
 from pathlib import Path
 import re
+import socket
+import ssl
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -81,6 +85,48 @@ def _decode_response(raw: bytes) -> dict:
     return value
 
 
+def _ssl_context() -> ssl.SSLContext:
+    context = ssl.create_default_context()
+    # Some macOS Python installations ship without a populated OpenSSL CA store.
+    if not context.cert_store_stats()["x509_ca"] and not any(
+        name in os.environ for name in ("SSL_CERT_FILE", "SSL_CERT_DIR")
+    ):
+        try:
+            import certifi
+        except ImportError:
+            return context
+        context.load_verify_locations(cafile=certifi.where())
+    return context
+
+
+def _network_failure(exc: Exception, method: str, path: str, started: float) -> dict:
+    reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        kind = "tls_certificate"
+        message = "TLS certificate verification failed; check SSL_CERT_FILE/SSL_CERT_DIR or install certifi"
+    elif isinstance(reason, socket.gaierror):
+        kind = "dns"
+        message = "DNS lookup failed; check network access and the server hostname"
+    elif isinstance(reason, TimeoutError):
+        kind = "timeout"
+        message = "Request timed out; retry with the same request or submission ID"
+    elif isinstance(reason, (ConnectionError, http.client.HTTPException)):
+        kind = "connection"
+        message = "Connection interrupted; retry with the same request or submission ID"
+    else:
+        kind = "network"
+        message = "Network request failed; retry with the same request or submission ID"
+    # Exception messages may contain credentials, proxy URLs, or response content.
+    details = {
+        "error": message, "error_kind": kind, "method": method, "path": path,
+        "elapsed_seconds": round(time.monotonic() - started, 3),
+        "exception_type": type(exc).__name__, "reason_type": type(reason).__name__,
+    }
+    if isinstance(getattr(reason, "errno", None), int):
+        details["errno"] = reason.errno
+    return details
+
+
 def request_json(
     base_url: str, token: str, method: str, path: str, *,
     body: dict | None = None, query: dict | None = None, timeout: float = 60,
@@ -94,8 +140,9 @@ def request_json(
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    opener = urllib.request.build_opener(_NoRedirects())
+    started = time.monotonic()
     try:
+        opener = urllib.request.build_opener(_NoRedirects(), urllib.request.HTTPSHandler(context=_ssl_context()))
         with opener.open(request, timeout=timeout) as response:
             return _decode_response(response.read())
     except urllib.error.HTTPError as exc:
@@ -109,8 +156,9 @@ def request_json(
         finally:
             exc.close()
         raise ClientError(f"HTTP {exc.code}", response={**payload, "http_status": exc.code}) from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise ClientError("Network request failed; retry with the same request or submission ID") from exc
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+        payload = _network_failure(exc, method, path, started)
+        raise ClientError(payload["error"], response=payload) from exc
 
 
 def _bounded_int(minimum: int, maximum: int):

@@ -1,9 +1,14 @@
+import errno
+from http.client import IncompleteRead, RemoteDisconnected
 from io import BytesIO
 import json
+import socket
+import ssl
 import urllib.error
 import urllib.parse
 import uuid
 
+import certifi
 import pytest
 
 from scripts import question_authoring_client as client
@@ -13,6 +18,14 @@ from scripts import question_authoring_client as client
 def http(monkeypatch):
     monkeypatch.setenv(client.TOKEN_ENV, "test-secret-admin-token")
     state = {"calls": [], "payload": {"status": "active", "job_id": "job-a", "items": []}}
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    monkeypatch.setattr(client, "_ssl_context", lambda: context)
+
+    class Response(BytesIO):
+        def read(self, *args, **kwargs):
+            if state.get("read_error"):
+                raise state["read_error"]
+            return super().read(*args, **kwargs)
 
     class Opener:
         def open(self, request, *, timeout):
@@ -20,14 +33,126 @@ def http(monkeypatch):
             if state.get("error"):
                 raise state["error"]
             raw = state.get("raw")
-            return BytesIO(raw if raw is not None else json.dumps(state["payload"]).encode())
+            return Response(raw if raw is not None else json.dumps(state["payload"]).encode())
 
     def build_opener(*handlers):
-        assert len(handlers) == 1 and isinstance(handlers[0], client._NoRedirects)
+        assert len(handlers) == 2
+        assert isinstance(handlers[0], client._NoRedirects)
+        assert isinstance(handlers[1], client.urllib.request.HTTPSHandler)
+        assert handlers[1]._context is context
+        assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
         return Opener()
 
     monkeypatch.setattr(client.urllib.request, "build_opener", build_opener)
     return state
+
+
+def test_empty_default_trust_store_loads_certifi_without_disabling_verification(monkeypatch):
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    assert context.cert_store_stats()["x509_ca"] == 0
+    monkeypatch.setattr(client.ssl, "create_default_context", lambda: context)
+
+    assert client._ssl_context() is context
+
+    assert context.cert_store_stats()["x509_ca"] > 0
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname
+
+
+def test_populated_default_trust_store_is_preserved(monkeypatch):
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_verify_locations(cafile=certifi.where())
+    before = context.get_ca_certs(binary_form=True)
+    monkeypatch.setattr(client.ssl, "create_default_context", lambda: context)
+    monkeypatch.setattr(certifi, "where", lambda: pytest.fail("default trust must be preserved"))
+
+    assert client._ssl_context() is context
+
+    assert context.get_ca_certs(binary_form=True) == before
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname
+
+
+@pytest.mark.parametrize("variable", ["SSL_CERT_FILE", "SSL_CERT_DIR"])
+@pytest.mark.parametrize("value", ["/configured/custom-ca", ""])
+def test_explicit_ca_configuration_is_preserved_even_when_store_is_empty(monkeypatch, variable, value):
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    monkeypatch.setenv(variable, value)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    monkeypatch.setattr(client.ssl, "create_default_context", lambda: context)
+    monkeypatch.setattr(certifi, "where", lambda: pytest.fail("explicit CA configuration must be preserved"))
+
+    assert client._ssl_context() is context
+
+    assert context.cert_store_stats()["x509_ca"] == 0
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname
+
+
+@pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "url-error"])
+@pytest.mark.parametrize("cause,kind", [
+    (ssl.SSLCertVerificationError(1, "test-secret-admin-token private-cert-detail"), "tls_certificate"),
+    (socket.gaierror(socket.EAI_NONAME, "test-secret-admin-token private-dns-detail"), "dns"),
+    (TimeoutError("test-secret-admin-token private-timeout-detail"), "timeout"),
+    (ConnectionResetError(errno.ECONNRESET, "test-secret-admin-token private-connection-detail"), "connection"),
+    (OSError(errno.EIO, "test-secret-admin-token private-network-detail"), "network"),
+])
+def test_network_diagnostics_classify_underlying_exception_without_retry_or_secret_leak(
+    http, capsys, cause, kind, wrapped,
+):
+    error = urllib.error.URLError(cause) if wrapped else cause
+    http["error"] = error
+
+    assert client.main(["claim", "--worker-id", "generator-a", "--request-id", "retry-claim-1"]) == 1
+
+    assert len(http["calls"]) == 1
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["error_kind"] == kind
+    assert payload["exception_type"] == type(error).__name__
+    assert payload["reason_type"] == type(cause).__name__
+    assert payload["method"] == "POST"
+    assert payload["path"] == client.API_ROOT + "/claims"
+    assert isinstance(payload["elapsed_seconds"], (int, float))
+    assert 0 <= payload["elapsed_seconds"] < 10
+    if cause.errno is not None:
+        assert payload["errno"] == cause.errno
+    assert payload["client_request"]["request_id"] == "retry-claim-1"
+    assert "test-secret-admin-token" not in output.out + output.err
+    assert "private-" not in output.out + output.err
+
+
+@pytest.mark.parametrize("error,kind", [
+    (RemoteDisconnected("test-secret-admin-token private-disconnect-detail"), "connection"),
+    (IncompleteRead(b"test-secret-admin-token private-response-body", 100), "connection"),
+])
+def test_interrupted_http_response_has_diagnostics_and_preserves_submission_id(
+    http, tmp_path, capsys, error, kind,
+):
+    input_file = tmp_path / "input.json"
+    input_file.write_text('[{"item_id":"item-a","result":{}}]')
+    http["read_error" if isinstance(error, IncompleteRead) else "error"] = error
+
+    assert client.main([
+        "submit", "job-a", "--worker-id", "reviewer-a", "--submission-id", "submission-a",
+        "--input", str(input_file),
+    ]) == 1
+
+    assert len(http["calls"]) == 1
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["error_kind"] == kind
+    assert payload["exception_type"] == type(error).__name__
+    assert payload["reason_type"] == type(error).__name__
+    assert payload["client_request"]["submission_id"] == "submission-a"
+    assert payload["path"] == client.API_ROOT + "/claims/job-a/submissions"
+    assert "test-secret-admin-token" not in output.out + output.err
+    assert "private-" not in output.out + output.err
 
 
 def test_pending_uses_authenticated_get_and_encoded_filters(http, capsys):
