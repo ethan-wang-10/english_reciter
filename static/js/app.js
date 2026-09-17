@@ -3841,6 +3841,7 @@ const REVIEW_PHONETIC_STORAGE_KEY = 'english_reciter_review_show_phonetic';
 const REVIEW_TEST_INFLECTION_STORAGE_KEY = 'english_reciter_review_test_inflection';
 const REVIEW_NEW_WORDS_FIRST_STORAGE_KEY = 'english_reciter_review_new_words_first';
 const REVIEW_NUMBER_DIRECT_SUBMIT_STORAGE_KEY = 'english_reciter_review_number_direct_submit';
+const REVIEW_MANUAL_SPELLING_MESSAGE = '请手动逐字输入，不能粘贴或拖入答案。';
 
 function getReviewTestInflectionEnabled() {
     const cb = document.getElementById('review-test-inflection');
@@ -3895,6 +3896,113 @@ function applyTargetCasingToTypedChar(targetChar, typedLower) {
     return typedLower.toLowerCase();
 }
 
+function sanitizeUnderlineTypedValue(value, maxLength = Infinity) {
+    let v = String(value || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    if (Number.isFinite(maxLength) && maxLength >= 0 && v.length > maxLength) {
+        v = v.slice(0, maxLength);
+    }
+    return v;
+}
+
+function isBlockedUnderlineInputType(inputType) {
+    return [
+        'insertFromPaste',
+        'insertFromPasteAsQuotation',
+        'insertFromDrop',
+        'insertReplacementText',
+        'insertFromYank',
+    ].includes(String(inputType || ''));
+}
+
+function showManualSpellingInputMessage() {
+    const messageDiv = document.getElementById('word-message');
+    if (messageDiv) {
+        messageDiv.textContent = REVIEW_MANUAL_SPELLING_MESSAGE;
+        messageDiv.className = 'word-message error';
+        messageDiv.style.display = 'block';
+    }
+}
+
+function rejectAssistedUnderlineInput(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const container = document.getElementById('underline-input');
+    const capture = document.getElementById('mobile-word-capture');
+    if (container) {
+        container.dataset.blockedAssist = '1';
+        container.dataset.currentInput = '';
+        container.dataset.typedCharCount = '0';
+    }
+    if (capture) {
+        capture.value = '';
+    }
+    updateUnderlineDisplay();
+    showManualSpellingInputMessage();
+    focusWordCapture(50);
+    return false;
+}
+
+function restoreUnderlineInputFromState(value, typedCharCount = null, blockedAssist = false) {
+    const container = document.getElementById('underline-input');
+    const capture = document.getElementById('mobile-word-capture');
+    if (!container || !capture) return;
+    const maxLength = Number(container.dataset.wordLength || 0);
+    const v = sanitizeUnderlineTypedValue(value, maxLength);
+    capture.value = v;
+    container.dataset.currentInput = v;
+    const n = Number(typedCharCount);
+    container.dataset.typedCharCount = String(
+        Number.isFinite(n) && n >= v.length ? Math.floor(n) : v.length,
+    );
+    container.dataset.blockedAssist = blockedAssist ? '1' : '0';
+    updateUnderlineDisplay();
+}
+
+function isUnderlineInputManualEnough() {
+    const container = document.getElementById('underline-input');
+    if (!container) return true;
+    const current = container.dataset.currentInput || '';
+    const typed = Number(container.dataset.typedCharCount || 0);
+    return container.dataset.blockedAssist !== '1' && Number.isFinite(typed) && typed >= current.length;
+}
+
+function selectionIntersectsElement(selection, element) {
+    if (!selection || !element) return false;
+    for (let i = 0; i < selection.rangeCount; i += 1) {
+        const range = selection.getRangeAt(i);
+        try {
+            if (range.intersectsNode(element)) return true;
+        } catch (_) {
+            if (element.contains(selection.anchorNode) || element.contains(selection.focusNode)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function blockGuardedReviewCopy(event) {
+    const selection = window.getSelection ? window.getSelection() : null;
+    const guarded = [
+        document.getElementById('current-word-english'),
+        document.getElementById('new-word-study-english'),
+        ...document.querySelectorAll('.new-word-study-example-en'),
+    ].filter(Boolean);
+    const target = event.target;
+    const touchesGuardedSelection = guarded.some((el) => selectionIntersectsElement(selection, el));
+    const startsOnGuardedText = Boolean(
+        target && target.closest && target.closest('#current-word-english, #new-word-study-english, .new-word-study-example-en'),
+    );
+    if (!touchesGuardedSelection && !startsOnGuardedText) return;
+    event.preventDefault();
+    if (event.clipboardData) {
+        event.clipboardData.setData('text/plain', '');
+    }
+    showManualSpellingInputMessage();
+}
+
 // 初始化下划线显示 + 透明输入层（桌面/移动端统一，可唤起软键盘）
 function initializeUnderlineInput(word) {
     const target = (word.english || '').trim();
@@ -3935,6 +4043,8 @@ function initializeUnderlineInputForTarget(word, target) {
     container.dataset.targetText = target;
     container.dataset.wordLength = String(typeableCount);
     container.dataset.currentInput = '';
+    container.dataset.typedCharCount = '0';
+    container.dataset.blockedAssist = '0';
 
     capture.value = '';
     capture.readOnly = false;
@@ -3944,16 +4054,44 @@ function initializeUnderlineInputForTarget(word, target) {
     );
     capture.setAttribute('aria-describedby', 'review-exercise-type');
 
-    const syncFromCapture = () => {
-        let v = capture.value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        if (v.length > typeableCount) {
-            v = v.slice(0, typeableCount);
+    const syncFromCapture = (event) => {
+        const previous = container.dataset.currentInput || '';
+        const inputType = String(event?.inputType || '');
+        const inserted = sanitizeUnderlineTypedValue(event?.data || '');
+        let v = sanitizeUnderlineTypedValue(capture.value, typeableCount);
+        const grewBy = v.length - previous.length;
+        if (
+            isBlockedUnderlineInputType(inputType)
+            || inserted.length > 1
+            || grewBy > 1
+            || (event && event.isTrusted === false && v !== previous)
+        ) {
+            rejectAssistedUnderlineInput(event);
+            return;
         }
         capture.value = v;
         container.dataset.currentInput = v;
+        container.dataset.blockedAssist = '0';
+        if (grewBy > 0) {
+            const typedCount = Number(container.dataset.typedCharCount || 0);
+            container.dataset.typedCharCount = String(
+                (Number.isFinite(typedCount) ? typedCount : 0) + grewBy,
+            );
+        }
         updateUnderlineDisplay();
     };
 
+    capture.onbeforeinput = (e) => {
+        const inserted = sanitizeUnderlineTypedValue(e.data || '');
+        if (isBlockedUnderlineInputType(e.inputType) || inserted.length > 1) {
+            rejectAssistedUnderlineInput(e);
+        }
+    };
+    capture.onpaste = rejectAssistedUnderlineInput;
+    capture.ondrop = rejectAssistedUnderlineInput;
+    capture.ondragover = (e) => {
+        e.preventDefault();
+    };
     capture.oninput = syncFromCapture;
     capture.onkeydown = (e) => {
         if (e.key === 'Enter') {
@@ -4024,6 +4162,8 @@ function clearUnderlineInput() {
     const capture = document.getElementById('mobile-word-capture');
     if (!container) return;
     container.dataset.currentInput = '';
+    container.dataset.typedCharCount = '0';
+    container.dataset.blockedAssist = '0';
     if (capture) {
         capture.value = '';
     }
@@ -6423,11 +6563,11 @@ async function restorePausedReviewWord(returnState) {
             targetAnswer,
             currentRevealedCount,
         );
-        const capture = document.getElementById('mobile-word-capture');
-        if (capture && returnState.inputValue) {
-            capture.value = returnState.inputValue;
-            capture.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+        restoreUnderlineInputFromState(
+            returnState.inputValue || '',
+            returnState.inputTypedCharCount,
+            returnState.inputBlockedAssist === true,
+        );
     }
 }
 
@@ -6498,6 +6638,7 @@ function startImmediateWrongReview() {
     }
 
     const capture = document.getElementById('mobile-word-capture');
+    const underline = document.getElementById('underline-input');
     immediateRemedialReturnState = {
         currentReviewList,
         currentReviewIndex,
@@ -6506,6 +6647,8 @@ function startImmediateWrongReview() {
         wrongRoundNumber,
         wordMap: new Map(wordMap),
         inputValue: String(capture?.value || ''),
+        inputTypedCharCount: Number(underline?.dataset?.typedCharCount || 0),
+        inputBlockedAssist: underline?.dataset?.blockedAssist === '1',
         sectionBreakOpen: isReviewSectionBreakOpen(),
         reviewSectionStartIndex,
         reviewSectionStartCorrectAttempts,
@@ -7382,6 +7525,10 @@ async function submitAnswerRequest() {
     
     if (!answer) {
         focusWordCapture(0);
+        return false;
+    }
+    if (!isSemantic && !isUnderlineInputManualEnough()) {
+        rejectAssistedUnderlineInput();
         return false;
     }
 
@@ -10465,6 +10612,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.target.closest('button')) return;
             focusWordCapture(0);
         });
+        reviewBox.addEventListener('copy', blockGuardedReviewCopy);
+        reviewBox.addEventListener('cut', blockGuardedReviewCopy);
+        reviewBox.addEventListener('dragstart', blockGuardedReviewCopy);
     }
     
     // 下划线输入框的Enter键已经在initializeUnderlineInput中处理

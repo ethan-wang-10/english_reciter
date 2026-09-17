@@ -2435,6 +2435,13 @@ body {
     overflow-wrap: anywhere;
 }
 
+#current-word-english,
+#new-word-study-english,
+.new-word-study-example-en {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
 .new-word-study-chinese {
     color: var(--text-primary);
     font-size: 1.12rem;

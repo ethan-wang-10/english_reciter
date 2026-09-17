@@ -453,7 +453,6 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert 'id="import-ocr-english-only"' in html
     assert "仅提取英文" in html
     assert "fd.append('english_only', englishOnly ? '1' : '0')" in javascript
-    assert "/static/js/app.js?v=20260905-offline-handwriting-v1" in html
     assert "function reviewWordHasNoLearningAttempt(word)" in javascript
     assert "function reviewQueueEndpoint(path)" in javascript
     assert "reviewQueueEndpoint('/bootstrap')" in javascript
@@ -465,7 +464,15 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "newWordsFirst && word?.task_imported_today" not in javascript
     assert "partitionRestoredReviewWords" in javascript
     assert "wrongWordsOrder = restored.remedialWords.map" in javascript
-    assert "/static/css/style.css?v=20260910-authoring-v2" in html
+    assert "REVIEW_MANUAL_SPELLING_MESSAGE" in javascript
+    assert "insertFromPaste" in javascript
+    assert "typedCharCount" in javascript
+    assert "rejectAssistedUnderlineInput" in javascript
+    assert "blockGuardedReviewCopy" in javascript
+    assert "-webkit-user-select: none" in stylesheet
+    assert "#new-word-study-english" in stylesheet
+    assert "/static/css/style.css?v=20260917-copy-guard-v1" in html
+    assert "/static/js/app.js?v=20260917-copy-guard-v1" in html
     assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
