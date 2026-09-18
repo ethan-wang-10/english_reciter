@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -16,6 +16,7 @@ _WEB_DATA_DIR = tempfile.TemporaryDirectory(prefix="english-reciter-web-test-")
 os.environ["ENGLISH_RECITER_DATA_DIR"] = _WEB_DATA_DIR.name
 
 import simple_web_app as web  # noqa: E402
+from reciter import Word  # noqa: E402
 
 
 class _SemanticReciter:
@@ -472,7 +473,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "-webkit-user-select: none" in stylesheet
     assert "#new-word-study-english" in stylesheet
     assert "/static/css/style.css?v=20260917-copy-guard-v1" in html
-    assert "/static/js/app.js?v=20260917-copy-guard-v1" in html
+    assert "/static/js/app.js?v=20260918-bonus-practice-v1" in html
     assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
@@ -740,6 +741,136 @@ def test_bonus_practice_requires_server_session(client, monkeypatch) -> None:
 
     assert response.status_code == 409
     assert "加练会话" in response.get_json()["error"]
+
+
+@pytest.fixture
+def bonus_reciter(monkeypatch, tmp_path):
+    config = web.Config(str(tmp_path / 'config.json'))
+    config.DATA_FILE = str(tmp_path / 'learning_data.json')
+    config.EXAMPLE_DB = str(tmp_path / 'word_examples.json')
+    config.BACKUP_ENABLED = False
+    config.TTS_ENABLED = False
+    reciter = web.WordReciter(config)
+    reciter.all_words = [
+        Word(f'word-{i}', 'test', success_count=2,
+             next_review_date=reciter.today + timedelta(days=7))
+        for i in range(12)
+    ]
+    _mock_student_session(monkeypatch, reciter)
+    monkeypatch.setattr(web, 'DATA_DIR', tmp_path)
+    monkeypatch.setattr(web, 'lookup_csv_word', lambda word: None)
+    monkeypatch.setattr(web, '_pk_stats_for_gamification', lambda username: (0, 0))
+    state = web.gamification_mod.default_state()
+    state['streak_correct_by_day'][web.china_today().isoformat()] = (
+        web.gamification_mod.CHECKIN_MIN_CORRECT
+    )
+    web.gamification_mod.save_state(tmp_path, 'alice', state)
+    return reciter
+
+
+def test_bonus_review_issues_ten_words(client, bonus_reciter) -> None:
+    response = client.get('/api/words/extra-review', headers={'Authorization': 'Bearer test'})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['count'] == 10
+    assert len({word['english'] for word in payload['words']}) == 10
+    assert all(word['bonus_session_id'] == payload['bonus_session_id'] for word in payload['words'])
+
+
+@pytest.mark.parametrize('remedial', [False, True])
+def test_bonus_review_rewards_completed_round_once(
+    client, bonus_reciter, monkeypatch, tmp_path, remedial,
+) -> None:
+    headers = {'Authorization': 'Bearer test'}
+    issued = client.get('/api/words/extra-review', headers=headers).get_json()
+    requests = [
+        {
+            'word_id': word['english'],
+            'answer': word['english'],
+            'bonus_practice': True,
+            'bonus_session_id': issued['bonus_session_id'],
+            'review_event_id': f'bonus-{i}',
+            'bonus_session_completed': True,
+        }
+        for i, word in enumerate(issued['words'])
+    ]
+    for body in requests[:9]:
+        response = client.post('/api/words/practice', headers=headers, json=body)
+        assert response.status_code == 200
+        assert response.get_json()['gamification']['xp_gained'] == 0
+    incorrect = {**requests[-1], 'answer': 'incorrect', 'review_event_id': 'bonus-incorrect'}
+    response = client.post('/api/words/practice', headers=headers, json=incorrect)
+    assert response.status_code == 200
+    assert response.get_json()['correct'] is False
+    assert 'gamification' not in response.get_json()
+    last_request = {**requests[-1], 'remedial': remedial, 'attempt_number': 2}
+    completed = client.post('/api/words/practice', headers=headers, json=last_request)
+    assert completed.status_code == 200
+    reward = completed.get_json()['gamification']
+    assert reward['xp_gained'] == 1
+    assert reward['answer_xp_gained'] == 1
+    assert reward['lifetime_xp'] == reward['xp_balance'] == 1
+    reloaded = web.WordReciter(bonus_reciter.config)
+    _mock_student_session(monkeypatch, reloaded)
+    replay = client.post('/api/words/practice', headers=headers, json=last_request)
+    assert replay.status_code == 200
+    assert replay.get_json()['gamification'] == reward
+    earlier = client.post('/api/words/practice', headers=headers, json=requests[0])
+    assert earlier.status_code == 200
+    assert earlier.get_json()['gamification']['xp_gained'] == 0
+    extra = {**last_request, 'review_event_id': 'bonus-extra'}
+    assert client.post('/api/words/practice', headers=headers, json=extra).status_code == 409
+    state = web.gamification_mod.load_state(tmp_path, 'alice')
+    assert state['lifetime_xp'] == state['xp_balance'] == 1
+    assert state['total_correct'] == 10
+    for word in reloaded.all_words:
+        assert word.success_count == 2
+        assert word.next_review_date == reloaded.today + timedelta(days=7)
+
+    second_round = client.get('/api/words/extra-review', headers=headers).get_json()
+    assert second_round['bonus_session_id'] != issued['bonus_session_id']
+    for i, word in enumerate(second_round['words']):
+        response = client.post('/api/words/practice', headers=headers, json={
+            'word_id': word['english'],
+            'answer': word['english'],
+            'bonus_practice': True,
+            'bonus_session_id': second_round['bonus_session_id'],
+            'review_event_id': f'second-bonus-{i}',
+        })
+        assert response.status_code == 200
+        assert response.get_json()['gamification']['xp_gained'] == (1 if i == 9 else 0)
+    state = web.gamification_mod.load_state(tmp_path, 'alice')
+    assert state['lifetime_xp'] == state['xp_balance'] == 2
+    assert state['total_correct'] == 20
+    assert client.post('/api/words/practice', headers=headers, json=last_request).status_code == 409
+
+
+def test_bonus_review_short_round_has_no_xp(client, bonus_reciter, tmp_path) -> None:
+    bonus_reciter.all_words = bonus_reciter.all_words[:9]
+    headers = {'Authorization': 'Bearer test'}
+    issued = client.get('/api/words/extra-review', headers=headers).get_json()
+    assert issued['count'] == 9
+    for i, word in enumerate(issued['words']):
+        response = client.post('/api/words/practice', headers=headers, json={
+            'word_id': word['english'],
+            'answer': word['english'],
+            'bonus_practice': True,
+            'bonus_session_id': issued['bonus_session_id'],
+            'review_event_id': f'short-bonus-{i}',
+        })
+        assert response.status_code == 200
+        assert response.get_json()['gamification']['xp_gained'] == 0
+    assert web.gamification_mod.load_state(tmp_path, 'alice')['lifetime_xp'] == 0
+
+
+def test_bonus_review_ui_uses_ten_words_and_completion_reward(client) -> None:
+    html = client.get('/').get_data(as_text=True)
+    javascript = client.get('/static/js/app.js').get_data(as_text=True)
+    assert '随机加练 10 词' in html
+    assert '完成 10 个词获得 1 XP' in html
+    assert '随机加练 10 个词' in javascript
+    assert '随机加练 5' not in html + javascript
+    assert '获得 ${formatNumber(sessionBonusPracticeXp)} XP' in javascript
 
 
 def test_review_payload_redacts_semantic_answers(monkeypatch, tmp_path) -> None:

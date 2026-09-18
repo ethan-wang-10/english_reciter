@@ -42,6 +42,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # 导入核心功能
 from reciter import (
+    BONUS_PRACTICE_WORD_COUNT,
     DEFAULT_DAILY_REVIEW_LIMIT,
     LearningDataLoadError,
     MAX_DAILY_REVIEW_LIMIT,
@@ -4799,7 +4800,7 @@ def get_review_list(username):
 @app.route('/api/words/extra-review', methods=['GET'])
 @token_required
 def get_extra_review_list(username):
-    """今日无待复习时：从全词库按复习次数最少优先、同层随机抽取加练词（默认 5 个）。"""
+    """今日无待复习时：按复习次数最少优先、同层随机抽取 10 个加练词。"""
     try:
         with user_reciter_session(username) as reciter:
             task_bundle = reciter.get_today_learning_plan(
@@ -4807,7 +4808,7 @@ def get_extra_review_list(username):
             )
             if int((task_bundle.get('plan') or {}).get('remaining') or 0) > 0:
                 return jsonify({'error': '请先完成今日学习任务，再开始随机加练'}), 409
-            bonus_session_id, picked = reciter.create_bonus_practice_session(5)
+            bonus_session_id, picked = reciter.create_bonus_practice_session(BONUS_PRACTICE_WORD_COUNT)
             words = []
             for w in picked:
                 nd = w.next_review_date
@@ -5129,6 +5130,12 @@ def practice_word(username):
             gam_payload = None
             if is_correct and (recorded or review_event_id):
                 pkw, pkm = _pk_stats_for_gamification(username)
+                bonus_session_completed = bool(
+                    bonus_practice
+                    and reciter.is_bonus_practice_completion_event(
+                        bonus_session_id, word_id, review_event_id,
+                    )
+                )
                 gam_payload = gamification_mod.award_correct_answer(
                     DATA_DIR,
                     username,
@@ -5144,6 +5151,7 @@ def practice_word(username):
                         f'{reciter.word_state_key(word)}\0{review_event_id}'.encode('utf-8')
                     ).hexdigest(),
                     event_scope=reciter.word_state_key(word),
+                    bonus_session_completed=bonus_session_completed,
                 )
 
             body = {

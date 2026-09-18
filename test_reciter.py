@@ -650,6 +650,59 @@ class TestWordReciter(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "今日学习任务"):
             reciter.create_bonus_practice_session(1)
 
+    def test_bonus_practice_reward_belongs_to_tenth_word_event_after_reload(self):
+        reciter = WordReciter(self.config)
+        reciter.all_words = [Word(f"word-{i}", "test") for i in range(12)]
+        session_id, picked = reciter.create_bonus_practice_session()
+        self.assertEqual(len(picked), 10)
+        for i, word in enumerate(picked[:9]):
+            self.assertTrue(reciter.complete_bonus_practice_word(
+                session_id, word.english, f"event-{i}",
+            ))
+            self.assertFalse(reciter.is_bonus_practice_completion_event(
+                session_id, word.english, f"event-{i}",
+            ))
+        reciter.save_learning_data(backup=False)
+        reloaded = WordReciter(self.config)
+        last_word = picked[-1].english
+        self.assertTrue(reloaded.complete_bonus_practice_word(
+            session_id, last_word, "event-9",
+        ))
+        self.assertTrue(reloaded.is_bonus_practice_completion_event(
+            session_id, last_word, "event-9",
+        ))
+        self.assertTrue(reloaded.complete_bonus_practice_word(
+            session_id, picked[0].english, "event-0",
+        ))
+        self.assertFalse(reloaded.is_bonus_practice_completion_event(
+            session_id, picked[0].english, "event-0",
+        ))
+        self.assertFalse(reloaded.is_bonus_practice_completion_event(
+            "other-session", last_word, "event-9",
+        ))
+        reloaded.learning_state_v2['bonus_practice_session']['date'] = (
+            reloaded.today - timedelta(days=1)
+        ).isoformat()
+        self.assertFalse(reloaded.is_bonus_practice_completion_event(
+            session_id, last_word, "event-9",
+        ))
+        self.assertFalse(reloaded.complete_bonus_practice_word(
+            session_id, last_word, "event-9",
+        ))
+
+    def test_short_bonus_practice_round_does_not_earn_reward(self):
+        reciter = WordReciter(self.config)
+        reciter.all_words = [Word(f"word-{i}", "test") for i in range(9)]
+        session_id, picked = reciter.create_bonus_practice_session()
+        self.assertEqual(len(picked), 9)
+        for i, word in enumerate(picked):
+            self.assertTrue(reciter.complete_bonus_practice_word(
+                session_id, word.english, f"event-{i}",
+            ))
+            self.assertFalse(reciter.is_bonus_practice_completion_event(
+                session_id, word.english, f"event-{i}",
+            ))
+
     def test_today_plan_prioritizes_reviews_then_fills_with_new_words(self):
         reciter = WordReciter(self.config)
         reciter.config.DAILY_REVIEW_LIMIT = 3

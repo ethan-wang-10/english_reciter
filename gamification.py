@@ -25,7 +25,7 @@ XP_PLAN_CORRECT = 10
 XP_PROGRESS_STEP = 5
 XP_MASTERED = 40
 XP_REMEDIAL = 4
-XP_BONUS_PRACTICE = 3
+XP_BONUS_PRACTICE = 1
 
 DAILY_XP_SOFT_CAP = 400
 DAILY_XP_HARD_CAP = 700
@@ -1006,9 +1006,10 @@ def compute_raw_xp(
     remedial: bool,
     success_increased: bool,
     mastered_now: bool,
+    bonus_session_completed: bool = False,
 ) -> int:
     if bonus_practice:
-        return XP_BONUS_PRACTICE
+        return XP_BONUS_PRACTICE if bonus_session_completed else 0
     if remedial:
         return XP_REMEDIAL
     raw = XP_PLAN_CORRECT
@@ -1590,6 +1591,7 @@ def award_correct_answer(
     pk_matches: int = 0,
     event_id: str = '',
     event_scope: str = '',
+    bonus_session_completed: bool = False,
 ) -> Dict[str, Any]:
     """
     答对后加分、更新 streak、解锁成就。在同一用户锁内调用。
@@ -1628,6 +1630,7 @@ def award_correct_answer(
             remedial=remedial,
             success_increased=success_increased,
             mastered_now=mastered_now,
+            bonus_session_completed=bonus_session_completed,
         )
 
         daily_so_far = int(state["daily_xp"].get(day_key, 0))

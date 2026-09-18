@@ -329,6 +329,48 @@ class TestPracticeAwardIdempotency(unittest.TestCase):
             self.assertNotIn('bounded-event-0', {event['event_id'] for event in scoped})
 
 
+class TestBonusPracticeRoundReward(unittest.TestCase):
+    def test_only_completed_bonus_round_has_raw_xp(self):
+        common = {
+            'bonus_practice': True,
+            'remedial': True,
+            'success_increased': True,
+            'mastered_now': True,
+        }
+        self.assertEqual(gm.compute_raw_xp(**common), 0)
+        self.assertEqual(gm.compute_raw_xp(**common, bonus_session_completed=True), 1)
+
+    def test_completed_round_awards_one_xp_once(self):
+        with temp_data_dir() as data_dir:
+            today = china_today().isoformat()
+            state = gm.default_state()
+            state['streak_correct_by_day'][today] = gm.CHECKIN_MIN_CORRECT
+            gm.save_state(data_dir, 'bonus-round-user', state)
+            common = {
+                'bonus_practice': True,
+                'remedial': False,
+                'old_success_count': 0,
+                'new_success_count': 0,
+                'mastered_now': False,
+                'mastered_words': 0,
+            }
+            results = [gm.award_correct_answer(
+                data_dir, 'bonus-round-user', event_id=f'bonus-round-{i}',
+                bonus_session_completed=i == 9, **common,
+            ) for i in range(10)]
+            self.assertEqual([result['xp_gained'] for result in results], [0] * 9 + [1])
+            replay = gm.award_correct_answer(
+                data_dir, 'bonus-round-user', event_id='bonus-round-9',
+                bonus_session_completed=True, **common,
+            )
+            self.assertEqual(replay, results[-1])
+            final = gm.load_state(data_dir, 'bonus-round-user')
+            self.assertEqual(final['lifetime_xp'], 1)
+            self.assertEqual(final['xp_balance'], 1)
+            self.assertEqual(final['daily_xp'][today], 1)
+            self.assertEqual(final['total_correct'], 10)
+
+
 class TestStreakDisplayV2(unittest.TestCase):
     @patch.object(gm, "STREAK_V2_EFFECTIVE_DATE", date(2000, 1, 1))
     def test_effective_zero_when_gap_before_today(self):

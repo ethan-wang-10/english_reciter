@@ -44,6 +44,7 @@ DEFAULT_DAILY_REVIEW_LIMIT = 120
 MAX_DAILY_REVIEW_LIMIT = 300
 MIN_DAILY_REVIEW_SHARE = 0.6
 DEFAULT_DAILY_NEW_WORD_TARGET = 15
+BONUS_PRACTICE_WORD_COUNT = 10
 DAILY_PERFORMANCE_HISTORY_DAYS = 30
 LEGACY_CALIBRATION_VERSION = 1
 SPELLING_CLUSTER_ORDER_VERSION = 1
@@ -1969,7 +1970,7 @@ class WordReciter:
         word.review_count += 1
         return '✅ 正确！（加练仅计复习次数）'
 
-    def get_extra_review_words(self, count: int = 5) -> List[Word]:
+    def get_extra_review_words(self, count: int = BONUS_PRACTICE_WORD_COUNT) -> List[Word]:
         """
         从待复习与已掌握词库中选词：复习次数最少优先，同次数内随机打乱，
         保证长期覆盖（低次数词优先被抽到）。
@@ -1987,7 +1988,9 @@ class WordReciter:
             ordered.extend(tier)
         return ordered[:count]
 
-    def create_bonus_practice_session(self, count: int = 5) -> tuple[str, List[Word]]:
+    def create_bonus_practice_session(
+        self, count: int = BONUS_PRACTICE_WORD_COUNT,
+    ) -> tuple[str, List[Word]]:
         """Issue a server-owned bonus round after today's assigned task is complete."""
         progress = self.daily_task_progress()
         if int(progress.get('remaining') or 0) > 0:
@@ -2037,20 +2040,47 @@ class WordReciter:
         session = self.learning_state_v2.get('bonus_practice_session')
         if not isinstance(session, dict):
             return False
+        if session.get('date') != self.today.isoformat():
+            return False
         if str(session.get('session_id') or '') != str(session_id or ''):
             return False
         key = self.word_state_key(word_id)
-        if key not in {str(value or '') for value in (session.get('word_keys') or [])}:
+        word_keys = {str(value or '') for value in (session.get('word_keys') or [])}
+        if key not in word_keys:
+            return False
+        event_key = str(event_id or '')[:96]
+        if not event_key:
             return False
         completed = session.setdefault('completed_events', {})
         if not isinstance(completed, dict):
             completed = {}
             session['completed_events'] = completed
         prior = str(completed.get(key) or '')
-        if prior and prior != str(event_id or ''):
-            return False
-        completed[key] = str(event_id or '')[:96]
+        if prior:
+            return prior == event_key
+        completed[key] = event_key
+        if len(word_keys) == BONUS_PRACTICE_WORD_COUNT and word_keys.issubset(completed):
+            session['completion_event'] = {'word_key': key, 'event_id': event_key}
         return True
+
+    def is_bonus_practice_completion_event(
+        self,
+        session_id: str,
+        word_id: str,
+        event_id: str,
+    ) -> bool:
+        """Only the event completing all ten issued words can earn the round reward."""
+        session = self.learning_state_v2.get('bonus_practice_session')
+        if not isinstance(session, dict):
+            return False
+        if session.get('date') != self.today.isoformat():
+            return False
+        if str(session.get('session_id') or '') != str(session_id or ''):
+            return False
+        return session.get('completion_event') == {
+            'word_key': self.word_state_key(word_id),
+            'event_id': str(event_id or '')[:96],
+        }
 
     def record_answer_correct(
         self,

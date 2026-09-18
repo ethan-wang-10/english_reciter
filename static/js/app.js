@@ -103,6 +103,7 @@ let sessionTotalWrongAttempts = 0;
 let sessionNewMastered = [];
 let sessionExerciseStats = {};
 let sessionImmediateRemedialRounds = 0;
+let sessionBonusPracticeXp = 0;
 let currentTodayTaskPlan = null;
 let reviewQuestionStartedAt = 0;
 let pendingReviewSubmission = null;
@@ -5751,6 +5752,7 @@ function updateWrongRoundLabel() {
 }
 
 function resetSessionReviewStats() {
+    sessionBonusPracticeXp = 0;
     sessionInitialMainWords = 0;
     sessionMainCorrect = 0;
     sessionMainFailedThree = 0;
@@ -6795,7 +6797,9 @@ function showFinalComplete() {
             descEl.textContent = `今日任务已完成，另有 ${backlogAfterTask} 个到期词将按后续任务安排。`;
         } else {
             descEl.textContent = isBonus
-                ? '本次随机加练已完成（含错题巩固）。'
+                ? sessionBonusPracticeXp > 0
+                    ? `本次随机加练已完成（含错题巩固），获得 ${formatNumber(sessionBonusPracticeXp)} XP。`
+                    : '本次随机加练已完成（含错题巩固）。'
                 : '恭喜！今日待复习已全部完成（含错题巩固）。';
         }
     }
@@ -6830,8 +6834,8 @@ function showInitialEmptyReview() {
         descEl.textContent = completedToday
             ? backlog > 0
                 ? `今天的计划已完成，另有 ${backlog} 个到期词将按后续任务安排。`
-                : '今天的计划已完成，可以随机加练 5 个词保持手感。'
-            : '目前没有到期的复习任务。你可以随机加练 5 个词保持手感，或去导入新词。';
+                : '今天的计划已完成，可以随机加练 10 个词保持手感。'
+            : '目前没有到期的复习任务。你可以随机加练 10 个词保持手感，或去导入新词。';
     }
     hideReviewSessionSummary();
     reviewSessionMode = 'daily';
@@ -7637,6 +7641,9 @@ async function submitAnswerRequest() {
         }
         if (result.correct && result.gamification) {
             const gm = result.gamification;
+            if (reviewSessionMode === 'bonus') {
+                sessionBonusPracticeXp = Math.max(sessionBonusPracticeXp, Number(gm.answer_xp_gained) || 0);
+            }
             const gainedXp = Number(gm.xp_gained) || 0;
             const checkinBonusXp = Number(gm.checkin_bonus_xp) || 0;
             if (gainedXp > 0) {
