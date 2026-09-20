@@ -4097,6 +4097,7 @@ function initializeUnderlineInputForTarget(word, target) {
     capture.onkeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
+            if (e.repeat) return;
             if (!finishPendingReviewAdvance()) void submitAnswer();
             return;
         }
@@ -5936,11 +5937,13 @@ function finishPendingReviewAdvance() {
     return true;
 }
 
-function scheduleReviewAdvance(reviewContext, submissionIndex, word, delayMs) {
+function scheduleReviewAdvance(reviewContext, submissionIndex, word, delayMs = null) {
     cancelPendingReviewAdvance();
     isAdvancing = true;
     pendingReviewAdvance = { reviewContext, submissionIndex, word };
     setReviewSubmitButtonState('next');
+    // Final wrong answers stay visible until an explicit click or Enter press.
+    if (delayMs === null) return;
     reviewAdvanceTimer = setTimeout(
         () => finishPendingReviewAdvance(),
         Math.max(0, Number(delayMs) || 0),
@@ -6020,6 +6023,7 @@ function handleSemanticQuestionKeydown(event) {
     if (!word) return;
     if (event.key === 'Enter' && isAdvancing && pendingReviewAdvance) {
         event.preventDefault();
+        if (event.repeat) return;
         finishPendingReviewAdvance();
         return;
     }
@@ -7720,7 +7724,6 @@ async function submitAnswerRequest() {
                     reviewContext,
                     submissionIndex,
                     word,
-                    reviewFeedbackDelayMs(word, result, { isSemantic }),
                 );
             } else {
                 // 还有尝试机会，更新提示字符串
