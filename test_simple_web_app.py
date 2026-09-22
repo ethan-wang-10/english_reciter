@@ -1479,6 +1479,7 @@ def test_register_rejects_non_object_json(client) -> None:
 
 
 def test_login_accepts_json_content_type_with_charset(client, monkeypatch) -> None:
+    monkeypatch.setattr(web, "resolve_username", lambda username: username)
     monkeypatch.setattr(web, "verify_user", lambda username, password: True)
     monkeypatch.setattr(
         web,
@@ -1509,6 +1510,79 @@ def test_login_accepts_json_content_type_with_charset(client, monkeypatch) -> No
 
     assert response.status_code == 200
     assert response.get_json()["access_token"] == "test-token"
+
+
+def test_login_resolves_username_without_case_sensitivity(client, monkeypatch) -> None:
+    calls = []
+    user = {
+        "password_hash": "unused",
+        "created_at": "2026-01-01T00:00:00",
+        "enabled": True,
+    }
+    monkeypatch.setattr(web, "resolve_username", lambda username: "Alice")
+    monkeypatch.setattr(
+        web,
+        "verify_user",
+        lambda username, password: calls.append((username, password)) or True,
+    )
+    monkeypatch.setattr(web, "get_user", lambda username: user)
+    monkeypatch.setattr(web, "create_token", lambda username: f"token-for-{username}")
+    monkeypatch.setattr(
+        web,
+        "_auth_session_payload",
+        lambda username: {
+            "login_username": username,
+            "is_parent": False,
+            "child_username": None,
+            "system_broadcast": None,
+        },
+    )
+
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "aLiCe", "password": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert calls == [("Alice", "secret")]
+    assert response.get_json()["username"] == "Alice"
+    assert response.get_json()["login_username"] == "Alice"
+    assert response.get_json()["access_token"] == "token-for-Alice"
+
+
+def test_registration_rejects_username_that_differs_only_by_case(
+    monkeypatch, tmp_path
+) -> None:
+    users = {
+        "Alice": {
+            "password_hash": "unused",
+            "created_at": "2026-01-01T00:00:00",
+            "enabled": True,
+        }
+    }
+    invite_code = "CASETEST123"
+    monkeypatch.setattr(web, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(web, "INVITES_FILE", tmp_path / "invites.json")
+    monkeypatch.setattr(web, "INVITES_LOCK_FILE", tmp_path / ".invites.lock")
+    monkeypatch.setattr(web, "mutate_users", lambda mutator: mutator(users))
+    web.save_invites(
+        {
+            "invites": [
+                {
+                    "id": "case-test",
+                    "code_hash": web._hash_invite_code(invite_code),
+                    "created_by_kind": "admin",
+                    "used_at": None,
+                }
+            ]
+        }
+    )
+
+    ok, error = web.register_user_with_invite("alice", "secret1", None, invite_code)
+
+    assert ok is False
+    assert error == "用户名已存在"
+    assert web.load_invites()["invites"][0]["used_at"] is None
 
 
 def test_bootstrap_does_not_overwrite_corrupted_learning_data(

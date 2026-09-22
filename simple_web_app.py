@@ -84,6 +84,7 @@ from user_store import (
     init_user_store,
     load_users,
     mutate_users,
+    resolve_username,
     update_password_hash,
 )
 from app_time import china_now_iso, china_today
@@ -3006,7 +3007,7 @@ def register_user_with_invite(
                 creator = users.get(str(matched.get('created_by') or ''))
                 if not _user_row_is_enabled(creator):
                     return False, '邀请码无效或已使用'
-            if username in users:
+            if any(existing.casefold() == username.casefold() for existing in users):
                 return False, '用户名已存在'
             if is_reserved_parent_username(username):
                 return False, '该用户名保留给家长账户使用，请更换'
@@ -3938,8 +3939,9 @@ def login():
         if not username or not password:
             return jsonify({'error': '用户名和密码不能为空'}), 400
 
-        if verify_user(username, password):
-            urow = get_user(username)
+        login_username = resolve_username(username)
+        if login_username and verify_user(login_username, password):
+            urow = get_user(login_username)
             if not isinstance(urow, dict) or urow.get('enabled', True) is False:
                 return jsonify({'error': '账号已停用，请联系管理员'}), 403
             if isinstance(urow, dict) and is_parent_user_record(urow):
@@ -3949,12 +3951,12 @@ def login():
                 child_row = get_user(child)
                 if not isinstance(child_row, dict) or child_row.get('enabled', True) is False:
                     return jsonify({'error': '学生账号已停用，无法以家长身份登录'}), 403
-            token = create_token(username)
+            token = create_token(login_username)
             body = {
                 'access_token': token,
                 'token_type': 'bearer',
-                'username': username,
-                **_auth_session_payload(username),
+                'username': login_username,
+                **_auth_session_payload(login_username),
             }
             return jsonify(body), 200
         return jsonify({'error': '用户名或密码错误'}), 401
@@ -8291,6 +8293,8 @@ def admin_set_user_parent(username):
                 if not is_parent_user_record(pr) or pr.get('child_username') != username:
                     return False, 400, {'error': '家长登录名已被占用'}
             else:
+                if any(existing.casefold() == pname.casefold() for existing in users):
+                    return False, 400, {'error': '家长登录名已被占用'}
                 created_new = True
                 users[pname] = {
                     'role': USER_ROLE_PARENT,

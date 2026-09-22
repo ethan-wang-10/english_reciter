@@ -13,6 +13,7 @@ from user_store import (
     import_users_from_json,
     init_user_store,
     load_users,
+    resolve_username,
     save_users,
     update_password_hash,
     user_table_count,
@@ -76,6 +77,45 @@ def test_get_user_and_conditional_password_hash_update(ud: Path) -> None:
     assert get_user("alice")["password_hash"] == "old"
     assert update_password_hash("alice", "old", "new") is True
     assert get_user("alice")["password_hash"] == "new"
+
+
+def test_resolve_username_ignores_case_and_preserves_stored_spelling(ud: Path) -> None:
+    init_user_store(ud)
+    save_users(
+        {
+            "Alice_01": {
+                "password_hash": "old",
+                "created_at": "2026-01-01T00:00:00",
+                "enabled": True,
+            }
+        }
+    )
+
+    assert resolve_username("alice_01") == "Alice_01"
+    assert resolve_username("ALICE_01") == "Alice_01"
+    assert resolve_username("missing") is None
+
+
+def test_resolve_username_requires_exact_case_for_legacy_case_collision(ud: Path) -> None:
+    init_user_store(ud)
+    save_users(
+        {
+            "Alice": {
+                "password_hash": "a",
+                "created_at": "2026-01-01T00:00:00",
+                "enabled": True,
+            },
+            "alice": {
+                "password_hash": "b",
+                "created_at": "2026-01-02T00:00:00",
+                "enabled": True,
+            },
+        }
+    )
+
+    assert resolve_username("Alice") == "Alice"
+    assert resolve_username("alice") == "alice"
+    assert resolve_username("ALICE") is None
 
 
 def test_auto_migrate_from_json(ud: Path) -> None:
