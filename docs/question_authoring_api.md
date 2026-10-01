@@ -49,6 +49,10 @@ Authorization: Bearer <admin_access_token>
 
 修订上传会检查当前词库来源与领取时的完整记录，任一变化均返回 `409`，已发布题目不可修订覆盖。修订保存后必须重新完成全部三轮独立审核，旧审核结论不能复用，原作者和修订作者都不能审核该题。租约及幂等标识规则同样适用；请求超时后应查询原任务并复用上传文件，避免重复生成。
 
+只有生成自检、尚不符合当前独立审核要求或已与当前词库来源失配的历史 `questions` 记录，可以通过显式 `legacy_revision` 升级。它必须指定 `words`，不会领取已经满足当前独立审核门槛且来源匹配的题目或被撤回的题目，也不改变普通 `generation`、`revision` 的保护策略。返回 `mode=repair`、完整 `previous_records.questions`、可还原时的 `retained_manuscript` 与原题指纹。旧题通常只有三个干扰项，作者应保留有效正文，修正不合格内容并补齐候选，再上传规定的七个字段。
+
+旧题完整存入不可变任务快照；领取、修订上传、审核拒绝、释放或到期都保留旧 `questions` 正文和题目 ID。只有三阶段独立审核全部通过后才替换旧题。每次上传都会再次校验旧题指纹和词库来源；管理员并发修改、来源变更或其他任务已发布时返回 `409`。历史记录仍可通过原修订任务查询恢复。不要仅凭 `questions` 命名空间的记录数量判断完成：实际练习还要求当前审核门槛与来源匹配。
+
 领取与上传使用同一词库来源：同键优先采用 v2，CSV 重复键采用最后一条，再按级别筛选。新版来源缺少有效释义或可定位答案的例句时，不回退到旧 CSV 出题。其他进程更新 v2 后，查询会检查文件时间并刷新缓存。
 
 外部流程自身不调用 DeepSeek。服务器若仍有旧 DeepSeek 队列，可用已有配置 `GAOKAO_AUTO_BACKFILL_ENABLED=false` 停止旧队列；外部 API 与工作台继续可用。词库联合导入遇到外部任务拥有的词，也不会再次生成或覆盖其选择题。
@@ -70,7 +74,7 @@ Authorization: Bearer <admin_access_token>
 | `POST /claims/<job_id>/release` | `worker_id` |
 | `POST /claims/<job_id>/submissions` | `worker_id`、`submission_id`、`items` |
 
-`kind` 可为 `generation`、`revision`、`recognition_blind`、`context_blind` 或 `feedback`。`limit` 为 1 至 10，租约默认 3600 秒，可设为 60 至 86400 秒。`level` 为空字符串表示所有级别，`高中` 表示高中词库。服务端省略 `level` 时默认高中、省略 `limit` 时默认 5；CLI 显式发送其默认值：全部级别、10 个任务。
+`kind` 可为 `generation`、`revision`、`legacy_revision`、`recognition_blind`、`context_blind` 或 `feedback`。`legacy_revision` 的领取和待办查询必须指定 `words`（查询参数为 JSON 数组，POST 为字符串数组）。`limit` 为 1 至 10，租约默认 3600 秒，可设为 60 至 86400 秒。`level` 为空字符串表示所有级别，`高中` 表示高中词库。服务端省略 `level` 时默认高中、省略 `limit` 时默认 5；CLI 显式发送其默认值：全部级别、10 个任务。
 
 `worker_id`、`request_id`、`submission_id` 等标识最长 128 个字符，以英文字母或数字开头，其余字符可使用英文字母、数字、点、下划线、冒号或连字符。
 
@@ -100,6 +104,15 @@ Authorization: Bearer <admin_access_token>
 ```bash
 python3 scripts/question_authoring_client.py pending \
   --worker-id codex-generator-20260910 --kind generation --level 高中 --limit 3
+```
+
+领取指定旧题进行保留原稿的修订与独立审核：
+
+```bash
+python3 scripts/question_authoring_client.py claim \
+  --worker-id codex-legacy-editor --kind legacy_revision --level '' \
+  --words ache aboard above --request-id legacy-20261001-batch-001 \
+  --output /private/tmp/legacy-claim.json
 ```
 
 领取一批并保存服务器返回的规则与原始任务：

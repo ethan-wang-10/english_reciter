@@ -205,6 +205,19 @@ def test_revision_claim_preserves_raw_history_in_response(http, capsys):
 
 
 @pytest.mark.parametrize("command", ["pending", "claim"])
+def test_legacy_revision_requires_explicit_word_filter_without_http(http, command):
+    assert client.main([command, "--worker-id", "editor", "--kind", "legacy_revision"]) == 1
+    assert not http["calls"]
+
+
+def test_legacy_revision_claim_sends_explicit_words(http):
+    assert client.main(["claim", "--worker-id", "editor", "--kind", "legacy_revision", "--words", " Benefit "]) == 0
+    payload = json.loads(http["calls"][0][0].data)
+    assert payload["kind"] == "legacy_revision"
+    assert payload["words"] == ["benefit"]
+
+
+@pytest.mark.parametrize("command", ["pending", "claim"])
 def test_word_filters_are_normalized_and_encoded(http, command):
     assert client.main([command, "--worker-id", "editor", "--words", " Benefit ", "ice cream"]) == 0
     request = http["calls"][0][0]

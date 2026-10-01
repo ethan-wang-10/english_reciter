@@ -23,7 +23,7 @@ import uuid
 
 API_ROOT = "/api/admin/gaokao/authoring"
 DEFAULT_BASE_URL = "https://english.itorange.online"
-KINDS = ("generation", "revision", "recognition_blind", "context_blind", "feedback")
+KINDS = ("generation", "revision", "legacy_revision", "recognition_blind", "context_blind", "feedback")
 TOKEN_ENV = "ENGLISH_RECITER_ADMIN_TOKEN"
 
 
@@ -235,6 +235,8 @@ def _submission_items(filename: str) -> list:
 
 
 def _build_request(args) -> tuple[str, str, dict | None, dict | None, dict]:
+    if args.command in {"pending", "claim"} and args.kind == "legacy_revision" and args.words is None:
+        raise ClientError("legacy_revision requires --words")
     path = API_ROOT
     body, query, metadata = None, None, {}
     if args.command == "pending":
