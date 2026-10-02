@@ -416,6 +416,14 @@ def _recognition_options(source: dict, raw: Any) -> Tuple[Optional[Tuple[str, Li
     return (correct, distractors), ""
 
 
+def _recognition_headword(source: dict) -> str:
+    key = source["english"]
+    if key == "i" and _recognition_core_sense(source.get("chinese")) == "我":
+        return "I"
+    form = str(source.get("context_answer") or "").strip()
+    return form if normalize_word(form) == key else key
+
+
 def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict], str]:
     if not isinstance(raw, dict):
         return None, "AI result is not an object"
@@ -496,7 +504,7 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
         "recognition": {
             "question_id": recognition_id,
             "type": "recognition",
-            "prompt": key,
+            "prompt": _recognition_headword(source),
             "phonetic": source.get("phonetic") or "",
             "options": recognition_options,
             "answer_option_id": recognition_answer,
@@ -1654,7 +1662,7 @@ def _raw_from_published(source: dict, record: Any) -> Optional[dict]:
         raw[f"{kind}_distractors"] = [row["text"] for row in options if row is not answer]
         raw[f"{kind}_explanation_zh"] = question.get("explanation_zh")
         if kind == "recognition":
-            if question.get("prompt") != source["english"]:
+            if normalize_word(question.get("prompt")) != source["english"]:
                 return None
         else:
             prompt = question.get("prompt")
@@ -2493,7 +2501,10 @@ def get_question(word_key: str, question_type: str, *, source: Any = _SOURCE_UNS
         return None
     question = row.get(question_type) if isinstance(row, dict) else None
     if isinstance(question, dict) and isinstance(source, dict) and question_type == "recognition":
-        question = {**question, "phonetic": source.get("phonetic") or ""}
+        question = {
+            **question, "prompt": _recognition_headword(source),
+            "phonetic": source.get("phonetic") or "",
+        }
     return question if isinstance(question, dict) else None
 
 
@@ -2507,6 +2518,11 @@ def get_question_by_id(question_id: str, *, source: Any = _SOURCE_UNSET) -> Opti
     question, record = found
     if source is not _SOURCE_UNSET and not record_matches_source(record, source):
         return None
+    if isinstance(source, dict) and question.get("type") == "recognition":
+        question = {
+            **question, "prompt": _recognition_headword(source),
+            "phonetic": source.get("phonetic") or "",
+        }
     return question if _is_approved_record(record) else None
 
 

@@ -110,7 +110,58 @@ def test_phonetic_update_keeps_current_published_questions(private_question_bank
 
     assert result["pending"] == 0
     assert questions.get_question("benefit", "context", source=updated_source) == original_record["context"]
+    question_id = original_record["recognition"]["question_id"]
+    assert questions.get_question_by_id(question_id, source=updated_source)["phonetic"] == "/new/"
     assert questions.load_bank()["questions"]["benefit"] == original_record
+
+
+@pytest.mark.parametrize("english,chinese,form,title", [
+    ("i", "pron. 我", "I", "I"),
+    ("alice", "n. 艾丽丝", "Alice", "Alice"),
+    ("nasa", "n. 航天局", "NASA", "NASA"),
+    ("go", "v. 去", "went", "go"),
+])
+def test_recognition_title_preserves_headword_casing_not_inflection(english, chinese, form, title):
+    source = {**_source(english, chinese), "context_answer": form}
+    raw = _generated(english)
+    raw["context_sentence"] = raw["context_sentence"].replace(english, form)
+    record, error = questions.finalize_generated_questions(source, raw)
+
+    assert error == ""
+    assert record["recognition"]["prompt"] == title
+    assert questions.candidate_pool_from_published(source, record) is not None
+
+
+@pytest.mark.parametrize("english,chinese,form", [
+    ("i", "pron. 我", "I"),
+    ("alice", "n. 艾丽丝", "Alice"),
+])
+def test_display_casing_preserves_stored_questions_and_never_calls_generation(
+    private_question_bank, english, chinese, form,
+):
+    source = {**_source(english, chinese), "context_answer": form}
+    record, error = questions.finalize_generated_questions(source, _generated(english))
+    assert error == ""
+    record = questions._mark_independently_audited(record)
+    record["recognition"]["prompt"] = english
+    before = copy.deepcopy(record)
+    bank = questions.empty_bank()
+    bank["questions"][english] = record
+    questions._write_bank_unlocked(bank)
+
+    def unexpected_request(*args):
+        pytest.fail("display casing must not request generation or audit")
+
+    assert questions.get_question(english, "recognition", source=source)["prompt"] == form
+    by_id = questions.get_question_by_id(record["recognition"]["question_id"], source=source)
+    assert by_id["prompt"] == form
+    assert questions.candidate_pool_from_published(source, before) is not None
+    assert questions.sources_needing_prompt_refresh([source]) == []
+    result = questions.generate_audited_and_persist(
+        [source], unexpected_request, audit_chat=unexpected_request, refresh_prompt=True,
+    )
+    assert result["pending"] == 0
+    assert questions.load_bank()["questions"][english] == before
 
 
 def test_semantic_source_change_holds_old_content_without_regeneration(private_question_bank):
