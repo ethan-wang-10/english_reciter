@@ -161,6 +161,104 @@ def request_json(
         raise ClientError(payload["error"], response=payload) from exc
 
 
+class JsonSession:
+    """Reuse one authenticated HTTP connection for a multi-request batch.
+
+    The command-line client intentionally keeps one request per process. Long-running
+    batch runners can use this session to avoid a TLS handshake for every claim or
+    submission while retaining the same response and error semantics as
+    :func:`request_json`.
+    """
+
+    def __init__(self, base_url: str, token: str, *, timeout: float = 60):
+        self.base_url = _validated_base_url(base_url)
+        self.token = token
+        self.timeout = timeout
+        self._parsed = urllib.parse.urlsplit(self.base_url)
+        self._context = _ssl_context() if self._parsed.scheme == "https" else None
+        self._connection: http.client.HTTPConnection | None = None
+
+    def close(self) -> None:
+        connection, self._connection = self._connection, None
+        if connection is not None:
+            try:
+                connection.close()
+            except OSError:
+                pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def _target(self, path: str, query: dict | None) -> str:
+        if not isinstance(path, str) or not path.startswith("/"):
+            raise ClientError("Request path must start with '/'")
+        prefix = self._parsed.path.rstrip("/")
+        target = prefix + path
+        if not target:
+            target = "/"
+        if query:
+            target += "?" + urllib.parse.urlencode(query)
+        return target
+
+    def _get_connection(self) -> http.client.HTTPConnection:
+        if self._connection is None:
+            connection_type = (
+                http.client.HTTPSConnection
+                if self._parsed.scheme == "https"
+                else http.client.HTTPConnection
+            )
+            kwargs = {"timeout": self.timeout}
+            if self._context is not None:
+                kwargs["context"] = self._context
+            self._connection = connection_type(
+                self._parsed.hostname, self._parsed.port, **kwargs
+            )
+        return self._connection
+
+    def request_json(
+        self, method: str, path: str, *, body: dict | None = None,
+        query: dict | None = None,
+    ) -> dict:
+        target = self._target(path, query)
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.token}",
+            "Connection": "keep-alive",
+        }
+        data = None
+        if body is not None:
+            data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        started = time.monotonic()
+        try:
+            connection = self._get_connection()
+            connection.request(method, target, body=data, headers=headers)
+            response = connection.getresponse()
+            raw = response.read()
+            status = response.status
+            if response.will_close:
+                self.close()
+            if 300 <= status < 400:
+                self.close()
+                raise ClientError("Server redirect refused; use the final HTTPS server URL")
+            if status >= 400:
+                try:
+                    payload = _decode_response(raw)
+                except ClientError:
+                    payload = {"error": f"HTTP {status}"}
+                raise ClientError(f"HTTP {status}", response={**payload, "http_status": status})
+            return _decode_response(raw)
+        except ClientError:
+            raise
+        except (OSError, http.client.HTTPException) as exc:
+            self.close()
+            payload = _network_failure(exc, method, path, started)
+            raise ClientError(payload["error"], response=payload) from exc
+
+
 def _bounded_int(minimum: int, maximum: int):
     def parse(value: str) -> int:
         try:

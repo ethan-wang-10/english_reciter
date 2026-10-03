@@ -61,6 +61,82 @@ def test_empty_default_trust_store_loads_certifi_without_disabling_verification(
     assert context.check_hostname
 
 
+def test_json_session_reuses_connection_and_closes_on_server_request(monkeypatch):
+    state = {"instances": [], "requests": []}
+
+    class Response:
+        status = 200
+        will_close = False
+
+        def read(self):
+            return b'{"ok": true}'
+
+    class Connection:
+        def __init__(self, host, port, *, timeout, context):
+            state["instances"].append((host, port, timeout, context))
+
+        def request(self, method, target, *, body, headers):
+            state["requests"].append((method, target, body, headers))
+
+        def getresponse(self):
+            return Response()
+
+        def close(self):
+            state["closed"] = state.get("closed", 0) + 1
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    monkeypatch.setattr(client, "_ssl_context", lambda: context)
+    monkeypatch.setattr(client.http.client, "HTTPSConnection", Connection)
+
+    with client.JsonSession("https://example.org", "session-token", timeout=12) as session:
+        assert session.request_json("GET", "/first", query={"page": 1}) == {"ok": True}
+        assert session.request_json("POST", "/second", body={"value": "值"}) == {"ok": True}
+
+    assert len(state["instances"]) == 1
+    assert state["instances"][0][:3] == ("example.org", None, 12)
+    assert state["requests"][0][1] == "/first?page=1"
+    assert state["requests"][1][1] == "/second"
+    assert state["requests"][1][2] == '{"value": "值"}'.encode("utf-8")
+    assert state["requests"][0][3]["Authorization"] == "Bearer session-token"
+    assert state["closed"] == 1
+
+
+def test_json_session_reconnects_after_connection_failure(monkeypatch):
+    state = {"instances": 0, "requests": 0}
+
+    class Response:
+        status = 200
+        will_close = False
+
+        def read(self):
+            return b'{"ok": true}'
+
+    class Connection:
+        def __init__(self, *args, **kwargs):
+            state["instances"] += 1
+            self.instance = state["instances"]
+
+        def request(self, *args, **kwargs):
+            state["requests"] += 1
+            if self.instance == 1:
+                raise ConnectionResetError("reset")
+
+        def getresponse(self):
+            return Response()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(client, "_ssl_context", lambda: ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
+    monkeypatch.setattr(client.http.client, "HTTPSConnection", Connection)
+    session = client.JsonSession("https://example.org", "session-token")
+    with pytest.raises(client.ClientError) as raised:
+        session.request_json("GET", "/first")
+    assert raised.value.response["error_kind"] == "connection"
+    assert session.request_json("GET", "/retry") == {"ok": True}
+    assert state == {"instances": 2, "requests": 2}
+
+
 def test_populated_default_trust_store_is_preserved(monkeypatch):
     monkeypatch.delenv("SSL_CERT_FILE", raising=False)
     monkeypatch.delenv("SSL_CERT_DIR", raising=False)
