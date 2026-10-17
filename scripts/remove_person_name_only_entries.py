@@ -104,15 +104,30 @@ def _apply(keys: set[str], csv_rows: list[dict], v2_rows: list[dict]) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="remove the reported entries")
+    parser.add_argument(
+        "--key",
+        action="append",
+        default=[],
+        metavar="WORD",
+        help="also remove a manually reviewed personal-name key (repeatable)",
+    )
     args = parser.parse_args()
 
     csv_rows = web._read_words_csv_from_path(web.WORDS_CSV_FILE)
     v2_rows = wordbank_v2._read_words_v2_for_append()
-    keys = _selected_keys(csv_rows, v2_rows)
+    detected_keys = _selected_keys(csv_rows, v2_rows)
+    manual_keys = {
+        wordbank_v2.normalize_english_key(value)
+        for value in args.key
+        if wordbank_v2.normalize_english_key(value)
+    }
+    keys = detected_keys | manual_keys
     result = {
         "mode": "apply" if args.apply else "dry_run",
         "keys": sorted(keys),
         "count": len(keys),
+        "detected_keys": sorted(detected_keys),
+        "manual_keys": sorted(manual_keys),
     }
     if args.apply:
         result.update(_apply(keys, csv_rows, v2_rows))
