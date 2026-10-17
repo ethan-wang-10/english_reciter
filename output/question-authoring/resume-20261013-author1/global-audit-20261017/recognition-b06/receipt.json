@@ -1,0 +1,33 @@
+{
+  "items": [
+    {
+      "error": "",
+      "item_id": "bc2f60cff19a4aa986c921bbfa37db9e",
+      "status": "awaiting_context_blind"
+    },
+    {
+      "error": "semantic audit rejected recognition; insufficient safe options (0/3); acceptable options: ['甚至']",
+      "item_id": "9ff7f345af5c4f2b9054e8f786ac74ea",
+      "status": "rejected"
+    },
+    {
+      "error": "semantic audit rejected recognition correct answer",
+      "item_id": "46efb98f868d42c196b6a32e050e39e1",
+      "status": "rejected"
+    },
+    {
+      "error": "semantic audit rejected recognition correct answer",
+      "item_id": "3e240f35de0845399a4e37a5555c03dd",
+      "status": "rejected"
+    },
+    {
+      "error": "",
+      "item_id": "9d5acecab6dc4833be6444bfff2e3cb9",
+      "status": "awaiting_context_blind"
+    }
+  ],
+  "job_id": "eecfcbebbb174e26baf56cd0573760a0",
+  "kind": "recognition_blind",
+  "status": "completed",
+  "submission_id": "global-recognition-audit-20261017-b06-submit"
+}

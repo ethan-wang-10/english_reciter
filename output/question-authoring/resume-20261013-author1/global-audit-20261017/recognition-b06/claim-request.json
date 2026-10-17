@@ -1,0 +1,12 @@
+{
+  "method": "POST",
+  "path": "/claims",
+  "body": {
+    "kind": "recognition_blind",
+    "worker_id": "codex-global-recognition-audit-20261017",
+    "request_id": "global-recognition-audit-20261017-b06",
+    "level": "",
+    "limit": 5,
+    "ttl_seconds": 86400
+  }
+}
