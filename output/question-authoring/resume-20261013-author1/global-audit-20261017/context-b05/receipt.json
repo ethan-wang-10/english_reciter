@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "error": "",
+      "item_id": "0b4415a934b9436e804de567ee3b3e39",
+      "status": "awaiting_feedback"
+    },
+    {
+      "error": "semantic audit rejected context quality: 七个选项均可作 exchange dollars for 的宾语，词形和句法自然。yen、pounds、rubles、euros 是不同货币；coins、cash 和 checks 也都可能是兑换所得的支付形式。题目没有交代目的地或兑换方式，因此汇率线索只能说明涉及金钱兑换，无法在这些选项中唯一确定答案。没有直接释义泄露。",
+      "item_id": "1254684da0a14ccebf624e2356707f01",
+      "status": "rejected"
+    },
+    {
+      "error": "",
+      "item_id": "ff18254bd36346b7942e12c7a794d01e",
+      "status": "awaiting_feedback"
+    },
+    {
+      "error": "",
+      "item_id": "e6eff07041164101981fe2f83e7f7551",
+      "status": "awaiting_feedback"
+    }
+  ],
+  "job_id": "fc1c62871a374c03bb8ed3230ec9106f",
+  "kind": "context_blind",
+  "status": "completed",
+  "submission_id": "global-audit-20261017-context-b05-submit"
+}
