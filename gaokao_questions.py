@@ -212,7 +212,7 @@ def _generated_context(source: dict, raw: dict) -> Tuple[Optional[dict], str]:
 def source_from_wordbank_row(row: dict) -> Optional[dict]:
     english = normalize_word(row.get("english"))
     chinese = str(row.get("chinese") or "").strip()
-    if not english or not chinese:
+    if not english or not chinese or is_person_name_only_definition(chinese):
         return None
     context_sentence = None
     context_answer = english
@@ -324,6 +324,42 @@ _RECOGNITION_POS_RE = re.compile(
 )
 _RECOGNITION_SENSE_SEPARATOR_RE = re.compile(r"[；;、/，,]+")
 _RECOGNITION_METADATA_LABELS = {"人名", "姓氏", "男名", "女名", "男子名", "女子名", "地名", "城市名", "州名", "国家名", "朝代", "英国城市", "心理学", "英式", "美式", "表感叹"}
+_PERSON_NAME_LABEL_RE = re.compile(r"(?:人名|姓名|男名|女名|男子名|女子名)")
+_NON_PERSON_PROPER_NAME_LABEL_RE = re.compile(
+    r"(?:地名|城市|州名|国家名|岛屿|山脉|河流|海峡|朝代|民族|商行|品牌|机构|公司)"
+)
+_SURNAME_LABEL_RE = re.compile(r"姓氏")
+
+
+def is_person_name_only_definition(value: Any) -> bool:
+    """Return whether every listed sense is exclusively a personal name.
+
+    A word such as ``surname`` is a normal lexical item even though its Chinese
+    definition is ``姓氏``. Conversely, an entry such as ``艾米（人名）`` has no
+    teachable common-word sense and should never be sent to question authoring.
+    Mixed entries (for example, person/place names) remain available for a
+    separate editorial decision instead of being deleted automatically.
+    """
+    text = _RECOGNITION_POS_RE.sub("", " ".join(str(value or "").strip().split())).strip()
+    parts = [part.strip() for part in re.split(r"[；;]", text) if part.strip()]
+    if not parts:
+        return False
+
+    for part in parts:
+        if _NON_PERSON_PROPER_NAME_LABEL_RE.search(part):
+            return False
+        if _PERSON_NAME_LABEL_RE.search(part):
+            continue
+        if not _SURNAME_LABEL_RE.search(part):
+            return False
+
+        # "姓氏" itself is a normal definition (for example, the headword
+        # "surname"). A named surname, such as "本顿（姓氏）", is not.
+        without_label = _SURNAME_LABEL_RE.sub("", part)
+        without_label = re.sub(r"[()（）\[\]【】\s,，。．:：/／、-]", "", without_label)
+        if not without_label:
+            return False
+    return True
 
 
 def _recognition_text(value: Any) -> str:
