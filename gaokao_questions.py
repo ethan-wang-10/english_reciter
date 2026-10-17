@@ -212,7 +212,12 @@ def _generated_context(source: dict, raw: dict) -> Tuple[Optional[dict], str]:
 def source_from_wordbank_row(row: dict) -> Optional[dict]:
     english = normalize_word(row.get("english"))
     chinese = str(row.get("chinese") or "").strip()
-    if not english or not chinese or is_person_name_only_definition(chinese):
+    if (
+        not english
+        or not chinese
+        or is_person_name_only_definition(chinese)
+        or is_geographic_name_fragment_only_definition(chinese)
+    ):
         return None
     context_sentence = None
     context_answer = english
@@ -329,6 +334,7 @@ _NON_PERSON_PROPER_NAME_LABEL_RE = re.compile(
     r"(?:地名|城市|州名|国家名|岛屿|山脉|河流|海峡|朝代|民族|商行|品牌|机构|公司)"
 )
 _SURNAME_LABEL_RE = re.compile(r"姓氏")
+_GEOGRAPHIC_NAME_FRAGMENT_LABEL_RE = re.compile(r"(?:地名一部分|州名|地区名)")
 
 
 def is_person_name_only_definition(value: Any) -> bool:
@@ -360,6 +366,17 @@ def is_person_name_only_definition(value: Any) -> bool:
         if not without_label:
             return False
     return True
+
+
+def is_geographic_name_fragment_only_definition(value: Any) -> bool:
+    """Return whether all senses label a geographic name or name fragment.
+
+    These labels describe proper names rather than vocabulary that can support a
+    self-contained choice question. The wordbank retains them for other uses.
+    """
+    text = _RECOGNITION_POS_RE.sub("", " ".join(str(value or "").strip().split())).strip()
+    parts = [part.strip() for part in re.split(r"[；;]", text) if part.strip()]
+    return bool(parts) and all(_GEOGRAPHIC_NAME_FRAGMENT_LABEL_RE.search(part) for part in parts)
 
 
 def _recognition_text(value: Any) -> str:
