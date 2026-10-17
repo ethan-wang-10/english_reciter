@@ -410,6 +410,19 @@ def test_recognition_uses_later_candidates_when_earlier_values_are_invalid() -> 
     assert option_texts == {'憎恶', '赞美', '忽视', '允许'}
 
 
+def test_recognition_rejects_repeated_hanzi_placeholder_options() -> None:
+    raw = _generated('england')
+    raw['recognition_distractors'] = ['门门门', '水水水', '火火火', '人人人', '天天天', '山山山']
+
+    record, error = questions.finalize_generated_questions(
+        _source('england', 'n. 英格兰'),
+        raw,
+    )
+
+    assert record is None
+    assert error == 'recognition requires three distinct Chinese distractors with one sense each'
+
+
 def test_generation_prompt_keeps_dynamic_input_after_cacheable_rules() -> None:
     first = questions.build_generation_prompt([_source('novel', 'n. 小说')])
     second = questions.build_generation_prompt([_source('apple', 'n. 苹果')])

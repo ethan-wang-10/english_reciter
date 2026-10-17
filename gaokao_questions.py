@@ -397,6 +397,12 @@ def _recognition_senses(value: Any) -> List[str]:
     return senses
 
 
+def _is_repeated_single_hanzi(text: str) -> bool:
+    """Reject placeholder-like options such as ``门门门`` or ``水水``."""
+    chars = re.findall(r"[\u3400-\u9fff]", text)
+    return len(chars) >= 2 and len(set(chars)) == 1
+
+
 def _recognition_candidate_rows(
     source: dict,
     raw: Any,
@@ -419,7 +425,12 @@ def _recognition_candidate_rows(
             continue
         text = _recognition_core_sense(value)
         key = normalize_word(text)
-        if not text or key in seen or not re.fullmatch(r"[\u3400-\u9fff]+", text):
+        if (
+            not text
+            or key in seen
+            or not re.fullmatch(r"[\u3400-\u9fff]+", text)
+            or _is_repeated_single_hanzi(text)
+        ):
             continue
         seen.add(key)
         candidates.append((index, text, len(re.findall(r"[\u3400-\u9fff]", text))))
