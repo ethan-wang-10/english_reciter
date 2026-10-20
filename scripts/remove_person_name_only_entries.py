@@ -9,6 +9,7 @@ editorial decision.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import stat
@@ -60,12 +61,39 @@ def _backup(path: Path) -> str:
     return str(backup)
 
 
-def _remove_question_records(keys: set[str]) -> dict[str, int]:
+def _write_question_record_backup(snapshot: dict[str, dict[str, dict]]) -> str:
+    path = questions.QUESTION_BANK_FILE.with_name(
+        f"{questions.QUESTION_BANK_FILE.name}.before-remove-person-name-records-{uuid.uuid4().hex}.json"
+    )
+    original_stat = questions.QUESTION_BANK_FILE.stat()
+    encoded = (json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    with path.open("xb") as stream:
+        stream.write(encoded)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.chmod(path, stat.S_IMODE(original_stat.st_mode))
+    try:
+        os.chown(path, original_stat.st_uid, original_stat.st_gid)
+    except PermissionError:
+        pass
+    return str(path)
+
+
+def _remove_question_records(keys: set[str]) -> dict:
     if not keys:
-        return {namespace: 0 for namespace in QUESTION_NAMESPACES}
+        return {"counts": {namespace: 0 for namespace in QUESTION_NAMESPACES}, "backup": None}
     removed = {namespace: 0 for namespace in QUESTION_NAMESPACES}
     with questions._thread_lock, questions._interprocess_lock():
         bank = questions._read_bank_keys_unlocked(keys)
+        snapshot = {
+            namespace: {
+                key: copy.deepcopy(bank[namespace][key])
+                for key in keys
+                if key in bank[namespace]
+            }
+            for namespace in QUESTION_NAMESPACES
+        }
+        backup = _write_question_record_backup(snapshot) if any(snapshot.values()) else None
         for namespace in QUESTION_NAMESPACES:
             records = bank[namespace]
             for key in keys:
@@ -74,7 +102,7 @@ def _remove_question_records(keys: set[str]) -> dict[str, int]:
                     removed[namespace] += 1
         if any(removed.values()):
             questions._write_bank_keys_unlocked(bank, keys)
-    return removed
+    return {"counts": removed, "backup": backup}
 
 
 def _apply(keys: set[str], csv_rows: list[dict], v2_rows: list[dict]) -> dict:
