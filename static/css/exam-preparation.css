@@ -32,6 +32,19 @@
 .exam-hint { font-size: 0.88rem; margin-top: 8px; }
 .exam-panel .btn { margin-top: 18px; }
 .exam-panel button:disabled { opacity: 0.55; cursor: default; }
+.exam-editor-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.exam-sentences-section { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px; }
+.exam-sentences-section summary { cursor: pointer; font-weight: 700; }
+.exam-sentences-section summary span { float: right; font-weight: 400; color: var(--text-secondary); }
+.exam-sentence-list { display: grid; gap: 12px; margin-top: 14px; }
+.exam-sentence-row { border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-width: 0; }
+.exam-sentence-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.exam-sentence-row .exam-remove-sentence { margin: 0; padding: 6px 10px; min-height: 32px; font-size: 0.82rem; }
+.exam-sentence-row label { font-size: 0.88rem; }
+.exam-sentence-row textarea { min-height: 90px; }
+.exam-paper-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.exam-paper-toolbar > span { color: var(--text-secondary); font-size: 0.88rem; }
+.exam-paper-toolbar .btn { margin: 0; padding: 8px 14px; font-size: 0.88rem; }
 .exam-message {
     background: var(--primary-light);
     border-radius: 14px;
@@ -52,12 +65,16 @@
     color: var(--text-primary);
     text-align: left;
     cursor: pointer;
+    width: 100%;
+    min-height: max-content;
     overflow-wrap: anywhere;
 }
 .exam-paper-card strong { font-size: 1rem; }
 .exam-paper-card span { font-size: 0.82rem; }
 .exam-paper-card[aria-pressed="true"] { border-color: var(--primary-dark); background: #f2ffe8; }
 .exam-paper-preview { max-height: 72px; overflow: auto; overflow-wrap: anywhere; }
+#exam-paper-sentence-preview { white-space: pre-line; }
+#exam-spelling-answer { min-height: 72px; }
 .exam-choice-toggle { display: flex; align-items: flex-start; gap: 10px; margin-top: 20px; cursor: pointer; }
 .exam-choice-toggle input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--primary-dark); flex-shrink: 0; }
 .exam-attempt-panel { max-width: 780px; margin-inline: auto; }
@@ -94,6 +111,8 @@
 .exam-wrong-card { padding: 16px; background: #fff8f5; border: 1px solid #f4d8cc; border-radius: 14px; overflow-wrap: anywhere; }
 .exam-wrong-card h4 { margin: 0 0 8px; }
 .exam-wrong-card p + p { margin-top: 6px; }
+.exam-paper-mistakes { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 8px; }
+.exam-result-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 
 @media (max-width: 720px) {
     .exam-setup-grid { grid-template-columns: 1fr; gap: 18px; }
@@ -102,4 +121,7 @@
     .exam-attempt-actions > .btn { width: 100%; }
     .exam-attempt-actions > div { width: 100%; justify-content: space-between; }
     .exam-panel > .btn, #exam-paper-settings > .btn { width: 100%; }
+    .exam-editor-actions > .btn { flex: 1; }
+    .exam-result-actions { flex-direction: column; }
+    .exam-result-actions .btn, .exam-paper-mistakes .btn { width: 100%; }
 }

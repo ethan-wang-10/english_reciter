@@ -6,6 +6,7 @@ from exam_preparation import (
     ExamPreparationError,
     ExamPreparationStore,
     MAX_PAPER_NAME,
+    parse_exam_sentences,
     parse_exam_words,
 )
 
@@ -32,15 +33,13 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
     def list_papers(username):
         return jsonify({"papers": store(username).list_papers()})
 
-    @routes.post("/papers")
-    @token_required
-    def create_paper(username):
-        body = _body()
+    def paper_content(username, body):
         name = body.get("name")
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > MAX_PAPER_NAME:
             raise ExamPreparationError(f"请填写 1～{MAX_PAPER_NAME} 个字符的考卷名称")
-        keys, duplicates = parse_exam_words(body.get("words"))
-        found = word_lookup(username, keys)
+        sentences = parse_exam_sentences(body.get("sentences", []))
+        keys, duplicates = parse_exam_words(body.get("words", ""), allow_empty=bool(sentences))
+        found = word_lookup(username, keys) if keys else {}
         missing = [key for key in keys if not (found.get(key, {}).get("chinese") or "").strip()]
         if missing:
             preview = "、".join(missing[:12]) + ("等" if len(missing) > 12 else "")
@@ -49,8 +48,26 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
                 missing_words=missing,
             )
         words = [{"english": found[key]["english"], "chinese": found[key]["chinese"]} for key in keys]
-        paper = store(username).create_paper(name.strip(), words)
+        return name.strip(), words, sentences, duplicates
+
+    @routes.post("/papers")
+    @token_required
+    def create_paper(username):
+        name, words, sentences, duplicates = paper_content(username, _body())
+        paper = store(username).create_paper(name, words, sentences)
         return jsonify({"paper": paper, "duplicates_removed": duplicates}), 201
+
+    @routes.put("/papers/<paper_id>")
+    @token_required
+    def update_paper(username, paper_id):
+        user_store = store(username)
+        existing = user_store.get_paper(paper_id)
+        body = _body()
+        # Older clients editing only words must preserve any existing sentence questions.
+        body.setdefault("sentences", existing["sentences"])
+        name, words, sentences, duplicates = paper_content(username, body)
+        paper = user_store.update_paper(paper_id, name, words, sentences)
+        return jsonify({"paper": paper, "duplicates_removed": duplicates})
 
     @routes.post("/papers/<paper_id>/attempts")
     @token_required
@@ -68,12 +85,24 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
     @token_required
     @parent_forbidden
     def get_attempt(username, attempt_id):
-        return jsonify(store(username).get_attempt(attempt_id))
+        user_store = store(username)
+        payload = user_store.get_attempt(attempt_id)
+        payload["mistake_count"] = user_store.mistake_count(payload["attempt"]["paper_id"])
+        return jsonify(payload)
 
     @routes.post("/attempts/<attempt_id>/submit")
     @token_required
     @parent_forbidden
     def submit_attempt(username, attempt_id):
-        return jsonify({"result": store(username).submit_attempt(attempt_id, _body().get("answers"))})
+        user_store = store(username)
+        result = user_store.submit_attempt(attempt_id, _body().get("answers"))
+        return jsonify({"result": result, "mistake_count": user_store.mistake_count(result["paper_id"])})
+
+    @routes.post("/papers/<paper_id>/mistake-reviews")
+    @token_required
+    @parent_forbidden
+    def start_mistake_review(username, paper_id):
+        _body()
+        return jsonify({"attempt": store(username).start_mistake_review(paper_id)}), 201
 
     app.register_blueprint(routes)

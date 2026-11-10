@@ -307,6 +307,59 @@ def test_exam_api_choices_require_real_boolean(client, exam_environment):
     assert len(attempt['questions']) == 1
 
 
+def test_exam_api_updates_existing_paper_and_preserves_failed_edit(client, exam_environment):
+    headers = {'Authorization': 'Bearer alice'}
+    paper = client.post('/api/exam-preparation/papers', headers=headers, json={'name': '原考卷', 'words': 'apple'}).get_json()['paper']
+    url = f"/api/exam-preparation/papers/{paper['id']}"
+    sentences = [{'chinese': '我喜欢苹果。', 'answers': ['I like apples.', 'I love apples.']}]
+    response = client.put(url, headers=headers, json={'name': '修改后的考卷', 'words': 'apple,look after,apple', 'sentences': sentences})
+    assert response.status_code == 200
+    updated = response.get_json()['paper']
+    assert updated['id'] == paper['id']
+    assert (updated['word_count'], updated['sentence_count']) == (2, 1)
+    assert updated['sentences'] == sentences
+    assert response.get_json()['duplicates_removed'] == 1
+    assert client.put(url, headers=headers, json={'name': '不能保存', 'words': 'unknown'}).status_code == 400
+    assert client.get('/api/exam-preparation/papers', headers=headers).get_json()['papers'][0]['name'] == '修改后的考卷'
+    assert client.put(url, headers=headers, json={'name': '保留句子', 'words': 'apple'}).status_code == 200
+    assert client.get('/api/exam-preparation/papers', headers=headers).get_json()['papers'][0]['sentences'] == sentences
+    assert client.put(url, headers=headers, json={'name': '删除句子', 'words': 'apple', 'sentences': []}).status_code == 200
+    assert client.get('/api/exam-preparation/papers', headers=headers).get_json()['papers'][0]['sentence_count'] == 0
+
+
+def test_exam_api_sentence_only_paper_can_be_edited_by_parent_and_taken_by_child(client, exam_environment):
+    parent = {'Authorization': 'Bearer alice_parent'}
+    child = {'Authorization': 'Bearer alice'}
+    sentences = [{'chinese': '我喜欢苹果。', 'answers': ['I like apples.']}]
+    response = client.post('/api/exam-preparation/papers', headers=parent, json={'name': '句子卷', 'sentences': sentences})
+    assert response.status_code == 201
+    paper = response.get_json()['paper']
+    url = f"/api/exam-preparation/papers/{paper['id']}"
+    sentences[0]['answers'].append('I love apples.')
+    assert client.put(url, headers=parent, json={'name': '句子卷修改', 'words': '', 'sentences': sentences}).status_code == 200
+    attempt = client.post(f'{url}/attempts', headers=child, json={}).get_json()['attempt']
+    assert (attempt['word_count'], attempt['sentence_count']) == (0, 1)
+    question = attempt['questions'][0]
+    assert set(question) == {'id', 'type', 'prompt'}
+    response = client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=child, json={'answers': {question['id']: ' i LOVE  apples！ '}})
+    assert response.get_json()['result']['score'] == 100
+    assert not (exam_environment / 'alice' / 'learning.sqlite3').exists()
+
+
+def test_exam_api_edit_requires_authentication_and_ownership(client, exam_environment):
+    headers = {'Authorization': 'Bearer alice'}
+    body = {'name': '原考卷', 'words': 'apple'}
+    paper = client.post('/api/exam-preparation/papers', headers=headers, json=body).get_json()['paper']
+    url = f"/api/exam-preparation/papers/{paper['id']}"
+    assert client.put(url, json=body).status_code == 401
+    assert client.put(url, headers={'Authorization': 'Bearer bob'}, json=body).status_code == 404
+    assert client.put('/api/exam-preparation/papers/missing', headers=headers, json=body).status_code == 404
+    assert client.put(url, headers=headers, json=[]).status_code == 400
+    response = client.put(url, headers=headers, json={'name': '不完整句子', 'words': 'apple', 'sentences': [{'chinese': '你好', 'answers': []}]})
+    assert response.status_code == 400
+    assert client.get('/api/exam-preparation/papers', headers=headers).get_json()['papers'][0]['name'] == '原考卷'
+
+
 def test_password_reset_policy_reads_environment(monkeypatch) -> None:
     monkeypatch.setenv("PASSWORD_RESET_TTL_MINUTES", "45")
     monkeypatch.setenv("PASSWORD_RESET_COOLDOWN_SECONDS", "90")

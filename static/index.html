@@ -7,7 +7,7 @@
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/brand/logo-mark.svg?v=parrot2">
     <link rel="stylesheet" href="/static/css/style.css?v=20261110-nav-more-v1">
-    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-1">
+    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-mistakes-v1">
 </head>
 <body>
     <div id="app">
@@ -446,32 +446,52 @@
             <div id="exam-preparation-section" class="section">
                 <div class="container exam-container">
                     <h2>考前准备</h2>
-                    <p class="exam-intro">把这次要考的单词整理成考卷，随时开始一场模拟考试。</p>
+                    <p class="exam-intro">把要考的单词和中译英句子整理成考卷，随时开始一场模拟考试。</p>
                     <p id="exam-preparation-message" class="exam-message" role="status" aria-live="polite" hidden></p>
                     <div id="exam-setup-view" class="exam-setup-grid">
                         <form id="exam-create-form" class="exam-panel">
-                            <h3>新建考卷</h3>
+                            <h3 id="exam-editor-title">新建考卷</h3>
+                            <p id="exam-editor-hint" class="exam-hint" hidden>修改后保存即可用于下一次考试，历史考试记录会保留。</p>
                             <label for="exam-words">本次考试单词</label>
-                            <textarea id="exam-words" rows="6" maxlength="20000" required placeholder="例如：apple, banana, beautiful, look after" aria-describedby="exam-words-hint exam-word-count" spellcheck="false" autocapitalize="none" autocorrect="off"></textarea>
+                            <textarea id="exam-words" rows="6" maxlength="20000" placeholder="例如：apple, banana, beautiful, look after" aria-describedby="exam-words-hint exam-word-count" spellcheck="false" autocapitalize="none" autocorrect="off"></textarea>
                             <p id="exam-words-hint" class="exam-hint">用英文或中文逗号分隔，也支持换行。重复单词会自动合并，释义从词库或已导入单词中匹配。</p>
                             <p id="exam-word-count" class="exam-hint" aria-live="polite">已输入 0 个不同的单词 · 最多 300 个</p>
+                            <details id="exam-sentences-section" class="exam-sentences-section">
+                                <summary>句子中译英（可选）<span id="exam-sentence-count">0 道</span></summary>
+                                <p class="exam-hint">填写中文题干和英文参考答案，可只添加句子题。多个正确译法每行一个，最多 100 道题。</p>
+                                <p id="exam-sentence-grading-hint" class="exam-hint">按参考答案匹配，忽略大小写、多余空格和句末标点。其他正确译法请一并填写。</p>
+                                <div id="exam-sentence-list" class="exam-sentence-list"></div>
+                                <button id="exam-add-sentence" type="button" class="btn btn-secondary">＋ 添加句子题</button>
+                            </details>
                             <label for="exam-paper-name">考卷名称</label>
                             <input id="exam-paper-name" type="text" maxlength="80" required placeholder="例如：期中考试 · Unit 1–3">
-                            <button id="exam-save-paper" type="submit" class="btn btn-primary">保存并生成考卷</button>
+                            <div class="exam-editor-actions">
+                                <button id="exam-save-paper" type="submit" class="btn btn-primary">保存并生成考卷</button>
+                                <button id="exam-cancel-edit" type="button" class="btn btn-secondary" hidden>取消编辑</button>
+                            </div>
                         </form>
                         <div class="exam-panel">
                             <h3>选择考卷</h3>
-                            <p id="exam-paper-empty" class="exam-hint">还没有考卷，先输入考试单词并保存一张吧。</p>
+                            <p id="exam-paper-empty" class="exam-hint">还没有考卷，先添加单词或句子题并保存一张吧。</p>
                             <div id="exam-paper-list" class="exam-paper-list" role="group" aria-label="已保存的考卷"></div>
                             <div id="exam-paper-settings" hidden>
+                                <div class="exam-paper-toolbar">
+                                    <span>考卷内容</span>
+                                    <button id="exam-edit-paper" type="button" class="btn btn-secondary" aria-controls="exam-create-form">编辑考卷</button>
+                                </div>
                                 <p id="exam-paper-preview" class="exam-hint exam-paper-preview"></p>
+                                <p id="exam-paper-sentence-preview" class="exam-hint exam-paper-preview" hidden></p>
                                 <label class="exam-choice-toggle">
                                     <input id="exam-include-choices" type="checkbox" aria-describedby="exam-choice-hint">
                                     <span>开启选择题</span>
                                 </label>
-                                <p id="exam-choice-hint" class="exam-hint">默认只考单词默写。开启后，在默写题后加入可用的英文识义和语境选词题。</p>
+                                <p id="exam-choice-hint" class="exam-hint">默认考单词默写和已添加的句子中译英。开启后，再加入单词可用的英文识义和语境选词题。</p>
                                 <p id="exam-parent-hint" class="exam-hint" hidden>家长可以为孩子创建考卷，请使用学生账号参加考试。</p>
                                 <button id="exam-start" type="button" class="btn btn-primary" disabled>开始考试</button>
+                                <div class="exam-paper-mistakes">
+                                    <p id="exam-paper-mistake-count" class="exam-hint" aria-live="polite">暂无待复习错题</p>
+                                    <button id="exam-review-paper-mistakes" type="button" class="btn btn-secondary" disabled>复习错题</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -487,8 +507,9 @@
                         <span id="exam-question-type" class="exam-question-type"></span>
                         <p id="exam-question-prompt" class="exam-question-prompt"></p>
                         <div id="exam-spelling-wrap">
-                            <label for="exam-spelling-answer">请默写英文单词或短语</label>
-                            <input id="exam-spelling-answer" type="text" maxlength="200" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="exam-question-prompt">
+                            <label id="exam-answer-label" for="exam-spelling-answer">请默写英文单词或短语</label>
+                            <textarea id="exam-spelling-answer" rows="2" maxlength="200" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="exam-question-prompt exam-answer-hint"></textarea>
+                            <p id="exam-answer-hint" class="exam-hint" hidden>请将上面的中文句子译成英文，大小写和句末标点不影响判分。</p>
                         </div>
                         <div id="exam-choice-options" class="exam-choice-options" role="group" aria-labelledby="exam-question-prompt" hidden></div>
                         <div class="exam-attempt-actions">
@@ -506,9 +527,13 @@
                         <p id="exam-result-score" class="exam-result-score"></p>
                         <p id="exam-result-summary"></p>
                         <p id="exam-result-perfect" class="exam-result-perfect" hidden>全部答对，继续保持！</p>
+                        <p id="exam-mistake-status" class="exam-hint" aria-live="polite"></p>
                         <h4 id="exam-wrong-title">错题回顾</h4>
                         <div id="exam-wrong-list" class="exam-wrong-list"></div>
-                        <button id="exam-back-to-papers" type="button" class="btn btn-primary">返回考卷，再考一次</button>
+                        <div class="exam-result-actions">
+                            <button id="exam-review-mistakes" type="button" class="btn btn-primary" hidden>复习错题</button>
+                            <button id="exam-back-to-papers" type="button" class="btn btn-secondary">返回考卷</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1409,7 +1434,7 @@
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
     <script src="/static/js/app.js?v=20261110-nav-more-v1" defer></script>
-    <script src="/static/js/exam-preparation.js?v=20261110-1" defer></script>
+    <script src="/static/js/exam-preparation.js?v=20261110-mistakes-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js?v=20260910-authoring-v1" defer></script>

@@ -1,16 +1,22 @@
 """Exam parsing, private question snapshots, and durable server grading."""
 
 from concurrent.futures import ThreadPoolExecutor
+import json
+import sqlite3
 
 import pytest
 
-from exam_preparation import ExamPreparationError, ExamPreparationStore, parse_exam_words
+from exam_preparation import ExamPreparationError, ExamPreparationStore, parse_exam_sentences, parse_exam_words
 
 
 WORDS = [
     {"english": "apple", "chinese": "n. 苹果"},
     {"english": "look after", "chinese": "照顾"},
 ]
+SENTENCES = [{
+    "chinese": "我每天步行去学校。",
+    "answers": ["I walk to school every day.", "I go to school on foot every day."],
+}]
 
 
 def choice_lookup(word, kind):
@@ -149,3 +155,93 @@ def test_users_cannot_access_each_others_papers_or_attempts(tmp_path):
         with pytest.raises(ExamPreparationError) as error:
             operation()
         assert error.value.status == 404
+
+
+def test_sentence_parser_preserves_text_and_deduplicates_equivalent_answers():
+    parsed = parse_exam_sentences([{
+        "chinese": "  我每天步行去学校。  ",
+        "answers": ["I walk to school every day.", " i  walk to school every day！ ", "I go to school on foot every day."],
+    }])
+    assert parsed == SENTENCES
+    assert parse_exam_words("", allow_empty=True) == ([], 0)
+
+
+@pytest.mark.parametrize("sentences", [
+    None, {}, [None], [{}], [{"chinese": "", "answers": ["Hello"]}],
+    [{"chinese": "中文", "answers": []}], [{"chinese": "中文", "answers": "Hello"}],
+    [{"chinese": "中文", "answers": [None]}], [{"chinese": "中文", "answers": ["中文"]}],
+    [{"chinese": "中文", "answers": ["Hello 中文"]}], [{"chinese": "中文", "answers": ["!?"]}],
+    [{"chinese": "中" * 501, "answers": ["Hello"]}], [{"chinese": "中文", "answers": ["a" * 501]}],
+    [{"chinese": "中文", "answers": ["Hello"] * 11}], SENTENCES * 101,
+])
+def test_sentence_parser_rejects_incomplete_or_oversized_questions(sentences):
+    with pytest.raises(ExamPreparationError):
+        parse_exam_sentences(sentences)
+
+
+@pytest.mark.parametrize("answer,correct", [
+    ("I WALK   to school every day！", True), ("I go to school on foot every day", True),
+    ("I walked to school every day.", False), ("", False),
+])
+def test_sentence_only_exam_is_private_and_graded_against_accepted_answers(tmp_path, answer, correct):
+    store = ExamPreparationStore(tmp_path / "exam.sqlite3")
+    paper = store.create_paper("句子中译英", [], SENTENCES)
+    assert ExamPreparationStore(store.path).get_paper(paper["id"])["sentences"] == SENTENCES
+    attempt = store.start_attempt(paper, False, choice_lookup)
+    assert (attempt["word_count"], attempt["sentence_count"]) == (0, 1)
+    question = attempt["questions"][0]
+    assert question["type"] == "translation"
+    assert set(question) == {"id", "type", "prompt"}
+    result = store.submit_attempt(attempt["id"], {question["id"]: answer})
+    assert result["questions"][0]["correct"] is correct
+    assert result["score"] == (100 if correct else 0)
+    assert all(value in result["questions"][0]["correct_answer"] for value in SENTENCES[0]["answers"])
+
+
+def test_mixed_exam_keeps_written_questions_before_choices(tmp_path):
+    store = ExamPreparationStore(tmp_path / "exam.sqlite3")
+    paper = store.create_paper("混合卷", WORDS, SENTENCES)
+    attempt = store.start_attempt(paper, True, choice_lookup)
+    assert [q["type"] for q in attempt["questions"]] == ["spelling", "spelling", "translation", "recognition"]
+
+
+def test_edit_keeps_paper_identity_and_existing_attempt_snapshot(tmp_path):
+    store = ExamPreparationStore(tmp_path / "exam.sqlite3")
+    paper = store.create_paper("修改前", WORDS, SENTENCES)
+    old_attempt = store.start_attempt(paper, False, choice_lookup)
+    changed_sentences = [{"chinese": "昨天我步行去学校。", "answers": ["I walked to school yesterday."]}]
+    edited = store.update_paper(paper["id"], "修改后", WORDS[:1], changed_sentences)
+    assert edited["id"] == paper["id"]
+    assert edited["created_at"] == paper["created_at"]
+    assert store.get_attempt(old_attempt["id"])["attempt"] == old_attempt
+    answers = {q["id"]: {
+        "spelling": "apple" if q["prompt"] == "n. 苹果" else "look after",
+        "translation": SENTENCES[0]["answers"][1],
+    }[q["type"]] for q in old_attempt["questions"]}
+    result = store.submit_attempt(old_attempt["id"], answers)
+    assert result["paper_name"] == "修改前"
+    assert result["score"] == 100
+    new_attempt = store.start_attempt(edited, False, choice_lookup)
+    assert new_attempt["paper_name"] == "修改后"
+    assert [q["prompt"] for q in new_attempt["questions"] if q["type"] == "translation"] == ["昨天我步行去学校。"]
+    assert len(store.list_papers()) == 1
+    assert store.list_papers()[0]["attempt_count"] == 1
+    with pytest.raises(ExamPreparationError) as error:
+        store.update_paper("missing", "不存在", WORDS, [])
+    assert error.value.status == 404
+
+
+def test_legacy_database_migrates_without_losing_words_or_attempts(tmp_path):
+    path = tmp_path / "exam.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE exam_papers(id TEXT PRIMARY KEY, name TEXT NOT NULL, words_json TEXT NOT NULL, created_at TEXT NOT NULL)")
+        connection.execute("INSERT INTO exam_papers VALUES (?, ?, ?, ?)", ("legacy", "旧考卷", json.dumps(WORDS), "2026-11-09"))
+    store = ExamPreparationStore(path)
+    paper = store.get_paper("legacy")
+    assert paper["words"] == WORDS
+    assert paper["sentences"] == []
+    assert paper["sentence_count"] == 0
+    attempt = store.start_attempt(paper, False, choice_lookup)
+    store.update_paper("legacy", "添加句子后", WORDS, SENTENCES)
+    assert store.get_attempt(attempt["id"])["attempt"] == attempt
+    assert store.get_paper("legacy")["sentences"] == SENTENCES

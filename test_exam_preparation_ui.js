@@ -49,6 +49,8 @@ function examUI() {
             { id: 'q2', type: 'spelling', prompt: '照顾' },
         ],
     };
+    state.paper = paper;
+    state.attempt = attempt;
     const context = vm.createContext({
         window: {},
         document: {
@@ -67,7 +69,7 @@ function examUI() {
         isParentSession: false,
         apiRequest: async (url, options = {}) => {
             const body = options.body ? JSON.parse(options.body) : null;
-            state.calls.push({ url, body });
+            state.calls.push({ url, body, method: options.method || 'GET' });
             if (url.endsWith('/submit')) {
                 if (state.submit) return state.submit(body);
                 return { result: {
@@ -76,12 +78,19 @@ function examUI() {
                 } };
             }
             if (url.endsWith('/attempts')) {
+                if (state.start) return state.start(body);
                 const choices = body.include_choices ? [{ id: 'q3', type: 'recognition', prompt: 'apple', options: [{ id: 'a', text: '苹果' }, { id: 'b', text: '香蕉' }] }] : [];
                 return { attempt: { ...attempt, include_choices: body.include_choices, choice_count: choices.length, questions: [...attempt.questions, ...choices] } };
             }
             if (url.includes('/attempts/')) return { attempt, result: null };
-            if (options.method === 'POST') {
+            if (options.method === 'POST' || options.method === 'PUT') {
                 if (state.failCreation) throw new Error('未找到中文释义：unknownword');
+                if (state.save) return state.save(body);
+                Object.assign(paper, {
+                    name: body.name,
+                    sentences: body.sentences,
+                    sentence_count: body.sentences.length,
+                });
                 return { paper, duplicates_removed: 1 };
             }
             if (state.list) return state.list();
@@ -106,8 +115,9 @@ test('creating a paper sends both fields and retains input on failure', async ()
     ui.state.failCreation = false;
     await ui.field('exam-create-form').fire('submit');
     const call = ui.state.calls.find((call) => call.body?.name);
-    assert.deepEqual(call.body, { name: '期中考试', words: 'apple,look after,apple' });
+    assert.deepEqual(call.body, { name: '期中考试', words: 'apple,look after,apple', sentences: [] });
     assert.equal(ui.field('exam-words').value, '');
+    assert.equal(ui.field('exam-include-choices').disabled, false);
     assert.match(ui.field('exam-preparation-message').textContent, /已合并 1 个重复单词/);
 });
 
@@ -205,4 +215,123 @@ test('parent can see preparation but cannot start an exam', async () => {
     assert.equal(ui.field('exam-start').disabled, true);
     await ui.field('exam-start').fire('click');
     assert.equal(ui.state.calls.some((call) => call.url.endsWith('/attempts')), false);
+});
+
+test('editing loads the selected paper beside the list and cancellation restores a new paper draft', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    ui.field('exam-paper-name').value = '未保存的新卷';
+    ui.field('exam-words').value = 'banana';
+    await ui.field('exam-add-sentence').fire('click');
+    const draftRow = ui.field('exam-sentence-list').children[0];
+    draftRow.children[2].value = '我喜欢香蕉。';
+    draftRow.children[4].value = 'I like bananas.';
+    await ui.field('exam-edit-paper').fire('click');
+    assert.equal(ui.field('exam-editor-title').textContent, '编辑考卷');
+    assert.equal(ui.field('exam-paper-name').value, '期中考试');
+    assert.equal(ui.field('exam-words').value, 'apple, look after');
+    assert.equal(ui.field('exam-start').disabled, true);
+    assert.equal(ui.field('exam-save-paper').textContent, '保存修改');
+    assert.equal(ui.field('exam-cancel-edit').hidden, false);
+    await ui.field('exam-start').fire('click');
+    assert.equal(ui.state.calls.some((call) => call.url.endsWith('/attempts')), false);
+    await ui.field('exam-cancel-edit').fire('click');
+    assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
+    assert.equal(ui.field('exam-paper-name').value, '未保存的新卷');
+    assert.equal(ui.field('exam-words').value, 'banana');
+    assert.equal(ui.field('exam-sentence-list').children[0].children[4].value, 'I like bananas.');
+    assert.equal(ui.field('exam-start').disabled, false);
+});
+
+test('saving edits uses the original paper id and retains changes after failure', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    ui.field('exam-paper-name').value = '修改后的期中考试';
+    ui.field('exam-words').value = 'look after';
+    ui.state.failCreation = true;
+    await ui.field('exam-create-form').fire('submit');
+    assert.equal(ui.field('exam-editor-title').textContent, '编辑考卷');
+    assert.equal(ui.field('exam-words').value, 'look after');
+    assert.equal(ui.field('exam-save-paper').disabled, false);
+    ui.state.failCreation = false;
+    await ui.field('exam-create-form').fire('submit');
+    const calls = ui.state.calls.filter((call) => call.method === 'PUT');
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].url, '/exam-preparation/papers/paper-1');
+    assert.deepEqual(calls[1].body, { name: '修改后的期中考试', words: 'look after', sentences: [] });
+    assert.match(ui.field('exam-preparation-message').textContent, /已更新/);
+    assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
+    assert.equal(ui.field('exam-paper-list').children.length, 1);
+    assert.equal(ui.field('exam-paper-list').children[0].children[0].textContent, '修改后的期中考试');
+});
+
+test('sentence questions load for editing, accept multiple reference answers and can be removed', async () => {
+    const ui = examUI();
+    ui.state.paper.sentences = [{ chinese: '我每天步行去学校。', answers: ['I walk to school every day.'] }];
+    ui.state.paper.sentence_count = 1;
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    assert.equal(ui.field('exam-sentences-section').open, true);
+    const row = ui.field('exam-sentence-list').children[0];
+    assert.equal(row.children[2].value, '我每天步行去学校。');
+    row.children[4].value += '\nI go to school on foot every day.\n';
+    await ui.field('exam-add-sentence').fire('click');
+    const unwanted = ui.field('exam-sentence-list').children[1];
+    await unwanted.children[0].children[1].fire('click');
+    assert.equal(ui.field('exam-sentence-list').children.length, 1);
+    await ui.field('exam-create-form').fire('submit');
+    const call = ui.state.calls.find((call) => call.method === 'PUT');
+    assert.deepEqual(call.body.sentences, [{
+        chinese: '我每天步行去学校。', answers: ['I walk to school every day.', 'I go to school on foot every day.'],
+    }]);
+});
+
+test('sentence-only exams provide written answers and keep answers across navigation', async () => {
+    const ui = examUI();
+    ui.state.paper.word_count = 0;
+    ui.state.paper.words = [];
+    ui.state.paper.sentence_count = 2;
+    ui.state.paper.sentences = [{ chinese: '我喜欢苹果。', answers: ['I like apples.'] }];
+    ui.state.attempt.questions = [
+        { id: 's1', type: 'translation', prompt: '我喜欢苹果。' },
+        { id: 's2', type: 'translation', prompt: '这是我的学校。' },
+    ];
+    ui.state.start = async () => ({ attempt: { ...ui.state.attempt, word_count: 0, sentence_count: 2 } });
+    await ui.api.open();
+    ui.field('exam-include-choices').checked = true;
+    assert.equal(ui.field('exam-include-choices').disabled, true);
+    await ui.field('exam-start').fire('click');
+    assert.equal(ui.state.calls.find((call) => call.url.endsWith('/attempts')).body.include_choices, false);
+    assert.equal(ui.field('exam-question-type').textContent, '句子中译英');
+    assert.equal(ui.field('exam-spelling-wrap').hidden, false);
+    assert.equal(ui.field('exam-choice-options').hidden, true);
+    assert.equal(ui.field('exam-spelling-answer').maxLength, 500);
+    assert.match(ui.field('exam-answer-label').textContent, /译成英文/);
+    ui.field('exam-spelling-answer').value = 'I like apples.';
+    await ui.field('exam-spelling-answer').fire('input');
+    await ui.field('exam-next').fire('click');
+    await ui.field('exam-previous').fire('click');
+    assert.equal(ui.field('exam-spelling-answer').value, 'I like apples.');
+    await ui.field('exam-submit').fire('click');
+    assert.equal(ui.state.calls.find((call) => call.url.endsWith('/submit')).body.answers.s1, 'I like apples.');
+});
+
+test('account reset clears sentence answers in the editor and ignores an in-flight edit response', async () => {
+    const ui = examUI();
+    ui.state.paper.sentences = [{ chinese: '私有中文题干', answers: ['Private reference answer.'] }];
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    let resolve;
+    ui.state.save = () => new Promise((callback) => { resolve = callback; });
+    const saving = ui.field('exam-create-form').fire('submit');
+    ui.api.reset();
+    ui.account.token = 'bob-token';
+    ui.account.username = 'bob';
+    resolve({ paper: ui.state.paper, duplicates_removed: 0 });
+    await saving;
+    assert.equal(ui.field('exam-sentence-list').children.length, 0);
+    assert.equal(ui.field('exam-paper-list').children.length, 0);
+    assert.equal(ui.field('exam-paper-name').value, '');
+    assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
 });
