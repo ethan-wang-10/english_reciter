@@ -7,7 +7,7 @@
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/brand/logo-mark.svg?v=parrot2">
     <link rel="stylesheet" href="/static/css/style.css?v=20261110-nav-more-v1">
-    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-word-chips-v1">
+    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-builtin-v1">
 </head>
 <body>
     <div id="app">
@@ -520,11 +520,12 @@
                                 </div>
                                 <p id="exam-paper-preview" class="exam-hint exam-paper-preview"></p>
                                 <p id="exam-paper-sentence-preview" class="exam-hint exam-paper-preview" hidden></p>
-                                <label class="exam-choice-toggle">
+                                <label id="exam-choice-toggle" class="exam-choice-toggle">
                                     <input id="exam-include-choices" type="checkbox" aria-describedby="exam-choice-hint">
                                     <span>开启选择题</span>
                                 </label>
                                 <p id="exam-choice-hint" class="exam-hint">默认考单词默写和已添加的句子中译英。开启后，再加入单词可用的英文识义和语境选词题。</p>
+                                <p id="exam-builtin-hint" class="exam-hint" hidden></p>
                                 <p id="exam-parent-hint" class="exam-hint" hidden>家长可以为孩子创建考卷，请使用学生账号参加考试。</p>
                                 <button id="exam-start" type="button" class="btn btn-primary" disabled>开始考试</button>
                                 <div class="exam-paper-mistakes">
@@ -533,6 +534,15 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    <div id="exam-knowledge-view" class="exam-panel exam-knowledge-panel" hidden>
+                        <div class="exam-knowledge-head">
+                            <h3 id="exam-knowledge-title" tabindex="-1">知识点梳理</h3>
+                            <button id="exam-knowledge-back" type="button" class="btn btn-secondary">返回选择考卷</button>
+                        </div>
+                        <p id="exam-knowledge-intro" class="exam-hint"></p>
+                        <a id="exam-knowledge-pdf" class="exam-handbook-link" target="_blank" rel="noopener">阅读完整复习手册（PDF，含自测与参考答案） ↗</a>
+                        <div id="exam-knowledge-content" class="exam-knowledge-content"></div>
                     </div>
                     <div id="exam-attempt-view" class="exam-panel exam-attempt-panel" hidden>
                         <div class="exam-attempt-head">
@@ -1473,7 +1483,7 @@
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
     <script src="/static/js/app.js?v=20261110-inline-import-v1" defer></script>
-    <script src="/static/js/exam-preparation.js?v=20261110-word-chips-v1" defer></script>
+    <script src="/static/js/exam-preparation.js?v=20261110-builtin-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js?v=20260910-authoring-v1" defer></script>

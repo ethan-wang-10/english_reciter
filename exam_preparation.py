@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from app_time import china_now_iso
+import builtin_exam_catalog
 import exam_mistakes
 from wordbank_v2 import normalize_english_key
 
@@ -23,6 +24,8 @@ MAX_EXAM_SENTENCES = 100
 MAX_SENTENCE_TEXT = 500
 MAX_SENTENCE_ANSWERS = 10
 CHOICE_TYPES = ("recognition", "context")
+EXAM_CHOICE_TYPES = CHOICE_TYPES + builtin_exam_catalog.CHOICE_TYPES
+EXTENDED_WRITTEN_TYPES = ("translation",) + builtin_exam_catalog.WRITTEN_TYPES
 
 
 class ExamPreparationError(ValueError):
@@ -148,11 +151,11 @@ def grade_attempt(attempt: dict, answers: object) -> dict:
     rows = []
     for question in questions:
         answer = answers.get(question["id"], "")
-        limit = MAX_SENTENCE_TEXT if question["type"] == "translation" else 200
+        limit = MAX_SENTENCE_TEXT if question["type"] in EXTENDED_WRITTEN_TYPES else 200
         if not isinstance(answer, str) or len(answer) > limit:
             raise ExamPreparationError("答案格式不正确或长度超过限制")
         answer = answer.strip()
-        if question["type"] == "translation":
+        if question["type"] in EXTENDED_WRITTEN_TYPES:
             correct = normalize_sentence_answer(answer) in {
                 normalize_sentence_answer(value) for value in question["accepted_answers"]
             }
@@ -244,11 +247,14 @@ class ExamPreparationStore:
     def _paper(row) -> dict:
         words = json.loads(row["words_json"])
         sentences = json.loads(row["sentences_json"])
-        return {
+        paper = {
             "id": row["id"], "name": row["name"], "created_at": row["created_at"],
             "words": words, "word_count": len(words),
             "sentences": sentences, "sentence_count": len(sentences),
         }
+        if builtin_exam_catalog.is_builtin(paper['id']):
+            paper.update(builtin_exam_catalog.public_paper(paper['id']))
+        return paper
 
     def create_paper(self, name: str, words: list[dict], sentences: list[dict] | None = None) -> dict:
         paper_id = uuid.uuid4().hex
@@ -261,6 +267,8 @@ class ExamPreparationStore:
             return self._paper(connection.execute("SELECT * FROM exam_papers WHERE id=?", (paper_id,)).fetchone())
 
     def update_paper(self, paper_id: str, name: str, words: list[dict], sentences: list[dict]) -> dict:
+        if builtin_exam_catalog.is_builtin(paper_id):
+            raise ExamPreparationError("内置考卷不支持修改，请编辑自己的考卷", 403)
         with self._connection() as connection:
             cursor = connection.execute(
                 "UPDATE exam_papers SET name=?, words_json=?, sentences_json=? WHERE id=?",
@@ -273,15 +281,23 @@ class ExamPreparationStore:
     def get_paper(self, paper_id: str) -> dict:
         with self._connection() as connection:
             row = connection.execute("SELECT * FROM exam_papers WHERE id=?", (paper_id,)).fetchone()
+            if row is None and builtin_exam_catalog.is_builtin(paper_id):
+                paper = builtin_exam_catalog.public_paper(paper_id)
+                connection.execute(
+                    "INSERT OR IGNORE INTO exam_papers(id, name, words_json, sentences_json, created_at) VALUES (?, ?, '[]', '[]', ?)",
+                    (paper_id, paper['name'], china_now_iso()),
+                )
+                row = connection.execute("SELECT * FROM exam_papers WHERE id=?", (paper_id,)).fetchone()
             if row is None:
                 raise ExamPreparationError("考卷不存在，请重新选择", 404)
             return self._paper(row)
 
     def list_papers(self) -> list[dict]:
         with self._connection() as connection:
-            papers = []
-            for row in connection.execute("SELECT * FROM exam_papers ORDER BY created_at DESC, rowid DESC"):
-                paper = self._paper(row)
+            papers = [self._paper(row) for row in connection.execute("SELECT * FROM exam_papers ORDER BY created_at DESC, rowid DESC")]
+            present = {paper['id'] for paper in papers}
+            papers.extend(paper for paper in builtin_exam_catalog.list_papers() if paper['id'] not in present)
+            for paper in papers:
                 results = connection.execute(
                     "SELECT score FROM exam_attempts a WHERE paper_id=? AND result_json IS NOT NULL "
                     "AND NOT EXISTS (SELECT 1 FROM exam_mistake_reviews r WHERE r.attempt_id=a.id) "
@@ -292,11 +308,18 @@ class ExamPreparationStore:
                 paper["last_score"] = scores[0] if scores else None
                 paper["best_score"] = max(scores) if scores else None
                 paper["mistake_count"] = exam_mistakes.pending_count(connection, paper["id"])
-                papers.append(paper)
-            return papers
+            return sorted(papers, key=lambda paper: bool(paper.get('builtin')))
 
     def start_attempt(self, paper: dict, include_choices: bool, question_lookup) -> dict:
-        questions, choice_count = build_exam_questions(paper["words"], include_choices, question_lookup, paper.get("sentences"))
+        if paper.get('builtin'):
+            paper = self.get_paper(paper['id'])
+            questions = builtin_exam_catalog.questions(paper['id'])
+            for question in questions:
+                question['id'] = uuid.uuid4().hex
+            choice_count = sum(question['type'] in EXAM_CHOICE_TYPES for question in questions)
+            include_choices = bool(choice_count)
+        else:
+            questions, choice_count = build_exam_questions(paper["words"], include_choices, question_lookup, paper.get("sentences"))
         attempt = {
             "id": uuid.uuid4().hex,
             "paper_id": paper["id"], "paper_name": paper["name"],
@@ -305,6 +328,9 @@ class ExamPreparationStore:
             "sentence_count": paper.get("sentence_count", 0),
             "started_at": china_now_iso(),
         }
+        if paper.get('builtin'):
+            attempt['builtin'] = True
+            attempt['time_minutes'] = paper['time_minutes']
         with self._connection() as connection:
             connection.execute(
                 "INSERT INTO exam_attempts(id, paper_id, attempt_json, started_at) VALUES (?, ?, ?, ?)",
@@ -315,6 +341,8 @@ class ExamPreparationStore:
     def mistake_count(self, paper_id: str) -> int:
         with self._connection() as connection:
             if connection.execute("SELECT 1 FROM exam_papers WHERE id=?", (paper_id,)).fetchone() is None:
+                if builtin_exam_catalog.is_builtin(paper_id):
+                    return 0
                 raise ExamPreparationError("考卷不存在，请重新选择", 404)
             return exam_mistakes.pending_count(connection, paper_id)
 
@@ -323,6 +351,8 @@ class ExamPreparationStore:
             connection.execute("BEGIN IMMEDIATE")
             paper = connection.execute("SELECT * FROM exam_papers WHERE id=?", (paper_id,)).fetchone()
             if paper is None:
+                if builtin_exam_catalog.is_builtin(paper_id):
+                    raise ExamPreparationError("这张考卷暂无待复习错题", 409)
                 raise ExamPreparationError("考卷不存在，请重新选择", 404)
             questions = exam_mistakes.pending_questions(connection, paper_id)
             if not questions:
@@ -331,7 +361,7 @@ class ExamPreparationStore:
             choices = []
             for question in questions:
                 question["id"] = uuid.uuid4().hex
-                (choices if question["type"] in CHOICE_TYPES else written).append(question)
+                (choices if question["type"] in EXAM_CHOICE_TYPES else written).append(question)
             random.SystemRandom().shuffle(written)
             random.SystemRandom().shuffle(choices)
             attempt = {

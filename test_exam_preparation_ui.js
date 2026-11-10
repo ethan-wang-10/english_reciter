@@ -78,6 +78,7 @@ function examUI() {
         apiRequest: async (url, options = {}) => {
             const body = options.body ? JSON.parse(options.body) : null;
             state.calls.push({ url, body, method: options.method || 'GET' });
+            if (url.endsWith('/knowledge')) return typeof state.knowledge === 'function' ? state.knowledge() : state.knowledge;
             if (url === '/wordbank/csv/import-words') {
                 if (state.import) return state.import(body);
                 state.failCreation = false;
@@ -112,7 +113,7 @@ function examUI() {
                 return { paper, duplicates_removed: 1 };
             }
             if (state.list) return state.list();
-            return { papers: [paper] };
+            return { papers: [paper], builtin_papers: state.builtinPapers || [] };
         },
     });
     vm.runInContext(source, context);
@@ -591,4 +592,121 @@ test('saving disables chip removal and the add field until the request finishes'
     await saving;
     assert.equal(ui.field('exam-add-words').disabled, false);
     assert.equal(ui.field('exam-word-chips').children.length, 0);
+});
+
+function addBuiltinFixture(ui) {
+    const paper = {
+        id: 'builtin-shanghai-grade4-u1-u4', builtin: true,
+        name: '上海四年级上册英语 · U1-U4 期中自测', question_count: 16,
+        word_count: 0, sentence_count: 0, words: [], sentences: [],
+        time_minutes: 20, description: '8 道填空、4 道句型转换和 4 道阅读单选。',
+        edition: '上海四年级上册', attempt_count: 0,
+    };
+    ui.state.builtinPapers = [paper];
+    ui.state.knowledge = {
+        paper_name: paper.name, pdf_url: '/static/exam-preparation/shanghai-grade4-u1-u4.pdf',
+        knowledge: { title: 'U1-U4 知识点梳理', intro: '学校、同学、动物与生日。', sections: [
+            { title: 'U1 学校', blocks: [{ title: '核心语法', items: ["doesn't 后用 have。"] }] },
+            { title: 'U2 同学', blocks: [{ title: '常用结构', items: ['help sb do sth'] }] },
+        ] },
+    };
+    return paper;
+}
+
+test('built-in papers share the selection list and have a neighboring knowledge button', async () => {
+    const ui = examUI();
+    addBuiltinFixture(ui);
+    await ui.api.open();
+    assert.equal(ui.field('exam-paper-list').children.length, 2);
+    const builtinRow = ui.field('exam-paper-list').children[1];
+    assert.equal(builtinRow.children[1].textContent, '知识点梳理');
+    assert.match(builtinRow.children[0].children[1].textContent, /16 道题/);
+    await builtinRow.children[0].fire('click');
+    assert.equal(ui.field('exam-edit-paper').hidden, true);
+    assert.equal(ui.field('exam-choice-toggle').hidden, true);
+    assert.equal(ui.field('exam-builtin-hint').hidden, false);
+    assert.equal(ui.field('exam-start').disabled, false);
+    await ui.field('exam-edit-paper').fire('click');
+    assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
+});
+
+test('knowledge opens for reading and returning keeps the personal editor draft', async () => {
+    const ui = examUI();
+    addBuiltinFixture(ui);
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    ui.field('exam-paper-name').value = '未保存的修改';
+    ui.field('exam-add-words').value = 'banana';
+    await ui.field('exam-paper-list').children[1].children[1].fire('click');
+    assert.equal(ui.field('exam-knowledge-view').hidden, false);
+    assert.equal(ui.field('exam-setup-view').hidden, true);
+    assert.equal(ui.field('exam-knowledge-title').textContent, 'U1-U4 知识点梳理');
+    assert.equal(ui.field('exam-knowledge-content').children.length, 2);
+    assert.equal(ui.field('exam-knowledge-content').children[0].open, true);
+    assert.equal(ui.field('exam-knowledge-pdf').href, '/static/exam-preparation/shanghai-grade4-u1-u4.pdf');
+    await ui.field('exam-knowledge-back').fire('click');
+    assert.equal(ui.field('exam-setup-view').hidden, false);
+    assert.equal(ui.field('exam-paper-name').value, '未保存的修改');
+    assert.equal(ui.field('exam-add-words').value, 'banana');
+});
+
+test('fixed built-in questions use written fields and reading choices with the right labels', async () => {
+    const ui = examUI();
+    const paper = addBuiltinFixture(ui);
+    ui.state.start = async () => ({ attempt: {
+        id: 'builtin-attempt', paper_id: paper.id, paper_name: paper.name, builtin: true,
+        word_count: 0, sentence_count: 0, choice_count: 1, include_choices: true, time_minutes: 20,
+        questions: [
+            { id: 'b1', type: 'fill_blank', prompt: 'He often ____ (help) me.' },
+            { id: 'b2', type: 'rewrite', prompt: 'The building has no walls.（改为含 any 的同义句）' },
+            { id: 'b3', type: 'reading_choice', prompt: 'Where is the party?', options: [{ id: 'a', text: 'Hall' }, { id: 'b', text: 'Library' }] },
+        ],
+    } });
+    await ui.api.open();
+    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.field('exam-start').fire('click');
+    assert.match(ui.field('exam-preparation-message').textContent, /内置固定考卷/);
+    assert.equal(ui.field('exam-answer-label').textContent, '请填写空缺部分');
+    assert.equal(ui.field('exam-spelling-wrap').hidden, false);
+    ui.field('exam-spelling-answer').value = 'helps';
+    await ui.field('exam-spelling-answer').fire('input');
+    await ui.field('exam-next').fire('click');
+    assert.equal(ui.field('exam-answer-label').textContent, '请写出转换后的完整句子');
+    await ui.field('exam-next').fire('click');
+    assert.equal(ui.field('exam-question-type').textContent, '阅读选择');
+    assert.equal(ui.field('exam-spelling-wrap').hidden, true);
+    assert.equal(ui.field('exam-choice-options').hidden, false);
+    await ui.field('exam-choice-options').children[0].fire('click');
+    await ui.field('exam-previous').fire('click');
+    await ui.field('exam-previous').fire('click');
+    assert.equal(ui.field('exam-spelling-answer').value, 'helps');
+});
+
+test('parents may read built-in knowledge while the exam remains disabled', async () => {
+    const ui = examUI();
+    addBuiltinFixture(ui);
+    ui.context.isParentSession = true;
+    await ui.api.open();
+    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    assert.equal(ui.field('exam-start').disabled, true);
+    await ui.field('exam-paper-list').children[1].children[1].fire('click');
+    assert.equal(ui.field('exam-knowledge-view').hidden, false);
+});
+
+test('account reset ignores a late knowledge response and clears study content', async () => {
+    const ui = examUI();
+    addBuiltinFixture(ui);
+    const knowledge = ui.state.knowledge;
+    let resolve;
+    ui.state.knowledge = () => new Promise((callback) => { resolve = callback; });
+    await ui.api.open();
+    const opening = ui.field('exam-paper-list').children[1].children[1].fire('click');
+    ui.api.reset();
+    ui.account.token = 'bob-token';
+    ui.account.username = 'bob';
+    resolve(knowledge);
+    await opening;
+    assert.equal(ui.field('exam-knowledge-view').hidden, true);
+    assert.equal(ui.field('exam-knowledge-content').children.length, 0);
+    assert.equal(ui.field('exam-knowledge-pdf').href, '');
 });

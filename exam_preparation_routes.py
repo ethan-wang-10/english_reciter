@@ -1,6 +1,7 @@
 """Authenticated endpoints for students' named exam papers."""
 
 from flask import Blueprint, jsonify, request
+import builtin_exam_catalog
 
 from exam_preparation import (
     ExamPreparationError,
@@ -31,7 +32,18 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
     @routes.get("/papers")
     @token_required
     def list_papers(username):
-        return jsonify({"papers": store(username).list_papers()})
+        papers = store(username).list_papers()
+        return jsonify({
+            "papers": [paper for paper in papers if not paper.get('builtin')],
+            "builtin_papers": [paper for paper in papers if paper.get('builtin')],
+        })
+
+    @routes.get('/papers/<paper_id>/knowledge')
+    @token_required
+    def paper_knowledge(username, paper_id):
+        if not builtin_exam_catalog.is_builtin(paper_id):
+            raise ExamPreparationError('这张考卷暂无知识点梳理', 404)
+        return jsonify(builtin_exam_catalog.knowledge(paper_id))
 
     def paper_content(username, body):
         name = body.get("name")
@@ -62,6 +74,8 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
     def update_paper(username, paper_id):
         user_store = store(username)
         existing = user_store.get_paper(paper_id)
+        if existing.get('builtin'):
+            raise ExamPreparationError("内置考卷不支持修改，请编辑自己的考卷", 403)
         body = _body()
         # Older clients editing only words must preserve any existing sentence questions.
         body.setdefault("sentences", existing["sentences"])

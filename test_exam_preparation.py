@@ -146,7 +146,7 @@ def test_users_cannot_access_each_others_papers_or_attempts(tmp_path):
     bob = ExamPreparationStore(tmp_path / "bob" / "exam.sqlite3")
     paper = alice.create_paper("私有卷", WORDS)
     attempt = alice.start_attempt(paper, False, choice_lookup)
-    assert bob.list_papers() == []
+    assert not [paper for paper in bob.list_papers() if not paper.get('builtin')]
     for operation in (
         lambda: bob.get_paper(paper["id"]),
         lambda: bob.get_attempt(attempt["id"]),
@@ -224,7 +224,7 @@ def test_edit_keeps_paper_identity_and_existing_attempt_snapshot(tmp_path):
     new_attempt = store.start_attempt(edited, False, choice_lookup)
     assert new_attempt["paper_name"] == "修改后"
     assert [q["prompt"] for q in new_attempt["questions"] if q["type"] == "translation"] == ["昨天我步行去学校。"]
-    assert len(store.list_papers()) == 1
+    assert len([paper for paper in store.list_papers() if not paper.get('builtin')]) == 1
     assert store.list_papers()[0]["attempt_count"] == 1
     with pytest.raises(ExamPreparationError) as error:
         store.update_paper("missing", "不存在", WORDS, [])

@@ -1,6 +1,6 @@
 (() => {
     const base = '/exam-preparation';
-    const typeNames = { spelling: '单词默写', translation: '句子中译英', recognition: '英文识义', context: '语境选词' };
+    const typeNames = { spelling: '单词默写', translation: '句子中译英', recognition: '英文识义', context: '语境选词', fill_blank: '语法填空', rewrite: '句型转换', reading_choice: '阅读选择' };
     let papers = [];
     let selectedPaper = '';
     let editingPaper = '';
@@ -18,12 +18,13 @@
     let generation = 0;
     let listRequest = 0;
     let draftKey = '';
+    let knowledgeReturnButton = null;
     const el = (id) => document.getElementById(id);
     const context = () => ({ account: captureAccountContext(), generation });
     const current = (ctx) => ctx.generation === generation && isAccountContextCurrent(ctx.account);
     const canImportWords = () => typeof userPlan !== 'undefined' && userPlan === 'paid';
-    const isWrittenQuestion = (question) => ['spelling', 'translation'].includes(question.type);
-    const paperContents = (paper) => [
+    const isWrittenQuestion = (question) => ['spelling', 'translation', 'fill_blank', 'rewrite'].includes(question.type);
+    const paperContents = (paper) => paper.builtin ? `${paper.question_count} 道题` : [
         paper.word_count ? `${paper.word_count} 个单词` : '',
         paper.sentence_count ? `${paper.sentence_count} 道句子题` : '',
     ].filter(Boolean).join(' · ');
@@ -141,6 +142,7 @@
         el('exam-add-sentence').disabled = busy || sentenceRows.length >= 100;
         el('exam-start').disabled = busy || !!editingPaper || !selectedPaper || isParentSession;
         const selected = papers.find((paper) => paper.id === selectedPaper);
+        el('exam-edit-paper').hidden = !!selected?.builtin;
         el('exam-include-choices').disabled = busy || isParentSession || !selected?.word_count;
         ['exam-import-words', 'exam-import-level', 'exam-import-add-to-queue', 'exam-import-dismiss'].forEach((id) => {
             el(id).disabled = busy;
@@ -313,7 +315,7 @@
     function editPaper() {
         if (busy || editingPaper) return;
         const paper = papers.find((item) => item.id === selectedPaper);
-        if (!paper) return;
+        if (!paper || paper.builtin) return;
         newPaperDraft = editorValue();
         editingPaper = paper.id;
         fillEditor({ name: paper.name, words: paper.words.map((word) => word.english).join(', '), sentences: paper.sentences || [] });
@@ -338,7 +340,7 @@
     }
 
     function showView(view) {
-        ['setup', 'attempt', 'result'].forEach((name) => {
+        ['setup', 'attempt', 'result', 'knowledge'].forEach((name) => {
             el(`exam-${name}-view`).hidden = name !== view;
         });
     }
@@ -347,7 +349,7 @@
         busy = value;
         updateMistakeControls();
         ['exam-save-paper', 'exam-start', 'exam-previous', 'exam-next', 'exam-submit',
-            'exam-words', 'exam-paper-name', 'exam-cancel-edit', 'exam-back-to-papers'].forEach((id) => {
+            'exam-words', 'exam-paper-name', 'exam-cancel-edit', 'exam-back-to-papers', 'exam-knowledge-back'].forEach((id) => {
             const button = el(id);
             if (button) button.disabled = value;
         });
@@ -397,7 +399,7 @@
             const title = document.createElement('strong');
             title.textContent = paper.name;
             const detail = document.createElement('span');
-            detail.textContent = `${paperContents(paper)} · ${paper.created_at.slice(0, 10)}`;
+            detail.textContent = paper.builtin ? `${paperContents(paper)} · 建议 ${paper.time_minutes} 分钟` : `${paperContents(paper)} · ${paper.created_at.slice(0, 10)}`;
             const score = document.createElement('span');
             score.textContent = paper.attempt_count
                 ? `最近 ${paper.last_score} 分 · 最高 ${paper.best_score} 分 · 已考 ${paper.attempt_count} 次`
@@ -409,7 +411,26 @@
                 selectedPaper = paper.id;
                 renderPapers();
             });
-            list.appendChild(button);
+            if (paper.builtin) {
+                const badge = document.createElement('span');
+                badge.className = 'exam-paper-badge';
+                badge.textContent = '内置考卷';
+                button.appendChild(badge);
+                const row = document.createElement('div');
+                row.className = 'exam-builtin-row';
+                const knowledgeButton = document.createElement('button');
+                knowledgeButton.type = 'button';
+                knowledgeButton.className = 'btn btn-secondary';
+                knowledgeButton.textContent = '知识点梳理';
+                knowledgeButton.disabled = busy;
+                knowledgeButton.setAttribute('aria-label', `${paper.name}：知识点梳理`);
+                knowledgeButton.setAttribute('aria-controls', 'exam-knowledge-view');
+                knowledgeButton.addEventListener('click', () => openKnowledge(paper.id, knowledgeButton));
+                row.append(button, knowledgeButton);
+                list.appendChild(row);
+            } else {
+                list.appendChild(button);
+            }
         }
         const selected = papers.find((paper) => paper.id === selectedPaper);
         el('exam-paper-preview').textContent = selected ? selected.words.map((word) => word.english).join(', ') : '';
@@ -419,6 +440,10 @@
         el('exam-paper-sentence-preview').textContent = sentences.map((sentence, i) => `${i + 1}. ${sentence.chinese}`).join('\n');
         el('exam-parent-hint').hidden = !isParentSession;
         el('exam-include-choices').disabled = busy || isParentSession || !selected?.word_count;
+        el('exam-choice-toggle').hidden = !!selected?.builtin;
+        el('exam-choice-hint').hidden = !!selected?.builtin;
+        el('exam-builtin-hint').hidden = !selected?.builtin;
+        el('exam-builtin-hint').textContent = selected?.builtin ? `${selected.description} ${selected.source_note || ''}` : '';
         updateEditor();
         updateMistakeControls();
     }
@@ -449,8 +474,52 @@
         const request = ++listRequest;
         const data = await apiRequest(`${base}/papers`);
         if (!current(ctx) || request !== listRequest) return;
-        papers = data.papers;
+        papers = [...data.papers, ...(data.builtin_papers || [])];
         renderPapers();
+    }
+
+    async function openKnowledge(paperId, button) {
+        if (busy) return;
+        const ctx = context();
+        setBusy(true);
+        message('正在加载知识点梳理…');
+        try {
+            const data = await apiRequest(`${base}/papers/${encodeURIComponent(paperId)}/knowledge`);
+            if (!current(ctx)) return;
+            knowledgeReturnButton = button;
+            el('exam-knowledge-title').textContent = data.knowledge.title;
+            el('exam-knowledge-intro').textContent = data.knowledge.intro;
+            el('exam-knowledge-pdf').href = data.pdf_url;
+            const content = el('exam-knowledge-content');
+            content.replaceChildren();
+            data.knowledge.sections.forEach((section, index) => {
+                const panel = document.createElement('details');
+                panel.open = index === 0;
+                const summary = document.createElement('summary');
+                summary.textContent = section.title;
+                panel.appendChild(summary);
+                section.blocks.forEach((block) => {
+                    const heading = document.createElement('h4');
+                    heading.textContent = block.title;
+                    const list = document.createElement('ul');
+                    block.items.forEach((item) => {
+                        const line = document.createElement('li');
+                        line.textContent = item;
+                        list.appendChild(line);
+                    });
+                    panel.append(heading, list);
+                });
+                content.appendChild(panel);
+            });
+            message();
+            showView('knowledge');
+            el('exam-knowledge-view').scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+            el('exam-knowledge-title').focus({ preventScroll: true });
+        } catch (error) {
+            if (current(ctx)) message(error.message || '加载知识点失败，请重试', true);
+        } finally {
+            if (current(ctx)) setBusy(false);
+        }
     }
 
     async function open() {
@@ -543,6 +612,10 @@
             index = 0;
             storeDraft();
             renderQuestion();
+            if (attempt.builtin) {
+                message(`本次为内置固定考卷，共 ${attempt.questions.length} 题，建议 ${attempt.time_minutes} 分钟完成。填空只写空缺部分，句型转换写完整句子。`);
+                return;
+            }
             const missing = attempt.word_count * 2 - attempt.choice_count;
             const translationInfo = attempt.sentence_count ? `本次包含 ${attempt.sentence_count} 道句子中译英题。` : '';
             message(translationInfo + (attempt.include_choices
@@ -626,8 +699,8 @@
         el('exam-choice-options').hidden = isWrittenQuestion(question);
         const input = el('exam-spelling-answer');
         input.value = isWrittenQuestion(question) ? answers[question.id] || '' : '';
-        input.maxLength = question.type === 'translation' ? 500 : 200;
-        el('exam-answer-label').textContent = question.type === 'translation' ? '请将中文句子译成英文' : '请默写英文单词或短语';
+        input.maxLength = question.type === 'spelling' ? 200 : 500;
+        el('exam-answer-label').textContent = ({ translation: '请将中文句子译成英文', fill_blank: '请填写空缺部分', rewrite: '请写出转换后的完整句子' })[question.type] || '请默写英文单词或短语';
         el('exam-answer-hint').hidden = question.type !== 'translation';
         const options = el('exam-choice-options');
         options.replaceChildren();
@@ -700,7 +773,7 @@
             const card = document.createElement('article');
             card.className = 'exam-wrong-card';
             const title = document.createElement('h4');
-            title.textContent = question.type === 'translation' ? typeNames[question.type] : `${question.english} · ${typeNames[question.type]}`;
+            title.textContent = ['translation', 'fill_blank', 'rewrite', 'reading_choice'].includes(question.type) ? typeNames[question.type] : `${question.english} · ${typeNames[question.type]}`;
             card.appendChild(title);
             [question.prompt, `你的答案：${question.user_answer || '未作答'}`, `正确答案：${question.correct_answer}`,
                 question.translation, question.explanation].filter(Boolean).forEach((text) => {
@@ -726,6 +799,7 @@
         selectedPaper = '';
         editingPaper = '';
         newPaperDraft = null;
+        knowledgeReturnButton = null;
         attempt = null;
         result = null;
         answers = {};
@@ -740,6 +814,10 @@
         el('exam-spelling-answer').value = '';
         el('exam-choice-options').replaceChildren();
         el('exam-wrong-list').replaceChildren();
+        el('exam-knowledge-content').replaceChildren();
+        el('exam-knowledge-title').textContent = '知识点梳理';
+        el('exam-knowledge-intro').textContent = '';
+        el('exam-knowledge-pdf').href = '';
         ['exam-attempt-name', 'exam-question-prompt', 'exam-result-name', 'exam-result-score', 'exam-result-summary', 'exam-mistake-status'].forEach((id) => {
             el(id).textContent = '';
         });
@@ -753,6 +831,12 @@
     window.examPreparation = { open, reset };
     document.addEventListener('DOMContentLoaded', () => {
         el('exam-create-form').addEventListener('submit', savePaper);
+        el('exam-knowledge-back').addEventListener('click', () => {
+            if (busy) return;
+            showView('setup');
+            message();
+            knowledgeReturnButton?.focus({ preventScroll: true });
+        });
         el('exam-edit-paper').addEventListener('click', editPaper);
         el('exam-cancel-edit').addEventListener('click', () => {
             if (busy) return;
