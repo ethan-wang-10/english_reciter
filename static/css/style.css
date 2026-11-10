@@ -4187,6 +4187,21 @@ button.import-article-chip--selected:hover {
     }
 }
 
+.review-loading-status {
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--text-secondary);
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    font-weight: 700;
+}
+
+.review-loading-status[hidden],
+#review-section.is-loading .review-layout {
+    display: none !important;
+}
+
 .section {
     display: none;
 }

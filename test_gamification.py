@@ -24,6 +24,19 @@ def temp_data_dir():
 
 
 class TestAchievementUnlock(unittest.TestCase):
+    def test_profile_uses_one_history_snapshot_and_keeps_new_achievements(self):
+        with temp_data_dir() as d:
+            with patch.object(gm, 'load_state', wraps=gm.load_state) as load:
+                profile = gm.public_profile(d, 'alice', mastered_words=100)
+            self.assertEqual(load.call_count, 1)
+            self.assertTrue(profile['achievements_unlocked'])
+            self.assertEqual(profile['total_xp'], 0)
+            persisted = gm.load_state(d, 'alice')
+            self.assertEqual(
+                {row['id'] for row in profile['achievements_unlocked']},
+                set(persisted['achievements']),
+            )
+
     def test_daily_xp_cap_achievement(self):
         st = gm.default_state()
         st["daily_xp"] = {"2020-01-01": gm.DAILY_XP_SOFT_CAP}

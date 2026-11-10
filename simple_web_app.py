@@ -4009,14 +4009,16 @@ def bootstrap(username):
                 reciter.save_learning_data(backup=False)
             summary = _summary_payload_from_reciter(reciter)
 
-        pkw, pkm = _pk_stats_for_gamification(username)
-        gam_payload = gamification_mod.public_profile(
-            DATA_DIR,
-            username,
-            mastered_words=mastered_n,
-            pk_wins=pkw,
-            pk_matches=pkm,
-        )
+        gam_payload = None
+        if request.args.get('include_gamification', '1') != '0':
+            pkw, pkm = _pk_stats_for_gamification(username)
+            gam_payload = gamification_mod.public_profile(
+                DATA_DIR,
+                username,
+                mastered_words=mastered_n,
+                pk_wins=pkw,
+                pk_matches=pkm,
+            )
 
         av = user_avatar_disk_path(username)
         return jsonify({

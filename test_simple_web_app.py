@@ -313,6 +313,48 @@ def test_password_reset_policy_reads_environment(monkeypatch) -> None:
     assert web._password_reset_policy() == (45, 90)
 
 
+@pytest.mark.parametrize('include_gamification', [True, False])
+def test_bootstrap_can_return_learning_without_waiting_for_rewards(client, monkeypatch, include_gamification):
+    saved = []
+    reciter = SimpleNamespace(
+        mastered_words=[],
+        get_today_learning_plan=lambda **kwargs: {'words': []},
+        save_learning_data=lambda **kwargs: saved.append(True),
+    )
+    _mock_student_session(monkeypatch, reciter)
+    monkeypatch.setattr(web, '_auth_session_payload', lambda login: {})
+    monkeypatch.setattr(web, '_reliable_listening_available', lambda: False)
+    monkeypatch.setattr(web, '_review_words_payload', lambda *args, **kwargs: {'words': [], 'count': 0})
+    monkeypatch.setattr(web, '_summary_payload_from_reciter', lambda reciter: {'due_count': 0, 'stats': {}})
+    monkeypatch.setattr(web, 'user_avatar_disk_path', lambda username: None)
+    monkeypatch.setattr(web, 'get_user_plan', lambda username: 'free')
+    monkeypatch.setattr(web, 'get_deepseek_api_key', lambda: '')
+    monkeypatch.setattr(web, '_article_ai_extract_enabled', lambda: False)
+    calls = []
+
+    def pk_stats(username):
+        assert include_gamification, 'Fast bootstrap must not settle PK rewards'
+        calls.append('pk')
+        return 0, 0
+
+    def profile(*args, **kwargs):
+        assert include_gamification, 'Fast bootstrap must not load reward history'
+        calls.append('profile')
+        return {'level': 3}
+
+    monkeypatch.setattr(web, '_pk_stats_for_gamification', pk_stats)
+    monkeypatch.setattr(web.gamification_mod, 'public_profile', profile)
+    url = '/api/bootstrap' + ('' if include_gamification else '?include_gamification=0')
+    response = client.get(url, headers={'Authorization': 'Bearer student-token'})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['review'] == {'words': [], 'count': 0}
+    assert payload['summary']['due_count'] == 0
+    assert payload['gamification'] == ({'level': 3} if include_gamification else None)
+    assert calls == (['pk', 'profile'] if include_gamification else [])
+    assert saved == [True]
+
+
 def test_rapidocr_image_to_string_joins_nonempty_lines(monkeypatch) -> None:
     class FakeRapidOCREngine:
         def __call__(self, image):
@@ -572,8 +614,8 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "blockGuardedReviewCopy" in javascript
     assert "-webkit-user-select: none" in stylesheet
     assert "#new-word-study-english" in stylesheet
-    assert "/static/css/style.css?v=20260917-copy-guard-v1" in html
-    assert "/static/js/app.js?v=20261110-exam-preparation-v1" in html
+    assert "/static/css/style.css?v=20261110-startup-v1" in html
+    assert "/static/js/app.js?v=20261110-startup-v1" in html
     assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
