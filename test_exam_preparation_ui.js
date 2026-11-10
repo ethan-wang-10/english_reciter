@@ -6,6 +6,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, 'static/js/exam-preparation.js'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, 'static/index.html'), 'utf8');
+const appSource = fs.readFileSync(path.join(__dirname, 'static/js/app.js'), 'utf8');
 
 function examUI() {
     class Element {
@@ -38,6 +39,7 @@ function examUI() {
         }
     }
     const elements = new Map(Array.from(html.matchAll(/id="(exam-[^"]+)"/g), (match) => [match[1], new Element()]));
+    elements.get('exam-import-panel').hidden = true;
     const storage = new Map();
     const account = { token: 'alice-token', username: 'alice' };
     const state = { calls: [], failCreation: false };
@@ -67,9 +69,21 @@ function examUI() {
         isAccountContextCurrent: (ctx) => ctx.token === account.token && ctx.username === account.username,
         sessionStudentUsername: () => account.username,
         isParentSession: false,
+        userPlan: 'paid',
+        setTimeout: (callback) => setImmediate(callback),
+        parseVocabImportTokens: (raw) => raw.split(/[,，;；、\r\n]+/).map((word) => word.trim()).filter(Boolean),
+        vocabImportWordsForApi: (words) => words.join(', '),
+        invalidateReviewDataAfterImport: () => { state.reviewInvalidated = true; },
+        clearWordbankCsvDiscoveryCache: () => { state.wordbankInvalidated = true; },
         apiRequest: async (url, options = {}) => {
             const body = options.body ? JSON.parse(options.body) : null;
             state.calls.push({ url, body, method: options.method || 'GET' });
+            if (url === '/wordbank/csv/import-words') {
+                if (state.import) return state.import(body);
+                state.failCreation = false;
+                return { new_in_csv: 2 };
+            }
+            if (url.includes('/wordbank/import-jobs/')) return state.job();
             if (url.endsWith('/submit')) {
                 if (state.submit) return state.submit(body);
                 return { result: {
@@ -84,7 +98,11 @@ function examUI() {
             }
             if (url.includes('/attempts/')) return { attempt, result: null };
             if (options.method === 'POST' || options.method === 'PUT') {
-                if (state.failCreation) throw new Error('未找到中文释义：unknownword');
+                if (state.failCreation) {
+                    const error = new Error('未找到中文释义：unknownword');
+                    if (state.missingWords) error.missing_words = state.missingWords;
+                    throw error;
+                }
                 if (state.save) return state.save(body);
                 Object.assign(paper, {
                     name: body.name,
@@ -334,4 +352,130 @@ test('account reset clears sentence answers in the editor and ignores an in-flig
     assert.equal(ui.field('exam-paper-list').children.length, 0);
     assert.equal(ui.field('exam-paper-name').value, '');
     assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
+});
+
+async function missingWordEditor(ui) {
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    ui.field('exam-paper-name').value = '四上期中考试';
+    ui.field('exam-words').value = 'apple, seventy, school building';
+    ui.state.failCreation = true;
+    ui.state.missingWords = ['seventy', 'school building'];
+    await ui.field('exam-create-form').fire('submit');
+}
+
+test('missing words open an inline import window and successful import saves the original paper', async () => {
+    const ui = examUI();
+    await missingWordEditor(ui);
+    assert.equal(ui.field('exam-import-panel').hidden, false);
+    assert.equal(ui.field('exam-import-words').value, 'seventy\nschool building');
+    assert.equal(ui.field('exam-import-add-to-queue').checked, false);
+    assert.equal(ui.field('exam-paper-name').value, '四上期中考试');
+    assert.equal(ui.field('exam-words').value, 'apple, seventy, school building');
+    ui.field('exam-import-level').value = '小学';
+    await ui.field('exam-import-submit').fire('click');
+    const imported = ui.state.calls.find((call) => call.url === '/wordbank/csv/import-words');
+    assert.deepEqual(imported.body, { words: 'seventy, school building', level: '小学', also_add_to_queue: false });
+    const saves = ui.state.calls.filter((call) => call.method === 'PUT');
+    assert.equal(saves.length, 2);
+    assert.equal(saves[1].url, '/exam-preparation/papers/paper-1');
+    assert.deepEqual(saves[1].body, saves[0].body);
+    assert.equal(ui.field('exam-import-panel').hidden, true);
+    assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
+    assert.equal(ui.state.wordbankInvalidated, true);
+});
+
+test('background import waits for completion before retrying the paper save', async () => {
+    const ui = examUI();
+    await missingWordEditor(ui);
+    ui.field('exam-import-add-to-queue').checked = true;
+    ui.state.import = async () => ({ job_id: 'private-job' });
+    let polls = 0;
+    ui.state.job = async () => {
+        polls += 1;
+        assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 1);
+        if (polls === 1) return { status: 'running' };
+        ui.state.failCreation = false;
+        return { status: 'succeeded', result: { queue_result: { added: 2 } } };
+    };
+    await ui.field('exam-import-submit').fire('click');
+    assert.equal(polls, 2);
+    assert.equal(ui.state.calls.find((call) => call.url === '/wordbank/csv/import-words').body.also_add_to_queue, true);
+    assert.equal(ui.state.reviewInvalidated, true);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 2);
+});
+
+test('partial imports retain the paper draft and show only the still-missing words', async () => {
+    const ui = examUI();
+    await missingWordEditor(ui);
+    ui.state.import = async () => {
+        ui.state.missingWords = ['school building'];
+        return { new_in_csv: 1, invalid_surfaces: ['school building'] };
+    };
+    await ui.field('exam-import-submit').fire('click');
+    assert.equal(ui.field('exam-import-panel').hidden, false);
+    assert.equal(ui.field('exam-import-words').value, 'school building');
+    assert.equal(ui.field('exam-words').value, 'apple, seventy, school building');
+    assert.equal(ui.field('exam-paper-name').value, '四上期中考试');
+    assert.match(ui.field('exam-import-status').textContent, /未能导入：school building/);
+    assert.equal(ui.field('exam-import-submit').disabled, false);
+});
+
+test('a failed background import preserves inputs and allows retry', async () => {
+    const ui = examUI();
+    await missingWordEditor(ui);
+    ui.state.import = async () => ({ job_id: 'private-job' });
+    ui.state.job = async () => ({ status: 'failed', error: '导入服务暂不可用' });
+    await ui.field('exam-import-submit').fire('click');
+    assert.match(ui.field('exam-import-status').textContent, /导入服务暂不可用/);
+    assert.equal(ui.field('exam-import-words').value, 'seventy\nschool building');
+    assert.equal(ui.field('exam-import-submit').disabled, false);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 1);
+});
+
+test('free accounts see the inline import explanation without bypassing VIP access', async () => {
+    const ui = examUI();
+    ui.context.userPlan = 'free';
+    await missingWordEditor(ui);
+    assert.equal(ui.field('exam-import-panel').hidden, false);
+    assert.equal(ui.field('exam-import-locked').hidden, false);
+    assert.equal(ui.field('exam-import-submit').disabled, true);
+    await ui.field('exam-import-submit').fire('click');
+    assert.equal(ui.state.calls.some((call) => call.url === '/wordbank/csv/import-words'), false);
+});
+
+test('account switches stop background polling and prevent saving another account paper', async () => {
+    const ui = examUI();
+    await missingWordEditor(ui);
+    ui.state.import = async () => ({ job_id: 'private-job' });
+    ui.state.job = async () => {
+        ui.api.reset();
+        ui.account.token = 'bob-token';
+        ui.account.username = 'bob';
+        return { status: 'succeeded', result: {} };
+    };
+    await ui.field('exam-import-submit').fire('click');
+    assert.equal(ui.state.calls.filter((call) => call.url.includes('/import-jobs/')).length, 1);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 1);
+    assert.equal(ui.field('exam-import-panel').hidden, true);
+    assert.equal(ui.field('exam-import-words').value, '');
+    assert.equal(ui.field('exam-paper-name').value, '');
+});
+
+test('API errors preserve the complete missing-word list as structured data', async () => {
+    const start = appSource.indexOf('async function apiRequest(');
+    const end = appSource.indexOf('/** 单词学习：', start);
+    const words = Array.from({ length: 20 }, (_, index) => `missing${index}`);
+    const context = vm.createContext({
+        token: 'alice-token', API_BASE: '/api', parseApiJsonBody: JSON.parse,
+        captureAccountContext: () => ({ token: 'alice-token', username: 'alice' }),
+        isAccountContextCurrent: () => true,
+        fetch: async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: '缺少释义', missing_words: [...words, null, 42, ''] }) }),
+    });
+    vm.runInContext(appSource.slice(start, end), context);
+    await assert.rejects(context.apiRequest('/exam-preparation/papers'), (error) => {
+        assert.equal(error.status, 400);
+        assert.deepEqual(Array.from(error.missing_words), words);
+        return true;
+    });
 });

@@ -12,12 +12,15 @@
     let answers = {};
     let index = 0;
     let busy = false;
+    let importBusy = false;
+    let importFeedback = '';
     let generation = 0;
     let listRequest = 0;
     let draftKey = '';
     const el = (id) => document.getElementById(id);
     const context = () => ({ account: captureAccountContext(), generation });
     const current = (ctx) => ctx.generation === generation && isAccountContextCurrent(ctx.account);
+    const canImportWords = () => typeof userPlan !== 'undefined' && userPlan === 'paid';
     const isWrittenQuestion = (question) => ['spelling', 'translation'].includes(question.type);
     const paperContents = (paper) => [
         paper.word_count ? `${paper.word_count} 个单词` : '',
@@ -44,6 +47,99 @@
         el('exam-start').disabled = busy || !!editingPaper || !selectedPaper || isParentSession;
         const selected = papers.find((paper) => paper.id === selectedPaper);
         el('exam-include-choices').disabled = busy || isParentSession || !selected?.word_count;
+        ['exam-import-words', 'exam-import-level', 'exam-import-add-to-queue', 'exam-import-dismiss'].forEach((id) => {
+            el(id).disabled = busy;
+        });
+        el('exam-import-submit').disabled = busy || !canImportWords() || !el('exam-import-words').value.trim();
+        el('exam-import-submit').textContent = importBusy ? '导入处理中…' : '导入并保存考卷';
+        el('exam-import-locked').hidden = canImportWords();
+    }
+
+    function importStatus(text = '', error = false) {
+        const node = el('exam-import-status');
+        node.textContent = text;
+        node.hidden = !text;
+        node.classList.toggle('exam-message-error', error);
+        node.setAttribute('role', error ? 'alert' : 'status');
+    }
+
+    function hideMissingImport() {
+        el('exam-import-panel').hidden = true;
+        el('exam-import-words').value = '';
+        el('exam-import-level').value = '';
+        el('exam-import-add-to-queue').checked = false;
+        importFeedback = '';
+        importStatus();
+    }
+
+    function showMissingImport(words) {
+        el('exam-import-panel').hidden = false;
+        el('exam-import-words').value = words.join('\n');
+        importStatus(importFeedback ? `${importFeedback} 以下单词仍缺少释义，请检查拼写后重试。` : '', !!importFeedback);
+        updateEditor();
+        el('exam-import-panel').scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function waitForExamImportJob(jobId, ctx) {
+        const deadline = Date.now() + 15 * 60 * 1000;
+        while (current(ctx) && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            if (!current(ctx)) return null;
+            const job = await apiRequest(`/wordbank/import-jobs/${encodeURIComponent(jobId)}`);
+            if (!current(ctx)) return null;
+            if (job.status === 'succeeded' && job.result) return job.result;
+            if (job.status === 'failed') throw new Error(job.error || '后台导入失败，请重试');
+        }
+        if (!current(ctx)) return null;
+        throw new Error('后台导入仍在进行，请稍后重试保存考卷');
+    }
+
+    async function importMissingWords() {
+        if (busy) return;
+        if (!canImportWords()) {
+            importStatus('词汇导入仅限 VIP 用户使用，请联系管理员升级账号。', true);
+            return;
+        }
+        const tokens = [...new Set(parseVocabImportTokens(el('exam-import-words').value))];
+        if (!tokens.length) {
+            importStatus('请先输入需要导入的单词或词组。', true);
+            return;
+        }
+        const ctx = context();
+        importBusy = true;
+        setBusy(true);
+        importStatus('正在导入单词，当前考卷内容已保留…');
+        try {
+            let data = await apiRequest('/wordbank/csv/import-words', {
+                method: 'POST', body: JSON.stringify({
+                    words: vocabImportWordsForApi(tokens), level: el('exam-import-level').value,
+                    also_add_to_queue: el('exam-import-add-to-queue').checked,
+                }),
+            });
+            if (!current(ctx)) return;
+            if (data.job_id) {
+                importStatus('已提交后台导入，完成后会继续保存考卷，请稍候…');
+                data = await waitForExamImportJob(data.job_id, ctx);
+            }
+            if (!current(ctx) || !data) return;
+            if (Number(data.queue_result?.added) > 0 && typeof invalidateReviewDataAfterImport === 'function') {
+                invalidateReviewDataAfterImport();
+            }
+            if (typeof clearWordbankCsvDiscoveryCache === 'function') clearWordbankCsvDiscoveryCache();
+            const failed = [...new Set(['failed', 'blocked_surfaces', 'invalid_surfaces']
+                .flatMap((key) => Array.isArray(data[key]) ? data[key] : []).filter((word) => typeof word === 'string'))];
+            importFeedback = failed.length ? `未能导入：${failed.join('、')}。` : '导入处理完成。';
+            importBusy = false;
+            setBusy(false);
+            await savePaper({ preventDefault() {} });
+        } catch (error) {
+            if (current(ctx)) importStatus(error.message || '导入失败，请重试', true);
+        } finally {
+            if (current(ctx)) {
+                importBusy = false;
+                setBusy(false);
+            }
+        }
     }
 
     function addSentence(value = { chinese: '', answers: [] }) {
@@ -108,6 +204,7 @@
     }
 
     function fillEditor(value) {
+        hideMissingImport();
         el('exam-paper-name').value = value?.name || '';
         el('exam-words').value = value?.words || '';
         renderSentences(value?.sentences || []);
@@ -316,7 +413,15 @@
             message(`“${data.paper.name}”${paperId ? '已更新' : '已保存'}，共 ${paperContents(data.paper)}。${data.duplicates_removed ? `已合并 ${data.duplicates_removed} 个重复单词。` : ''}`);
             await refreshPapers();
         } catch (error) {
-            if (current(ctx)) message(error.message || '保存考卷失败，请重试', true);
+            if (current(ctx)) {
+                const missing = Array.isArray(error.missing_words) ? error.missing_words : [];
+                if (missing.length) {
+                    message('部分单词缺少中文释义，可在下方导入后继续保存考卷。', true);
+                    showMissingImport(missing);
+                } else {
+                    message(error.message || '保存考卷失败，请重试', true);
+                }
+            }
         } finally {
             if (current(ctx)) setBusy(false);
         }
@@ -529,6 +634,7 @@
         index = 0;
         draftKey = '';
         busy = false;
+        importBusy = false;
         if (!el('exam-create-form')) return;
         el('exam-create-form').reset();
         fillEditor(null);
@@ -559,7 +665,15 @@
             if (busy || sentenceRows.length >= 100) return;
             addSentence().focus();
         });
-        el('exam-words').addEventListener('input', updateWordCount);
+        el('exam-words').addEventListener('input', () => {
+            hideMissingImport();
+            updateWordCount();
+        });
+        el('exam-import-words').addEventListener('input', updateEditor);
+        el('exam-import-submit').addEventListener('click', importMissingWords);
+        el('exam-import-dismiss').addEventListener('click', () => {
+            if (!busy) hideMissingImport();
+        });
         el('exam-start').addEventListener('click', startExam);
         el('exam-review-paper-mistakes').addEventListener('click', () => startMistakeReview(selectedPaper));
         el('exam-review-mistakes').addEventListener('click', () => startMistakeReview(result?.paper_id));

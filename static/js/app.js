@@ -4806,6 +4806,8 @@ async function apiRequest(endpoint, options = {}) {
         const requestError = new Error(error.error || error.detail || '请求失败');
         requestError.status = response.status;
         requestError.code = error.code || '';
+        requestError.missing_words = Array.isArray(error.missing_words)
+            ? error.missing_words.filter((word) => typeof word === 'string' && word.trim()) : [];
         throw requestError;
     }
     

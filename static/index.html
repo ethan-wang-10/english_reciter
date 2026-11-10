@@ -7,7 +7,7 @@
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/brand/logo-mark.svg?v=parrot2">
     <link rel="stylesheet" href="/static/css/style.css?v=20261110-nav-more-v1">
-    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-mistakes-v1">
+    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-inline-import-v1">
 </head>
 <body>
     <div id="app">
@@ -469,6 +469,31 @@
                                 <button id="exam-save-paper" type="submit" class="btn btn-primary">保存并生成考卷</button>
                                 <button id="exam-cancel-edit" type="button" class="btn btn-secondary" hidden>取消编辑</button>
                             </div>
+                            <section id="exam-import-panel" class="exam-import-panel" aria-labelledby="exam-import-title" hidden>
+                                <h4 id="exam-import-title">补充未识别的单词 <span class="vip-badge">VIP</span></h4>
+                                <p class="exam-hint">已填入缺少释义的单词，可直接在这里导入，无需离开考卷。导入完成后会继续保存当前考卷。</p>
+                                <label for="exam-import-words">需要导入的单词或词组</label>
+                                <textarea id="exam-import-words" rows="4" maxlength="20000" spellcheck="false" autocapitalize="none" autocorrect="off" aria-describedby="exam-import-input-hint" placeholder="每行一词或词组，也支持逗号分隔"></textarea>
+                                <p id="exam-import-input-hint" class="exam-hint">如需修正拼写，请同时修改上方的考试单词。</p>
+                                <label for="exam-import-level">指定难度（可选）</label>
+                                <select id="exam-import-level">
+                                    <option value="">自动判断</option>
+                                    <option value="小学">小学</option>
+                                    <option value="初中">初中</option>
+                                    <option value="高中">高中</option>
+                                    <option value="GRE">GRE</option>
+                                </select>
+                                <label class="exam-choice-toggle">
+                                    <input id="exam-import-add-to-queue" type="checkbox">
+                                    <span>同时加入待复习列表</span>
+                                </label>
+                                <p id="exam-import-locked" class="exam-hint" hidden>词汇导入仅限 VIP 用户使用，请联系管理员升级账号。</p>
+                                <p id="exam-import-status" class="exam-hint" role="status" aria-live="polite" hidden></p>
+                                <div class="exam-editor-actions">
+                                    <button id="exam-import-submit" type="button" class="btn btn-primary">导入并保存考卷</button>
+                                    <button id="exam-import-dismiss" type="button" class="btn btn-secondary">暂不导入</button>
+                                </div>
+                            </section>
                         </form>
                         <div class="exam-panel">
                             <h3>选择考卷</h3>
@@ -1433,8 +1458,8 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20261110-nav-more-v1" defer></script>
-    <script src="/static/js/exam-preparation.js?v=20261110-mistakes-v1" defer></script>
+    <script src="/static/js/app.js?v=20261110-inline-import-v1" defer></script>
+    <script src="/static/js/exam-preparation.js?v=20261110-inline-import-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js?v=20260910-authoring-v1" defer></script>
