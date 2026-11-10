@@ -106,6 +106,7 @@ from performance_store import (
 )
 from learning_sqlite_store import LearningSQLiteStore, learning_store_revision
 from import_job_store import ImportJobStore
+from exam_preparation_routes import register_exam_preparation_routes
 
 try:
     from tts_piper import (
@@ -6717,6 +6718,25 @@ def _publish_combined_gaokao_questions_for_new_entries(
 def _current_gaokao_source(word_key: str) -> Optional[dict]:
     row = lookup_csv_word(word_key)
     return gaokao_questions.source_from_wordbank_row(row) if row else None
+
+
+def _exam_preparation_words(username: str, keys: List[str]) -> Dict[str, dict]:
+    found = {key: row for key in keys if (row := lookup_csv_word(key))}
+    missing = [key for key in keys if not (found.get(key, {}).get('chinese') or '').strip()]
+    if missing:
+        with user_reciter_session(username) as reciter:
+            for key in missing:
+                word = reciter.find_word(key, include_mastered=True)
+                if word and (word.chinese or '').strip():
+                    found[key] = {'english': word.english, 'chinese': word.chinese}
+    return found
+
+
+register_exam_preparation_routes(
+    app, token_required, parent_forbidden, lambda: DATA_DIR,
+    lambda username, keys: _exam_preparation_words(username, keys),
+    lambda key, kind: gaokao_questions.get_question(key, kind, source=_current_gaokao_source(key)),
+)
 
 
 def gaokao_question_sources(level: str = "") -> List[dict]:

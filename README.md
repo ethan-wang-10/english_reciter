@@ -9,6 +9,7 @@
 | 智能每日任务 | 默认每天最多安排 120 个词；默认复习优先，至少 60% 容量保留给复习，新词量按近 7 天正确率、完成率、作答难度与积压自动调整 |
 | 自适应复习 | 使用可解释的 `adaptive-sm2-v1` 排期，根据答题结果动态调整间隔（不是 FSRS） |
 | 高考多维掌握 | Web 端以英文识义、语境选词和拼写作为掌握门槛；可靠音频可用时，听写作为已掌握词的增强练习 |
+| 考前准备 | 输入逗号分隔的考试单词并为考卷命名，保存后可反复考试；默认单词默写，可额外开启英文识义和语境选择题，交卷后查看成绩与错题 |
 | 私有选择题库 | 英文识义与语境选词由服务端判分；支持离线批量生成、断点续跑和缺题时在线补题 |
 | 外部题目编写 | 管理员 API 支持领取未生成词、上传题目和分阶段独立审核；该流程不调用 DeepSeek |
 | 关联复习顺序 | 每日任务选词不变；任务内按本地拼写相似度将近形词排在一起，便于对比记忆 |
@@ -89,6 +90,7 @@ cp config.example.json config.json
 | `learning_data.json` | CLI 默认学习数据（可从 `words.txt` 初始化） |
 | `learning_data.learning_state_v2.json` | 自适应排期与每日任务兼容 sidecar；主数据已包含同一状态 |
 | `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
+| `user_data_simple/<用户名>/exam_preparation.sqlite3` | 考前准备的考卷与考试记录；独立保存，不计入每日任务与学习积分 |
 | `static/wordbanks/words.csv` | 内置词库（**不随 Git 发布**；本地从 `words.csv.example` 复制或自备；线上勿被 `git pull` 覆盖，由服务器文件或管理后台「增量上传」维护） |
 | `static/wordbanks/words_v2.json` | 新版内置词库（线上运行时数据；仓库只保留空占位，部署脚本会保护服务器本地文件） |
 | `user_data_simple/_shared/gaokao_questions_v2.json` | 服务端私有的版本化高考选择题库，包含答案，不得放入 `static/` |

@@ -207,6 +207,106 @@ def client():
         yield test_client
 
 
+@pytest.fixture
+def exam_environment(monkeypatch, tmp_path):
+    monkeypatch.setattr(web, 'DATA_DIR', tmp_path)
+    monkeypatch.setattr(web, 'verify_token', lambda token: token if token in ('alice', 'bob', 'alice_parent') else None)
+    users = {
+        'alice': {'enabled': True}, 'bob': {'enabled': True},
+        'alice_parent': {'enabled': True, 'role': 'parent', 'child_username': 'alice'},
+    }
+    monkeypatch.setattr(web, 'get_user', users.get)
+    monkeypatch.setattr(web, 'lookup_csv_word', lambda key: (
+        {'english': 'apple', 'chinese': 'n. 苹果'} if key == 'apple' else None
+    ))
+    private_word = SimpleNamespace(english='look after', chinese='照顾')
+
+    @contextmanager
+    def reciter_session(username):
+        yield SimpleNamespace(find_word=lambda key, **kwargs: private_word if key == 'look after' else None)
+
+    monkeypatch.setattr(web, 'user_reciter_session', reciter_session)
+    monkeypatch.setattr(web.gaokao_questions, 'get_question', lambda *args, **kwargs: None)
+    return tmp_path
+
+
+def test_exam_api_creates_named_paper_and_grades_without_learning_updates(client, exam_environment):
+    headers = {'Authorization': 'Bearer alice'}
+    response = client.post('/api/exam-preparation/papers', headers=headers, json={
+        'name': '  期中考试  ', 'words': 'Apple，look after, apple',
+    })
+    assert response.status_code == 201
+    created = response.get_json()
+    assert created['duplicates_removed'] == 1
+    assert created['paper']['name'] == '期中考试'
+    assert created['paper']['word_count'] == 2
+    paper_id = created['paper']['id']
+    response = client.post(f'/api/exam-preparation/papers/{paper_id}/attempts', headers=headers, json={})
+    assert response.status_code == 201
+    attempt = response.get_json()['attempt']
+    assert attempt['include_choices'] is False
+    assert all(question['type'] == 'spelling' for question in attempt['questions'])
+    answers = {question['id']: 'APPLE' if question['prompt'] == 'n. 苹果' else 'wrong' for question in attempt['questions']}
+    response = client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=headers, json={'answers': answers})
+    assert response.status_code == 200
+    result = response.get_json()['result']
+    assert (result['score'], result['correct_count'], result['wrong_count']) == (50, 1, 1)
+    assert client.get('/api/exam-preparation/papers', headers=headers).get_json()['papers'][0]['last_score'] == 50
+    assert not (exam_environment / 'alice' / 'learning.sqlite3').exists()
+
+
+def test_exam_api_missing_words_do_not_save_partial_papers(client, exam_environment):
+    headers = {'Authorization': 'Bearer alice'}
+    response = client.post('/api/exam-preparation/papers', headers=headers, json={
+        'name': '检查释义', 'words': 'apple,unknownword',
+    })
+    assert response.status_code == 400
+    assert response.get_json()['missing_words'] == ['unknownword']
+    assert client.get('/api/exam-preparation/papers', headers=headers).get_json()['papers'] == []
+
+
+@pytest.mark.parametrize('body', [None, [], {'name': '', 'words': 'apple'}, {'name': 'a' * 81, 'words': 'apple'}, {'name': '测试', 'words': 123}])
+def test_exam_api_rejects_invalid_creation(client, exam_environment, body):
+    response = client.post('/api/exam-preparation/papers', headers={'Authorization': 'Bearer alice'}, json=body)
+    assert response.status_code == 400
+
+
+def test_exam_api_authentication_and_user_isolation(client, exam_environment):
+    assert client.get('/api/exam-preparation/papers').status_code == 401
+    alice = {'Authorization': 'Bearer alice'}
+    bob = {'Authorization': 'Bearer bob'}
+    paper = client.post('/api/exam-preparation/papers', headers=alice, json={'name': '私有', 'words': 'apple'}).get_json()['paper']
+    attempt = client.post(f"/api/exam-preparation/papers/{paper['id']}/attempts", headers=alice, json={}).get_json()['attempt']
+    assert client.get('/api/exam-preparation/papers', headers=bob).get_json()['papers'] == []
+    assert client.post(f"/api/exam-preparation/papers/{paper['id']}/attempts", headers=bob, json={}).status_code == 404
+    assert client.get(f"/api/exam-preparation/attempts/{attempt['id']}", headers=bob).status_code == 404
+    assert client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=bob, json={'answers': {}}).status_code == 404
+
+
+def test_parent_can_prepare_child_paper_but_cannot_take_exam(client, exam_environment):
+    parent = {'Authorization': 'Bearer alice_parent'}
+    child = {'Authorization': 'Bearer alice'}
+    paper = client.post('/api/exam-preparation/papers', headers=parent, json={'name': '家长准备', 'words': 'apple'}).get_json()['paper']
+    assert client.get('/api/exam-preparation/papers', headers=child).get_json()['papers'][0]['id'] == paper['id']
+    assert client.post(f"/api/exam-preparation/papers/{paper['id']}/attempts", headers=parent, json={}).status_code == 403
+    attempt = client.post(f"/api/exam-preparation/papers/{paper['id']}/attempts", headers=child, json={}).get_json()['attempt']
+    assert client.get(f"/api/exam-preparation/attempts/{attempt['id']}", headers=parent).status_code == 403
+    assert client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=parent, json={'answers': {}}).status_code == 403
+
+
+def test_exam_api_choices_require_real_boolean(client, exam_environment):
+    headers = {'Authorization': 'Bearer alice'}
+    paper = client.post('/api/exam-preparation/papers', headers=headers, json={'name': '测试', 'words': 'apple'}).get_json()['paper']
+    response = client.post(f"/api/exam-preparation/papers/{paper['id']}/attempts", headers=headers, json={'include_choices': 'false'})
+    assert response.status_code == 400
+    response = client.post(f"/api/exam-preparation/papers/{paper['id']}/attempts", headers=headers, json={'include_choices': True})
+    assert response.status_code == 201
+    attempt = response.get_json()['attempt']
+    assert attempt['include_choices'] is True
+    assert attempt['choice_count'] == 0
+    assert len(attempt['questions']) == 1
+
+
 def test_password_reset_policy_reads_environment(monkeypatch) -> None:
     monkeypatch.setenv("PASSWORD_RESET_TTL_MINUTES", "45")
     monkeypatch.setenv("PASSWORD_RESET_COOLDOWN_SECONDS", "90")
@@ -473,7 +573,7 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "-webkit-user-select: none" in stylesheet
     assert "#new-word-study-english" in stylesheet
     assert "/static/css/style.css?v=20260917-copy-guard-v1" in html
-    assert "/static/js/app.js?v=20260920-manual-review-advance-v1" in html
+    assert "/static/js/app.js?v=20261110-exam-preparation-v1" in html
     assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet

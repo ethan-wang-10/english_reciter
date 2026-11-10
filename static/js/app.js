@@ -5026,6 +5026,7 @@ function handleInviteRegistrationNavigation() {
 
 function showLoginPage() {
     resetInviteCardState();
+    window.examPreparation?.reset();
     preloadedReviewData = null;
     reviewDataStaleAfterImport = false;
     resetActiveReviewSession();
@@ -5357,7 +5358,7 @@ function showSection(sectionId) {
     document.querySelectorAll(`.mobile-more-link[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
 
     const moreBtn = document.getElementById('mobile-more-btn');
-    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook')) {
+    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook' || sectionId === 'exam-preparation')) {
         moreBtn.classList.add('active');
     }
 
@@ -5374,6 +5375,8 @@ function showSection(sectionId) {
         loadDiscovery();
     } else if (sectionId === 'textbook') {
         loadTextbookSection();
+    } else if (sectionId === 'exam-preparation') {
+        void window.examPreparation?.open();
     } else if (sectionId === 'progress') {
         if (_isSectionFresh('progress')) { _restoreScrollPos('progress'); return; }
         loadProgress();
