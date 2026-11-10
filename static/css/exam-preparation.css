@@ -33,6 +33,17 @@
 .exam-panel .btn { margin-top: 18px; }
 .exam-panel button:disabled { opacity: 0.55; cursor: default; }
 .exam-editor-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.exam-field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-weight: 700; margin: 18px 0 8px; }
+.exam-field-label span { font-size: 0.8rem; font-weight: 400; color: var(--text-secondary); }
+.exam-word-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 8px; padding: 12px; min-height: 70px; max-height: 320px; overflow-y: auto; border: 2px solid var(--border); border-radius: 12px; }
+.exam-word-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 4px 4px 12px; background: var(--primary-light); border: 1px solid #c2e7a3; border-radius: 24px; font-size: 0.9rem; }
+.exam-word-chip span { min-width: 0; overflow-wrap: anywhere; }
+.exam-word-chip-remove { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-secondary); font: inherit; font-size: 1.3rem; cursor: pointer; }
+.exam-word-chip-remove:hover { background: #d8efc4; color: var(--text-primary); }
+.exam-word-add-row { display: flex; align-items: stretch; gap: 10px; }
+.exam-word-add-row #exam-add-words { min-width: 0; min-height: 76px; flex: 1; }
+.exam-word-add-row .btn { margin: 0; flex-shrink: 0; padding: 10px 18px; }
+#exam-word-editor-status.exam-message-error { color: #b62424; }
 .exam-import-panel { margin-top: 24px; padding-top: 20px; border-top: 2px solid var(--border); }
 .exam-import-panel h4 { font-size: 1rem; margin: 0 0 10px; }
 .exam-import-panel select { width: 100%; padding: 10px 12px; border: 2px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text-primary); font: inherit; }

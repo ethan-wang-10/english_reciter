@@ -259,6 +259,8 @@ test('editing loads the selected paper beside the list and cancellation restores
     assert.equal(ui.field('exam-words').value, 'banana');
     assert.equal(ui.field('exam-sentence-list').children[0].children[4].value, 'I like bananas.');
     assert.equal(ui.field('exam-start').disabled, false);
+    assert.equal(ui.field('exam-word-chips').children.length, 0);
+    assert.equal(ui.field('exam-add-words').value, '');
 });
 
 test('saving edits uses the original paper id and retains changes after failure', async () => {
@@ -266,7 +268,7 @@ test('saving edits uses the original paper id and retains changes after failure'
     await ui.api.open();
     await ui.field('exam-edit-paper').fire('click');
     ui.field('exam-paper-name').value = '修改后的期中考试';
-    ui.field('exam-words').value = 'look after';
+    await ui.field('exam-word-chips').children.find((chip) => chip.children[0].textContent === 'apple').children[1].fire('click');
     ui.state.failCreation = true;
     await ui.field('exam-create-form').fire('submit');
     assert.equal(ui.field('exam-editor-title').textContent, '编辑考卷');
@@ -352,13 +354,17 @@ test('account reset clears sentence answers in the editor and ignores an in-flig
     assert.equal(ui.field('exam-paper-list').children.length, 0);
     assert.equal(ui.field('exam-paper-name').value, '');
     assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
+    assert.equal(ui.field('exam-word-chips').children.length, 0);
+    assert.equal(ui.field('exam-add-words').value, '');
 });
 
 async function missingWordEditor(ui) {
     await ui.api.open();
     await ui.field('exam-edit-paper').fire('click');
     ui.field('exam-paper-name').value = '四上期中考试';
-    ui.field('exam-words').value = 'apple, seventy, school building';
+    await ui.field('exam-word-chips').children.find((chip) => chip.children[0].textContent === 'look after').children[1].fire('click');
+    ui.field('exam-add-words').value = 'seventy, school building';
+    await ui.field('exam-add-word-button').fire('click');
     ui.state.failCreation = true;
     ui.state.missingWords = ['seventy', 'school building'];
     await ui.field('exam-create-form').fire('submit');
@@ -371,7 +377,7 @@ test('missing words open an inline import window and successful import saves the
     assert.equal(ui.field('exam-import-words').value, 'seventy\nschool building');
     assert.equal(ui.field('exam-import-add-to-queue').checked, false);
     assert.equal(ui.field('exam-paper-name').value, '四上期中考试');
-    assert.equal(ui.field('exam-words').value, 'apple, seventy, school building');
+    assert.equal(ui.field('exam-words').value, 'apple, school building, seventy');
     ui.field('exam-import-level').value = '小学';
     await ui.field('exam-import-submit').fire('click');
     const imported = ui.state.calls.find((call) => call.url === '/wordbank/csv/import-words');
@@ -415,7 +421,7 @@ test('partial imports retain the paper draft and show only the still-missing wor
     await ui.field('exam-import-submit').fire('click');
     assert.equal(ui.field('exam-import-panel').hidden, false);
     assert.equal(ui.field('exam-import-words').value, 'school building');
-    assert.equal(ui.field('exam-words').value, 'apple, seventy, school building');
+    assert.equal(ui.field('exam-words').value, 'apple, school building, seventy');
     assert.equal(ui.field('exam-paper-name').value, '四上期中考试');
     assert.match(ui.field('exam-import-status').textContent, /未能导入：school building/);
     assert.equal(ui.field('exam-import-submit').disabled, false);
@@ -478,4 +484,111 @@ test('API errors preserve the complete missing-word list as structured data', as
         assert.deepEqual(Array.from(error.missing_words), words);
         return true;
     });
+});
+
+const chipWords = (ui) => ui.field('exam-word-chips').children.map((chip) => chip.children[0].textContent);
+
+test('editing shows alphabetically sorted word chips and preserves complete phrases', async () => {
+    const ui = examUI();
+    ui.state.paper.words = ['school building', 'Banana', 'apple', 'APPLE', 'look after'].map((english) => ({ english }));
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    assert.equal(ui.field('exam-words-raw').hidden, true);
+    assert.equal(ui.field('exam-word-editor').hidden, false);
+    assert.deepEqual(chipWords(ui), ['apple', 'Banana', 'look after', 'school building']);
+    assert.equal(ui.field('exam-words').value, 'apple, Banana, look after, school building');
+    assert.equal(ui.field('exam-word-chips').children[0].children[1].attributes['aria-label'], '删除 apple');
+    assert.match(ui.field('exam-word-count').textContent, /已选 4 个/);
+});
+
+test('adding a batch deduplicates case and whitespace and inserts words in alphabetical order', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    ui.field('exam-add-words').value = 'zoo，ART ROOM\n Apple ;computer   room';
+    await ui.field('exam-add-word-button').fire('click');
+    assert.deepEqual(chipWords(ui), ['apple', 'ART ROOM', 'computer room', 'look after', 'zoo']);
+    assert.equal(ui.field('exam-add-words').value, '');
+    assert.match(ui.field('exam-word-editor-status').textContent, /3.*1 个重复/);
+    assert.match(ui.field('exam-word-count').textContent, /已选 5 个/);
+});
+
+test('removing a chip updates the draft and saves the remaining words only', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    await ui.field('exam-word-chips').children[0].children[1].fire('click');
+    assert.deepEqual(chipWords(ui), ['look after']);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 0);
+    await ui.field('exam-create-form').fire('submit');
+    assert.equal(ui.state.calls.find((call) => call.method === 'PUT').body.words, 'look after');
+});
+
+test('saving includes words still pending in the add field', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    ui.field('exam-add-words').value = 'banana, art room';
+    await ui.field('exam-create-form').fire('submit');
+    assert.equal(ui.state.calls.find((call) => call.method === 'PUT').body.words, 'apple, art room, banana, look after');
+});
+
+test('Enter adds words while composition, held Enter and Shift Enter preserve the pending text', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    const input = ui.field('exam-add-words');
+    input.value = 'banana';
+    for (const event of [{ isComposing: true }, { repeat: true }, { shiftKey: true }]) {
+        await input.fire('keydown', { key: 'Enter', ...event });
+        assert.equal(input.value, 'banana');
+        assert.deepEqual(chipWords(ui), ['apple', 'look after']);
+    }
+    await input.fire('keydown', { key: 'Enter' });
+    assert.equal(input.value, '');
+    assert.deepEqual(chipWords(ui), ['apple', 'banana', 'look after']);
+});
+
+test('invalid input and the 300 word limit preserve the pending words without saving', async () => {
+    const ui = examUI();
+    ui.state.paper.words = Array.from({ length: 300 }, (_, index) => ({ english: `word${index}` }));
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    ui.field('exam-add-words').value = 'extra';
+    await ui.field('exam-create-form').fire('submit');
+    assert.equal(chipWords(ui).length, 300);
+    assert.equal(ui.field('exam-add-words').value, 'extra');
+    assert.match(ui.field('exam-word-editor-status').textContent, /最多 300/);
+    ui.field('exam-add-words').value = 'word/invalid';
+    await ui.field('exam-add-word-button').fire('click');
+    assert.equal(ui.field('exam-add-words').value, 'word/invalid');
+    assert.match(ui.field('exam-word-editor-status').textContent, /请检查英文/);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 0);
+});
+
+test('removing a missing word closes the outdated import window', async () => {
+    const ui = examUI();
+    await missingWordEditor(ui);
+    const chip = ui.field('exam-word-chips').children.find((item) => item.children[0].textContent === 'school building');
+    await chip.children[1].fire('click');
+    assert.equal(ui.field('exam-import-panel').hidden, true);
+    assert.deepEqual(chipWords(ui), ['apple', 'seventy']);
+});
+
+test('saving disables chip removal and the add field until the request finishes', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    await ui.field('exam-edit-paper').fire('click');
+    let resolve;
+    ui.state.save = () => new Promise((callback) => { resolve = callback; });
+    const remove = ui.field('exam-word-chips').children[0].children[1];
+    const saving = ui.field('exam-create-form').fire('submit');
+    assert.equal(remove.disabled, true);
+    assert.equal(ui.field('exam-add-words').disabled, true);
+    await remove.fire('click');
+    assert.deepEqual(chipWords(ui), ['apple', 'look after']);
+    resolve({ paper: ui.state.paper, duplicates_removed: 0 });
+    await saving;
+    assert.equal(ui.field('exam-add-words').disabled, false);
+    assert.equal(ui.field('exam-word-chips').children.length, 0);
 });

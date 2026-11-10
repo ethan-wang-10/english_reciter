@@ -7,7 +7,7 @@
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/brand/logo-mark.svg?v=parrot2">
     <link rel="stylesheet" href="/static/css/style.css?v=20261110-nav-more-v1">
-    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-inline-import-v1">
+    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-word-chips-v1">
 </head>
 <body>
     <div id="app">
@@ -452,9 +452,23 @@
                         <form id="exam-create-form" class="exam-panel">
                             <h3 id="exam-editor-title">新建考卷</h3>
                             <p id="exam-editor-hint" class="exam-hint" hidden>修改后保存即可用于下一次考试，历史考试记录会保留。</p>
-                            <label for="exam-words">本次考试单词</label>
-                            <textarea id="exam-words" rows="6" maxlength="20000" placeholder="例如：apple, banana, beautiful, look after" aria-describedby="exam-words-hint exam-word-count" spellcheck="false" autocapitalize="none" autocorrect="off"></textarea>
-                            <p id="exam-words-hint" class="exam-hint">用英文或中文逗号分隔，也支持换行。重复单词会自动合并，释义从词库或已导入单词中匹配。</p>
+                            <div id="exam-words-raw">
+                                <label for="exam-words">本次考试单词</label>
+                                <textarea id="exam-words" rows="6" maxlength="20000" placeholder="例如：apple, banana, beautiful, look after" aria-describedby="exam-words-hint exam-word-count" spellcheck="false" autocapitalize="none" autocorrect="off"></textarea>
+                                <p id="exam-words-hint" class="exam-hint">用英文或中文逗号分隔，也支持换行。重复单词会自动合并，释义从词库或已导入单词中匹配。</p>
+                            </div>
+                            <div id="exam-word-editor" hidden>
+                                <p id="exam-word-chips-label" class="exam-field-label">本次考试单词 <span>按字母排序</span></p>
+                                <div id="exam-word-chips" class="exam-word-chips" role="group" aria-labelledby="exam-word-chips-label"></div>
+                                <p id="exam-word-chips-empty" class="exam-hint" hidden>还没有单词，可在下方添加。</p>
+                                <label for="exam-add-words">添加单词或词组</label>
+                                <div class="exam-word-add-row">
+                                    <textarea id="exam-add-words" rows="2" maxlength="20000" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder="例如：apple, school building" aria-describedby="exam-add-words-hint exam-word-count"></textarea>
+                                    <button id="exam-add-word-button" type="button" class="btn btn-secondary">添加</button>
+                                </div>
+                                <p id="exam-add-words-hint" class="exam-hint">支持逗号或换行批量添加，按回车添加；点击单词旁的 × 可删除，保存修改后生效。</p>
+                                <p id="exam-word-editor-status" class="exam-hint" role="status" aria-live="polite" hidden></p>
+                            </div>
                             <p id="exam-word-count" class="exam-hint" aria-live="polite">已输入 0 个不同的单词 · 最多 300 个</p>
                             <details id="exam-sentences-section" class="exam-sentences-section">
                                 <summary>句子中译英（可选）<span id="exam-sentence-count">0 道</span></summary>
@@ -474,7 +488,7 @@
                                 <p class="exam-hint">已填入缺少释义的单词，可直接在这里导入，无需离开考卷。导入完成后会继续保存当前考卷。</p>
                                 <label for="exam-import-words">需要导入的单词或词组</label>
                                 <textarea id="exam-import-words" rows="4" maxlength="20000" spellcheck="false" autocapitalize="none" autocorrect="off" aria-describedby="exam-import-input-hint" placeholder="每行一词或词组，也支持逗号分隔"></textarea>
-                                <p id="exam-import-input-hint" class="exam-hint">如需修正拼写，请同时修改上方的考试单词。</p>
+                                <p id="exam-import-input-hint" class="exam-hint">如需修正拼写，请先在上方删除或修改原词，再添加正确的单词。</p>
                                 <label for="exam-import-level">指定难度（可选）</label>
                                 <select id="exam-import-level">
                                     <option value="">自动判断</option>
@@ -1459,7 +1473,7 @@
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
     <script src="/static/js/app.js?v=20261110-inline-import-v1" defer></script>
-    <script src="/static/js/exam-preparation.js?v=20261110-inline-import-v1" defer></script>
+    <script src="/static/js/exam-preparation.js?v=20261110-word-chips-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js?v=20260910-authoring-v1" defer></script>

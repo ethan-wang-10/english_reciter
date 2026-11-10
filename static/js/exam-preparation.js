@@ -7,6 +7,7 @@
     let newPaperDraft = null;
     let sentenceRows = [];
     let sentenceFieldId = 0;
+    let wordRemoveButtons = [];
     let attempt = null;
     let result = null;
     let answers = {};
@@ -35,6 +36,95 @@
         };
     }
 
+    function wordTokens(text) {
+        return text.split(/[,，、;；\r\n]+/).map((word) => word.trim().replace(/\s+/g, ' ')
+            .replace(/[’‘]/g, "'")).filter(Boolean);
+    }
+
+    function uniqueWords(text) {
+        const words = new Map();
+        wordTokens(text).forEach((word) => {
+            const key = word.toLowerCase();
+            if (!words.has(key)) words.set(key, word);
+        });
+        return [...words.values()].sort((left, right) => left.localeCompare(right, 'en', { sensitivity: 'base' }));
+    }
+
+    function wordEditorStatus(text = '', error = false) {
+        const node = el('exam-word-editor-status');
+        node.textContent = text;
+        node.hidden = !text;
+        node.classList.toggle('exam-message-error', error);
+        node.setAttribute('role', error ? 'alert' : 'status');
+    }
+
+    function renderWordChips() {
+        const list = el('exam-word-chips');
+        list.replaceChildren();
+        wordRemoveButtons = [];
+        if (!editingPaper) return;
+        const words = uniqueWords(el('exam-words').value);
+        el('exam-words').value = words.join(', ');
+        el('exam-word-chips-empty').hidden = words.length > 0;
+        words.forEach((word, position) => {
+            const chip = document.createElement('span');
+            chip.className = 'exam-word-chip';
+            const label = document.createElement('span');
+            label.textContent = word;
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'exam-word-chip-remove';
+            remove.textContent = '×';
+            remove.disabled = busy;
+            remove.setAttribute('aria-label', `删除 ${word}`);
+            remove.addEventListener('click', () => {
+                if (busy) return;
+                el('exam-words').value = words.filter((item) => item !== word).join(', ');
+                hideMissingImport();
+                renderWordChips();
+                updateWordCount();
+                wordEditorStatus(`已移除 ${word}，保存修改后生效。`);
+                (wordRemoveButtons[Math.min(position, wordRemoveButtons.length - 1)] || el('exam-add-words')).focus({ preventScroll: true });
+            });
+            wordRemoveButtons.push(remove);
+            chip.append(label, remove);
+            list.appendChild(chip);
+        });
+    }
+
+    function addEditorWords(focus = true) {
+        if (busy || !editingPaper) return false;
+        const input = el('exam-add-words');
+        const additions = wordTokens(input.value);
+        if (!additions.length) {
+            wordEditorStatus('请先输入要添加的单词或词组。', true);
+            return false;
+        }
+        const invalid = additions.find((word) => word.length > 120 || !/^[a-z0-9 .'-]+$/i.test(word) || !/[a-z]/i.test(word));
+        if (invalid) {
+            wordEditorStatus(`请检查英文单词或词组：${invalid.slice(0, 60)}`, true);
+            input.focus();
+            return false;
+        }
+        const previous = uniqueWords(el('exam-words').value);
+        const words = uniqueWords([...previous, ...additions].join(', '));
+        if (words.length > 300 || words.join(', ').length > 20000) {
+            wordEditorStatus('每张考卷最多 300 个不同的单词，单词内容最多 20000 个字符。', true);
+            input.focus();
+            return false;
+        }
+        const added = words.length - previous.length;
+        const duplicates = additions.length - added;
+        el('exam-words').value = words.join(', ');
+        input.value = '';
+        hideMissingImport();
+        renderWordChips();
+        updateWordCount();
+        wordEditorStatus(`已添加 ${added} 个单词。${duplicates ? `已忽略 ${duplicates} 个重复项。` : ''}`);
+        if (focus) input.focus({ preventScroll: true });
+        return true;
+    }
+
     function updateEditor() {
         el('exam-editor-title').textContent = editingPaper ? '编辑考卷' : '新建考卷';
         el('exam-editor-hint').hidden = !editingPaper;
@@ -42,6 +132,11 @@
         el('exam-save-paper').textContent = editingPaper ? '保存修改' : '保存并生成考卷';
         el('exam-edit-paper').textContent = editingPaper ? '正在旁边编辑' : '编辑考卷';
         el('exam-edit-paper').disabled = busy || !!editingPaper || !selectedPaper;
+        el('exam-words-raw').hidden = !!editingPaper;
+        el('exam-word-editor').hidden = !editingPaper;
+        el('exam-add-words').disabled = busy;
+        el('exam-add-word-button').disabled = busy;
+        wordRemoveButtons.forEach((button) => { button.disabled = busy; });
         el('exam-sentence-count').textContent = `${sentenceRows.length} 道`;
         el('exam-add-sentence').disabled = busy || sentenceRows.length >= 100;
         el('exam-start').disabled = busy || !!editingPaper || !selectedPaper || isParentSession;
@@ -207,6 +302,9 @@
         hideMissingImport();
         el('exam-paper-name').value = value?.name || '';
         el('exam-words').value = value?.words || '';
+        el('exam-add-words').value = '';
+        wordEditorStatus();
+        renderWordChips();
         renderSentences(value?.sentences || []);
         el('exam-sentences-section').open = sentenceRows.length > 0;
         updateWordCount();
@@ -221,7 +319,7 @@
         fillEditor({ name: paper.name, words: paper.words.map((word) => word.english).join(', '), sentences: paper.sentences || [] });
         message(`正在编辑“${paper.name}”，修改后请保存。`);
         el('exam-editor-title').scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
-        el('exam-paper-name').focus({ preventScroll: true });
+        el('exam-add-words').focus({ preventScroll: true });
     }
 
     function finishEditing() {
@@ -392,6 +490,7 @@
     async function savePaper(event) {
         event.preventDefault();
         if (busy) return;
+        if (editingPaper && el('exam-add-words').value.trim() && !addEditorWords(false)) return;
         const ctx = context();
         const paperId = editingPaper;
         const content = editorValue();
@@ -615,9 +714,8 @@
     }
 
     function updateWordCount() {
-        const words = el('exam-words').value.toLowerCase().split(/[,，、;；\r\n]+/)
-            .map((word) => word.trim().replace(/\s+/g, ' ')).filter(Boolean);
-        el('exam-word-count').textContent = `已输入 ${new Set(words).size} 个不同的单词 · 最多 300 个`;
+        const count = uniqueWords(el('exam-words').value).length;
+        el('exam-word-count').textContent = `${editingPaper ? '已选' : '已输入'} ${count} 个不同的单词 · 最多 300 个`;
     }
 
     function reset() {
@@ -668,6 +766,13 @@
         el('exam-words').addEventListener('input', () => {
             hideMissingImport();
             updateWordCount();
+        });
+        el('exam-add-word-button').addEventListener('click', () => addEditorWords());
+        el('exam-add-words').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !event.repeat) {
+                event.preventDefault();
+                addEditorWords();
+            }
         });
         el('exam-import-words').addEventListener('input', updateEditor);
         el('exam-import-submit').addEventListener('click', importMissingWords);
