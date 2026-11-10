@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#58CC02">
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/brand/logo-mark.svg?v=parrot2">
-    <link rel="stylesheet" href="/static/css/style.css?v=20261110-startup-v1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20261110-nav-more-v1">
     <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-1">
 </head>
 <body>
@@ -136,13 +136,18 @@
                 </div>
                 <div class="nav-menu nav-menu-desktop">
                     <button class="nav-item active" data-page="review">今日复习</button>
-                    <button class="nav-item" data-page="discover">单词学习</button>
-                    <button class="nav-item" data-page="textbook">课文学习</button>
                     <button class="nav-item" data-page="exam-preparation">考前准备</button>
-                    <button class="nav-item" data-page="progress">学习进度</button>
                     <button class="nav-item" data-page="import">导入单词</button>
-                    <button class="nav-item" data-page="mastered">已掌握</button>
                     <button class="nav-item" data-page="leaderboard">排行榜</button>
+                    <div id="desktop-more-wrap" class="desktop-more-wrap">
+                        <button type="button" id="desktop-more-btn" class="nav-item" aria-expanded="false" aria-controls="desktop-more-menu">更多 <span class="desktop-more-arrow" aria-hidden="true">▾</span></button>
+                        <div id="desktop-more-menu" class="desktop-more-menu" role="group" aria-label="更多功能" hidden>
+                            <button type="button" class="nav-item desktop-more-link" data-page="discover">单词学习</button>
+                            <button type="button" class="nav-item desktop-more-link" data-page="textbook">课文学习</button>
+                            <button type="button" class="nav-item desktop-more-link" data-page="progress">学习进度</button>
+                            <button type="button" class="nav-item desktop-more-link" data-page="mastered">已掌握</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="nav-gamification" id="nav-gamification" title="学习积分与连续打卡">
                     <span class="ng-level" id="ng-level">Lv.1</span>
@@ -1403,7 +1408,7 @@
     </div>
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
-    <script src="/static/js/app.js?v=20261110-startup-v1" defer></script>
+    <script src="/static/js/app.js?v=20261110-nav-more-v1" defer></script>
     <script src="/static/js/exam-preparation.js?v=20261110-1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>

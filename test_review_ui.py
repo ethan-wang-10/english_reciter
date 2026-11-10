@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 
-@pytest.mark.parametrize('test_file', ['test_review_ui.js', 'test_exam_preparation_ui.js', 'test_startup_ui.js'])
+@pytest.mark.parametrize('test_file', ['test_review_ui.js', 'test_exam_preparation_ui.js', 'test_startup_ui.js', 'test_desktop_navigation_ui.js'])
 def test_review_browser_interactions(test_file):
     node = shutil.which("node")
     if not node:

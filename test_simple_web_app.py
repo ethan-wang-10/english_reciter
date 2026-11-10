@@ -614,8 +614,8 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "blockGuardedReviewCopy" in javascript
     assert "-webkit-user-select: none" in stylesheet
     assert "#new-word-study-english" in stylesheet
-    assert "/static/css/style.css?v=20261110-startup-v1" in html
-    assert "/static/js/app.js?v=20261110-startup-v1" in html
+    assert "/static/css/style.css?v=20261110-nav-more-v1" in html
+    assert "/static/js/app.js?v=20261110-nav-more-v1" in html
     assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
