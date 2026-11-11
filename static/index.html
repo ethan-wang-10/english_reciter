@@ -7,7 +7,7 @@
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/brand/logo-mark.svg?v=parrot2">
     <link rel="stylesheet" href="/static/css/style.css?v=20261110-nav-more-v1">
-    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-final-listening-v1">
+    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261111-abandon-v1">
 </head>
 <body>
     <div id="app">
@@ -548,7 +548,18 @@
                     <div id="exam-attempt-view" class="exam-panel exam-attempt-panel" hidden>
                         <div class="exam-attempt-head">
                             <h3 id="exam-attempt-name"></h3>
-                            <span id="exam-question-position"></span>
+                            <div class="exam-attempt-tools">
+                                <span id="exam-question-position"></span>
+                                <button id="exam-abandon" type="button" class="btn btn-secondary" aria-expanded="false" aria-controls="exam-abandon-confirmation">放弃本次考试</button>
+                            </div>
+                        </div>
+                        <div id="exam-abandon-confirmation" class="exam-abandon-confirmation" role="group" aria-labelledby="exam-abandon-title" aria-describedby="exam-abandon-description" hidden>
+                            <p id="exam-abandon-title" class="exam-abandon-title">确认放弃本次考试？</p>
+                            <p id="exam-abandon-description">放弃后将清除本次答题进度，返回选择考卷；不会生成成绩。</p>
+                            <div class="exam-abandon-actions">
+                                <button id="exam-abandon-cancel" type="button" class="btn btn-secondary">继续答题</button>
+                                <button id="exam-abandon-confirm" type="button" class="btn exam-abandon-confirm">确认放弃</button>
+                            </div>
                         </div>
                         <div class="exam-progress-row">
                             <progress id="exam-answer-progress" max="1" value="0" aria-label="已作答题数"></progress>
@@ -1489,7 +1500,7 @@
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
     <script src="/static/js/app.js?v=20261110-inline-import-v1" defer></script>
-    <script src="/static/js/exam-preparation.js?v=20261110-final-listening-v1" defer></script>
+    <script src="/static/js/exam-preparation.js?v=20261111-abandon-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js?v=20260910-authoring-v1" defer></script>

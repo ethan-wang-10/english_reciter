@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, 'static/js/exam-preparation.
 const html = fs.readFileSync(path.join(__dirname, 'static/index.html'), 'utf8');
 const appSource = fs.readFileSync(path.join(__dirname, 'static/js/app.js'), 'utf8');
 
-function examUI() {
+function examUI(storage = new Map()) {
     class Element {
         value = '';
         hidden = false;
@@ -43,7 +43,6 @@ function examUI() {
     }
     const elements = new Map(Array.from(html.matchAll(/id="(exam-[^"]+)"/g), (match) => [match[1], new Element()]));
     elements.get('exam-import-panel').hidden = true;
-    const storage = new Map();
     const account = { token: 'alice-token', username: 'alice' };
     const state = { calls: [], failCreation: false };
     const paper = { id: 'paper-1', name: '期中考试', word_count: 2, words: [{ english: 'apple' }, { english: 'look after' }], created_at: '2026-11-10T12:00:00', attempt_count: 0 };
@@ -104,7 +103,7 @@ function examUI() {
                 const choices = body.include_choices ? [{ id: 'q3', type: 'recognition', prompt: 'apple', options: [{ id: 'a', text: '苹果' }, { id: 'b', text: '香蕉' }] }] : [];
                 return { attempt: { ...attempt, include_choices: body.include_choices, choice_count: choices.length, questions: [...attempt.questions, ...choices] } };
             }
-            if (url.includes('/attempts/')) return { attempt, result: null };
+            if (url.includes('/attempts/')) return state.restore ? state.restore(url) : { attempt, result: null };
             if (options.method === 'POST' || options.method === 'PUT') {
                 if (state.failCreation) {
                     const error = new Error('未找到中文释义：unknownword');
@@ -198,6 +197,117 @@ test('unfinished attempt restores answers and position after a page reload', asy
     assert.equal(ui.field('exam-attempt-view').hidden, false);
     assert.equal(ui.field('exam-spelling-answer').value, 'look after');
     assert.equal(ui.field('exam-question-position').textContent, '第 2 / 2 题');
+});
+
+test('cancelling abandonment preserves the current answer and recoverable draft', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    await ui.field('exam-start').fire('click');
+    ui.field('exam-spelling-answer').value = 'apple';
+    await ui.field('exam-spelling-answer').fire('input');
+    const draft = ui.storage.get('english-reciter-exam:alice');
+    await ui.field('exam-abandon').fire('click');
+    assert.equal(ui.field('exam-abandon-confirmation').hidden, false);
+    assert.equal(ui.field('exam-attempt-view').hidden, false);
+    assert.equal(ui.storage.get('english-reciter-exam:alice'), draft);
+    await ui.field('exam-abandon-cancel').fire('click');
+    assert.equal(ui.field('exam-abandon-confirmation').hidden, true);
+    assert.equal(ui.field('exam-spelling-answer').value, 'apple');
+    assert.equal(ui.storage.get('english-reciter-exam:alice'), draft);
+    assert.equal(ui.state.calls.some((call) => call.url.endsWith('/submit')), false);
+});
+
+test('abandonment returns to the selected paper, preserves the editor draft and starts a fresh exam', async () => {
+    const ui = examUI();
+    const secondPaper = { ...ui.state.paper, id: 'paper-2', name: '单元自测' };
+    ui.state.list = async () => ({ papers: [ui.state.paper, secondPaper] });
+    let sequence = 0;
+    ui.state.start = async () => ({ attempt: {
+        ...ui.state.attempt, id: `attempt-${++sequence}`, paper_id: secondPaper.id, paper_name: secondPaper.name,
+    } });
+    await ui.api.open();
+    ui.field('exam-paper-name').value = '未保存的新考卷';
+    ui.field('exam-words').value = 'banana';
+    await ui.field('exam-paper-list').children[1].fire('click');
+    await ui.field('exam-start').fire('click');
+    ui.field('exam-spelling-answer').value = 'apple';
+    await ui.field('exam-spelling-answer').fire('input');
+    await ui.field('exam-next').fire('click');
+    await ui.field('exam-abandon').fire('click');
+    await ui.field('exam-abandon-confirm').fire('click');
+    assert.equal(ui.field('exam-attempt-view').hidden, true);
+    assert.equal(ui.field('exam-setup-view').hidden, false);
+    assert.equal(ui.field('exam-abandon-confirmation').hidden, true);
+    assert.equal(ui.field('exam-paper-list').children[1].attributes['aria-pressed'], 'true');
+    assert.equal(ui.field('exam-paper-name').value, '未保存的新考卷');
+    assert.equal(ui.field('exam-words').value, 'banana');
+    assert.equal(ui.storage.has('english-reciter-exam:alice'), false);
+    assert.equal(ui.state.calls.some((call) => call.url.endsWith('/submit')), false);
+    await ui.api.open();
+    assert.equal(ui.field('exam-setup-view').hidden, false);
+    assert.equal(ui.state.calls.some((call) => call.url.includes('/attempts/')), false);
+    await ui.field('exam-start').fire('click');
+    assert.equal(ui.field('exam-question-position').textContent, '第 1 / 2 题');
+    assert.equal(ui.field('exam-spelling-answer').value, '');
+    assert.equal(ui.field('exam-abandon-confirmation').hidden, true);
+    const fresh = JSON.parse(ui.storage.get('english-reciter-exam:alice'));
+    assert.equal(fresh.id, 'attempt-2');
+    assert.deepEqual(fresh.answers, {});
+});
+
+test('a reload after abandonment stays at paper selection instead of recovering the old attempt', async () => {
+    const ui = examUI();
+    ui.storage.set('english-reciter-exam:alice', JSON.stringify({ id: 'attempt-1', answers: { q1: 'apple' }, index: 0 }));
+    await ui.api.open();
+    await ui.field('exam-abandon').fire('click');
+    await ui.field('exam-abandon-confirm').fire('click');
+    const reloaded = examUI(ui.storage);
+    await reloaded.api.open();
+    assert.equal(reloaded.field('exam-setup-view').hidden, false);
+    assert.equal(reloaded.field('exam-attempt-view').hidden, true);
+    assert.equal(reloaded.state.calls.some((call) => call.url.includes('/attempts/')), false);
+});
+
+test('a late overlapping recovery response cannot resurrect an abandoned attempt', async () => {
+    const ui = examUI();
+    ui.storage.set('english-reciter-exam:alice', JSON.stringify({ id: 'attempt-1', answers: { q1: 'apple' }, index: 0 }));
+    const pending = [];
+    ui.state.restore = () => new Promise((resolve) => pending.push(resolve));
+    const first = ui.api.open();
+    const second = ui.api.open();
+    await new Promise(setImmediate);
+    assert.equal(pending.length, 2);
+    pending[0]({ attempt: ui.state.attempt, result: null });
+    await first;
+    await ui.field('exam-abandon').fire('click');
+    await ui.field('exam-abandon-confirm').fire('click');
+    pending[1]({ attempt: ui.state.attempt, result: null });
+    await second;
+    assert.equal(ui.field('exam-setup-view').hidden, false);
+    assert.equal(ui.field('exam-attempt-view').hidden, true);
+    assert.equal(ui.storage.size, 0);
+});
+
+test('abandonment cannot race an in-flight submission', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    await ui.field('exam-start').fire('click');
+    await ui.field('exam-abandon').fire('click');
+    let resolve;
+    ui.state.submit = () => new Promise((callback) => { resolve = callback; });
+    const submitting = ui.field('exam-submit').fire('click');
+    assert.equal(ui.field('exam-abandon').disabled, true);
+    assert.equal(ui.field('exam-abandon-confirm').disabled, true);
+    await ui.field('exam-abandon-confirm').fire('click');
+    assert.equal(ui.field('exam-attempt-view').hidden, false);
+    assert.equal(ui.storage.size, 1);
+    resolve({ result: {
+        paper_id: ui.state.paper.id, paper_name: ui.state.paper.name,
+        score: 0, total: 2, correct_count: 0, wrong_count: 2, questions: [],
+    } });
+    await submitting;
+    assert.equal(ui.field('exam-result-view').hidden, false);
+    assert.equal(ui.storage.size, 0);
 });
 
 test('submission failure retains answers and allows retry', async () => {
@@ -734,6 +844,29 @@ function listeningFixture(ui) {
     } });
     return paper;
 }
+
+test('abandoning a listening exam stops its audio and returns to the same built-in paper', async () => {
+    const ui = examUI();
+    listeningFixture(ui);
+    await ui.api.open();
+    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.field('exam-start').fire('click');
+    const audio = ui.field('exam-listening-audio');
+    const pauses = audio.pauseCount;
+    const lateError = audio.onerror;
+    await ui.field('exam-abandon').fire('click');
+    await ui.field('exam-abandon-confirm').fire('click');
+    assert.ok(audio.pauseCount > pauses);
+    assert.equal(audio.src, '');
+    assert.equal(audio.onerror, null);
+    assert.equal(ui.field('exam-listening-wrap').hidden, true);
+    assert.equal(ui.field('exam-setup-view').hidden, false);
+    assert.equal(ui.field('exam-paper-list').children[1].children[0].attributes['aria-pressed'], 'true');
+    lateError();
+    assert.equal(ui.field('exam-listening-error').hidden, true);
+    assert.equal(ui.storage.size, 0);
+    assert.equal(ui.state.calls.some((call) => call.url.endsWith('/submit')), false);
+});
 
 test('listening questions provide reusable native audio and retain selected answers across navigation', async () => {
     const ui = examUI();

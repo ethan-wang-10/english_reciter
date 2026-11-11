@@ -163,6 +163,32 @@ test('a fresh page exposes durable pending mistakes from the selected paper', as
     assert.equal(ui.state.calls.filter((row) => row.url.endsWith('/mistake-reviews')).length, 1);
 });
 
+test('abandoning a mistake review clears recovery without grading or removing pending mistakes', async () => {
+    const ui = mistakeUI();
+    await ui.api.open();
+    await ui.field('exam-review-paper-mistakes').fire('click');
+    ui.field('exam-spelling-answer').value = 'look after';
+    await ui.field('exam-spelling-answer').fire('input');
+    await ui.field('exam-abandon').fire('click');
+    await ui.field('exam-abandon-confirm').fire('click');
+    assert.equal(ui.field('exam-attempt-view').hidden, true);
+    assert.equal(ui.field('exam-setup-view').hidden, false);
+    assert.equal(ui.storage.size, 0);
+    assert.equal(ui.state.calls.some((row) => row.url.endsWith('/submit')), false);
+    assert.equal(ui.state.paper.mistake_count, 2);
+    assert.equal(ui.state.paper.attempt_count, 1);
+    assert.equal(ui.state.paper.last_score, 50);
+    assert.equal(ui.state.paper.best_score, 50);
+    assert.match(ui.field('exam-paper-mistake-count').textContent, /2/);
+    assert.equal(ui.field('exam-review-paper-mistakes').disabled, false);
+    await ui.api.open();
+    assert.equal(ui.state.calls.some((row) => row.url.includes('/attempts/')), false);
+    await ui.field('exam-review-paper-mistakes').fire('click');
+    assert.equal(ui.field('exam-attempt-view').hidden, false);
+    assert.equal(ui.field('exam-spelling-answer').value, '');
+    assert.equal(ui.state.calls.filter((row) => row.url.endsWith('/mistake-reviews')).length, 2);
+});
+
 test('clearing the remaining mistakes hides the result action and disables the paper action', async () => {
     const ui = mistakeUI();
     await ui.api.open();

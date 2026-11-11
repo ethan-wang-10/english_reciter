@@ -341,6 +341,7 @@
 
     function showView(view) {
         if (view !== 'attempt') stopListeningAudio();
+        hideAbandonConfirmation();
         ['setup', 'attempt', 'result', 'knowledge'].forEach((name) => {
             el(`exam-${name}-view`).hidden = name !== view;
         });
@@ -351,6 +352,7 @@
         if (value) el('exam-listening-audio').pause?.();
         updateMistakeControls();
         ['exam-save-paper', 'exam-start', 'exam-previous', 'exam-next', 'exam-submit',
+            'exam-abandon', 'exam-abandon-confirm', 'exam-abandon-cancel',
             'exam-words', 'exam-paper-name', 'exam-cancel-edit', 'exam-back-to-papers', 'exam-knowledge-back'].forEach((id) => {
             const button = el(id);
             if (button) button.disabled = value;
@@ -383,6 +385,49 @@
 
     function readDraft() {
         try { return JSON.parse(sessionStorage.getItem(draftKey) || 'null'); } catch (_) { return null; }
+    }
+
+    function hideAbandonConfirmation() {
+        el('exam-abandon-confirmation').hidden = true;
+        el('exam-abandon').setAttribute('aria-expanded', 'false');
+    }
+
+    function requestAbandon() {
+        if (busy || !attempt || result) return;
+        const reviewing = attempt.mode === 'wrong_review';
+        el('exam-abandon-title').textContent = reviewing ? '确认放弃本次复习？' : '确认放弃本次考试？';
+        el('exam-abandon-description').textContent = reviewing
+            ? '放弃后将清除本次答题进度，返回选择考卷；已保存的错题会保留。'
+            : '放弃后将清除本次答题进度，返回选择考卷；不会生成成绩。';
+        el('exam-abandon-confirmation').hidden = false;
+        el('exam-abandon').setAttribute('aria-expanded', 'true');
+        el('exam-listening-audio').pause?.();
+        el('exam-abandon-cancel').focus({ preventScroll: true });
+    }
+
+    function abandonExam() {
+        if (busy || !attempt || result || el('exam-abandon-confirmation').hidden) return;
+        const reviewing = attempt.mode === 'wrong_review';
+        selectedPaper = attempt.paper_id;
+        // Ignore any older restore response that could bring this attempt back.
+        generation += 1;
+        listRequest += 1;
+        clearDraft();
+        attempt = null;
+        result = null;
+        answers = {};
+        index = 0;
+        el('exam-spelling-answer').value = '';
+        el('exam-choice-options').replaceChildren();
+        ['exam-attempt-name', 'exam-question-prompt', 'exam-question-position', 'exam-answer-count'].forEach((id) => {
+            el(id).textContent = '';
+        });
+        el('exam-answer-progress').value = 0;
+        showView('setup');
+        renderPapers();
+        setBusy(false);
+        message(reviewing ? '已放弃本次复习，已保存的错题仍可继续复习。' : '已放弃本次考试，未生成成绩。可以重新选择考卷。');
+        el('exam-start').focus({ preventScroll: true });
     }
 
     function renderPapers() {
@@ -722,6 +767,7 @@
             }
         }
         el('exam-attempt-name').textContent = attempt.paper_name;
+        el('exam-abandon').textContent = attempt.mode === 'wrong_review' ? '放弃本次复习' : '放弃本次考试';
         el('exam-question-position').textContent = `第 ${index + 1} / ${attempt.questions.length} 题`;
         el('exam-question-type').textContent = typeNames[question.type];
         el('exam-question-prompt').textContent = question.prompt;
@@ -905,6 +951,13 @@
         el('exam-previous').addEventListener('click', () => moveQuestion(-1));
         el('exam-next').addEventListener('click', () => moveQuestion(1));
         el('exam-submit').addEventListener('click', submitExam);
+        el('exam-abandon').addEventListener('click', requestAbandon);
+        el('exam-abandon-confirm').addEventListener('click', abandonExam);
+        el('exam-abandon-cancel').addEventListener('click', () => {
+            if (busy) return;
+            hideAbandonConfirmation();
+            el('exam-abandon').focus({ preventScroll: true });
+        });
         el('exam-spelling-answer').addEventListener('input', (event) => {
             if (!attempt || busy) return;
             answers[attempt.questions[index].id] = event.target.value;
