@@ -143,7 +143,7 @@ test('result-page mistake review starts a new blank attempt without reusing reve
     await ui.field('exam-review-mistakes').fire('click');
     const call = ui.state.calls.find((row) => row.url.endsWith('/mistake-reviews'));
     assert.equal(call.url, '/exam-preparation/papers/paper-1/mistake-reviews');
-    assert.deepEqual(call.body, {});
+    assert.deepEqual(call.body, { supports_listening: true });
     assert.equal(ui.field('exam-result-view').hidden, true);
     assert.equal(ui.field('exam-attempt-view').hidden, false);
     assert.equal(ui.field('exam-question-prompt').textContent, '照顾');

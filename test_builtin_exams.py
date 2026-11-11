@@ -15,7 +15,7 @@ from exam_preparation_routes import register_exam_preparation_routes
 
 BUILTIN_ID = "builtin-shanghai-grade4-u1-u4"
 WORDS = [{"english": "apple", "chinese": "苹果"}]
-PRIVATE_FIELDS = {"answer", "answers", "accepted_answers", "correct_answer", "answer_option_id", "explanation"}
+PRIVATE_FIELDS = {"answer", "answers", "accepted_answers", "correct_answer", "answer_option_id", "explanation", "listening_text", "audio_file"}
 
 
 def no_generated_questions(*args):
@@ -35,14 +35,39 @@ def correct_answers(store, attempt_id):
     }
 
 
+def issue_legacy_midterm_snapshot(store):
+    """Simulate an already-issued paper without relying on repository history."""
+    attempt = store.start_attempt(store.get_paper(BUILTIN_ID), False, no_generated_questions)
+    snapshot = private_attempt(store, attempt["id"])
+    snapshot["questions"] = [question for question in snapshot["questions"] if question["type"] != "listening_choice"]
+    snapshot.update({
+        "paper_name": "上海四年级上册英语 · U1-U4 期中自测",
+        "listening_count": 0, "choice_count": 4, "time_minutes": 20,
+    })
+    assert len(snapshot["questions"]) == 16
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("UPDATE exam_attempts SET attempt_json=? WHERE id=?", (json.dumps(snapshot, ensure_ascii=False), attempt["id"]))
+    return store.get_attempt(attempt["id"])["attempt"]
+
+
+def attempt_count(path):
+    with sqlite3.connect(path) as connection:
+        return connection.execute("SELECT COUNT(*) FROM exam_attempts").fetchone()[0]
+
+
 def builtin_summary(store):
     return next(paper for paper in store.list_papers() if paper["id"] == BUILTIN_ID)
 
 
 def assert_question_privacy(questions):
     for question in questions:
-        assert set(question) <= {"id", "type", "prompt", "options"}
+        assert set(question) <= {"id", "type", "prompt", "options", "audio_url"}
         assert not (set(question) & PRIVATE_FIELDS)
+        if question["type"] == "listening_choice":
+            assert question["audio_url"].startswith("/static/exam-preparation/audio/")
+            assert question["audio_url"].endswith(".wav")
+        else:
+            assert "audio_url" not in question
 
 
 @pytest.fixture
@@ -87,7 +112,8 @@ def client(tmp_path):
 def test_builtin_is_available_without_copying_or_importing_and_private_papers_remain_separate(store):
     paper = store.get_paper(BUILTIN_ID)
     assert paper["builtin"] is True
-    assert paper["question_count"] == 16
+    assert paper["question_count"] == 26
+    assert paper["listening_count"] == 10
     assert paper["words"] == []
     assert paper["sentences"] == []
     assert not (set(paper) & PRIVATE_FIELDS)
@@ -98,11 +124,11 @@ def test_builtin_is_available_without_copying_or_importing_and_private_papers_re
     assert store.get_paper(private["id"])["words"] == WORDS
     assert not store.get_paper(private["id"]).get("builtin", False)
     assert {row["id"] for row in store.list_papers()} >= {BUILTIN_ID, private["id"]}
-    assert ExamPreparationStore(store.path).get_paper(BUILTIN_ID)["question_count"] == 16
+    assert ExamPreparationStore(store.path).get_paper(BUILTIN_ID)["question_count"] == 26
 
 
 def test_listing_builtin_catalog_does_not_create_a_personal_paper_row(store):
-    assert builtin_summary(store)["question_count"] == 16
+    assert builtin_summary(store)["question_count"] == 26
     with sqlite3.connect(store.path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM exam_papers WHERE id=?", (BUILTIN_ID,)).fetchone()[0] == 0
     store.get_paper(BUILTIN_ID)
@@ -110,20 +136,21 @@ def test_listing_builtin_catalog_does_not_create_a_personal_paper_row(store):
         assert connection.execute("SELECT COUNT(*) FROM exam_papers WHERE id=?", (BUILTIN_ID,)).fetchone()[0] == 1
 
 
-def test_builtin_keeps_the_fixed_sixteen_question_paper_and_hides_grading_data(store):
+def test_builtin_keeps_the_fixed_twenty_six_question_paper_and_hides_grading_data(store):
     paper = store.get_paper(BUILTIN_ID)
     first = store.start_attempt(paper, False, no_generated_questions)
     second = store.start_attempt(paper, True, no_generated_questions)
-    expected = Counter({"fill_blank": 8, "rewrite": 4, "reading_choice": 4})
+    expected = Counter({"listening_choice": 10, "fill_blank": 8, "rewrite": 4, "reading_choice": 4})
     assert Counter(question["type"] for question in first["questions"]) == expected
     assert first["paper_id"] == BUILTIN_ID
-    assert first["choice_count"] == 4
+    assert first["choice_count"] == 14
+    assert first["listening_count"] == 10
     assert [question["prompt"] for question in first["questions"]] == [question["prompt"] for question in second["questions"]]
     assert not ({question["id"] for question in first["questions"]} & {question["id"] for question in second["questions"]})
     assert_question_privacy(first["questions"])
     assert_question_privacy(store.get_attempt(first["id"])["attempt"]["questions"])
     for question in first["questions"]:
-        if question["type"] == "reading_choice":
+        if question["type"] in ("reading_choice", "listening_choice"):
             assert len(question["options"]) == 4
             assert len({option["id"] for option in question["options"]}) == 4
 
@@ -132,14 +159,14 @@ def test_starting_a_listed_builtin_creates_its_private_attempt_history_lazily(st
     paper = builtin_summary(store)
     attempt = store.start_attempt(paper, False, no_generated_questions)
     store.submit_attempt(attempt["id"], {})
-    assert store.mistake_count(BUILTIN_ID) == 16
-    assert len(store.start_mistake_review(BUILTIN_ID)["questions"]) == 16
+    assert store.mistake_count(BUILTIN_ID) == 26
+    assert len(store.start_mistake_review(BUILTIN_ID)["questions"]) == 26
 
 
 def test_builtin_written_answers_follow_the_handbook_and_accept_sentence_variants(store):
     attempt = store.start_attempt(store.get_paper(BUILTIN_ID), False, no_generated_questions)
     private = private_attempt(store, attempt["id"])
-    written = [question for question in private["questions"] if question["type"] != "reading_choice"]
+    written = [question for question in private["questions"] if question["type"] in ("fill_blank", "rewrite")]
     assert [question["answer"] for question in written[:8]] == ["has", "helps", "drawing", "are", "is swimming", "to eat", "on", "meet"]
     answers = correct_answers(store, attempt["id"])
     variants = [
@@ -151,22 +178,23 @@ def test_builtin_written_answers_follow_the_handbook_and_accept_sentence_variant
     for question, answer in zip(written[8:], variants, strict=True):
         answers[question["id"]] = "  " + answer.upper().replace(" ", "   ") + "  "
     result = store.submit_attempt(attempt["id"], answers)
-    assert (result["score"], result["total"], result["correct_count"]) == (100, 16, 16)
+    assert (result["score"], result["total"], result["correct_count"]) == (100, 26, 26)
     assert all(row["explanation"] for row in result["questions"])
     assert store.get_attempt(attempt["id"])["result"] == result
 
 
-def test_builtin_mistakes_cover_written_and_reading_questions_without_changing_exam_scores(store):
+def test_builtin_mistakes_cover_listening_written_and_reading_without_changing_exam_scores(store):
     attempt = store.start_attempt(store.get_paper(BUILTIN_ID), False, no_generated_questions)
     original = store.submit_attempt(attempt["id"], {})
-    assert original["wrong_count"] == 16
-    assert store.mistake_count(BUILTIN_ID) == 16
+    assert original["wrong_count"] == 26
+    assert store.mistake_count(BUILTIN_ID) == 26
     review = store.start_mistake_review(BUILTIN_ID)
     assert review["mode"] == "wrong_review"
-    assert review["choice_count"] == 4
-    assert len(review["questions"]) == 16
-    assert all(question["type"] != "reading_choice" for question in review["questions"][:12])
-    assert all(question["type"] == "reading_choice" for question in review["questions"][12:])
+    assert review["choice_count"] == 14
+    assert review["listening_count"] == 10
+    assert len(review["questions"]) == 26
+    assert all(question["type"] in ("fill_blank", "rewrite") for question in review["questions"][:12])
+    assert all(question["type"] in ("reading_choice", "listening_choice") for question in review["questions"][12:])
     assert_question_privacy(review["questions"])
     reviewed = store.submit_attempt(review["id"], correct_answers(store, review["id"]))
     assert reviewed["score"] == 100
@@ -181,7 +209,7 @@ def test_repeated_builtin_attempts_reuse_the_mistake_identity_instead_of_duplica
     for _ in range(2):
         attempt = store.start_attempt(paper, False, no_generated_questions)
         store.submit_attempt(attempt["id"], {})
-    assert store.mistake_count(BUILTIN_ID) == 16
+    assert store.mistake_count(BUILTIN_ID) == 26
     assert builtin_summary(store)["attempt_count"] == 2
 
 
@@ -247,6 +275,7 @@ def test_builtin_and_knowledge_are_selectable_by_students_and_parents_without_qu
         assert payload["paper_name"] == paper["name"]
         assert payload["pdf_url"].startswith("/static/")
         assert payload["pdf_url"].endswith("shanghai-grade4-u1-u4.pdf")
+        assert payload["exam_pdf_url"] == "/static/exam-preparation/shanghai-grade4-u1-u4-midterm-listening.pdf"
         assert "questions" not in payload and "questions" not in knowledge
         assert not (set(knowledge) & PRIVATE_FIELDS)
 
@@ -258,27 +287,100 @@ def test_builtin_routes_protect_editing_attempts_and_private_results(client):
     assert client.put(root, headers=alice, json={"name": "改写", "words": "apple"}).status_code == 403
     assert client.post(root + "/attempts", headers=parent, json={}).status_code == 403
     assert client.post(root + "/mistake-reviews", headers=parent, json={}).status_code == 403
-    response = client.post(root + "/attempts", headers=alice, json={})
+    response = client.post(root + "/attempts", headers=alice, json={"supports_listening": True})
     assert response.status_code == 201
     attempt = response.get_json()["attempt"]
-    assert len(attempt["questions"]) == 16
+    assert len(attempt["questions"]) == 26
     assert_question_privacy(attempt["questions"])
     assert client.get(f"/api/exam-preparation/attempts/{attempt['id']}", headers=parent).status_code == 403
     assert client.get(f"/api/exam-preparation/attempts/{attempt['id']}", headers={"Authorization": "Bearer bob"}).status_code == 404
     result = client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=alice, json={"answers": {}})
     assert result.status_code == 200
-    assert result.get_json()["mistake_count"] == 16
+    assert result.get_json()["mistake_count"] == 26
     assert client.get(f"{root}/knowledge", headers=alice).status_code == 200
     assert client.get("/api/exam-preparation/papers/builtin-missing/knowledge", headers=alice).status_code == 404
+
+
+def test_an_already_issued_sixteen_question_snapshot_keeps_its_original_grading_and_history(store, client):
+    original = issue_legacy_midterm_snapshot(store)
+    headers = {"Authorization": "Bearer alice"}
+    restored = client.get(f"/api/exam-preparation/attempts/{original['id']}", headers=headers)
+    assert restored.status_code == 200
+    assert len(restored.get_json()["attempt"]["questions"]) == 16
+    assert restored.get_json()["attempt"]["listening_count"] == 0
+    assert_question_privacy(restored.get_json()["attempt"]["questions"])
+    response = client.post(
+        f"/api/exam-preparation/attempts/{original['id']}/submit", headers=headers,
+        json={"answers": correct_answers(store, original["id"])},
+    )
+    assert response.status_code == 200
+    legacy_result = response.get_json()["result"]
+    assert (legacy_result["total"], legacy_result["correct_count"], legacy_result["score"]) == (16, 16, 100)
+    assert legacy_result["paper_name"] == original["paper_name"]
+    expanded = store.start_attempt(store.get_paper(BUILTIN_ID), False, no_generated_questions)
+    assert len(expanded["questions"]) == 26
+    store.submit_attempt(expanded["id"], {})
+    assert store.get_attempt(original["id"])["result"] == legacy_result
+    summary = builtin_summary(store)
+    assert (summary["question_count"], summary["listening_count"]) == (26, 10)
+    assert (summary["attempt_count"], summary["last_score"], summary["best_score"]) == (2, 0, 100)
+
+
+@pytest.mark.parametrize("body,expected_status", [({}, 409), ({"supports_listening": False}, 409), ({"supports_listening": "true"}, 400)])
+def test_older_pages_cannot_start_a_listening_paper_or_create_an_unreturned_attempt(client, tmp_path, body, expected_status):
+    root = f"/api/exam-preparation/papers/{BUILTIN_ID}"
+    headers = {"Authorization": "Bearer alice"}
+    response = client.post(root + "/attempts", headers=headers, json=body)
+    assert response.status_code == expected_status
+    if expected_status == 409:
+        assert "刷新" in response.get_json()["error"]
+    assert attempt_count(tmp_path / "alice/exam_preparation.sqlite3") == 0
+    supported = client.post(root + "/attempts", headers=headers, json={"supports_listening": True})
+    assert supported.status_code == 201
+    assert supported.get_json()["attempt"]["listening_count"] == 10
+
+
+def test_listening_mistake_review_requires_current_page_support_without_leaving_an_attempt_behind(store, client):
+    attempt = store.start_attempt(store.get_paper(BUILTIN_ID), False, no_generated_questions)
+    store.submit_attempt(attempt["id"], {})
+    root = f"/api/exam-preparation/papers/{BUILTIN_ID}/mistake-reviews"
+    headers = {"Authorization": "Bearer alice"}
+    count = attempt_count(store.path)
+    unsupported = client.post(root, headers=headers, json={})
+    assert unsupported.status_code == 409
+    assert "刷新" in unsupported.get_json()["error"]
+    assert attempt_count(store.path) == count
+    supported = client.post(root, headers=headers, json={"supports_listening": True})
+    assert supported.status_code == 201
+    assert supported.get_json()["attempt"]["listening_count"] == 10
+    assert len(supported.get_json()["attempt"]["questions"]) == 26
+    assert attempt_count(store.path) == count + 1
+
+
+def test_old_pages_can_still_review_a_legacy_non_listening_snapshot_of_the_expanded_paper(store, client):
+    attempt = issue_legacy_midterm_snapshot(store)
+    store.submit_attempt(attempt["id"], {})
+    response = client.post(
+        f"/api/exam-preparation/papers/{BUILTIN_ID}/mistake-reviews",
+        headers={"Authorization": "Bearer alice"}, json={},
+    )
+    assert response.status_code == 201
+    review = response.get_json()["attempt"]
+    assert review["listening_count"] == 0
+    assert len(review["questions"]) == 16
+    assert_question_privacy(review["questions"])
 
 
 def test_catalog_source_contains_the_expected_fixed_question_ids_and_complete_study_units():
     source = Path(__file__).resolve().parent / "builtin_exams/shanghai-grade4-u1-u4.json"
     catalog = json.loads(source.read_text())
     assert catalog["id"] == BUILTIN_ID
-    assert [question["id"] for question in catalog["questions"]] == [f"q{index:02d}" for index in range(1, 17)]
-    assert catalog["time_minutes"] == 20
+    assert [question["id"] for question in catalog["questions"][:10]] == [f"l{index:02d}" for index in range(1, 11)]
+    assert [question["id"] for question in catalog["questions"][10:]] == [f"q{index:02d}" for index in range(1, 17)]
+    assert catalog["time_minutes"] == 30
+    assert "听力" in catalog["name"]
     assert catalog["source_file"] == "shanghai-grade4-u1-u4.pdf"
+    assert catalog["exam_file"] == "shanghai-grade4-u1-u4-midterm-listening.pdf"
     assert len(catalog["knowledge"]["sections"]) >= 4
     reading_answers = [
         next(option["text"] for option in question["options"] if option["id"] == question["answer"])
@@ -289,7 +391,7 @@ def test_catalog_source_contains_the_expected_fixed_question_ids_and_complete_st
     ]
     for question in catalog["questions"]:
         assert question["prompt"] and question["explanation"]
-        if question["type"] == "reading_choice":
+        if question["type"] in ("reading_choice", "listening_choice"):
             options = {option["id"]: option["text"] for option in question["options"]}
             assert question["answer"] in options
             assert len(set(options.values())) == 4

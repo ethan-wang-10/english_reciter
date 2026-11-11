@@ -1,6 +1,6 @@
 (() => {
     const base = '/exam-preparation';
-    const typeNames = { spelling: '单词默写', translation: '句子中译英', recognition: '英文识义', context: '语境选词', fill_blank: '语法填空', rewrite: '句型转换', reading_choice: '阅读选择' };
+    const typeNames = { spelling: '单词默写', translation: '句子中译英', recognition: '英文识义', context: '语境选词', fill_blank: '语法填空', rewrite: '句型转换', reading_choice: '阅读选择', listening_choice: '听力选择' };
     let papers = [];
     let selectedPaper = '';
     let editingPaper = '';
@@ -340,6 +340,7 @@
     }
 
     function showView(view) {
+        if (view !== 'attempt') stopListeningAudio();
         ['setup', 'attempt', 'result', 'knowledge'].forEach((name) => {
             el(`exam-${name}-view`).hidden = name !== view;
         });
@@ -347,6 +348,7 @@
 
     function setBusy(value) {
         busy = value;
+        if (value) el('exam-listening-audio').pause?.();
         updateMistakeControls();
         ['exam-save-paper', 'exam-start', 'exam-previous', 'exam-next', 'exam-submit',
             'exam-words', 'exam-paper-name', 'exam-cancel-edit', 'exam-back-to-papers', 'exam-knowledge-back'].forEach((id) => {
@@ -399,7 +401,7 @@
             const title = document.createElement('strong');
             title.textContent = paper.name;
             const detail = document.createElement('span');
-            detail.textContent = paper.builtin ? `${paperContents(paper)} · 建议 ${paper.time_minutes} 分钟` : `${paperContents(paper)} · ${paper.created_at.slice(0, 10)}`;
+            detail.textContent = paper.builtin ? `${paperContents(paper)}${paper.listening_count ? ` · 听力 ${paper.listening_count} 题` : ''} · 建议 ${paper.time_minutes} 分钟` : `${paperContents(paper)} · ${paper.created_at.slice(0, 10)}`;
             const score = document.createElement('span');
             score.textContent = paper.attempt_count
                 ? `最近 ${paper.last_score} 分 · 最高 ${paper.best_score} 分 · 已考 ${paper.attempt_count} 次`
@@ -490,6 +492,9 @@
             el('exam-knowledge-title').textContent = data.knowledge.title;
             el('exam-knowledge-intro').textContent = data.knowledge.intro;
             el('exam-knowledge-pdf').href = data.pdf_url;
+            el('exam-knowledge-pdf').textContent = data.exam_pdf_url ? '阅读知识点复习手册（PDF） ↗' : '阅读完整复习手册（PDF，含自测与参考答案） ↗';
+            el('exam-knowledge-exam-pdf').hidden = !data.exam_pdf_url;
+            el('exam-knowledge-exam-pdf').href = data.exam_pdf_url || '';
             const content = el('exam-knowledge-content');
             content.replaceChildren();
             data.knowledge.sections.forEach((section, index) => {
@@ -534,7 +539,7 @@
             if (!current(ctx)) return;
             const draft = readDraft();
             if (draft?.id && !isParentSession && !busy && !attempt && !result) {
-                const data = await apiRequest(`${base}/attempts/${encodeURIComponent(draft.id)}`);
+                const data = await apiRequest(`${base}/attempts/${encodeURIComponent(draft.id)}?supports_listening=1`);
                 if (!current(ctx) || busy || attempt || result) return;
                 if (data.result) {
                     applyResult(data);
@@ -599,11 +604,12 @@
         if (busy || editingPaper || !selectedPaper || isParentSession) return;
         const ctx = context();
         const includeChoices = !el('exam-include-choices').disabled && el('exam-include-choices').checked;
+        const selected = papers.find((paper) => paper.id === selectedPaper);
         setBusy(true);
         message('正在准备考试…');
         try {
             const data = await apiRequest(`${base}/papers/${encodeURIComponent(selectedPaper)}/attempts`, {
-                method: 'POST', body: JSON.stringify({ include_choices: includeChoices }),
+                method: 'POST', body: JSON.stringify({ include_choices: includeChoices, ...(selected?.builtin ? { supports_listening: true } : {}) }),
             });
             if (!current(ctx)) return;
             attempt = data.attempt;
@@ -613,7 +619,7 @@
             storeDraft();
             renderQuestion();
             if (attempt.builtin) {
-                message(`本次为内置固定考卷，共 ${attempt.questions.length} 题，建议 ${attempt.time_minutes} 分钟完成。填空只写空缺部分，句型转换写完整句子。`);
+                message(`本次为内置固定考卷，共 ${attempt.questions.length} 题${attempt.listening_count ? `（含听力 ${attempt.listening_count} 题）` : ''}，建议 ${attempt.time_minutes} 分钟完成。填空只写空缺部分，句型转换写完整句子。`);
                 return;
             }
             const missing = attempt.word_count * 2 - attempt.choice_count;
@@ -638,7 +644,7 @@
         message('正在准备错题复习…');
         try {
             const data = await apiRequest(`${base}/papers/${encodeURIComponent(paperId)}/mistake-reviews`, {
-                method: 'POST', body: '{}',
+                method: 'POST', body: JSON.stringify({ supports_listening: true }),
             });
             if (!current(ctx)) return;
             attempt = data.attempt;
@@ -682,15 +688,39 @@
     function focusAnswer() {
         if (!attempt || busy || !el('exam-preparation-section').classList.contains('active')) return;
         const question = attempt.questions[index];
-        const target = isWrittenQuestion(question)
+        const target = question.type === 'listening_choice' ? el('exam-listening-audio') : isWrittenQuestion(question)
             ? el('exam-spelling-answer')
             : el('exam-choice-options').querySelector('[aria-pressed="true"]') || el('exam-choice-options').querySelector('button');
         target?.focus({ preventScroll: true });
     }
 
+    function stopListeningAudio() {
+        const audio = el('exam-listening-audio');
+        if (!audio) return;
+        audio.onerror = null;
+        audio.pause?.();
+        audio.removeAttribute?.('src');
+        audio.load?.();
+        el('exam-listening-wrap').hidden = true;
+        el('exam-listening-error').hidden = true;
+    }
+
     function renderQuestion(focus = true) {
         showView('attempt');
+        stopListeningAudio();
         const question = attempt.questions[index];
+        if (question.type === 'listening_choice') {
+            el('exam-listening-wrap').hidden = false;
+            const audio = el('exam-listening-audio');
+            if (typeof question.audio_url === 'string' && question.audio_url.startsWith('/static/exam-preparation/audio/')) {
+                audio.src = question.audio_url;
+                audio.onerror = () => {
+                    if (attempt?.questions[index]?.id === question.id) el('exam-listening-error').hidden = false;
+                };
+            } else {
+                el('exam-listening-error').hidden = false;
+            }
+        }
         el('exam-attempt-name').textContent = attempt.paper_name;
         el('exam-question-position').textContent = `第 ${index + 1} / ${attempt.questions.length} 题`;
         el('exam-question-type').textContent = typeNames[question.type];
@@ -773,7 +803,7 @@
             const card = document.createElement('article');
             card.className = 'exam-wrong-card';
             const title = document.createElement('h4');
-            title.textContent = ['translation', 'fill_blank', 'rewrite', 'reading_choice'].includes(question.type) ? typeNames[question.type] : `${question.english} · ${typeNames[question.type]}`;
+            title.textContent = ['translation', 'fill_blank', 'rewrite', 'reading_choice', 'listening_choice'].includes(question.type) ? typeNames[question.type] : `${question.english} · ${typeNames[question.type]}`;
             card.appendChild(title);
             [question.prompt, `你的答案：${question.user_answer || '未作答'}`, `正确答案：${question.correct_answer}`,
                 question.translation, question.explanation].filter(Boolean).forEach((text) => {
@@ -818,6 +848,7 @@
         el('exam-knowledge-title').textContent = '知识点梳理';
         el('exam-knowledge-intro').textContent = '';
         el('exam-knowledge-pdf').href = '';
+        el('exam-knowledge-exam-pdf').href = '';
         ['exam-attempt-name', 'exam-question-prompt', 'exam-result-name', 'exam-result-score', 'exam-result-summary', 'exam-mistake-status'].forEach((id) => {
             el(id).textContent = '';
         });
@@ -830,6 +861,11 @@
 
     window.examPreparation = { open, reset };
     document.addEventListener('DOMContentLoaded', () => {
+        if (typeof MutationObserver === 'function') {
+            new MutationObserver(() => {
+                if (!el('exam-preparation-section').classList.contains('active')) el('exam-listening-audio').pause?.();
+            }).observe(el('exam-preparation-section'), { attributes: true, attributeFilter: ['class'] });
+        }
         el('exam-create-form').addEventListener('submit', savePaper);
         el('exam-knowledge-back').addEventListener('click', () => {
             if (busy) return;

@@ -1,0 +1,1188 @@
+{
+  "id": "builtin-shanghai-grade4-u5-u10-final",
+  "name": "上海四年级上册英语 · U5-U10 期末模拟卷（含听力）",
+  "edition": "上海教育出版社五·四学制四年级上册；2026年7月第一版；复习范围 U5-U10。",
+  "description": "40 道固定题：10 道听力选择、12 道语法填空、8 道句型转换、10 道阅读选择，建议 45 分钟完成。",
+  "source_note": "按 U5-U10 单元主题及已核对的原页重点编写，例句、题目和听力录音为自编复习练习。",
+  "time_minutes": 45,
+  "source_file": "shanghai-grade4-u5-u10-review.pdf",
+  "exam_file": "shanghai-grade4-u5-u10-final.pdf",
+  "knowledge": {
+    "title": "上海四年级上册英语 U5-U10 期末知识点梳理",
+    "intro": "按 U5-U10 范围整理，覆盖地点、秋天、早餐、诚实、钟点与天气。重点结构依据公开原页核对；例句和题目为自编，词汇包含配套练习用词，完整词表及校考范围以课本和老师要求为准。",
+    "sections": [
+      {
+        "id": "u5",
+        "title": "U5 参观与介绍地点 · Visiting places",
+        "blocks": [
+          {
+            "title": "主题词汇与阅读词",
+            "items": [
+              "cinema 电影院；museum 博物馆；supermarket 超市；playground 操场、游乐场。",
+              "house 房屋；bridge 桥；boat 船；shop 商店。复数常见形式：houses、bridges、boats、shops。",
+              "地点介绍常用：near my home 在我家附近；in the town 在镇上；with my brother 和我的兄弟一起。"
+            ]
+          },
+          {
+            "title": "核心结构：there be",
+            "items": [
+              "There is + 单数名词，表示某地有一个事物：There is a museum near my school.",
+              "There are + 复数名词：There are two shops near my home.",
+              "一般疑问句把 be 提前：Is there a cinema? - Yes, there is. / No, there is not.",
+              "复数问句与否定的配套复习：Are there any shops? / There are not any shops."
+            ]
+          },
+          {
+            "title": "阅读与地点介绍",
+            "items": [
+              "公开原页可核到 Venice 阅读主题。阅读时提取地点、建筑、桥梁、船和商店等信息，避免用课外常识代替文中证据。",
+              "配套表达顺序：在哪里 → 有什么 → 可以做什么 → 为什么喜欢。",
+              "自编例句：There is a museum near my home. I go there with my family. I like the old boats there."
+            ]
+          },
+          {
+            "title": "检查与练习",
+            "items": [
+              "be 与后面的名词单复数搭配：a museum 用 is；two shops 用 are。",
+              "一般疑问句通常用 any，肯定句可用 some；先看句意再填。",
+              "我能把 There is a museum near my school. 变为一般疑问句并作肯定、否定回答。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u6",
+        "title": "U6 秋天 · It's autumn!",
+        "blocks": [
+          {
+            "title": "主题词汇与活动",
+            "items": [
+              "autumn 秋天；farm 农场；leaf 叶子；fruit 水果；apple 苹果；fly south 向南飞。",
+              "秋景语境中的 fall 表示落下：Leaves fall in autumn.；leaf 的常见复数为 leaves。",
+              "collect colourful leaves 收集彩色树叶；take photos of beautiful fields 给美丽的田野拍照；watch birds flying south 看鸟儿南飞；pick fruit on the farm 在农场摘水果。"
+            ]
+          },
+          {
+            "title": "说清看见什么、正在做什么",
+            "items": [
+              "描述季节中的常见活动用一般现在时：Farmers pick fruit in autumn.",
+              "描述此刻动作，可复习 am / is / are + doing：The children are picking apples now.",
+              "Those 后接复数名词，复数主语与 are 搭配：Those leaves are yellow.",
+              "不要漏掉动词或 be：Birds fly south. / The birds are flying south."
+            ]
+          },
+          {
+            "title": "阅读与秋景表达",
+            "items": [
+              "本单元有 I love autumn days 韵文和秋景表达任务。复习画面、动作与感受，不机械抄写未理解的句子。",
+              "自编小短文顺序：季节与天气 → 看见什么 → 人和动物做什么 → 自己喜欢什么。",
+              "自编例句：It is cool in autumn. The leaves are yellow and brown. I collect leaves with my friends. I love autumn days."
+            ]
+          },
+          {
+            "title": "检查与练习",
+            "items": [
+              "检查名词的数：a leaf / many leaves；a bird / some birds。",
+              "基础搭配复习：my parents / our faces；my、our 后接名词，不要写成 I parents 或 we faces。",
+              "看到 now / Look! 等提示时，结合句意检查 be 与动词-ing。",
+              "我能用四个完整英文句子介绍秋天；写作时先有主语，再选择正确动词形式。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u7",
+        "title": "U7 健康早餐 · My healthy breakfast",
+        "blocks": [
+          {
+            "title": "主题与配套练习词汇",
+            "items": [
+              "breakfast 早餐；healthy 健康的；sandwich 三明治。原页重点包括早餐安排与频率表达。",
+              "配套练习用词：milk 牛奶；bread 面包；egg 鸡蛋；fruit 水果；water 水；a glass of milk 一杯牛奶。",
+              "关注食物名词的搭配：an egg；some bread；some milk；two sandwiches。这些是本套模拟练习中的基础复习。"
+            ]
+          },
+          {
+            "title": "核心结构：询问频率",
+            "items": [
+              "How often + 一般疑问句？用于问某事多久发生一次。",
+              "配套答语：every day 每天；once a week 每周一次；twice a week 每周两次；three times a week 每周三次。",
+              "自编问答：How often do you have sandwiches? - Three times a week.",
+              "第三人称单数配套复习：How often does she drink milk? - She drinks milk every day."
+            ]
+          },
+          {
+            "title": "早餐介绍与信息表",
+            "items": [
+              "先找食物，再找数量与频率；不要把每周几次误听成每天几次。",
+              "介绍自己的早餐：吃什么 → 喝什么 → 多久吃一次 → 怎样搭配。",
+              "自编例句：I have an egg and some bread for breakfast. I drink milk every day. I have sandwiches twice a week."
+            ]
+          },
+          {
+            "title": "检查与练习",
+            "items": [
+              "How often 问频率，答语是次数或频率；What 问内容，答语才是食物名称。",
+              "区分 have / has 和 do / does：She has breakfast. / Does she have breakfast?",
+              "我能读懂一周早餐表，用 every day 或 times a week 说出频率。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u8",
+        "title": "U8 诚实与承担责任 · Be honest",
+        "blocks": [
+          {
+            "title": "主题与配套表达",
+            "items": [
+              "honest 诚实的；tell the truth 说实话；tell lies 说谎；say sorry 道歉；make a mistake 犯错。",
+              "配套练习用词：cup 杯子；break 打破；hide 隐藏；help 帮助。",
+              "理解人物遇到的问题、作出的选择及其后果；用具体行为说明诚实。"
+            ]
+          },
+          {
+            "title": "核心结构：should + 动词原形",
+            "items": [
+              "should + 动词原形表示建议或应该做的事：You should tell the truth.",
+              "should not 的缩写为 shouldn't，后面的动词仍用原形。",
+              "自编例句：You should say sorry. You should not hide the mistake.",
+              "should 不随 he / she 加-s：He should tell his teacher."
+            ]
+          },
+          {
+            "title": "读故事、表达建议",
+            "items": [
+              "阅读顺序：谁 → 遇到什么问题 → 怎样做 → 结果怎样 → 学到什么。",
+              "根据文中证据评价行为，不把图画中未说明的细节当成答案。",
+              "自编情境：A child breaks a cup. The child should tell the truth and say sorry."
+            ]
+          },
+          {
+            "title": "检查与练习",
+            "items": [
+              "should 后不要写 tells、telling 或 to tell，使用 tell。",
+              "否定句要保留否定意义：You should not tell lies. / You shouldn't tell lies.",
+              "我能对一个小错误提出两条合适的英文建议。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u9",
+        "title": "U9 钟点与作息 · What time is it?",
+        "blocks": [
+          {
+            "title": "主题与配套练习词汇",
+            "items": [
+              "time 时间；clock 钟；get up 起床；have breakfast 吃早餐；go to school 上学；go home 回家。",
+              "整点可用 o'clock：seven o'clock 七点。",
+              "本套配套练习使用整点和数字钟点读法：six thirty 六点三十分；seven fifteen 七点十五分。其他钟点读法按课堂要求复习。"
+            ]
+          },
+          {
+            "title": "询问钟点与活动时间",
+            "items": [
+              "What time is it? - It is seven o'clock. / It's seven o'clock.",
+              "询问作息：What time do you get up? - I get up at seven.",
+              "在钟点前用 at：at six thirty；at eight o'clock。",
+              "配套复习：It is time for + 名词；It is time to + 动词原形。It is time for breakfast. / It is time to have breakfast."
+            ]
+          },
+          {
+            "title": "阅读时间表与安排一天",
+            "items": [
+              "阅读时把活动与时间一一对应；尤其区分起床、出门、到校和回家的时间。",
+              "本单元 Reading time 可核到 What is time?，复习理解时间与生活的关系。",
+              "自编例句：I get up at six thirty. I have breakfast at seven. I go to school at seven thirty."
+            ]
+          },
+          {
+            "title": "检查与练习",
+            "items": [
+              "What time 问钟点，不能只答活动或星期。",
+              "不要混用 at / on / in：at seven；on Monday；in autumn。",
+              "我能根据一张时间表写三句作息安排，时间与动作对应正确。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u10",
+        "title": "U10 天气与活动安排 · Weather",
+        "blocks": [
+          {
+            "title": "主题与配套练习词汇",
+            "items": [
+              "weather 天气；weather report 天气预报；rain 雨、下雨；rainy 下雨的。",
+              "配套练习中的天气词：sunny 晴朗的；cloudy 多云的；windy 多风的；snowy 下雪的；cool 凉爽的；umbrella 雨伞。",
+              "注意词性与搭配：rain 是名词或动词；rainy 是形容词。It is rainy. / Listen to the rain."
+            ]
+          },
+          {
+            "title": "描述天气",
+            "items": [
+              "询问天气的配套表达：What is the weather like today? / How is the weather today?",
+              "回答要有 be：It is rainy today. / It's sunny and cool.",
+              "从天气表中找城市、时间与天气；本套模拟题以当天的天气为主。",
+              "读到 rain 时看具体搭配：the rain 指雨；rainy 描述天气，不能直接写 It is rain."
+            ]
+          },
+          {
+            "title": "天气播报与生活选择",
+            "items": [
+              "本单元可核到 weather report，以及查阅当地今天天气的项目任务。",
+              "自编播报顺序：问候 → 地点 → 天气 → 适合的活动或建议。",
+              "自编例句：Here is today's weather report. It is rainy in Shanghai. Take an umbrella when you go out."
+            ]
+          },
+          {
+            "title": "检查与练习",
+            "items": [
+              "不要写 It rainy today.，应写 It is rainy today.",
+              "根据文中给出的天气选择活动，不用自己想象的天气替换听到的信息。",
+              "我能用三到四句英文做简短天气播报，并提出一条与天气相符的建议。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "check",
+        "title": "易错点与综合检查",
+        "blocks": [
+          {
+            "title": "先分清题目在问什么",
+            "items": [
+              "Where 问地点；What 问事物或动作；How often 问频率；What time 问钟点。",
+              "听力中不要把 three times a week 与 every day 混淆，也不要把 get up 的时间当成 go to school 的时间。"
+            ]
+          },
+          {
+            "title": "常见结构速查",
+            "items": [
+              "There is a museum. / There are two shops.；Is there...? / Are there...?",
+              "Those leaves are yellow.；The children are picking apples now.",
+              "She has breakfast. / Does she have breakfast?；should + 动词原形。",
+              "at + 钟点；in autumn；on the farm；for breakfast。"
+            ]
+          },
+          {
+            "title": "书写检查",
+            "items": [
+              "句子要有主语；be、实义动词和助动词与主语匹配。",
+              "检查 a / an、单复数、三单-s、否定词与单词拼写。",
+              "句首与人名大写，词间留空；做句型转换时保留原句的关键信息。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "skills",
+        "title": "听力、阅读与写作复习方法",
+        "blocks": [
+          {
+            "title": "听力四步",
+            "items": [
+              "先读问题与选项，圈出要听的地点、活动、频率、钟点或天气。",
+              "第一遍抓主旨，第二遍核对细节；听到 but / no / not 等词时重新判断。",
+              "本卷每段录音读两遍，中间间隔约两秒，在线练习可重复播放。",
+              "语音专项按课本 Sound / Stress 栏及教师音频跟读；本卷重点训练信息提取。"
+            ]
+          },
+          {
+            "title": "阅读三步",
+            "items": [
+              "先看题目，再读短文，最后回到原句找证据。",
+              "判断题和单选题尤其留意时间、地点、否定信息及人物动作。",
+              "不靠单个相同词机械配对，要看整句话的意思。"
+            ]
+          },
+          {
+            "title": "写作四个主题",
+            "items": [
+              "喜欢的地点：位置 → 有什么 → 可以做什么 → 喜欢的理由。",
+              "秋景：季节天气 → 看见什么 → 活动 → 感受。",
+              "健康早餐与作息：食物 → 频率 → 时间 → 合理安排。",
+              "诚实与天气情境：描述问题或天气 → 给出合适建议。"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "references": [
+    {
+      "label": "新版四年级上册单元目录",
+      "url": "http://www.dzkbw.com/books/hjb/yingyu/ws4s_2026/"
+    },
+    {
+      "label": "U5 课本原页朗读",
+      "url": "https://www.bilibili.com/video/BV1U9uw6jEEU/"
+    },
+    {
+      "label": "U6 课本原页朗读",
+      "url": "https://www.bilibili.com/video/BV1FguA6iEy1/"
+    },
+    {
+      "label": "U7 课本原页朗读",
+      "url": "https://www.bilibili.com/video/BV1wuuA6TEJ7/"
+    },
+    {
+      "label": "U8 课本原页朗读",
+      "url": "https://www.bilibili.com/video/BV1nGuA6NEAd/"
+    },
+    {
+      "label": "U9 课本原页朗读",
+      "url": "https://www.bilibili.com/video/BV1zGuA6PEYp/"
+    },
+    {
+      "label": "U10 课本原页朗读",
+      "url": "https://www.bilibili.com/video/BV1CPuA6zEr2/"
+    }
+  ],
+  "reading_passages": [
+    {
+      "id": "reading-a",
+      "title": "An autumn visit",
+      "text": "It is Saturday. Lily and her brother get up at seven o'clock. It is sunny and cool. There is a small museum near their home, but there is no cinema. They go to the museum at nine o'clock. After that, they walk to the park. In the park, the leaves are yellow and brown. Some children are collecting leaves. Lily takes photos. At twelve o'clock, Lily and her brother go home for lunch."
+    },
+    {
+      "id": "reading-b",
+      "title": "Breakfast and a small mistake",
+      "text": "On school days, Max gets up at six thirty. He has an egg, some bread and milk for breakfast. He has fruit every day and sandwiches twice a week. Today it is rainy. Before breakfast, Max drops his sister's cup. The cup breaks. Max is worried. His father says, 'You should tell your sister the truth.' Max tells her what happens and says sorry. His sister says, 'Thank you for telling me. Let's clean it up together.' Then Max takes an umbrella and goes to school at seven thirty.\nWords: drops 掉落；worried 担心的。"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q01",
+      "type": "listening_choice",
+      "prompt": "听录音，选择说话者要去的地方。",
+      "english": "Question 1",
+      "chinese": "听录音，选择说话者要去的地方。",
+      "options": [
+        {
+          "id": "a",
+          "text": "A museum."
+        },
+        {
+          "id": "b",
+          "text": "A cinema."
+        },
+        {
+          "id": "c",
+          "text": "A supermarket."
+        },
+        {
+          "id": "d",
+          "text": "A park."
+        }
+      ],
+      "answer": "c",
+      "explanation": "录音说要买水果，家附近有一家大超市，因此去超市。",
+      "listening_text": "I want to buy some fruit. There is a large supermarket near my home. I can go there with my mum.",
+      "audio_file": "shanghai-grade4-final/listen-01.wav"
+    },
+    {
+      "id": "q02",
+      "type": "listening_choice",
+      "prompt": "听录音，选择学校附近有的场所。",
+      "english": "Question 2",
+      "chinese": "听录音，选择学校附近有的场所。",
+      "options": [
+        {
+          "id": "a",
+          "text": "A museum."
+        },
+        {
+          "id": "b",
+          "text": "A cinema."
+        },
+        {
+          "id": "c",
+          "text": "A library."
+        },
+        {
+          "id": "d",
+          "text": "A restaurant."
+        }
+      ],
+      "answer": "a",
+      "explanation": "录音明确说学校附近有博物馆，没有电影院。",
+      "listening_text": "There is a museum near my school. There is no cinema there.",
+      "audio_file": "shanghai-grade4-final/listen-02.wav"
+    },
+    {
+      "id": "q03",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Lucy 正在做的事。",
+      "english": "Question 3",
+      "chinese": "听录音，选择 Lucy 正在做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Collecting leaves."
+        },
+        {
+          "id": "b",
+          "text": "Picking apples."
+        },
+        {
+          "id": "c",
+          "text": "Taking photos."
+        },
+        {
+          "id": "d",
+          "text": "Reading a book."
+        }
+      ],
+      "answer": "b",
+      "explanation": "Lucy 在农场，正在和父母摘苹果。",
+      "listening_text": "It is autumn. Lucy is on a farm. She is picking apples with her parents.",
+      "audio_file": "shanghai-grade4-final/listen-03.wav"
+    },
+    {
+      "id": "q04",
+      "type": "listening_choice",
+      "prompt": "听录音，选择录音描写的季节。",
+      "english": "Question 4",
+      "chinese": "听录音，选择录音描写的季节。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spring."
+        },
+        {
+          "id": "b",
+          "text": "Summer."
+        },
+        {
+          "id": "c",
+          "text": "Winter."
+        },
+        {
+          "id": "d",
+          "text": "Autumn."
+        }
+      ],
+      "answer": "d",
+      "explanation": "录音提到黄褐色树叶、鸟儿南飞，并说到 autumn days。",
+      "listening_text": "The leaves are yellow and brown. Some birds are flying south. I like these autumn days.",
+      "audio_file": "shanghai-grade4-final/listen-04.wav"
+    },
+    {
+      "id": "q05",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Tom 吃三明治的频率。",
+      "english": "Question 5",
+      "chinese": "听录音，选择 Tom 吃三明治的频率。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Once a week."
+        },
+        {
+          "id": "b",
+          "text": "Twice a week."
+        },
+        {
+          "id": "c",
+          "text": "Three times a week."
+        },
+        {
+          "id": "d",
+          "text": "Every day."
+        }
+      ],
+      "answer": "c",
+      "explanation": "three times a week 表示每周三次；every day 说的是喝牛奶的频率。",
+      "listening_text": "Tom has sandwiches for breakfast three times a week. He drinks milk every day.",
+      "audio_file": "shanghai-grade4-final/listen-05.wav"
+    },
+    {
+      "id": "q06",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Amy 今天早餐没有吃的东西。",
+      "english": "Question 6",
+      "chinese": "听录音，选择 Amy 今天早餐没有吃的东西。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Cake."
+        },
+        {
+          "id": "b",
+          "text": "Bread."
+        },
+        {
+          "id": "c",
+          "text": "An egg."
+        },
+        {
+          "id": "d",
+          "text": "Milk."
+        }
+      ],
+      "answer": "a",
+      "explanation": "Amy 早餐有鸡蛋、面包和牛奶，没有蛋糕。",
+      "listening_text": "Today Amy has an egg, some bread and a glass of milk for breakfast. She does not have cake.",
+      "audio_file": "shanghai-grade4-final/listen-06.wav"
+    },
+    {
+      "id": "q07",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Ben 应该做的事。",
+      "english": "Question 7",
+      "chinese": "听录音，选择 Ben 应该做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Hide the cup."
+        },
+        {
+          "id": "b",
+          "text": "Say nothing."
+        },
+        {
+          "id": "c",
+          "text": "Blame his brother."
+        },
+        {
+          "id": "d",
+          "text": "Tell Mum the truth and say sorry."
+        }
+      ],
+      "answer": "d",
+      "explanation": "姐姐建议 Ben 告诉妈妈实情并道歉。",
+      "listening_text": "Ben breaks a cup. He wants to hide it. His sister says, \"You should tell Mum the truth and say sorry.\"",
+      "audio_file": "shanghai-grade4-final/listen-07.wav"
+    },
+    {
+      "id": "q08",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Jack 起床的时间。",
+      "english": "Question 8",
+      "chinese": "听录音，选择 Jack 起床的时间。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Seven o'clock."
+        },
+        {
+          "id": "b",
+          "text": "Eight o'clock."
+        },
+        {
+          "id": "c",
+          "text": "Six o'clock."
+        },
+        {
+          "id": "d",
+          "text": "Nine o'clock."
+        }
+      ],
+      "answer": "a",
+      "explanation": "录音说 Jack 七点起床，八点去学校；题目问起床时间。",
+      "listening_text": "It is seven o'clock. Jack gets up now. He goes to school at eight o'clock.",
+      "audio_file": "shanghai-grade4-final/listen-08.wav"
+    },
+    {
+      "id": "q09",
+      "type": "listening_choice",
+      "prompt": "听录音，选择上海今天的天气。",
+      "english": "Question 9",
+      "chinese": "听录音，选择上海今天的天气。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Sunny."
+        },
+        {
+          "id": "b",
+          "text": "Windy."
+        },
+        {
+          "id": "c",
+          "text": "Rainy."
+        },
+        {
+          "id": "d",
+          "text": "Snowy."
+        }
+      ],
+      "answer": "c",
+      "explanation": "天气播报说明上海今天下雨，并提醒带雨伞。",
+      "listening_text": "Here is today's weather report. It is rainy in Shanghai. Please take an umbrella when you go out.",
+      "audio_file": "shanghai-grade4-final/listen-09.wav"
+    },
+    {
+      "id": "q10",
+      "type": "listening_choice",
+      "prompt": "听录音，选择大家最后的活动安排。",
+      "english": "Question 10",
+      "chinese": "听录音，选择大家最后的活动安排。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Have a picnic in the park."
+        },
+        {
+          "id": "b",
+          "text": "Stay at home and read books."
+        },
+        {
+          "id": "c",
+          "text": "Pick fruit on a farm."
+        },
+        {
+          "id": "d",
+          "text": "Go swimming."
+        }
+      ],
+      "answer": "b",
+      "explanation": "录音先说不能去公园野餐，最后建议留在家里读书。",
+      "listening_text": "It is windy today. We cannot have our picnic in the park. Let's stay at home and read some books.",
+      "audio_file": "shanghai-grade4-final/listen-10.wav"
+    },
+    {
+      "id": "q11",
+      "type": "fill_blank",
+      "prompt": "There ________ (be) a museum near my school.",
+      "english": "Question 11",
+      "chinese": "语法填空",
+      "answer": "is",
+      "accepted_answers": [
+        "is"
+      ],
+      "explanation": "a museum 是单数，there be 中使用 is。"
+    },
+    {
+      "id": "q12",
+      "type": "fill_blank",
+      "prompt": "________ (Be) there any shops near your home?",
+      "english": "Question 12",
+      "chinese": "语法填空",
+      "answer": "Are",
+      "accepted_answers": [
+        "Are"
+      ],
+      "explanation": "shops 是复数，问句中用 Are there。"
+    },
+    {
+      "id": "q13",
+      "type": "fill_blank",
+      "prompt": "Those ________ (leaf) are yellow.",
+      "english": "Question 13",
+      "chinese": "语法填空",
+      "answer": "leaves",
+      "accepted_answers": [
+        "leaves"
+      ],
+      "explanation": "Those 后接复数，leaf 的复数是 leaves。"
+    },
+    {
+      "id": "q14",
+      "type": "fill_blank",
+      "prompt": "Look! The birds are ________ (fly) south.",
+      "english": "Question 14",
+      "chinese": "语法填空",
+      "answer": "flying",
+      "accepted_answers": [
+        "flying"
+      ],
+      "explanation": "are 后填动词-ing；fly 直接加 -ing。"
+    },
+    {
+      "id": "q15",
+      "type": "fill_blank",
+      "prompt": "How ________ (often / many) do you have sandwiches? - Twice a week.",
+      "english": "Question 15",
+      "chinese": "语法填空",
+      "answer": "often",
+      "accepted_answers": [
+        "often"
+      ],
+      "explanation": "Twice a week 表示频率，应使用 How often。"
+    },
+    {
+      "id": "q16",
+      "type": "fill_blank",
+      "prompt": "She ________ (have) milk every day.",
+      "english": "Question 16",
+      "chinese": "语法填空",
+      "answer": "has",
+      "accepted_answers": [
+        "has"
+      ],
+      "explanation": "She 是第三人称单数，have 变为 has。"
+    },
+    {
+      "id": "q17",
+      "type": "fill_blank",
+      "prompt": "You should ________ (tell) the truth.",
+      "english": "Question 17",
+      "chinese": "语法填空",
+      "answer": "tell",
+      "accepted_answers": [
+        "tell"
+      ],
+      "explanation": "should 后使用动词原形。"
+    },
+    {
+      "id": "q18",
+      "type": "fill_blank",
+      "prompt": "We ________ (should / should not) tell lies.",
+      "english": "Question 18",
+      "chinese": "语法填空",
+      "answer": "should not",
+      "accepted_answers": [
+        "should not",
+        "shouldn't"
+      ],
+      "explanation": "句意为不应该说谎，使用 should not 或 shouldn't。"
+    },
+    {
+      "id": "q19",
+      "type": "fill_blank",
+      "prompt": "I get up ________ seven o'clock. (at / on / in)",
+      "english": "Question 19",
+      "chinese": "语法填空",
+      "answer": "at",
+      "accepted_answers": [
+        "at"
+      ],
+      "explanation": "具体钟点前使用 at。"
+    },
+    {
+      "id": "q20",
+      "type": "fill_blank",
+      "prompt": "It is time ________ breakfast. (for / to)",
+      "english": "Question 20",
+      "chinese": "语法填空",
+      "answer": "for",
+      "accepted_answers": [
+        "for"
+      ],
+      "explanation": "breakfast 是名词，使用 time for + 名词。"
+    },
+    {
+      "id": "q21",
+      "type": "fill_blank",
+      "prompt": "It is ________ today. (rain / rainy)",
+      "english": "Question 21",
+      "chinese": "语法填空",
+      "answer": "rainy",
+      "accepted_answers": [
+        "rainy"
+      ],
+      "explanation": "be 后描述天气用形容词 rainy。"
+    },
+    {
+      "id": "q22",
+      "type": "fill_blank",
+      "prompt": "Please take ________ umbrella. (a / an)",
+      "english": "Question 22",
+      "chinese": "语法填空",
+      "answer": "an",
+      "accepted_answers": [
+        "an"
+      ],
+      "explanation": "umbrella 以元音音素开头，不定冠词用 an。"
+    },
+    {
+      "id": "q23",
+      "type": "rewrite",
+      "prompt": "There is a museum near my home.\n改为一般疑问句，填写完整英文句子。",
+      "english": "Question 23",
+      "chinese": "句型转换",
+      "answer": "Is there a museum near my home?",
+      "accepted_answers": [
+        "Is there a museum near my home?",
+        "Is there a museum near your home?"
+      ],
+      "explanation": "一般疑问句把 is 提到 there 前；保留 my home，或按对话语境改为 your home，均可。"
+    },
+    {
+      "id": "q24",
+      "type": "rewrite",
+      "prompt": "There are some shops near the school.\n改为否定句，填写完整英文句子。",
+      "english": "Question 24",
+      "chinese": "句型转换",
+      "answer": "There aren't any shops near the school.",
+      "accepted_answers": [
+        "There aren't any shops near the school.",
+        "There are not any shops near the school.",
+        "There are no shops near the school."
+      ],
+      "explanation": "are 后加 not，some 变为 any；也可用 no shops，保留地点信息。"
+    },
+    {
+      "id": "q25",
+      "type": "rewrite",
+      "prompt": "These leaves are yellow.\n把 These 改为 Those，保持复数形式。",
+      "english": "Question 25",
+      "chinese": "句型转换",
+      "answer": "Those leaves are yellow.",
+      "accepted_answers": [
+        "Those leaves are yellow."
+      ],
+      "explanation": "Those 后仍使用复数 leaves 与 are。"
+    },
+    {
+      "id": "q26",
+      "type": "rewrite",
+      "prompt": "She drinks milk every day.\n改为一般疑问句。",
+      "english": "Question 26",
+      "chinese": "句型转换",
+      "answer": "Does she drink milk every day?",
+      "accepted_answers": [
+        "Does she drink milk every day?"
+      ],
+      "explanation": "使用 Does，后面的 drinks 恢复为 drink。"
+    },
+    {
+      "id": "q27",
+      "type": "rewrite",
+      "prompt": "He has sandwiches three times a week.\n对 three times a week 提问。",
+      "english": "Question 27",
+      "chinese": "句型转换",
+      "answer": "How often does he have sandwiches?",
+      "accepted_answers": [
+        "How often does he have sandwiches?"
+      ],
+      "explanation": "频率用 How often 提问，does 后用 have。"
+    },
+    {
+      "id": "q28",
+      "type": "rewrite",
+      "prompt": "You should hide the mistake.\n改为否定句。",
+      "english": "Question 28",
+      "chinese": "句型转换",
+      "answer": "You shouldn't hide the mistake.",
+      "accepted_answers": [
+        "You shouldn't hide the mistake.",
+        "You should not hide the mistake."
+      ],
+      "explanation": "should 后加 not，hide 保持原形。"
+    },
+    {
+      "id": "q29",
+      "type": "rewrite",
+      "prompt": "It is seven o'clock.\n对 seven o'clock 提问。",
+      "english": "Question 29",
+      "chinese": "句型转换",
+      "answer": "What time is it?",
+      "accepted_answers": [
+        "What time is it?",
+        "What's the time?",
+        "What is the time?",
+        "What time is it now?"
+      ],
+      "explanation": "对钟点提问可使用 What time 或 What is the time。"
+    },
+    {
+      "id": "q30",
+      "type": "rewrite",
+      "prompt": "It is rainy today.\n对 rainy 提问，保留 today。",
+      "english": "Question 30",
+      "chinese": "句型转换",
+      "answer": "What is the weather like today?",
+      "accepted_answers": [
+        "What is the weather like today?",
+        "What's the weather like today?",
+        "How is the weather today?",
+        "How's the weather today?"
+      ],
+      "explanation": "可以使用 What is the weather like 或 How is the weather。"
+    },
+    {
+      "id": "q31",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nAn autumn visit\nIt is Saturday. Lily and her brother get up at seven o'clock. It is sunny and cool. There is a small museum near their home, but there is no cinema. They go to the museum at nine o'clock. After that, they walk to the park. In the park, the leaves are yellow and brown. Some children are collecting leaves. Lily takes photos. At twelve o'clock, Lily and her brother go home for lunch.\n\nWhat day is it?",
+      "english": "Question 31",
+      "chinese": "What day is it?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Monday."
+        },
+        {
+          "id": "b",
+          "text": "Friday."
+        },
+        {
+          "id": "c",
+          "text": "Saturday."
+        },
+        {
+          "id": "d",
+          "text": "Sunday."
+        }
+      ],
+      "answer": "c",
+      "explanation": "短文第一句说明是 Saturday。",
+      "passage_id": "reading-a",
+      "question_text": "What day is it?"
+    },
+    {
+      "id": "q32",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nAn autumn visit\nIt is Saturday. Lily and her brother get up at seven o'clock. It is sunny and cool. There is a small museum near their home, but there is no cinema. They go to the museum at nine o'clock. After that, they walk to the park. In the park, the leaves are yellow and brown. Some children are collecting leaves. Lily takes photos. At twelve o'clock, Lily and her brother go home for lunch.\n\nWhat is near their home?",
+      "english": "Question 32",
+      "chinese": "What is near their home?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A cinema."
+        },
+        {
+          "id": "b",
+          "text": "A small museum."
+        },
+        {
+          "id": "c",
+          "text": "A large school."
+        },
+        {
+          "id": "d",
+          "text": "A farm."
+        }
+      ],
+      "answer": "b",
+      "explanation": "家附近有一家小博物馆，没有电影院。",
+      "passage_id": "reading-a",
+      "question_text": "What is near their home?"
+    },
+    {
+      "id": "q33",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nAn autumn visit\nIt is Saturday. Lily and her brother get up at seven o'clock. It is sunny and cool. There is a small museum near their home, but there is no cinema. They go to the museum at nine o'clock. After that, they walk to the park. In the park, the leaves are yellow and brown. Some children are collecting leaves. Lily takes photos. At twelve o'clock, Lily and her brother go home for lunch.\n\nWhat time do they go to the museum?",
+      "english": "Question 33",
+      "chinese": "What time do they go to the museum?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Seven o'clock."
+        },
+        {
+          "id": "b",
+          "text": "Eight o'clock."
+        },
+        {
+          "id": "c",
+          "text": "Nine o'clock."
+        },
+        {
+          "id": "d",
+          "text": "Twelve o'clock."
+        }
+      ],
+      "answer": "c",
+      "explanation": "去博物馆的时间是九点，不要与七点起床和十二点回家混淆。",
+      "passage_id": "reading-a",
+      "question_text": "What time do they go to the museum?"
+    },
+    {
+      "id": "q34",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nAn autumn visit\nIt is Saturday. Lily and her brother get up at seven o'clock. It is sunny and cool. There is a small museum near their home, but there is no cinema. They go to the museum at nine o'clock. After that, they walk to the park. In the park, the leaves are yellow and brown. Some children are collecting leaves. Lily takes photos. At twelve o'clock, Lily and her brother go home for lunch.\n\nWhat are some children doing in the park?",
+      "english": "Question 34",
+      "chinese": "What are some children doing in the park?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Picking apples."
+        },
+        {
+          "id": "b",
+          "text": "Swimming."
+        },
+        {
+          "id": "c",
+          "text": "Reading books."
+        },
+        {
+          "id": "d",
+          "text": "Collecting leaves."
+        }
+      ],
+      "answer": "d",
+      "explanation": "公园里的一些孩子正在收集树叶。",
+      "passage_id": "reading-a",
+      "question_text": "What are some children doing in the park?"
+    },
+    {
+      "id": "q35",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nAn autumn visit\nIt is Saturday. Lily and her brother get up at seven o'clock. It is sunny and cool. There is a small museum near their home, but there is no cinema. They go to the museum at nine o'clock. After that, they walk to the park. In the park, the leaves are yellow and brown. Some children are collecting leaves. Lily takes photos. At twelve o'clock, Lily and her brother go home for lunch.\n\nWhich sentence is true?",
+      "english": "Question 35",
+      "chinese": "Which sentence is true?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Lily takes photos in the park."
+        },
+        {
+          "id": "b",
+          "text": "There is a cinema near their home."
+        },
+        {
+          "id": "c",
+          "text": "They go home at nine."
+        },
+        {
+          "id": "d",
+          "text": "The leaves are blue."
+        }
+      ],
+      "answer": "a",
+      "explanation": "文中明确写到 Lily takes photos，其他选项与短文不符。",
+      "passage_id": "reading-a",
+      "question_text": "Which sentence is true?"
+    },
+    {
+      "id": "q36",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nBreakfast and a small mistake\nOn school days, Max gets up at six thirty. He has an egg, some bread and milk for breakfast. He has fruit every day and sandwiches twice a week. Today it is rainy. Before breakfast, Max drops his sister's cup. The cup breaks. Max is worried. His father says, 'You should tell your sister the truth.' Max tells her what happens and says sorry. His sister says, 'Thank you for telling me. Let's clean it up together.' Then Max takes an umbrella and goes to school at seven thirty.\nWords: drops 掉落；worried 担心的。\n\nWhat time does Max get up?",
+      "english": "Question 36",
+      "chinese": "What time does Max get up?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Six thirty."
+        },
+        {
+          "id": "b",
+          "text": "Seven thirty."
+        },
+        {
+          "id": "c",
+          "text": "Six o'clock."
+        },
+        {
+          "id": "d",
+          "text": "Eight o'clock."
+        }
+      ],
+      "answer": "a",
+      "explanation": "Max 六点三十分起床，七点三十分去学校。",
+      "passage_id": "reading-b",
+      "question_text": "What time does Max get up?"
+    },
+    {
+      "id": "q37",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nBreakfast and a small mistake\nOn school days, Max gets up at six thirty. He has an egg, some bread and milk for breakfast. He has fruit every day and sandwiches twice a week. Today it is rainy. Before breakfast, Max drops his sister's cup. The cup breaks. Max is worried. His father says, 'You should tell your sister the truth.' Max tells her what happens and says sorry. His sister says, 'Thank you for telling me. Let's clean it up together.' Then Max takes an umbrella and goes to school at seven thirty.\nWords: drops 掉落；worried 担心的。\n\nHow often does Max have sandwiches?",
+      "english": "Question 37",
+      "chinese": "How often does Max have sandwiches?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Every day."
+        },
+        {
+          "id": "b",
+          "text": "Once a week."
+        },
+        {
+          "id": "c",
+          "text": "Twice a week."
+        },
+        {
+          "id": "d",
+          "text": "Three times a week."
+        }
+      ],
+      "answer": "c",
+      "explanation": "每天吃的是水果，三明治每周吃两次。",
+      "passage_id": "reading-b",
+      "question_text": "How often does Max have sandwiches?"
+    },
+    {
+      "id": "q38",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nBreakfast and a small mistake\nOn school days, Max gets up at six thirty. He has an egg, some bread and milk for breakfast. He has fruit every day and sandwiches twice a week. Today it is rainy. Before breakfast, Max drops his sister's cup. The cup breaks. Max is worried. His father says, 'You should tell your sister the truth.' Max tells her what happens and says sorry. His sister says, 'Thank you for telling me. Let's clean it up together.' Then Max takes an umbrella and goes to school at seven thirty.\nWords: drops 掉落；worried 担心的。\n\nWhat should Max do about the cup?",
+      "english": "Question 38",
+      "chinese": "What should Max do about the cup?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Hide it."
+        },
+        {
+          "id": "b",
+          "text": "Tell his sister the truth and say sorry."
+        },
+        {
+          "id": "c",
+          "text": "Blame his father."
+        },
+        {
+          "id": "d",
+          "text": "Say nothing."
+        }
+      ],
+      "answer": "b",
+      "explanation": "父亲建议说实话，Max 也向姐姐说明情况并道歉。",
+      "passage_id": "reading-b",
+      "question_text": "What should Max do about the cup?"
+    },
+    {
+      "id": "q39",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nBreakfast and a small mistake\nOn school days, Max gets up at six thirty. He has an egg, some bread and milk for breakfast. He has fruit every day and sandwiches twice a week. Today it is rainy. Before breakfast, Max drops his sister's cup. The cup breaks. Max is worried. His father says, 'You should tell your sister the truth.' Max tells her what happens and says sorry. His sister says, 'Thank you for telling me. Let's clean it up together.' Then Max takes an umbrella and goes to school at seven thirty.\nWords: drops 掉落；worried 担心的。\n\nWhy does Max take an umbrella?",
+      "english": "Question 39",
+      "chinese": "Why does Max take an umbrella?",
+      "options": [
+        {
+          "id": "a",
+          "text": "It is sunny."
+        },
+        {
+          "id": "b",
+          "text": "He wants to hide the cup."
+        },
+        {
+          "id": "c",
+          "text": "It is snowy."
+        },
+        {
+          "id": "d",
+          "text": "It is rainy."
+        }
+      ],
+      "answer": "d",
+      "explanation": "当天正在下雨，雨伞与天气相对应。",
+      "passage_id": "reading-b",
+      "question_text": "Why does Max take an umbrella?"
+    },
+    {
+      "id": "q40",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nBreakfast and a small mistake\nOn school days, Max gets up at six thirty. He has an egg, some bread and milk for breakfast. He has fruit every day and sandwiches twice a week. Today it is rainy. Before breakfast, Max drops his sister's cup. The cup breaks. Max is worried. His father says, 'You should tell your sister the truth.' Max tells her what happens and says sorry. His sister says, 'Thank you for telling me. Let's clean it up together.' Then Max takes an umbrella and goes to school at seven thirty.\nWords: drops 掉落；worried 担心的。\n\nWhat can we learn from the story?",
+      "english": "Question 40",
+      "chinese": "What can we learn from the story?",
+      "options": [
+        {
+          "id": "a",
+          "text": "We should never have breakfast."
+        },
+        {
+          "id": "b",
+          "text": "We should hide broken cups."
+        },
+        {
+          "id": "c",
+          "text": "We should be honest when we make a mistake."
+        },
+        {
+          "id": "d",
+          "text": "We should blame other people."
+        }
+      ],
+      "answer": "c",
+      "explanation": "故事用承认错误和道歉说明诚实与承担责任。",
+      "passage_id": "reading-b",
+      "question_text": "What can we learn from the story?"
+    }
+  ]
+}

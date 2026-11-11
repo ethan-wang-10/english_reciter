@@ -23,6 +23,9 @@ function examUI() {
         appendChild(child) { this.append(child); }
         replaceChildren(...children) { this.children = children; }
         setAttribute(key, value) { this.attributes[key] = value; }
+        removeAttribute(key) { delete this.attributes[key]; if (key === 'src') this.src = ''; }
+        pause() { this.pauseCount = (this.pauseCount || 0) + 1; }
+        load() { this.loadCount = (this.loadCount || 0) + 1; }
         querySelectorAll() { return this.children; }
         querySelector(selector) {
             return selector.includes('aria-pressed')
@@ -75,6 +78,10 @@ function examUI() {
         vocabImportWordsForApi: (words) => words.join(', '),
         invalidateReviewDataAfterImport: () => { state.reviewInvalidated = true; },
         clearWordbankCsvDiscoveryCache: () => { state.wordbankInvalidated = true; },
+        MutationObserver: class {
+            constructor(callback) { state.sectionChanged = callback; }
+            observe() {}
+        },
         apiRequest: async (url, options = {}) => {
             const body = options.body ? JSON.parse(options.body) : null;
             state.calls.push({ url, body, method: options.method || 'GET' });
@@ -709,4 +716,92 @@ test('account reset ignores a late knowledge response and clears study content',
     assert.equal(ui.field('exam-knowledge-view').hidden, true);
     assert.equal(ui.field('exam-knowledge-content').children.length, 0);
     assert.equal(ui.field('exam-knowledge-pdf').href, '');
+});
+
+function listeningFixture(ui) {
+    const paper = addBuiltinFixture(ui);
+    paper.name = '上海四年级上册英语 · U5-U10 期末模拟卷（含听力）';
+    paper.listening_count = 2;
+    ui.state.start = async () => ({ attempt: {
+        id: 'listening-attempt', paper_id: paper.id, paper_name: paper.name, builtin: true,
+        word_count: 0, sentence_count: 0, choice_count: 2, include_choices: true,
+        listening_count: 2, time_minutes: 45,
+        questions: [
+            { id: 'l1', type: 'listening_choice', prompt: '听录音，选择地点。', audio_url: '/static/exam-preparation/audio/shanghai-grade4-final/listen-01.wav', options: [{ id: 'a', text: 'A museum.' }, { id: 'b', text: 'A cinema.' }] },
+            { id: 'f1', type: 'fill_blank', prompt: 'There ___ a museum.' },
+            { id: 'l2', type: 'listening_choice', prompt: '听录音，选择天气。', audio_url: '/static/exam-preparation/audio/shanghai-grade4-final/listen-02.wav', options: [{ id: 'a', text: 'Sunny.' }, { id: 'b', text: 'Rainy.' }] },
+        ],
+    } });
+    return paper;
+}
+
+test('listening questions provide reusable native audio and retain selected answers across navigation', async () => {
+    const ui = examUI();
+    listeningFixture(ui);
+    await ui.api.open();
+    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.field('exam-start').fire('click');
+    const audio = ui.field('exam-listening-audio');
+    assert.equal(ui.field('exam-listening-wrap').hidden, false);
+    assert.equal(audio.src, '/static/exam-preparation/audio/shanghai-grade4-final/listen-01.wav');
+    assert.equal(ui.field('exam-question-type').textContent, '听力选择');
+    assert.match(ui.field('exam-preparation-message').textContent, /含听力 2 题/);
+    assert.equal(ui.state.calls.find((call) => call.url.endsWith('/attempts')).body.supports_listening, true);
+    assert.equal(ui.field('exam-spelling-wrap').hidden, true);
+    await ui.field('exam-choice-options').children[0].fire('click');
+    const pauses = audio.pauseCount;
+    await ui.field('exam-next').fire('click');
+    assert.equal(ui.field('exam-listening-wrap').hidden, true);
+    assert.equal(audio.src, '');
+    assert.ok(audio.pauseCount > pauses);
+    await ui.field('exam-next').fire('click');
+    assert.equal(audio.src, '/static/exam-preparation/audio/shanghai-grade4-final/listen-02.wav');
+    await ui.field('exam-previous').fire('click');
+    await ui.field('exam-previous').fire('click');
+    assert.equal(ui.field('exam-choice-options').children[0].attributes['aria-pressed'], 'true');
+});
+
+test('audio errors are visible for the current question and reset stops playback without late feedback', async () => {
+    const ui = examUI();
+    listeningFixture(ui);
+    await ui.api.open();
+    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.field('exam-start').fire('click');
+    const audio = ui.field('exam-listening-audio');
+    const failed = audio.onerror;
+    failed();
+    assert.equal(ui.field('exam-listening-error').hidden, false);
+    ui.api.reset();
+    failed();
+    assert.equal(audio.src, '');
+    assert.equal(audio.onerror, null);
+    assert.equal(ui.field('exam-listening-error').hidden, true);
+    assert.equal(ui.field('exam-listening-wrap').hidden, true);
+});
+
+test('knowledge offers a separate downloadable exam without changing the study handbook', async () => {
+    const ui = examUI();
+    addBuiltinFixture(ui);
+    ui.state.knowledge.exam_pdf_url = '/static/exam-preparation/shanghai-grade4-u5-u10-final.pdf';
+    await ui.api.open();
+    await ui.field('exam-paper-list').children[1].children[1].fire('click');
+    assert.equal(ui.field('exam-knowledge-exam-pdf').hidden, false);
+    assert.equal(ui.field('exam-knowledge-exam-pdf').href, '/static/exam-preparation/shanghai-grade4-u5-u10-final.pdf');
+    assert.match(ui.field('exam-knowledge-pdf').textContent, /知识点复习手册/);
+    ui.api.reset();
+    assert.equal(ui.field('exam-knowledge-exam-pdf').href, '');
+});
+
+test('leaving exam preparation pauses the recording and preserves its source for returning', async () => {
+    const ui = examUI();
+    listeningFixture(ui);
+    await ui.api.open();
+    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.field('exam-start').fire('click');
+    const audio = ui.field('exam-listening-audio');
+    const pauses = audio.pauseCount;
+    ui.field('exam-preparation-section').classList.contains = () => false;
+    ui.state.sectionChanged();
+    assert.ok(audio.pauseCount > pauses);
+    assert.equal(audio.src, '/static/exam-preparation/audio/shanghai-grade4-final/listen-01.wav');
 });

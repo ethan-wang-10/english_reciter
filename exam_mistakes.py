@@ -22,6 +22,8 @@ def question_key(question: dict) -> str:
     """Identify semantics independently of attempt IDs and choice order/labels."""
     kind = question["type"]
     semantic = {"type": kind, "prompt": _text(question["prompt"])}
+    if kind == 'listening_choice':
+        semantic['listening_text'] = _text(question['listening_text'])
     if kind in ("translation", "fill_blank", "rewrite"):
         semantic["answers"] = sorted({
             _text(answer).rstrip(".!?。！？ ") for answer in question["accepted_answers"]

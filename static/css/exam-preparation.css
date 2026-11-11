@@ -97,6 +97,10 @@
 .exam-knowledge-head h3, .exam-knowledge-head .btn { margin: 0; }
 .exam-knowledge-head h3:focus { outline: none; }
 .exam-handbook-link { display: inline-block; margin: 14px 0 20px; color: #16729c; font-size: 0.88rem; }
+.exam-handbook-link + .exam-handbook-link { margin-left: 14px; }
+.exam-listening-wrap { margin-top: 16px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: #f4faff; }
+.exam-listening-wrap audio { display: block; width: 100%; margin-top: 10px; }
+.exam-listening-wrap .exam-message-error { padding: 8px 10px; border-radius: 10px; }
 .exam-knowledge-content { display: grid; gap: 14px; }
 .exam-knowledge-content details { padding: 16px; border: 1px solid var(--border); border-radius: 14px; }
 .exam-knowledge-content summary { cursor: pointer; font-size: 1.05rem; font-weight: 700; }
@@ -146,6 +150,7 @@
 .exam-result-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 
 @media (max-width: 720px) {
+    .exam-handbook-link + .exam-handbook-link { display: block; margin-left: 0; margin-top: 0; }
     .exam-setup-grid { grid-template-columns: 1fr; gap: 18px; }
     .exam-panel { padding: 18px; border-radius: var(--radius-md); }
     .exam-question-prompt { font-size: 1.2rem; }

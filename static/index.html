@@ -7,7 +7,7 @@
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/brand/logo-mark.svg?v=parrot2">
     <link rel="stylesheet" href="/static/css/style.css?v=20261110-nav-more-v1">
-    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-builtin-v1">
+    <link rel="stylesheet" href="/static/css/exam-preparation.css?v=20261110-final-listening-v1">
 </head>
 <body>
     <div id="app">
@@ -542,6 +542,7 @@
                         </div>
                         <p id="exam-knowledge-intro" class="exam-hint"></p>
                         <a id="exam-knowledge-pdf" class="exam-handbook-link" target="_blank" rel="noopener">阅读完整复习手册（PDF，含自测与参考答案） ↗</a>
+                        <a id="exam-knowledge-exam-pdf" class="exam-handbook-link" target="_blank" rel="noopener" hidden>打开模拟卷、参考答案及听力稿（PDF） ↗</a>
                         <div id="exam-knowledge-content" class="exam-knowledge-content"></div>
                     </div>
                     <div id="exam-attempt-view" class="exam-panel exam-attempt-panel" hidden>
@@ -554,6 +555,11 @@
                             <span id="exam-answer-count" aria-live="polite"></span>
                         </div>
                         <span id="exam-question-type" class="exam-question-type"></span>
+                        <div id="exam-listening-wrap" class="exam-listening-wrap" hidden>
+                            <p class="exam-hint">先听录音，再选择答案；录音可重复播放。</p>
+                            <audio id="exam-listening-audio" controls preload="none" aria-label="本题听力录音"></audio>
+                            <p id="exam-listening-error" class="exam-hint exam-message-error" role="alert" hidden>音频加载失败，请检查网络后刷新页面继续；已填写的答案会保留。</p>
+                        </div>
                         <p id="exam-question-prompt" class="exam-question-prompt"></p>
                         <div id="exam-spelling-wrap">
                             <label id="exam-answer-label" for="exam-spelling-answer">请默写英文单词或短语</label>
@@ -1483,7 +1489,7 @@
     
     <script src="/static/js/performance.js?v=20260711-invite9" defer></script>
     <script src="/static/js/app.js?v=20261110-inline-import-v1" defer></script>
-    <script src="/static/js/exam-preparation.js?v=20261110-builtin-v1" defer></script>
+    <script src="/static/js/exam-preparation.js?v=20261110-final-listening-v1" defer></script>
     <script src="/static/js/chat-sidebar.js" defer></script>
     <script src="/static/js/textbook.js" defer></script>
     <script src="/static/js/admin.js?v=20260910-authoring-v1" defer></script>

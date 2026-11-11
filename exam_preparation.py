@@ -135,7 +135,10 @@ def public_attempt(attempt: dict) -> dict:
         key: value for key, value in attempt.items() if key != "questions"
     } | {
         "questions": [
-            {key: question[key] for key in ("id", "type", "prompt", "options") if key in question}
+            {key: question[key] for key in (
+                ("id", "type", "prompt", "options", "audio_url")
+                if question["type"] == "listening_choice" else ("id", "type", "prompt", "options")
+            ) if key in question}
             for question in attempt["questions"]
         ],
     }
@@ -279,6 +282,8 @@ class ExamPreparationStore:
             return self._paper(connection.execute("SELECT * FROM exam_papers WHERE id=?", (paper_id,)).fetchone())
 
     def get_paper(self, paper_id: str) -> dict:
+        if paper_id.startswith('builtin-') and not builtin_exam_catalog.is_builtin(paper_id):
+            raise ExamPreparationError("考卷不存在，请重新选择", 404)
         with self._connection() as connection:
             row = connection.execute("SELECT * FROM exam_papers WHERE id=?", (paper_id,)).fetchone()
             if row is None and builtin_exam_catalog.is_builtin(paper_id):
@@ -294,7 +299,8 @@ class ExamPreparationStore:
 
     def list_papers(self) -> list[dict]:
         with self._connection() as connection:
-            papers = [self._paper(row) for row in connection.execute("SELECT * FROM exam_papers ORDER BY created_at DESC, rowid DESC")]
+            papers = [self._paper(row) for row in connection.execute("SELECT * FROM exam_papers ORDER BY created_at DESC, rowid DESC")
+                      if not row['id'].startswith('builtin-') or builtin_exam_catalog.is_builtin(row['id'])]
             present = {paper['id'] for paper in papers}
             papers.extend(paper for paper in builtin_exam_catalog.list_papers() if paper['id'] not in present)
             for paper in papers:
@@ -331,6 +337,7 @@ class ExamPreparationStore:
         if paper.get('builtin'):
             attempt['builtin'] = True
             attempt['time_minutes'] = paper['time_minutes']
+            attempt['listening_count'] = sum(question['type'] == 'listening_choice' for question in questions)
         with self._connection() as connection:
             connection.execute(
                 "INSERT INTO exam_attempts(id, paper_id, attempt_json, started_at) VALUES (?, ?, ?, ?)",
@@ -346,7 +353,7 @@ class ExamPreparationStore:
                 raise ExamPreparationError("考卷不存在，请重新选择", 404)
             return exam_mistakes.pending_count(connection, paper_id)
 
-    def start_mistake_review(self, paper_id: str) -> dict:
+    def start_mistake_review(self, paper_id: str, *, supports_listening: bool = True) -> dict:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             paper = connection.execute("SELECT * FROM exam_papers WHERE id=?", (paper_id,)).fetchone()
@@ -357,6 +364,8 @@ class ExamPreparationStore:
             questions = exam_mistakes.pending_questions(connection, paper_id)
             if not questions:
                 raise ExamPreparationError("这张考卷暂无待复习错题", 409)
+            if not supports_listening and any(question['type'] == 'listening_choice' for question in questions):
+                raise ExamPreparationError('错题中包含听力题，请刷新页面后继续复习', 409)
             written = []
             choices = []
             for question in questions:
@@ -366,11 +375,12 @@ class ExamPreparationStore:
             random.SystemRandom().shuffle(choices)
             attempt = {
                 "id": uuid.uuid4().hex,
-                "paper_id": paper_id, "paper_name": paper["name"],
+                "paper_id": paper_id, "paper_name": builtin_exam_catalog.public_paper(paper_id)['name'] if builtin_exam_catalog.is_builtin(paper_id) else paper["name"],
                 "mode": "wrong_review",
                 "include_choices": bool(choices), "choice_count": len(choices),
                 "word_count": sum(question["type"] == "spelling" for question in written),
                 "sentence_count": sum(question["type"] == "translation" for question in written),
+                "listening_count": sum(question["type"] == "listening_choice" for question in choices),
                 "questions": written + choices, "started_at": china_now_iso(),
             }
             connection.execute(

@@ -19,6 +19,13 @@ def _body() -> dict:
     return body
 
 
+def _supports_listening(body: dict) -> bool:
+    value = body.get('supports_listening', False)
+    if not isinstance(value, bool):
+        raise ExamPreparationError('页面版本无效，请刷新后重试')
+    return value
+
+
 def register_exam_preparation_routes(app, token_required, parent_forbidden, data_dir, word_lookup, question_lookup):
     routes = Blueprint("exam_preparation", __name__, url_prefix="/api/exam-preparation")
 
@@ -93,6 +100,8 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
             raise ExamPreparationError("是否开启选择题必须为布尔值")
         user_store = store(username)
         paper = user_store.get_paper(paper_id)
+        if paper.get('listening_count') and not _supports_listening(body):
+            raise ExamPreparationError('这张考卷已增加听力题，请刷新页面后再开始考试', 409)
         return jsonify({"attempt": user_store.start_attempt(paper, include_choices, question_lookup)}), 201
 
     @routes.get("/attempts/<attempt_id>")
@@ -101,6 +110,8 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
     def get_attempt(username, attempt_id):
         user_store = store(username)
         payload = user_store.get_attempt(attempt_id)
+        if any(question['type'] == 'listening_choice' for question in payload['attempt']['questions']) and request.args.get('supports_listening') != '1':
+            raise ExamPreparationError('当前考试包含听力题，请刷新页面后继续，已填写的答案会保留', 409)
         payload["mistake_count"] = user_store.mistake_count(payload["attempt"]["paper_id"])
         return jsonify(payload)
 
@@ -116,7 +127,7 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
     @token_required
     @parent_forbidden
     def start_mistake_review(username, paper_id):
-        _body()
-        return jsonify({"attempt": store(username).start_mistake_review(paper_id)}), 201
+        body = _body()
+        return jsonify({"attempt": store(username).start_mistake_review(paper_id, supports_listening=_supports_listening(body))}), 201
 
     app.register_blueprint(routes)

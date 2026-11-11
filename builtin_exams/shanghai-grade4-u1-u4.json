@@ -1,11 +1,11 @@
 {
   "id": "builtin-shanghai-grade4-u1-u4",
-  "name": "上海四年级上册英语 · U1-U4 期中自测",
+  "name": "上海四年级上册英语 · U1-U4 期中自测（含听力）",
   "edition": "上海教育出版社五·四学制四年级上册；教材版本按手册所述“2026年7月第一版”整理。",
-  "description": "围绕 U1 My school 至 U4 Our birthday，包含 8 道语法填空、4 道句型转换和 4 道邀请卡阅读单选题，建议 20 分钟完成。",
-  "time_minutes": 20,
+  "description": "26 道固定题：10 道听力选择、8 道语法填空、4 道句型转换和 4 道邀请卡阅读选择，建议 30 分钟完成。",
+  "time_minutes": 30,
   "source_file": "shanghai-grade4-u1-u4.pdf",
-  "source_note": "依据用户提供的期中复习手册整理。填空和句型转换沿用手册中的自编练习，邀请卡题改编为单选；不是出版社官方试卷。",
+  "source_note": "原 16 道笔试题依据期中复习手册整理，邀请卡阅读改编为单选；新增 10 道原创听力练习，供 U1-U4 复习自测使用。",
   "knowledge": {
     "title": "上海四年级上册英语 U1-U4 知识点梳理",
     "intro": "依据复习手册第 2-6 页整理。先复习词汇与核心结构，再用自己的话介绍学校、同学、动物和生日活动。词汇表为重点项，完整默写范围以课本和老师要求为准。",
@@ -222,10 +222,324 @@
             ]
           }
         ]
+      },
+      {
+        "id": "listening",
+        "title": "听力复习与答题方法",
+        "blocks": [
+          {
+            "title": "四个单元分别听什么",
+            "items": [
+              "U1：听清学校场所与位置；注意 in / on，以及 has no 表示没有。",
+              "U2：听清人物的品质，以及谁帮助谁、帮助做什么；不要把人名和行为配错。",
+              "U3：先判断在说哪种动物，再听正在做什么或生活在哪里；注意 is / are 与动词-ing。",
+              "U4：邀请卡信息要分清日期或星期、钟点、地点、活动和需要带的物品；不要把聚会活动当成要带的东西。"
+            ]
+          },
+          {
+            "title": "先看题，再听两遍",
+            "items": [
+              "先读问题与选项，明确本题在问地点、人物特点、动作、住所、时间还是物品。",
+              "本卷每段录音读两遍，中间间隔约两秒；在线复习可重复播放。",
+              "第一遍抓主要信息，第二遍核对细节；特别留意 no / not、不同人物和上午或晚上。",
+              "语音跟读仍以课本 Sound 栏与老师要求为准，本套听力重点训练信息提取。"
+            ]
+          }
+        ]
       }
     ]
   },
   "questions": [
+    {
+      "id": "l01",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 James 现在所在的地方。",
+      "english": "Listening 1",
+      "chinese": "听录音，选择 James 现在所在的地方。",
+      "options": [
+        {
+          "id": "a",
+          "text": "The computer room."
+        },
+        {
+          "id": "b",
+          "text": "The library."
+        },
+        {
+          "id": "c",
+          "text": "The reading room."
+        },
+        {
+          "id": "d",
+          "text": "The hall."
+        }
+      ],
+      "answer": "c",
+      "explanation": "James 在阅览室读故事；电脑房里的是他的朋友。",
+      "listening_text": "James is in the reading room. He is reading a story there. His friend is in the computer room.",
+      "audio_file": "shanghai-grade4-midterm/listen-01.wav"
+    },
+    {
+      "id": "l02",
+      "type": "listening_choice",
+      "prompt": "听录音，选择阅览室里没有的东西。",
+      "english": "Listening 2",
+      "chinese": "听录音，选择阅览室里没有的东西。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Books."
+        },
+        {
+          "id": "b",
+          "text": "Tables."
+        },
+        {
+          "id": "c",
+          "text": "Chairs."
+        },
+        {
+          "id": "d",
+          "text": "Computers."
+        }
+      ],
+      "answer": "d",
+      "explanation": "录音明确说阅览室有书、桌子和椅子，没有电脑。",
+      "listening_text": "Our reading room has many books, tables and chairs. It has no computers.",
+      "audio_file": "shanghai-grade4-midterm/listen-02.wav"
+    },
+    {
+      "id": "l03",
+      "type": "listening_choice",
+      "prompt": "听录音，选择录音中描述 Ben 的词。",
+      "english": "Listening 3",
+      "chinese": "听录音，选择录音中描述 Ben 的词。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Helpful."
+        },
+        {
+          "id": "b",
+          "text": "Polite."
+        },
+        {
+          "id": "c",
+          "text": "Quiet."
+        },
+        {
+          "id": "d",
+          "text": "Shy."
+        }
+      ],
+      "answer": "a",
+      "explanation": "录音用 helpful 介绍 Ben，并说他经常帮助别人学英语。",
+      "listening_text": "Ben is helpful. He often helps me learn English. He helps other children, too.",
+      "audio_file": "shanghai-grade4-midterm/listen-03.wav"
+    },
+    {
+      "id": "l04",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Lily 帮助说话者做的事。",
+      "english": "Listening 4",
+      "chinese": "听录音，选择 Lily 帮助说话者做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Clean the classroom."
+        },
+        {
+          "id": "b",
+          "text": "Learn English."
+        },
+        {
+          "id": "c",
+          "text": "Play football."
+        },
+        {
+          "id": "d",
+          "text": "Draw pictures."
+        }
+      ],
+      "answer": "b",
+      "explanation": "Lily 帮助说话者学英语、读生词，因此选择 Learn English。",
+      "listening_text": "Lily often helps me learn English. She helps me read new words. I say, \"Thank you for your help, Lily.\"",
+      "audio_file": "shanghai-grade4-midterm/listen-04.wav"
+    },
+    {
+      "id": "l05",
+      "type": "listening_choice",
+      "prompt": "听录音，选择小象正在做的事。",
+      "english": "Listening 5",
+      "chinese": "听录音，选择小象正在做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Sleeping."
+        },
+        {
+          "id": "b",
+          "text": "Walking."
+        },
+        {
+          "id": "c",
+          "text": "Swimming."
+        },
+        {
+          "id": "d",
+          "text": "Drinking water."
+        }
+      ],
+      "answer": "c",
+      "explanation": "小象正在河里游泳，不是在睡觉。",
+      "listening_text": "Look at the baby elephant. It is swimming in the river. It is not sleeping.",
+      "audio_file": "shanghai-grade4-midterm/listen-05.wav"
+    },
+    {
+      "id": "l06",
+      "type": "listening_choice",
+      "prompt": "听录音，选择猴子正在做的事。",
+      "english": "Listening 6",
+      "chinese": "听录音，选择猴子正在做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Playing in the trees."
+        },
+        {
+          "id": "b",
+          "text": "Drinking water."
+        },
+        {
+          "id": "c",
+          "text": "Sleeping in the trees."
+        },
+        {
+          "id": "d",
+          "text": "Swimming in the river."
+        }
+      ],
+      "answer": "a",
+      "explanation": "猴子正在树上玩耍；喝水的是大象，不要混淆动物与动作。",
+      "listening_text": "The monkeys are playing in the trees. Two elephants are drinking water near the river.",
+      "audio_file": "shanghai-grade4-midterm/listen-06.wav"
+    },
+    {
+      "id": "l07",
+      "type": "listening_choice",
+      "prompt": "听录音，选择北极熊的住所。",
+      "english": "Listening 7",
+      "chinese": "听录音，选择北极熊的住所。",
+      "options": [
+        {
+          "id": "a",
+          "text": "In a bamboo school."
+        },
+        {
+          "id": "b",
+          "text": "Near a hot desert."
+        },
+        {
+          "id": "c",
+          "text": "In the school library."
+        },
+        {
+          "id": "d",
+          "text": "Near the North Pole."
+        }
+      ],
+      "answer": "d",
+      "explanation": "录音说北极熊生活在北极附近，厚厚的毛可以保暖。",
+      "listening_text": "Polar bears live near the North Pole. They have thick fur to keep warm.",
+      "audio_file": "shanghai-grade4-midterm/listen-07.wav"
+    },
+    {
+      "id": "l08",
+      "type": "listening_choice",
+      "prompt": "听录音，选择生日聚会的时间。",
+      "english": "Listening 8",
+      "chinese": "听录音，选择生日聚会的时间。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Nine in the evening on Sunday."
+        },
+        {
+          "id": "b",
+          "text": "Nine in the morning on Sunday."
+        },
+        {
+          "id": "c",
+          "text": "Eight in the morning on Sunday."
+        },
+        {
+          "id": "d",
+          "text": "Nine in the morning on Saturday."
+        }
+      ],
+      "answer": "b",
+      "explanation": "聚会在星期日早上九点开始，注意钟点、上午或晚上以及星期。",
+      "listening_text": "Please come to our birthday party in the hall. It starts at nine o'clock on Sunday morning.",
+      "audio_file": "shanghai-grade4-midterm/listen-08.wav"
+    },
+    {
+      "id": "l09",
+      "type": "listening_choice",
+      "prompt": "听录音，选择录音中介绍的生日传统。",
+      "english": "Listening 9",
+      "chinese": "听录音，选择录音中介绍的生日传统。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Taking a family photo."
+        },
+        {
+          "id": "b",
+          "text": "Sharing a birthday cake."
+        },
+        {
+          "id": "c",
+          "text": "Eating a bowl of noodles."
+        },
+        {
+          "id": "d",
+          "text": "Writing a letter."
+        }
+      ],
+      "answer": "c",
+      "explanation": "录音介绍的生日传统是和家人一起吃一碗面条。",
+      "listening_text": "On my birthday, it is a tradition to eat a bowl of noodles. I have the noodles with my family. I like this tradition.",
+      "audio_file": "shanghai-grade4-midterm/listen-09.wav"
+    },
+    {
+      "id": "l10",
+      "type": "listening_choice",
+      "prompt": "听录音，选择参加聚会需要带的东西。",
+      "english": "Listening 10",
+      "chinese": "听录音，选择参加聚会需要带的东西。",
+      "options": [
+        {
+          "id": "a",
+          "text": "A birthday card."
+        },
+        {
+          "id": "b",
+          "text": "A cake."
+        },
+        {
+          "id": "c",
+          "text": "A bowl of noodles."
+        },
+        {
+          "id": "d",
+          "text": "Some books."
+        }
+      ],
+      "answer": "a",
+      "explanation": "录音要求带一张生日贺卡；分享蛋糕和拍照是聚会活动。",
+      "listening_text": "Please bring a birthday card to the party. We can share a cake and take photos together.",
+      "audio_file": "shanghai-grade4-midterm/listen-10.wav"
+    },
     {
       "id": "q01",
       "type": "fill_blank",
@@ -481,5 +795,6 @@
       "answer": "c",
       "explanation": "邀请卡写着 Please bring a birthday card.，需要带一张生日贺卡。"
     }
-  ]
+  ],
+  "exam_file": "shanghai-grade4-u1-u4-midterm-listening.pdf"
 }
