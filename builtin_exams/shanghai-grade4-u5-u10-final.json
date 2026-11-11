@@ -380,7 +380,7 @@
       "answer": "c",
       "explanation": "录音说要买水果，家附近有一家大超市，因此去超市。",
       "listening_text": "I want to buy some fruit. There is a large supermarket near my home. I can go there with my mum.",
-      "audio_file": "shanghai-grade4-final/listen-01.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-01.wav"
     },
     {
       "id": "q02",
@@ -409,7 +409,7 @@
       "answer": "a",
       "explanation": "录音明确说学校附近有博物馆，没有电影院。",
       "listening_text": "There is a museum near my school. There is no cinema there.",
-      "audio_file": "shanghai-grade4-final/listen-02.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-02.wav"
     },
     {
       "id": "q03",
@@ -438,7 +438,7 @@
       "answer": "b",
       "explanation": "Lucy 在农场，正在和父母摘苹果。",
       "listening_text": "It is autumn. Lucy is on a farm. She is picking apples with her parents.",
-      "audio_file": "shanghai-grade4-final/listen-03.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-03.wav"
     },
     {
       "id": "q04",
@@ -467,7 +467,7 @@
       "answer": "d",
       "explanation": "录音提到黄褐色树叶、鸟儿南飞，并说到 autumn days。",
       "listening_text": "The leaves are yellow and brown. Some birds are flying south. I like these autumn days.",
-      "audio_file": "shanghai-grade4-final/listen-04.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-04.wav"
     },
     {
       "id": "q05",
@@ -496,7 +496,7 @@
       "answer": "c",
       "explanation": "three times a week 表示每周三次；every day 说的是喝牛奶的频率。",
       "listening_text": "Tom has sandwiches for breakfast three times a week. He drinks milk every day.",
-      "audio_file": "shanghai-grade4-final/listen-05.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-05.wav"
     },
     {
       "id": "q06",
@@ -525,7 +525,7 @@
       "answer": "a",
       "explanation": "Amy 早餐有鸡蛋、面包和牛奶，没有蛋糕。",
       "listening_text": "Today Amy has an egg, some bread and a glass of milk for breakfast. She does not have cake.",
-      "audio_file": "shanghai-grade4-final/listen-06.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-06.wav"
     },
     {
       "id": "q07",
@@ -554,7 +554,7 @@
       "answer": "d",
       "explanation": "姐姐建议 Ben 告诉妈妈实情并道歉。",
       "listening_text": "Ben breaks a cup. He wants to hide it. His sister says, \"You should tell Mum the truth and say sorry.\"",
-      "audio_file": "shanghai-grade4-final/listen-07.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-07.wav"
     },
     {
       "id": "q08",
@@ -583,7 +583,7 @@
       "answer": "a",
       "explanation": "录音说 Jack 七点起床，八点去学校；题目问起床时间。",
       "listening_text": "It is seven o'clock. Jack gets up now. He goes to school at eight o'clock.",
-      "audio_file": "shanghai-grade4-final/listen-08.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-08.wav"
     },
     {
       "id": "q09",
@@ -612,7 +612,7 @@
       "answer": "c",
       "explanation": "天气播报说明上海今天下雨，并提醒带雨伞。",
       "listening_text": "Here is today's weather report. It is rainy in Shanghai. Please take an umbrella when you go out.",
-      "audio_file": "shanghai-grade4-final/listen-09.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-09.wav"
     },
     {
       "id": "q10",
@@ -641,7 +641,7 @@
       "answer": "b",
       "explanation": "录音先说不能去公园野餐，最后建议留在家里读书。",
       "listening_text": "It is windy today. We cannot have our picnic in the park. Let's stay at home and read some books.",
-      "audio_file": "shanghai-grade4-final/listen-10.wav"
+      "audio_file": "shanghai-grade4-final-normal/listen-10.wav"
     },
     {
       "id": "q11",

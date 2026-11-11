@@ -85,13 +85,14 @@ def test_listening_metadata_exposes_counts_and_local_media_without_script_or_ans
     assert attempt['include_choices'] is True
     for index, question in enumerate(attempt['questions'], 1):
         assert set(question) == {'id', 'type', 'prompt', 'options', 'audio_url'}
-        assert question['audio_url'] == f'/static/exam-preparation/audio/shanghai-grade4-final/listen-{index:02d}.wav'
+        assert question['audio_url'] == f'/static/exam-preparation/audio/shanghai-grade4-final-normal/listen-{index:02d}.wav'
     serialized = json.dumps(attempt)
     for question in paper['questions']:
         assert question['listening_text'] not in serialized
     assert store.get_attempt(attempt['id'])['attempt'] == attempt
     private = private_attempt(store, attempt['id'])
     assert private['questions'][0]['listening_text'] == 'Ben is in the library.'
+    assert private['questions'][0]['audio_file'] == 'shanghai-grade4-final/listen-01.wav'
     assert private['questions'][0]['answer'] == 'a'
 
 

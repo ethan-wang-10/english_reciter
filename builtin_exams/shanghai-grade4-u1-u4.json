@@ -277,7 +277,7 @@
       "answer": "c",
       "explanation": "James 在阅览室读故事；电脑房里的是他的朋友。",
       "listening_text": "James is in the reading room. He is reading a story there. His friend is in the computer room.",
-      "audio_file": "shanghai-grade4-midterm/listen-01.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-01.wav"
     },
     {
       "id": "l02",
@@ -306,7 +306,7 @@
       "answer": "d",
       "explanation": "录音明确说阅览室有书、桌子和椅子，没有电脑。",
       "listening_text": "Our reading room has many books, tables and chairs. It has no computers.",
-      "audio_file": "shanghai-grade4-midterm/listen-02.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-02.wav"
     },
     {
       "id": "l03",
@@ -335,7 +335,7 @@
       "answer": "a",
       "explanation": "录音用 helpful 介绍 Ben，并说他经常帮助别人学英语。",
       "listening_text": "Ben is helpful. He often helps me learn English. He helps other children, too.",
-      "audio_file": "shanghai-grade4-midterm/listen-03.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-03.wav"
     },
     {
       "id": "l04",
@@ -364,7 +364,7 @@
       "answer": "b",
       "explanation": "Lily 帮助说话者学英语、读生词，因此选择 Learn English。",
       "listening_text": "Lily often helps me learn English. She helps me read new words. I say, \"Thank you for your help, Lily.\"",
-      "audio_file": "shanghai-grade4-midterm/listen-04.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-04.wav"
     },
     {
       "id": "l05",
@@ -393,7 +393,7 @@
       "answer": "c",
       "explanation": "小象正在河里游泳，不是在睡觉。",
       "listening_text": "Look at the baby elephant. It is swimming in the river. It is not sleeping.",
-      "audio_file": "shanghai-grade4-midterm/listen-05.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-05.wav"
     },
     {
       "id": "l06",
@@ -422,7 +422,7 @@
       "answer": "a",
       "explanation": "猴子正在树上玩耍；喝水的是大象，不要混淆动物与动作。",
       "listening_text": "The monkeys are playing in the trees. Two elephants are drinking water near the river.",
-      "audio_file": "shanghai-grade4-midterm/listen-06.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-06.wav"
     },
     {
       "id": "l07",
@@ -451,7 +451,7 @@
       "answer": "d",
       "explanation": "录音说北极熊生活在北极附近，厚厚的毛可以保暖。",
       "listening_text": "Polar bears live near the North Pole. They have thick fur to keep warm.",
-      "audio_file": "shanghai-grade4-midterm/listen-07.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-07.wav"
     },
     {
       "id": "l08",
@@ -480,7 +480,7 @@
       "answer": "b",
       "explanation": "聚会在星期日早上九点开始，注意钟点、上午或晚上以及星期。",
       "listening_text": "Please come to our birthday party in the hall. It starts at nine o'clock on Sunday morning.",
-      "audio_file": "shanghai-grade4-midterm/listen-08.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-08.wav"
     },
     {
       "id": "l09",
@@ -509,7 +509,7 @@
       "answer": "c",
       "explanation": "录音介绍的生日传统是和家人一起吃一碗面条。",
       "listening_text": "On my birthday, it is a tradition to eat a bowl of noodles. I have the noodles with my family. I like this tradition.",
-      "audio_file": "shanghai-grade4-midterm/listen-09.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-09.wav"
     },
     {
       "id": "l10",
@@ -538,7 +538,7 @@
       "answer": "a",
       "explanation": "录音要求带一张生日贺卡；分享蛋糕和拍照是聚会活动。",
       "listening_text": "Please bring a birthday card to the party. We can share a cake and take photos together.",
-      "audio_file": "shanghai-grade4-midterm/listen-10.wav"
+      "audio_file": "shanghai-grade4-midterm-normal/listen-10.wav"
     },
     {
       "id": "q01",

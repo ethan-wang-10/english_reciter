@@ -17,6 +17,14 @@ def audio_url(filename):
         r'[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)*\.wav', filename, re.IGNORECASE,
     ):
         raise ValueError('Invalid built-in audio filename')
+    # Refresh existing attempt snapshots onto the current rendition as well.
+    for previous, current in (
+        ('shanghai-grade4-final/', 'shanghai-grade4-final-normal/'),
+        ('shanghai-grade4-midterm/', 'shanghai-grade4-midterm-normal/'),
+    ):
+        if filename.startswith(previous):
+            filename = current + filename[len(previous):]
+            break
     return '/static/exam-preparation/audio/' + filename
 
 

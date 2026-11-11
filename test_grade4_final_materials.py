@@ -69,7 +69,7 @@ def test_midterm_has_its_own_complete_exam_pdf_and_ten_distinct_recordings():
     recordings = [question for question in catalog.questions(paper_id) if question['type'] == 'listening_choice']
     assert len(recordings) == 10
     for question in recordings:
-        assert '/shanghai-grade4-midterm/' in question['audio_url']
+        assert '/shanghai-grade4-midterm-normal/' in question['audio_url']
         with wave.open(str(ROOT / question['audio_url'].lstrip('/'))) as audio:
             assert audio.getnframes() > 5 * audio.getframerate()
             assert audio.getframerate() == 22050

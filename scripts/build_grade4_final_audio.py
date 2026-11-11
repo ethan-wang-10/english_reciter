@@ -1,10 +1,11 @@
 """Build fixed grade-four listening WAVs using the offline macOS speech voice.
 
-Requires /usr/bin/say, /usr/bin/afconvert, and an existing ffmpeg. The speech service must be
+Requires /usr/bin/say and /usr/bin/afconvert when synthesizing new speech. The speech service must be
 accessible to the process; a sandboxed say invocation may return empty audio.
 Intermediate files and the quality report stay outside the repository.
-The nominal say rate is not treated as measured words per minute: ffmpeg's
-pitch-preserving atempo filter normalizes each clip to the requested pace.
+Normal playback keeps the original voice timing and pitch. An optional
+--target-wpm uses ffmpeg's pitch-preserving atempo filter for an explicit pace.
+--reuse-source-dir accepts previously synthesized WAVs with matching text files.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import wave
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / 'builtin_exams/shanghai-grade4-u5-u10-final.json'
 OUTPUT_ROOT = ROOT / 'static/exam-preparation/audio'
-WORK_ROOT = Path('/private/tmp/reciter-final-audio-build')
+WORK_ROOT = Path('/private/tmp/reciter-normal-audio-build')
 SAMPLE_RATE = 22050
 CHANNELS = 1
 SAMPLE_WIDTH = 2
@@ -115,8 +116,9 @@ def selected_ids(questions: list[dict], only: str | None) -> set[str]:
     return selected
 
 
-def build(voice: str = 'Samantha', rate: int = 100, target_wpm: int = 125,
-          source: Path = SOURCE, only: str | None = None) -> list[dict]:
+def build(voice: str = 'Samantha', rate: int = 100, target_wpm: int | None = None,
+          source: Path = SOURCE, only: str | None = None,
+          reuse_source_dir: Path | None = None) -> list[dict]:
     questions, folder = listening_questions(source)
     selected = selected_ids(questions, only)
     work_dir = work_directory(folder)
@@ -135,11 +137,13 @@ def build(voice: str = 'Samantha', rate: int = 100, target_wpm: int = 125,
                 raise RuntimeError(f'Unselected clip has no matching transcript report: {question["id"]}')
             if not destination.is_file() or item['sha256'] != hashlib.sha256(destination.read_bytes()).hexdigest():
                 raise RuntimeError(f'Unselected clip differs from its report: {question["id"]}')
-    ffmpeg = shutil.which('ffmpeg')
-    if not ffmpeg:
-        ffmpeg = next((str(path) for path in (Path('/opt/homebrew/bin/ffmpeg'), Path('/usr/local/bin/ffmpeg')) if path.is_file()), None)
-    if not ffmpeg:
-        raise RuntimeError('An existing ffmpeg is required for pitch-preserving tempo normalization')
+    ffmpeg = None
+    if target_wpm is not None:
+        ffmpeg = shutil.which('ffmpeg')
+        if not ffmpeg:
+            ffmpeg = next((str(path) for path in (Path('/opt/homebrew/bin/ffmpeg'), Path('/usr/local/bin/ffmpeg')) if path.is_file()), None)
+        if not ffmpeg:
+            raise RuntimeError('An existing ffmpeg is required for an explicit target pace')
     output_dir = OUTPUT_ROOT / folder
     output_dir.mkdir(parents=True, exist_ok=True)
     edge_silence = bytes(round(SAMPLE_RATE * LEAD_AND_TAIL_SECONDS) * SAMPLE_WIDTH)
@@ -155,44 +159,61 @@ def build(voice: str = 'Samantha', rate: int = 100, target_wpm: int = 125,
         aiff = work_dir / (stem + '.aiff')
         source_wav = work_dir / (stem + '.source.wav')
         single_wav = work_dir / (stem + '.single.wav')
-        transcript.write_text(text, encoding='utf-8')
-        aiff.unlink(missing_ok=True)
-        source_wav.unlink(missing_ok=True)
-        single_wav.unlink(missing_ok=True)
-        subprocess.run([
-            '/usr/bin/say', '-v', voice, '-r', str(rate),
-            '-o', str(aiff), '-f', str(transcript),
-        ], check=True, timeout=60)
-        subprocess.run([
-            '/usr/bin/afconvert', '-f', 'WAVE', '-d', f'LEI16@{SAMPLE_RATE}',
-            '-c', str(CHANNELS), str(aiff), str(source_wav),
-        ], check=True, timeout=60)
+        if reuse_source_dir is not None:
+            cached_text = reuse_source_dir / (stem + '.txt')
+            cached_wav = reuse_source_dir / (stem + '.source.wav')
+            if cached_text.read_text(encoding='utf-8') != text:
+                raise RuntimeError(f'Cached source transcript differs: {question["id"]}')
+            if cached_wav.resolve() != source_wav.resolve():
+                shutil.copy2(cached_wav, source_wav)
+            transcript.write_text(text, encoding='utf-8')
+            aiff_duration = None
+        else:
+            transcript.write_text(text, encoding='utf-8')
+            aiff.unlink(missing_ok=True)
+            source_wav.unlink(missing_ok=True)
+            subprocess.run([
+                '/usr/bin/say', '-v', voice, '-r', str(rate),
+                '-o', str(aiff), '-f', str(transcript),
+            ], check=True, timeout=60)
+            subprocess.run([
+                '/usr/bin/afconvert', '-f', 'WAVE', '-d', f'LEI16@{SAMPLE_RATE}',
+                '-c', str(CHANNELS), str(aiff), str(source_wav),
+            ], check=True, timeout=60)
+            aiff_info = subprocess.check_output(['/usr/bin/afinfo', str(aiff)], text=True, timeout=30)
+            aiff_duration = float(re.search(r'estimated duration:\s*([0-9.]+) sec', aiff_info).group(1))
+            aiff_sample_rate = float(re.search(r'([0-9.]+) Hz', aiff_info).group(1))
+            if aiff_sample_rate != SAMPLE_RATE:
+                raise RuntimeError(f'AIFF sample rate differs: {question["id"]}')
         source_pcm, source_frames = read_pcm(source_wav)
         source_duration = source_frames / SAMPLE_RATE
-        aiff_info = subprocess.check_output(['/usr/bin/afinfo', str(aiff)], text=True, timeout=30)
-        aiff_duration = float(re.search(r'estimated duration:\s*([0-9.]+) sec', aiff_info).group(1))
-        aiff_sample_rate = float(re.search(r'([0-9.]+) Hz', aiff_info).group(1))
-        if aiff_sample_rate != SAMPLE_RATE or abs(aiff_duration - source_duration) > 1 / SAMPLE_RATE:
+        if aiff_duration is not None and abs(aiff_duration - source_duration) > 1 / SAMPLE_RATE:
             raise RuntimeError(f'AIFF conversion changed sample rate or duration: {question["id"]}')
         word_count = len(re.findall(r"[A-Za-z]+(?:['’][A-Za-z]+)*", text))
         if not word_count or not 1.0 <= source_duration <= 60.0:
             raise RuntimeError(f'Unexpected source speech: {question["id"]}')
         pcm_metrics(source_pcm)
         source_wpm = word_count * 60 / source_duration
-        tempo_factor = target_wpm / source_wpm
-        if not 0.5 <= tempo_factor <= 2.0:
-            raise RuntimeError(f'Tempo normalization requires an unsupported factor: {tempo_factor}')
-        subprocess.run([
-            ffmpeg, '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-            '-i', str(source_wav), '-af', f'atempo={tempo_factor:.10f}',
-            '-ar', str(SAMPLE_RATE), '-ac', str(CHANNELS), '-c:a', 'pcm_s16le',
-            '-map_metadata', '-1', str(single_wav),
-        ], check=True, timeout=60)
-        single_pcm, single_frames = read_pcm(single_wav)
+        tempo_factor = 1.0
+        if target_wpm is None:
+            single_pcm, single_frames = source_pcm, source_frames
+        else:
+            tempo_factor = target_wpm / source_wpm
+            if not 0.5 <= tempo_factor <= 2.0:
+                raise RuntimeError(f'Tempo normalization requires an unsupported factor: {tempo_factor}')
+            subprocess.run([
+                ffmpeg, '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
+                '-i', str(source_wav), '-af', f'atempo={tempo_factor:.10f}',
+                '-ar', str(SAMPLE_RATE), '-ac', str(CHANNELS), '-c:a', 'pcm_s16le',
+                '-map_metadata', '-1', str(single_wav),
+            ], check=True, timeout=60)
+            single_pcm, single_frames = read_pcm(single_wav)
         single_duration = single_frames / SAMPLE_RATE
         measured_wpm = word_count * 60 / single_duration
-        if not 1.0 <= single_duration <= 60.0 or not 110 <= measured_wpm <= 140:
+        if not 1.0 <= single_duration <= 60.0:
             raise RuntimeError(f'Unexpected speech duration: {question["id"]}: {single_duration}')
+        if target_wpm is not None and abs(measured_wpm - target_wpm) > 2:
+            raise RuntimeError(f'Speech pace differs from the explicit target: {question["id"]}')
         speech_metrics = pcm_metrics(single_pcm)
         combined_pcm = edge_silence + single_pcm + repeat_silence + single_pcm + edge_silence
         destination = OUTPUT_ROOT / question['audio_file']
@@ -216,11 +237,12 @@ def build(voice: str = 'Samantha', rate: int = 100, target_wpm: int = 125,
             'target_wpm': target_wpm,
             'source_single_read_seconds': round(source_duration, 3),
             'source_aiff_seconds': aiff_duration,
-            'source_sample_rate': int(aiff_sample_rate),
+            'source_sample_rate': SAMPLE_RATE,
             'source_estimated_wpm': round(source_wpm, 2),
             'atempo_factor': round(tempo_factor, 8),
             'estimated_wpm': round(measured_wpm, 2),
-            'tempo_method': 'ffmpeg atempo (pitch preserving)',
+            'tempo_method': 'original speech (no tempo filter)' if target_wpm is None else 'ffmpeg atempo (pitch preserving)',
+            'reused_source': str(reuse_source_dir.resolve()) if reuse_source_dir else None,
             'sample_rate': SAMPLE_RATE,
             'sample_width_bytes': SAMPLE_WIDTH,
             'channels': CHANNELS,
@@ -249,16 +271,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--voice', default='Samantha')
     parser.add_argument('--rate', type=int, default=100)
-    parser.add_argument('--target-wpm', type=int, default=125)
+    parser.add_argument('--target-wpm', type=int, default=None, help='Optional explicit pace; omitted keeps normal original speech')
     parser.add_argument('--source', type=Path, default=SOURCE, help='Catalog JSON; defaults to the final exam')
     parser.add_argument('--only', help='Regenerate selected question IDs or clip numbers, separated by commas')
+    parser.add_argument('--reuse-source-dir', type=Path, help='Use matching listen-NN.txt and listen-NN.source.wav instead of synthesizing')
     args = parser.parse_args()
     if not 80 <= args.rate <= 180:
         parser.error('--rate must be between 80 and 180')
-    if not 110 <= args.target_wpm <= 140:
-        parser.error('--target-wpm must be between 110 and 140')
+    if args.target_wpm is not None and not 80 <= args.target_wpm <= 240:
+        parser.error('--target-wpm must be between 80 and 240')
     source = args.source.resolve()
-    report = build(args.voice, args.rate, args.target_wpm, source, args.only)
+    report = build(args.voice, args.rate, args.target_wpm, source, args.only, args.reuse_source_dir)
     _, folder = listening_questions(source)
     print(f'Verified {len(report)} fixed listening WAVs; report: {work_directory(folder) / "quality-report.json"}')
     return 0
