@@ -142,13 +142,37 @@ def duel_pk_counting_range(duel: Dict[str, Any]) -> Optional[Tuple[date, date]]:
     return eff_start, month_last
 
 
-def duel_pk_days_for_user(data_dir: Path, username: str, duel: Dict[str, Any]) -> int:
+def duel_pk_days_for_user(
+    data_dir: Path,
+    username: str,
+    duel: Dict[str, Any],
+    *,
+    states: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> int:
     """1v1 在计分区间内的有效打卡天数。"""
+    if duel.get("settled"):
+        field = (
+            "days_a" if username == duel.get("from_user")
+            else "days_b" if username == duel.get("target_user")
+            else None
+        )
+        days = duel.get(field) if field else None
+        # Settlement records the exact scores used for the payout. Historical
+        # lists must not reload entire reward ledgers to reconstruct them.
+        if type(days) is int and days >= 0:
+            return days
     rng = duel_pk_counting_range(duel)
     if not rng:
         return 0
     s, e = rng
-    st = gamification_mod.load_state(data_dir, username)
+    if states is None:
+        st = gamification_mod.load_state(data_dir, username)
+    else:
+        # This cache belongs to one list operation, so the next poll sees new
+        # check-ins while multiple active duels reuse one validated account.
+        if username not in states:
+            states[username] = gamification_mod.load_state(data_dir, username)
+        st = states[username]
     return gamification_mod.valid_checkin_days_in_range(st, s, e)
 
 
@@ -588,6 +612,7 @@ def list_duels_for_user(data_dir: Path, username: str) -> List[Dict[str, Any]]:
     data = _load_duels(data_dir)
     duels = data.get("duels") or []
     out = []
+    states: Dict[str, Dict[str, Any]] = {}
     for d in duels:
         if d.get("from_user") == username or d.get("target_user") == username:
             row = enrich_duel_for_api(dict(d))
@@ -595,8 +620,8 @@ def list_duels_for_user(data_dir: Path, username: str) -> List[Dict[str, Any]]:
             tu = row.get("target_user")
             if fu and tu:
                 row["pk_checkin_days"] = {
-                    str(fu): duel_pk_days_for_user(data_dir, str(fu), row),
-                    str(tu): duel_pk_days_for_user(data_dir, str(tu), row),
+                    str(fu): duel_pk_days_for_user(data_dir, str(fu), row, states=states),
+                    str(tu): duel_pk_days_for_user(data_dir, str(tu), row, states=states),
                 }
             else:
                 row["pk_checkin_days"] = {}
