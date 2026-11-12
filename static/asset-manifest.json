@@ -6,9 +6,9 @@
       "url": "/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg"
     },
     "/static/css/exam-preparation.css": {
-      "bytes": 12068,
-      "sha256": "2815cfe6d8cca5aa7106a8a36c91454c166a26707acd0682f7adf2cd56804193",
-      "url": "/static/assets/css/exam-preparation.2815cfe6d8cca5aa.css"
+      "bytes": 12558,
+      "sha256": "1b272a86e5061beaf6f8308d1b2e1b772c36bfa09909350299a474560040192c",
+      "url": "/static/assets/css/exam-preparation.1b272a86e5061bea.css"
     },
     "/static/css/style.css": {
       "bytes": 218119,
@@ -31,9 +31,9 @@
       "url": "/static/assets/js/chat-sidebar.8edef40ea8fe6819.js"
     },
     "/static/js/exam-preparation.js": {
-      "bytes": 53511,
-      "sha256": "607d942e4501578b708ff60b5c44f946e18637766fda61fcf1415020e77decb8",
-      "url": "/static/assets/js/exam-preparation.607d942e4501578b.js"
+      "bytes": 54513,
+      "sha256": "30fb975c1c0ae9e4cce89883064d6ac2ad1f14c39541617e9c85a3763a4ed21c",
+      "url": "/static/assets/js/exam-preparation.30fb975c1c0ae9e4.js"
     },
     "/static/js/performance.js": {
       "bytes": 17312,

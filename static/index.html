@@ -7,7 +7,7 @@
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg">
     <link rel="stylesheet" href="/static/assets/css/style.5a475613d811f533.css">
-    <link rel="stylesheet" href="/static/assets/css/exam-preparation.2815cfe6d8cca5aa.css">
+    <link rel="stylesheet" href="/static/assets/css/exam-preparation.1b272a86e5061bea.css">
 </head>
 <body>
     <div id="app">
@@ -544,18 +544,22 @@
                             <p id="exam-grade-summary" class="exam-hint" role="status" aria-live="polite"></p>
                             <p id="exam-paper-empty" class="exam-hint">还没有考卷，先添加单词或句子题并保存一张吧。</p>
                             <div id="exam-paper-list" class="exam-paper-list" role="group" aria-label="按年级收录的考卷"></div>
-                            <div id="exam-paper-settings" hidden>
-                                <div class="exam-paper-toolbar">
-                                    <span>考卷内容</span>
-                                    <button id="exam-edit-paper" type="button" class="btn btn-secondary" aria-controls="exam-create-form">编辑考卷</button>
+                            <div id="exam-custom-controls-home" hidden>
+                                <div id="exam-custom-controls" class="exam-custom-controls" role="group" hidden>
+                                    <div class="exam-paper-toolbar">
+                                        <span>考卷内容</span>
+                                        <button id="exam-edit-paper" type="button" class="btn btn-secondary" aria-controls="exam-create-form">编辑考卷</button>
+                                    </div>
+                                    <p id="exam-paper-preview" class="exam-hint exam-paper-preview"></p>
+                                    <p id="exam-paper-sentence-preview" class="exam-hint exam-paper-preview" hidden></p>
+                                    <label id="exam-choice-toggle" class="exam-choice-toggle">
+                                        <input id="exam-include-choices" type="checkbox" aria-describedby="exam-choice-hint">
+                                        <span>开启选择题</span>
+                                    </label>
+                                    <p id="exam-choice-hint" class="exam-hint">本卷默认考单词默写和已添加的句子中译英。开启后，再加入单词可用的英文识义和语境选词题。</p>
                                 </div>
-                                <p id="exam-paper-preview" class="exam-hint exam-paper-preview"></p>
-                                <p id="exam-paper-sentence-preview" class="exam-hint exam-paper-preview" hidden></p>
-                                <label id="exam-choice-toggle" class="exam-choice-toggle">
-                                    <input id="exam-include-choices" type="checkbox" aria-describedby="exam-choice-hint">
-                                    <span>开启选择题</span>
-                                </label>
-                                <p id="exam-choice-hint" class="exam-hint">默认考单词默写和已添加的句子中译英。开启后，再加入单词可用的英文识义和语境选词题。</p>
+                            </div>
+                            <div id="exam-paper-settings" hidden>
                                 <p id="exam-builtin-hint" class="exam-hint" hidden></p>
                                 <p id="exam-parent-hint" class="exam-hint" hidden>家长可以为孩子创建考卷，请使用学生账号参加考试。</p>
                                 <button id="exam-start" type="button" class="btn btn-primary" disabled>开始考试</button>
@@ -1531,7 +1535,7 @@
     
     <script src="/static/assets/js/performance.cabc7fdc8aff1192.js" defer></script>
     <script src="/static/assets/js/app.9ace853950a53182.js" defer></script>
-    <script src="/static/assets/js/exam-preparation.607d942e4501578b.js" defer></script>
+    <script src="/static/assets/js/exam-preparation.30fb975c1c0ae9e4.js" defer></script>
     <script src="/static/assets/js/chat-sidebar.8edef40ea8fe6819.js" defer></script>
     <script src="/static/assets/js/textbook.0528bf065ba0644e.js" defer></script>
     <script src="/static/assets/js/admin.ce6f48c3ba42f871.js" defer></script>

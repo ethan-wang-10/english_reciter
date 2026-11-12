@@ -20,9 +20,19 @@ function examUI(storage = new Map()) {
         attributes = {};
         listeners = {};
         classList = { toggle() {}, contains: () => true };
-        append(...children) { this.children.push(...children); }
+        append(...children) {
+            children.forEach((child) => {
+                if (child.parentElement) child.parentElement.children = child.parentElement.children.filter((item) => item !== child);
+                child.parentElement = this;
+                this.children.push(child);
+            });
+        }
         appendChild(child) { this.append(child); }
-        replaceChildren(...children) { this.children = children; }
+        replaceChildren(...children) {
+            this.children.forEach((child) => { child.parentElement = null; });
+            this.children = [];
+            this.append(...children);
+        }
         setAttribute(key, value) { this.attributes[key] = value; }
         removeAttribute(key) { delete this.attributes[key]; if (key === 'src') this.src = ''; }
         pause() { this.pauseCount = (this.pauseCount || 0) + 1; }
@@ -132,7 +142,11 @@ function examUI(storage = new Map()) {
     });
     vm.runInContext(source, context);
     state.ready();
-    return { state, storage, account, context, api: context.window.examPreparation, field: (id) => elements.get(id), paperRows: () => elements.get('exam-paper-list').children.flatMap((group) => group.children.slice(1)) };
+    return {
+        state, storage, account, context, api: context.window.examPreparation, field: (id) => elements.get(id),
+        paperRows: () => elements.get('exam-paper-list').children.flatMap((group) => group.children.slice(1)
+            .map((row) => row.className === 'exam-custom-paper' ? row.children[0] : row)),
+    };
 }
 
 test('creating a paper sends both fields and retains input on failure', async () => {
@@ -184,6 +198,7 @@ test('enabling choices adds option selection and retains it when revisiting', as
     const ui = examUI();
     await ui.api.open();
     ui.field('exam-include-choices').checked = true;
+    await ui.field('exam-include-choices').fire('change');
     await ui.field('exam-start').fire('click');
     assert.match(ui.field('exam-preparation-message').textContent, /2 道默写题和 1 道选择题/);
     await ui.field('exam-next').fire('click');
@@ -196,6 +211,48 @@ test('enabling choices adds option selection and retains it when revisiting', as
     assert.equal(ui.field('exam-choice-options').children[1].attributes['aria-pressed'], 'true');
     await ui.field('exam-submit').fire('click');
     assert.equal(ui.state.calls.find((call) => call.url.endsWith('/submit')).body.answers.q3, 'b');
+});
+
+test('custom paper controls stay inside their collection and choices are independent for each paper', async () => {
+    const ui = examUI();
+    const builtin = addBuiltinFixture(ui);
+    const lower = { ...ui.state.paper, id: 'paper-lower', grade: 4, term: 2, name: '四年级下册练习' };
+    ui.state.list = async () => ({ papers: [ui.state.paper, lower], builtin_papers: [builtin] });
+    await ui.api.open();
+    const controls = ui.field('exam-custom-controls');
+    assert.equal(controls.parentElement, ui.paperRows()[0].parentElement);
+    assert.equal(controls.parentElement.parentElement, ui.field('exam-paper-list').children[0]);
+    ui.field('exam-include-choices').checked = true;
+    await ui.field('exam-include-choices').fire('change');
+
+    await ui.paperRows()[1].children[0].fire('click');
+    assert.equal(controls.hidden, true);
+    assert.equal(controls.parentElement, ui.field('exam-custom-controls-home'));
+    assert.equal(ui.field('exam-include-choices').checked, false);
+    assert.equal(ui.field('exam-include-choices').disabled, true);
+    await ui.field('exam-start').fire('click');
+    assert.deepEqual(ui.state.calls.findLast((call) => call.url.endsWith('/attempts')).body, { include_choices: false, supports_listening: true });
+    await ui.field('exam-abandon').fire('click');
+    await ui.field('exam-abandon-confirm').fire('click');
+
+    await ui.paperRows()[2].fire('click');
+    assert.equal(controls.parentElement, ui.paperRows()[2].parentElement);
+    assert.equal(controls.parentElement.parentElement, ui.field('exam-paper-list').children[1]);
+    assert.equal(ui.field('exam-include-choices').checked, false);
+    await ui.field('exam-start').fire('click');
+    assert.equal(ui.state.calls.findLast((call) => call.url.endsWith('/attempts')).body.include_choices, false);
+    await ui.field('exam-abandon').fire('click');
+    await ui.field('exam-abandon-confirm').fire('click');
+
+    await ui.paperRows()[0].fire('click');
+    assert.equal(ui.field('exam-include-choices').checked, true);
+    await ui.field('exam-start').fire('click');
+    assert.equal(ui.state.calls.findLast((call) => call.url.endsWith('/attempts')).body.include_choices, true);
+    ui.api.reset();
+    ui.account.token = 'bob-token';
+    ui.account.username = 'bob';
+    await ui.api.open();
+    assert.equal(ui.field('exam-include-choices').checked, false);
 });
 
 test('unfinished attempt restores answers and position after a page reload', async () => {

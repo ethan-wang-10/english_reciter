@@ -7,6 +7,7 @@
     let gradeFilter = 'all';
     let termFilter = 'all';
     const expandedGroups = new Map();
+    const paperChoices = new Map();
     let editingPaper = '';
     let newPaperDraft = null;
     let sentenceRows = [];
@@ -155,7 +156,7 @@
         el('exam-start').disabled = busy || !!editingPaper || !selectedPaper || isParentSession;
         const selected = papers.find((paper) => paper.id === selectedPaper);
         el('exam-edit-paper').hidden = !!selected?.builtin;
-        el('exam-include-choices').disabled = busy || isParentSession || !selected?.word_count;
+        el('exam-include-choices').disabled = busy || isParentSession || !!selected?.builtin || !selected?.word_count;
         ['exam-import-words', 'exam-import-level', 'exam-import-add-to-queue', 'exam-import-dismiss'].forEach((id) => {
             el(id).disabled = busy;
         });
@@ -472,6 +473,9 @@
     }
 
     function renderPapers() {
+        const controls = el('exam-custom-controls');
+        controls.hidden = true;
+        el('exam-custom-controls-home').appendChild(controls);
         const list = el('exam-paper-list');
         list.replaceChildren();
         gradeOptions(el('exam-grade-filter'), true);
@@ -554,7 +558,15 @@
                 row.append(button, knowledgeButton);
                 group.appendChild(row);
             } else {
-                group.appendChild(button);
+                const row = document.createElement('div');
+                row.className = 'exam-custom-paper';
+                row.appendChild(button);
+                if (paper.id === selectedPaper) {
+                    controls.hidden = false;
+                    controls.setAttribute('aria-label', `${paper.name}：考卷设置`);
+                    row.appendChild(controls);
+                }
+                group.appendChild(row);
             }
         }
         const selected = papers.find((paper) => paper.id === selectedPaper);
@@ -564,7 +576,7 @@
         el('exam-paper-sentence-preview').hidden = sentences.length === 0;
         el('exam-paper-sentence-preview').textContent = sentences.map((sentence, i) => `${i + 1}. ${sentence.chinese}`).join('\n');
         el('exam-parent-hint').hidden = !isParentSession;
-        el('exam-include-choices').disabled = busy || isParentSession || !selected?.word_count;
+        el('exam-include-choices').checked = !selected?.builtin && paperChoices.get(selectedPaper) === true;
         el('exam-choice-toggle').hidden = !!selected?.builtin;
         el('exam-choice-hint').hidden = !!selected?.builtin;
         el('exam-builtin-hint').hidden = !selected?.builtin;
@@ -729,8 +741,8 @@
     async function startExam() {
         if (busy || editingPaper || !selectedPaper || isParentSession) return;
         const ctx = context();
-        const includeChoices = !el('exam-include-choices').disabled && el('exam-include-choices').checked;
         const selected = papers.find((paper) => paper.id === selectedPaper);
+        const includeChoices = !selected?.builtin && !!selected?.word_count && paperChoices.get(selectedPaper) === true;
         setBusy(true);
         message('正在准备考试…');
         try {
@@ -957,6 +969,7 @@
         gradeFilter = 'all';
         termFilter = 'all';
         expandedGroups.clear();
+        paperChoices.clear();
         editingPaper = '';
         newPaperDraft = null;
         knowledgeReturnButton = null;
@@ -1020,6 +1033,11 @@
             knowledgeReturnButton?.focus({ preventScroll: true });
         });
         el('exam-edit-paper').addEventListener('click', editPaper);
+        el('exam-include-choices').addEventListener('change', () => {
+            const selected = papers.find((paper) => paper.id === selectedPaper);
+            if (busy || isParentSession || selected?.builtin || !selected?.word_count) return;
+            paperChoices.set(selectedPaper, el('exam-include-choices').checked);
+        });
         el('exam-cancel-edit').addEventListener('click', () => {
             if (busy) return;
             finishEditing();
