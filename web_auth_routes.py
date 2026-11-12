@@ -128,8 +128,9 @@ def register_routes(app, services):
                 password = services.request.form.get('password', '').strip()
             if not username or not password:
                 return (services.jsonify({'error': '用户名和密码不能为空'}), 400)
-            if services.verify_user(username, password):
-                urow = services.get_user(username)
+            login_username = services.resolve_username(username)
+            if login_username and services.verify_user(login_username, password):
+                urow = services.get_user(login_username)
                 if not isinstance(urow, dict) or urow.get('enabled', True) is False:
                     return (services.jsonify({'error': '账号已停用，请联系管理员'}), 403)
                 if isinstance(urow, dict) and services.is_parent_user_record(urow):
@@ -139,8 +140,8 @@ def register_routes(app, services):
                     child_row = services.get_user(child)
                     if not isinstance(child_row, dict) or child_row.get('enabled', True) is False:
                         return (services.jsonify({'error': '学生账号已停用，无法以家长身份登录'}), 403)
-                token = services.create_token(username)
-                body = {'access_token': token, 'token_type': 'bearer', 'username': username, **services._auth_session_payload(username)}
+                token = services.create_token(login_username)
+                body = {'access_token': token, 'token_type': 'bearer', 'username': login_username, **services._auth_session_payload(login_username)}
                 return (services.jsonify(body), 200)
             return (services.jsonify({'error': '用户名或密码错误'}), 401)
         except Exception as e:

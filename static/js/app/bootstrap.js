@@ -187,7 +187,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 导航切换
-    document.querySelectorAll('.nav-item').forEach(item => {
+    initDesktopMoreNavigation();
+    document.querySelectorAll('.nav-item[data-page]').forEach(item => {
         item.addEventListener('click', () => {
             const page = item.dataset.page;
             showSection(page);

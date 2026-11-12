@@ -1,0 +1,27 @@
+[
+  {
+    "item_id": "bc2f60cff19a4aa986c921bbfa37db9e",
+    "recognition_valid_definition": [false, false, false, false, true, false, false],
+    "recognition_parallel_form": [true, true, true, true, true, true, true]
+  },
+  {
+    "item_id": "9ff7f345af5c4f2b9054e8f786ac74ea",
+    "recognition_valid_definition": [false, false, true, false, false, false, false],
+    "recognition_parallel_form": [false, false, true, false, false, false, false]
+  },
+  {
+    "item_id": "46efb98f868d42c196b6a32e050e39e1",
+    "recognition_valid_definition": [false, false, false, false, true, false, false],
+    "recognition_parallel_form": [true, true, true, true, false, true, true]
+  },
+  {
+    "item_id": "3e240f35de0845399a4e37a5555c03dd",
+    "recognition_valid_definition": [false, false, false, false, true, false, false],
+    "recognition_parallel_form": [true, true, true, true, true, true, true]
+  },
+  {
+    "item_id": "9d5acecab6dc4833be6444bfff2e3cb9",
+    "recognition_valid_definition": [false, false, true, false, false, false, false],
+    "recognition_parallel_form": [true, true, true, true, true, true, true]
+  }
+]

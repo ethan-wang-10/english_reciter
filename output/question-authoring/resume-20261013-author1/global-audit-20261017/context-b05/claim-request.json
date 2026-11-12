@@ -1,0 +1,12 @@
+{
+  "method": "POST",
+  "path": "/claims",
+  "body": {
+    "kind": "context_blind",
+    "worker_id": "codex-context-independent-20261017-b05",
+    "request_id": "global-audit-20261017-context-b05",
+    "level": "",
+    "limit": 5,
+    "ttl_seconds": 86400
+  }
+}

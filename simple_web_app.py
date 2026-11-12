@@ -88,6 +88,7 @@ from user_store import (
     init_user_store,
     load_users,
     mutate_users,
+    resolve_username,
     update_password_hash,
 )
 from app_time import china_now_iso, china_today
@@ -111,6 +112,7 @@ from learning_sqlite_store import LearningSQLiteStore, learning_store_revision
 from import_job_store import ImportJobStore, ImportLeaseLost, ImportOutcomeUnknown
 from rate_limit_store import RateLimitStore
 from storage_utils import PersistentStateLoadError
+from exam_preparation_routes import register_exam_preparation_routes
 
 try:
     from tts_piper import (
@@ -3075,7 +3077,7 @@ def register_user_with_invite(
                 creator = users.get(str(matched.get('created_by') or ''))
                 if not _user_row_is_enabled(creator):
                     return False, '邀请码无效或已使用'
-            if username in users:
+            if any(existing.casefold() == username.casefold() for existing in users):
                 return False, '用户名已存在'
             if is_reserved_parent_username(username):
                 return False, '该用户名保留给家长账户使用，请更换'
@@ -3098,10 +3100,8 @@ def register_user_with_invite(
 
         original_invite = dict(matched)
         try:
-            scope = [username]
-            if matched.get('created_by_kind') == 'user':
-                scope.append(str(matched.get('created_by') or ''))
-            ok, err = mutate_users(_add_user, usernames=scope)
+            # Case-insensitive login collisions require all names under the write lock.
+            ok, err = mutate_users(_add_user)
         except Exception as exc:
             matched.clear()
             matched.update(original_invite)
@@ -3887,14 +3887,16 @@ def bootstrap(username):
                 reciter.save_learning_data(backup=False)
             summary = _summary_payload_from_reciter(reciter)
 
-        pkw, pkm = _pk_stats_for_gamification(username)
-        gam_payload = gamification_mod.public_profile(
-            DATA_DIR,
-            username,
-            mastered_words=mastered_n,
-            pk_wins=pkw,
-            pk_matches=pkm,
-        )
+        gam_payload = None
+        if request.args.get('include_gamification', '1') != '0':
+            pkw, pkm = _pk_stats_for_gamification(username)
+            gam_payload = gamification_mod.public_profile(
+                DATA_DIR,
+                username,
+                mastered_words=mastered_n,
+                pk_wins=pkw,
+                pk_matches=pkm,
+            )
 
         av = user_avatar_disk_path(username)
         return jsonify({
@@ -5213,6 +5215,25 @@ def _current_gaokao_source(word_key: str) -> Optional[dict]:
     return gaokao_questions.source_from_wordbank_row(row) if row else None
 
 
+def _exam_preparation_words(username: str, keys: List[str]) -> Dict[str, dict]:
+    found = {key: row for key in keys if (row := lookup_csv_word(key))}
+    missing = [key for key in keys if not (found.get(key, {}).get('chinese') or '').strip()]
+    if missing:
+        with user_reciter_session(username) as reciter:
+            for key in missing:
+                word = reciter.find_word(key, include_mastered=True)
+                if word and (word.chinese or '').strip():
+                    found[key] = {'english': word.english, 'chinese': word.chinese}
+    return found
+
+
+register_exam_preparation_routes(
+    app, token_required, parent_forbidden, lambda: DATA_DIR,
+    lambda username, keys: _exam_preparation_words(username, keys),
+    lambda key, kind: gaokao_questions.get_question(key, kind, source=_current_gaokao_source(key)),
+)
+
+
 def gaokao_question_sources(level: str = "") -> List[dict]:
     """Use the same canonical rows as lookup_csv_word, then filter by level."""
     csv_by_key = load_words_csv_by_key()
@@ -6185,6 +6206,8 @@ def admin_set_user_parent(username):
                 if not is_parent_user_record(pr) or pr.get('child_username') != username:
                     return False, 400, {'error': '家长登录名已被占用'}
             else:
+                if any(existing.casefold() == pname.casefold() for existing in users):
+                    return False, 400, {'error': '家长登录名已被占用'}
                 created_new = True
                 users[pname] = {
                     'role': USER_ROLE_PARENT,
@@ -6209,7 +6232,8 @@ def admin_set_user_parent(username):
             del users[pname]
         return True, 200, {'username': username, 'parent_enabled': False}
 
-    ok, status_code, body = mutate_users(_set_parent, usernames=[username, pname])
+    # Parent creation checks the same global login namespace as registration.
+    ok, status_code, body = mutate_users(_set_parent)
     if not ok:
         return jsonify(body), status_code
     if want:

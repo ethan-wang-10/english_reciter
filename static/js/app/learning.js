@@ -549,11 +549,13 @@ function finishPendingReviewAdvance() {
     return true;
 }
 
-function scheduleReviewAdvance(reviewContext, submissionIndex, word, delayMs) {
+function scheduleReviewAdvance(reviewContext, submissionIndex, word, delayMs = null) {
     cancelPendingReviewAdvance();
     isAdvancing = true;
     pendingReviewAdvance = { reviewContext, submissionIndex, word };
     setReviewSubmitButtonState('next');
+    // Final wrong answers stay visible until an explicit click or Enter press.
+    if (delayMs === null) return;
     reviewAdvanceTimer = setTimeout(
         () => finishPendingReviewAdvance(),
         Math.max(0, Number(delayMs) || 0),
@@ -633,6 +635,7 @@ function handleSemanticQuestionKeydown(event) {
     if (!word) return;
     if (event.key === 'Enter' && isAdvancing && pendingReviewAdvance) {
         event.preventDefault();
+        if (event.repeat) return;
         finishPendingReviewAdvance();
         return;
     }
@@ -1463,6 +1466,7 @@ function showInitialEmptyReview() {
 }
 
 async function loadReviewList() {
+    setReviewLoading(true);
     reviewSessionGeneration += 1;
     cancelPendingReviewAdvance();
     pendingReviewSubmission = null;
@@ -1528,6 +1532,11 @@ async function loadReviewList() {
             requestSequence !== reviewDataRequestSequence
         ) return;
         showMainBanner('加载复习列表失败，请稍后重试');
+        document.getElementById('review-box').style.display = 'none';
+    } finally {
+        if (isReviewContextCurrent(reviewContext) && requestSequence === reviewDataRequestSequence) {
+            setReviewLoading(false);
+        }
     }
 }
 
@@ -2333,7 +2342,6 @@ async function submitAnswerRequest() {
                     reviewContext,
                     submissionIndex,
                     word,
-                    reviewFeedbackDelayMs(word, result, { isSemantic }),
                 );
             } else {
                 // 还有尝试机会，更新提示字符串

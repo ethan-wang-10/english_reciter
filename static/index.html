@@ -6,10 +6,8 @@
     <meta name="theme-color" content="#58CC02">
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/assets/css/style.48c99ec23901ab60.css">
+    <link rel="stylesheet" href="/static/assets/css/style.5a475613d811f533.css">
+    <link rel="stylesheet" href="/static/assets/css/exam-preparation.a1de83db330295b2.css">
 </head>
 <body>
     <div id="app">
@@ -138,12 +136,18 @@
                 </div>
                 <div class="nav-menu nav-menu-desktop">
                     <button class="nav-item active" data-page="review">今日复习</button>
-                    <button class="nav-item" data-page="discover">单词学习</button>
-                    <button class="nav-item" data-page="textbook">课文学习</button>
-                    <button class="nav-item" data-page="progress">学习进度</button>
+                    <button class="nav-item" data-page="exam-preparation">考前准备</button>
                     <button class="nav-item" data-page="import">导入单词</button>
-                    <button class="nav-item" data-page="mastered">已掌握</button>
                     <button class="nav-item" data-page="leaderboard">排行榜</button>
+                    <div id="desktop-more-wrap" class="desktop-more-wrap">
+                        <button type="button" id="desktop-more-btn" class="nav-item" aria-expanded="false" aria-controls="desktop-more-menu">更多 <span class="desktop-more-arrow" aria-hidden="true">▾</span></button>
+                        <div id="desktop-more-menu" class="desktop-more-menu" role="group" aria-label="更多功能" hidden>
+                            <button type="button" class="nav-item desktop-more-link" data-page="discover">单词学习</button>
+                            <button type="button" class="nav-item desktop-more-link" data-page="textbook">课文学习</button>
+                            <button type="button" class="nav-item desktop-more-link" data-page="progress">学习进度</button>
+                            <button type="button" class="nav-item desktop-more-link" data-page="mastered">已掌握</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="nav-gamification" id="nav-gamification" title="学习积分与连续打卡">
                     <span class="ng-level" id="ng-level">Lv.1</span>
@@ -214,6 +218,7 @@
                     </div>
                     <button type="button" class="mobile-more-link" data-page="discover">单词学习</button>
                     <button type="button" class="mobile-more-link" data-page="textbook">课文学习</button>
+                    <button type="button" class="mobile-more-link" data-page="exam-preparation">考前准备</button>
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
                     <button type="button" class="mobile-more-link js-invite-create" id="mobile-open-invite">邀请好友</button>
@@ -276,6 +281,7 @@
                         <div id="today-task-mix" class="today-task-mix" aria-label="今日任务构成"></div>
                     </section>
                     
+                    <p id="review-loading-status" class="review-loading-status" role="status" aria-live="polite" hidden>正在加载今日复习…</p>
                     <div class="review-layout">
                     <div class="review-main-wrap">
                     <div id="review-container" class="review-container">
@@ -436,6 +442,168 @@
                 </div>
             </div>
             
+            <!-- 考前准备页面 -->
+            <div id="exam-preparation-section" class="section">
+                <div class="container exam-container">
+                    <h2>考前准备</h2>
+                    <p class="exam-intro">把要考的单词和中译英句子整理成考卷，随时开始一场模拟考试。</p>
+                    <p id="exam-preparation-message" class="exam-message" role="status" aria-live="polite" hidden></p>
+                    <div id="exam-setup-view" class="exam-setup-grid">
+                        <form id="exam-create-form" class="exam-panel">
+                            <h3 id="exam-editor-title">新建考卷</h3>
+                            <p id="exam-editor-hint" class="exam-hint" hidden>修改后保存即可用于下一次考试，历史考试记录会保留。</p>
+                            <div id="exam-words-raw">
+                                <label for="exam-words">本次考试单词</label>
+                                <textarea id="exam-words" rows="6" maxlength="20000" placeholder="例如：apple, banana, beautiful, look after" aria-describedby="exam-words-hint exam-word-count" spellcheck="false" autocapitalize="none" autocorrect="off"></textarea>
+                                <p id="exam-words-hint" class="exam-hint">用英文或中文逗号分隔，也支持换行。重复单词会自动合并，释义从词库或已导入单词中匹配。</p>
+                            </div>
+                            <div id="exam-word-editor" hidden>
+                                <p id="exam-word-chips-label" class="exam-field-label">本次考试单词 <span>按字母排序</span></p>
+                                <div id="exam-word-chips" class="exam-word-chips" role="group" aria-labelledby="exam-word-chips-label"></div>
+                                <p id="exam-word-chips-empty" class="exam-hint" hidden>还没有单词，可在下方添加。</p>
+                                <label for="exam-add-words">添加单词或词组</label>
+                                <div class="exam-word-add-row">
+                                    <textarea id="exam-add-words" rows="2" maxlength="20000" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder="例如：apple, school building" aria-describedby="exam-add-words-hint exam-word-count"></textarea>
+                                    <button id="exam-add-word-button" type="button" class="btn btn-secondary">添加</button>
+                                </div>
+                                <p id="exam-add-words-hint" class="exam-hint">支持逗号或换行批量添加，按回车添加；点击单词旁的 × 可删除，保存修改后生效。</p>
+                                <p id="exam-word-editor-status" class="exam-hint" role="status" aria-live="polite" hidden></p>
+                            </div>
+                            <p id="exam-word-count" class="exam-hint" aria-live="polite">已输入 0 个不同的单词 · 最多 300 个</p>
+                            <details id="exam-sentences-section" class="exam-sentences-section">
+                                <summary>句子中译英（可选）<span id="exam-sentence-count">0 道</span></summary>
+                                <p class="exam-hint">填写中文题干和英文参考答案，可只添加句子题。多个正确译法每行一个，最多 100 道题。</p>
+                                <p id="exam-sentence-grading-hint" class="exam-hint">按参考答案匹配，忽略大小写、多余空格和句末标点。其他正确译法请一并填写。</p>
+                                <div id="exam-sentence-list" class="exam-sentence-list"></div>
+                                <button id="exam-add-sentence" type="button" class="btn btn-secondary">＋ 添加句子题</button>
+                            </details>
+                            <label for="exam-paper-name">考卷名称</label>
+                            <input id="exam-paper-name" type="text" maxlength="80" required placeholder="例如：期中考试 · Unit 1–3">
+                            <div class="exam-editor-actions">
+                                <button id="exam-save-paper" type="submit" class="btn btn-primary">保存并生成考卷</button>
+                                <button id="exam-cancel-edit" type="button" class="btn btn-secondary" hidden>取消编辑</button>
+                            </div>
+                            <section id="exam-import-panel" class="exam-import-panel" aria-labelledby="exam-import-title" hidden>
+                                <h4 id="exam-import-title">补充未识别的单词 <span class="vip-badge">VIP</span></h4>
+                                <p class="exam-hint">已填入缺少释义的单词，可直接在这里导入，无需离开考卷。导入完成后会继续保存当前考卷。</p>
+                                <label for="exam-import-words">需要导入的单词或词组</label>
+                                <textarea id="exam-import-words" rows="4" maxlength="20000" spellcheck="false" autocapitalize="none" autocorrect="off" aria-describedby="exam-import-input-hint" placeholder="每行一词或词组，也支持逗号分隔"></textarea>
+                                <p id="exam-import-input-hint" class="exam-hint">如需修正拼写，请先在上方删除或修改原词，再添加正确的单词。</p>
+                                <label for="exam-import-level">指定难度（可选）</label>
+                                <select id="exam-import-level">
+                                    <option value="">自动判断</option>
+                                    <option value="小学">小学</option>
+                                    <option value="初中">初中</option>
+                                    <option value="高中">高中</option>
+                                    <option value="GRE">GRE</option>
+                                </select>
+                                <label class="exam-choice-toggle">
+                                    <input id="exam-import-add-to-queue" type="checkbox">
+                                    <span>同时加入待复习列表</span>
+                                </label>
+                                <p id="exam-import-locked" class="exam-hint" hidden>词汇导入仅限 VIP 用户使用，请联系管理员升级账号。</p>
+                                <p id="exam-import-status" class="exam-hint" role="status" aria-live="polite" hidden></p>
+                                <div class="exam-editor-actions">
+                                    <button id="exam-import-submit" type="button" class="btn btn-primary">导入并保存考卷</button>
+                                    <button id="exam-import-dismiss" type="button" class="btn btn-secondary">暂不导入</button>
+                                </div>
+                            </section>
+                        </form>
+                        <div class="exam-panel">
+                            <h3>选择考卷</h3>
+                            <p id="exam-paper-empty" class="exam-hint">还没有考卷，先添加单词或句子题并保存一张吧。</p>
+                            <div id="exam-paper-list" class="exam-paper-list" role="group" aria-label="已保存的考卷"></div>
+                            <div id="exam-paper-settings" hidden>
+                                <div class="exam-paper-toolbar">
+                                    <span>考卷内容</span>
+                                    <button id="exam-edit-paper" type="button" class="btn btn-secondary" aria-controls="exam-create-form">编辑考卷</button>
+                                </div>
+                                <p id="exam-paper-preview" class="exam-hint exam-paper-preview"></p>
+                                <p id="exam-paper-sentence-preview" class="exam-hint exam-paper-preview" hidden></p>
+                                <label id="exam-choice-toggle" class="exam-choice-toggle">
+                                    <input id="exam-include-choices" type="checkbox" aria-describedby="exam-choice-hint">
+                                    <span>开启选择题</span>
+                                </label>
+                                <p id="exam-choice-hint" class="exam-hint">默认考单词默写和已添加的句子中译英。开启后，再加入单词可用的英文识义和语境选词题。</p>
+                                <p id="exam-builtin-hint" class="exam-hint" hidden></p>
+                                <p id="exam-parent-hint" class="exam-hint" hidden>家长可以为孩子创建考卷，请使用学生账号参加考试。</p>
+                                <button id="exam-start" type="button" class="btn btn-primary" disabled>开始考试</button>
+                                <div class="exam-paper-mistakes">
+                                    <p id="exam-paper-mistake-count" class="exam-hint" aria-live="polite">暂无待复习错题</p>
+                                    <button id="exam-review-paper-mistakes" type="button" class="btn btn-secondary" disabled>复习错题</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="exam-knowledge-view" class="exam-panel exam-knowledge-panel" hidden>
+                        <div class="exam-knowledge-head">
+                            <h3 id="exam-knowledge-title" tabindex="-1">知识点梳理</h3>
+                            <button id="exam-knowledge-back" type="button" class="btn btn-secondary">返回选择考卷</button>
+                        </div>
+                        <p id="exam-knowledge-intro" class="exam-hint"></p>
+                        <a id="exam-knowledge-pdf" class="exam-handbook-link" target="_blank" rel="noopener">阅读完整复习手册（PDF，含自测与参考答案） ↗</a>
+                        <a id="exam-knowledge-exam-pdf" class="exam-handbook-link" target="_blank" rel="noopener" hidden>打开模拟卷、参考答案及听力稿（PDF） ↗</a>
+                        <div id="exam-knowledge-content" class="exam-knowledge-content"></div>
+                    </div>
+                    <div id="exam-attempt-view" class="exam-panel exam-attempt-panel" hidden>
+                        <div class="exam-attempt-head">
+                            <h3 id="exam-attempt-name"></h3>
+                            <div class="exam-attempt-tools">
+                                <span id="exam-question-position"></span>
+                                <button id="exam-abandon" type="button" class="btn btn-secondary" aria-expanded="false" aria-controls="exam-abandon-confirmation">放弃本次考试</button>
+                            </div>
+                        </div>
+                        <div id="exam-abandon-confirmation" class="exam-abandon-confirmation" role="group" aria-labelledby="exam-abandon-title" aria-describedby="exam-abandon-description" hidden>
+                            <p id="exam-abandon-title" class="exam-abandon-title">确认放弃本次考试？</p>
+                            <p id="exam-abandon-description">放弃后将清除本次答题进度，返回选择考卷；不会生成成绩。</p>
+                            <div class="exam-abandon-actions">
+                                <button id="exam-abandon-cancel" type="button" class="btn btn-secondary">继续答题</button>
+                                <button id="exam-abandon-confirm" type="button" class="btn exam-abandon-confirm">确认放弃</button>
+                            </div>
+                        </div>
+                        <div class="exam-progress-row">
+                            <progress id="exam-answer-progress" max="1" value="0" aria-label="已作答题数"></progress>
+                            <span id="exam-answer-count" aria-live="polite"></span>
+                        </div>
+                        <span id="exam-question-type" class="exam-question-type"></span>
+                        <div id="exam-listening-wrap" class="exam-listening-wrap" hidden>
+                            <p class="exam-hint">先听录音，再选择答案；录音可重复播放。</p>
+                            <audio id="exam-listening-audio" controls preload="none" aria-label="本题听力录音"></audio>
+                            <p id="exam-listening-error" class="exam-hint exam-message-error" role="alert" hidden>音频加载失败，请检查网络后刷新页面继续；已填写的答案会保留。</p>
+                        </div>
+                        <p id="exam-question-prompt" class="exam-question-prompt"></p>
+                        <div id="exam-spelling-wrap">
+                            <label id="exam-answer-label" for="exam-spelling-answer">请默写英文单词或短语</label>
+                            <textarea id="exam-spelling-answer" rows="2" maxlength="200" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="exam-question-prompt exam-answer-hint"></textarea>
+                            <p id="exam-answer-hint" class="exam-hint" hidden>请将上面的中文句子译成英文，大小写和句末标点不影响判分。</p>
+                        </div>
+                        <div id="exam-choice-options" class="exam-choice-options" role="group" aria-labelledby="exam-question-prompt" hidden></div>
+                        <div class="exam-attempt-actions">
+                            <div>
+                                <button id="exam-previous" type="button" class="btn btn-secondary">上一题</button>
+                                <button id="exam-next" type="button" class="btn btn-secondary">下一题</button>
+                            </div>
+                            <button id="exam-submit" type="button" class="btn btn-primary">交卷并查看成绩</button>
+                        </div>
+                        <p class="exam-hint">可切换题目检查答案；未作答题目计为错误。交卷后统一显示成绩和错题。</p>
+                    </div>
+                    <div id="exam-result-view" class="exam-panel exam-result-panel" hidden>
+                        <h3 id="exam-result-heading" tabindex="-1">考试完成</h3>
+                        <p id="exam-result-name"></p>
+                        <p id="exam-result-score" class="exam-result-score"></p>
+                        <p id="exam-result-summary"></p>
+                        <p id="exam-result-perfect" class="exam-result-perfect" hidden>全部答对，继续保持！</p>
+                        <p id="exam-mistake-status" class="exam-hint" aria-live="polite"></p>
+                        <h4 id="exam-wrong-title">错题回顾</h4>
+                        <div id="exam-wrong-list" class="exam-wrong-list"></div>
+                        <div class="exam-result-actions">
+                            <button id="exam-review-mistakes" type="button" class="btn btn-primary" hidden>复习错题</button>
+                            <button id="exam-back-to-papers" type="button" class="btn btn-secondary">返回考卷</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 学习进度页面 -->
             <div id="progress-section" class="section">
                 <div class="container">
@@ -1331,7 +1499,8 @@
     </div>
     
     <script src="/static/assets/js/performance.cabc7fdc8aff1192.js" defer></script>
-    <script src="/static/assets/js/app.e27c3b850981587f.js" defer></script>
+    <script src="/static/assets/js/app.9ace853950a53182.js" defer></script>
+    <script src="/static/assets/js/exam-preparation.421f318059c0b7b6.js" defer></script>
     <script src="/static/assets/js/chat-sidebar.8edef40ea8fe6819.js" defer></script>
     <script src="/static/assets/js/textbook.0528bf065ba0644e.js" defer></script>
     <script src="/static/assets/js/admin.ce6f48c3ba42f871.js" defer></script>

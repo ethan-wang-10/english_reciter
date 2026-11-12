@@ -1,0 +1,46 @@
+[
+  {
+    "item_id": "0b4415a934b9436e804de567ee3b3e39",
+    "context_grammatical": [true, true, true, true, true, true, true],
+    "context_meaning_fits": [false, false, false, false, false, true, true],
+    "context_quality": {
+      "natural": true,
+      "decisive_clues": true,
+      "answer_revealed": false,
+      "reason_zh": "七个形容词都可在语法上修饰 geometry lesson。Euclidean 与题中用直线和熟悉角度规则证明三角形内角和的内容吻合；solid geometry 也可包含关于平面三角形的定理课，因此在该语境下同样说得通。其余形容词与此处的课堂主题不相符。题干提供了与几何类型相关的具体线索，但没有直接释义或同义改写答案。"
+    }
+  },
+  {
+    "item_id": "1254684da0a14ccebf624e2356707f01",
+    "context_grammatical": [true, true, true, true, true, true, true],
+    "context_meaning_fits": [true, false, true, true, true, true, false],
+    "context_quality": {
+      "natural": true,
+      "decisive_clues": true,
+      "answer_revealed": false,
+      "reason_zh": "七个选项均可作 exchange dollars for 的宾语，词形和句法自然。yen、pounds、rubles、euros 都是可以用美元兑换并查看汇率的外币，题目未交代目的地，因此这四项都符合语义。coins 和 cash 是过于宽泛的支付形式，checks 也不自然地搭配此处的汇率兑换，不能解释旅行者为何需要换取支付餐费和门票的外币。题干提供了具体的外币兑换线索，但不能区分具体货币；没有直接释义泄露。"
+    }
+  },
+  {
+    "item_id": "ff18254bd36346b7942e12c7a794d01e",
+    "context_grammatical": [true, true, true, true, true, true, true],
+    "context_meaning_fits": [true, false, false, false, false, false, false],
+    "context_quality": {
+      "natural": true,
+      "decisive_clues": true,
+      "answer_revealed": false,
+      "reason_zh": "七个名词都能在形式上接 manager’s 并位于 of direct questions 前。只有 evasion 表示回避问题，能解释记者为何因得不到所需说明而沮丧；answer 通常应搭配 answer to questions，其他名词与该结构和语境均不自然。题干的记者反应和所求解释提供了具体语境线索，但没有直接定义 evasion。"
+    }
+  },
+  {
+    "item_id": "e6eff07041164101981fe2f83e7f7551",
+    "context_grammatical": [true, true, true, true, true, true, true],
+    "context_meaning_fits": [true, true, false, false, false, false, false],
+    "context_quality": {
+      "natural": true,
+      "decisive_clues": true,
+      "answer_revealed": false,
+      "reason_zh": "所有形容词都能作 became 的表语。evasive 与给出含糊回答相符；quiet 也合理，因为证人面对关于记录的问题可能变得沉默寡言，同时只给出含糊回复。generous、accurate、brave、frank 和 enthusiastic 均不能自然解释这种回答方式。题干的回答表现提供了具体线索，但未直接释义答案。"
+    }
+  }
+]

@@ -5,10 +5,15 @@
       "sha256": "39d2e72c73f29bc04330eb29c06e750c4a9778e4aed2491d8a781acf84253f17",
       "url": "/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg"
     },
+    "/static/css/exam-preparation.css": {
+      "bytes": 10939,
+      "sha256": "a1de83db330295b2a67acb69af1eea33fb28435ee531f5d9fbf3d3e78cdb6229",
+      "url": "/static/assets/css/exam-preparation.a1de83db330295b2.css"
+    },
     "/static/css/style.css": {
-      "bytes": 216938,
-      "sha256": "48c99ec23901ab60d7720991472a7b39abd287fb9ab2bffc4967f2100dc3deaf",
-      "url": "/static/assets/css/style.48c99ec23901ab60.css"
+      "bytes": 218119,
+      "sha256": "5a475613d811f533ea635bca3db25ccfe30f3046978b9c531e821afcc4c39410",
+      "url": "/static/assets/css/style.5a475613d811f533.css"
     },
     "/static/js/admin.js": {
       "bytes": 40255,
@@ -16,14 +21,19 @@
       "url": "/static/assets/js/admin.ce6f48c3ba42f871.js"
     },
     "/static/js/app.js": {
-      "bytes": 454949,
-      "sha256": "e27c3b850981587f80d62bdc0ecf24a714f9f5ffec58aff306360ddf60368940",
-      "url": "/static/assets/js/app.e27c3b850981587f.js"
+      "bytes": 459464,
+      "sha256": "9ace853950a5318226793ff91a0e879565f5cb11e79a3b6209c94a42ef3cddbc",
+      "url": "/static/assets/js/app.9ace853950a53182.js"
     },
     "/static/js/chat-sidebar.js": {
       "bytes": 34598,
       "sha256": "8edef40ea8fe6819d7de9cd648d1b9be242fe00b8695e73d7b4a2a6ec4c210ef",
       "url": "/static/assets/js/chat-sidebar.8edef40ea8fe6819.js"
+    },
+    "/static/js/exam-preparation.js": {
+      "bytes": 47361,
+      "sha256": "421f318059c0b7b6db42ce47d79eebc08a0f5f4883fcf16d1bab9e009e33587b",
+      "url": "/static/assets/js/exam-preparation.421f318059c0b7b6.js"
     },
     "/static/js/performance.js": {
       "bytes": 17312,

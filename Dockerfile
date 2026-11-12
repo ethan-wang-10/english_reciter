@@ -57,6 +57,11 @@ COPY storage_utils.py .
 COPY reward_store.py .
 COPY reward_schema.py .
 COPY rate_limit_store.py .
+COPY builtin_exam_catalog.py .
+COPY exam_mistakes.py .
+COPY exam_preparation.py .
+COPY exam_preparation_routes.py .
+COPY builtin_exams/ ./builtin_exams/
 COPY web_auth_routes.py .
 COPY web_learning_routes.py .
 COPY web_wordbank_routes.py .

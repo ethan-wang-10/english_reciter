@@ -439,6 +439,7 @@ function initializeUnderlineInputForTarget(word, target) {
     capture.onkeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
+            if (e.repeat) return;
             if (!finishPendingReviewAdvance()) void submitAnswer();
             return;
         }

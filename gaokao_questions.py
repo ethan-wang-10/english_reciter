@@ -212,7 +212,12 @@ def _generated_context(source: dict, raw: dict) -> Tuple[Optional[dict], str]:
 def source_from_wordbank_row(row: dict) -> Optional[dict]:
     english = normalize_word(row.get("english"))
     chinese = str(row.get("chinese") or "").strip()
-    if not english or not chinese:
+    if (
+        not english
+        or not chinese
+        or is_person_name_only_definition(chinese)
+        or is_geographic_name_fragment_only_definition(chinese)
+    ):
         return None
     context_sentence = None
     context_answer = english
@@ -324,6 +329,54 @@ _RECOGNITION_POS_RE = re.compile(
 )
 _RECOGNITION_SENSE_SEPARATOR_RE = re.compile(r"[；;、/，,]+")
 _RECOGNITION_METADATA_LABELS = {"人名", "姓氏", "男名", "女名", "男子名", "女子名", "地名", "城市名", "州名", "国家名", "朝代", "英国城市", "心理学", "英式", "美式", "表感叹"}
+_PERSON_NAME_LABEL_RE = re.compile(r"(?:人名|姓名|男名|女名|男子名|女子名)")
+_NON_PERSON_PROPER_NAME_LABEL_RE = re.compile(
+    r"(?:地名|城市|州名|国家名|岛屿|山脉|河流|海峡|朝代|民族|商行|品牌|机构|公司)"
+)
+_SURNAME_LABEL_RE = re.compile(r"姓氏")
+_GEOGRAPHIC_NAME_FRAGMENT_LABEL_RE = re.compile(r"(?:地名一部分|州名|地区名)")
+
+
+def is_person_name_only_definition(value: Any) -> bool:
+    """Return whether every listed sense is exclusively a personal name.
+
+    A word such as ``surname`` is a normal lexical item even though its Chinese
+    definition is ``姓氏``. Conversely, an entry such as ``艾米（人名）`` has no
+    teachable common-word sense and should never be sent to question authoring.
+    Mixed entries (for example, person/place names) remain available for a
+    separate editorial decision instead of being deleted automatically.
+    """
+    text = _RECOGNITION_POS_RE.sub("", " ".join(str(value or "").strip().split())).strip()
+    parts = [part.strip() for part in re.split(r"[；;]", text) if part.strip()]
+    if not parts:
+        return False
+
+    for part in parts:
+        if _NON_PERSON_PROPER_NAME_LABEL_RE.search(part):
+            return False
+        if _PERSON_NAME_LABEL_RE.search(part):
+            continue
+        if not _SURNAME_LABEL_RE.search(part):
+            return False
+
+        # "姓氏" itself is a normal definition (for example, the headword
+        # "surname"). A named surname, such as "本顿（姓氏）", is not.
+        without_label = _SURNAME_LABEL_RE.sub("", part)
+        without_label = re.sub(r"[()（）\[\]【】\s,，。．:：/／、-]", "", without_label)
+        if not without_label:
+            return False
+    return True
+
+
+def is_geographic_name_fragment_only_definition(value: Any) -> bool:
+    """Return whether all senses label a geographic name or name fragment.
+
+    These labels describe proper names rather than vocabulary that can support a
+    self-contained choice question. The wordbank retains them for other uses.
+    """
+    text = _RECOGNITION_POS_RE.sub("", " ".join(str(value or "").strip().split())).strip()
+    parts = [part.strip() for part in re.split(r"[；;]", text) if part.strip()]
+    return bool(parts) and all(_GEOGRAPHIC_NAME_FRAGMENT_LABEL_RE.search(part) for part in parts)
 
 
 def _recognition_text(value: Any) -> str:
@@ -361,6 +414,12 @@ def _recognition_senses(value: Any) -> List[str]:
     return senses
 
 
+def _is_repeated_single_hanzi(text: str) -> bool:
+    """Reject placeholder-like options such as ``门门门`` or ``水水``."""
+    chars = re.findall(r"[\u3400-\u9fff]", text)
+    return len(chars) >= 2 and len(set(chars)) == 1
+
+
 def _recognition_candidate_rows(
     source: dict,
     raw: Any,
@@ -383,7 +442,12 @@ def _recognition_candidate_rows(
             continue
         text = _recognition_core_sense(value)
         key = normalize_word(text)
-        if not text or key in seen or not re.fullmatch(r"[\u3400-\u9fff]+", text):
+        if (
+            not text
+            or key in seen
+            or not re.fullmatch(r"[\u3400-\u9fff]+", text)
+            or _is_repeated_single_hanzi(text)
+        ):
             continue
         seen.add(key)
         candidates.append((index, text, len(re.findall(r"[\u3400-\u9fff]", text))))
@@ -414,6 +478,14 @@ def _recognition_options(source: dict, raw: Any) -> Tuple[Optional[Tuple[str, Li
     )
     distractors = [item[1] for item in selected]
     return (correct, distractors), ""
+
+
+def _recognition_headword(source: dict) -> str:
+    key = source["english"]
+    if key == "i" and _recognition_core_sense(source.get("chinese")) == "我":
+        return "I"
+    form = str(source.get("context_answer") or "").strip()
+    return form if normalize_word(form) == key else key
 
 
 def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict], str]:
@@ -496,7 +568,7 @@ def finalize_generated_questions(source: dict, raw: Any) -> Tuple[Optional[dict]
         "recognition": {
             "question_id": recognition_id,
             "type": "recognition",
-            "prompt": key,
+            "prompt": _recognition_headword(source),
             "phonetic": source.get("phonetic") or "",
             "options": recognition_options,
             "answer_option_id": recognition_answer,
@@ -1654,7 +1726,7 @@ def _raw_from_published(source: dict, record: Any) -> Optional[dict]:
         raw[f"{kind}_distractors"] = [row["text"] for row in options if row is not answer]
         raw[f"{kind}_explanation_zh"] = question.get("explanation_zh")
         if kind == "recognition":
-            if question.get("prompt") != source["english"]:
+            if normalize_word(question.get("prompt")) != source["english"]:
                 return None
         else:
             prompt = question.get("prompt")
@@ -2493,7 +2565,10 @@ def get_question(word_key: str, question_type: str, *, source: Any = _SOURCE_UNS
         return None
     question = row.get(question_type) if isinstance(row, dict) else None
     if isinstance(question, dict) and isinstance(source, dict) and question_type == "recognition":
-        question = {**question, "phonetic": source.get("phonetic") or ""}
+        question = {
+            **question, "prompt": _recognition_headword(source),
+            "phonetic": source.get("phonetic") or "",
+        }
     return question if isinstance(question, dict) else None
 
 
@@ -2507,6 +2582,11 @@ def get_question_by_id(question_id: str, *, source: Any = _SOURCE_UNSET) -> Opti
     question, record = found
     if source is not _SOURCE_UNSET and not record_matches_source(record, source):
         return None
+    if isinstance(source, dict) and question.get("type") == "recognition":
+        question = {
+            **question, "prompt": _recognition_headword(source),
+            "phonetic": source.get("phonetic") or "",
+        }
     return question if _is_approved_record(record) else None
 
 

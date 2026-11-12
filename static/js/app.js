@@ -793,6 +793,74 @@ function setupXpHistoryModal() {
     });
 }
 
+function desktopMoreVisibleLinks() {
+    return Array.from(document.querySelectorAll('.desktop-more-link'))
+        .filter((link) => !link.hidden && link.style.display !== 'none');
+}
+
+function setDesktopMoreOpen(open, focusFirst = false) {
+    const menu = document.getElementById('desktop-more-menu');
+    const button = document.getElementById('desktop-more-btn');
+    if (!menu || !button) return;
+    menu.hidden = !open;
+    button.setAttribute('aria-expanded', String(open));
+    if (open && focusFirst) desktopMoreVisibleLinks()[0]?.focus();
+}
+
+function closeDesktopMoreMenu(returnFocus = false) {
+    const menu = document.getElementById('desktop-more-menu');
+    const wasOpen = menu && !menu.hidden;
+    setDesktopMoreOpen(false);
+    if (wasOpen && returnFocus) document.getElementById('desktop-more-btn')?.focus();
+}
+
+function syncDesktopMoreActive(sectionId) {
+    document.getElementById('desktop-more-btn')?.classList.toggle(
+        'active', ['discover', 'textbook', 'progress', 'mastered'].includes(sectionId),
+    );
+}
+
+function initDesktopMoreNavigation() {
+    const wrap = document.getElementById('desktop-more-wrap');
+    const button = document.getElementById('desktop-more-btn');
+    const menu = document.getElementById('desktop-more-menu');
+    if (!wrap || !button || !menu) return;
+    button.addEventListener('click', () => setDesktopMoreOpen(menu.hidden));
+    button.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        setDesktopMoreOpen(true, event.key === 'ArrowDown');
+        if (event.key === 'ArrowUp') desktopMoreVisibleLinks().at(-1)?.focus();
+    });
+    menu.addEventListener('keydown', (event) => {
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        const links = desktopMoreVisibleLinks();
+        if (!links.length) return;
+        event.preventDefault();
+        const current = links.indexOf(event.target);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? links.length - 1
+            : (current + (event.key === 'ArrowDown' ? 1 : -1) + links.length) % links.length;
+        links[next]?.focus();
+    });
+    document.addEventListener('click', (event) => {
+        if (!wrap.contains(event.target)) closeDesktopMoreMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !menu.hidden) {
+            event.preventDefault();
+            closeDesktopMoreMenu(true);
+        }
+    });
+    wrap.addEventListener('focusout', (event) => {
+        if (!wrap.contains(event.relatedTarget)) closeDesktopMoreMenu();
+    });
+    if (typeof window.matchMedia === 'function') {
+        window.matchMedia('(max-width: 1199px)').addEventListener('change', (event) => {
+            if (event.matches) closeDesktopMoreMenu();
+        });
+    }
+}
+
 function openMobileMoreSheet() {
     const sheet = document.getElementById('mobile-more-sheet');
     const btn = document.getElementById('mobile-more-btn');
@@ -4198,6 +4266,7 @@ function initializeUnderlineInputForTarget(word, target) {
     capture.onkeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
+            if (e.repeat) return;
             if (!finishPendingReviewAdvance()) void submitAnswer();
             return;
         }
@@ -4835,6 +4904,8 @@ async function apiRequest(endpoint, options = {}) {
         const requestError = new Error(error.error || error.detail || '请求失败');
         requestError.status = response.status;
         requestError.code = error.code || '';
+        requestError.missing_words = Array.isArray(error.missing_words)
+            ? error.missing_words.filter((word) => typeof word === 'string' && word.trim()) : [];
         throw requestError;
     }
     
@@ -5135,7 +5206,9 @@ function handleInviteRegistrationNavigation() {
 
 function resetAccountSessionView() {
     if (typeof window.chatRoomOnLogout === 'function') window.chatRoomOnLogout();
+    closeDesktopMoreMenu();
     resetInviteCardState();
+    window.examPreparation?.reset();
     preloadedReviewData = null;
     reviewDataStaleAfterImport = false;
     resetActiveReviewSession();
@@ -5310,9 +5383,18 @@ function applyBootstrapPayload(boot) {
     }
 }
 
+function setReviewLoading(loading) {
+    const section = document.getElementById('review-section');
+    section?.classList.toggle('is-loading', loading);
+    section?.setAttribute('aria-busy', String(loading));
+    const status = document.getElementById('review-loading-status');
+    if (status) status.hidden = !loading;
+}
+
 async function showMainPage() {
     const accountContext = captureAccountContext();
     const reviewContext = captureReviewContext();
+    setReviewLoading(true);
     document.getElementById('login-page').classList.remove('active');
     document.getElementById('main-page').classList.add('active');
     const gl = document.getElementById('admin-gear-login');
@@ -5321,7 +5403,9 @@ async function showMainPage() {
     let boot = null;
     if (token) {
         try {
-            boot = await apiRequest(reviewQueueEndpoint('/bootstrap'));
+            const bootstrapEndpoint = reviewQueueEndpoint('/bootstrap');
+            const separator = bootstrapEndpoint.includes('?') ? '&' : '?';
+            boot = await apiRequest(`${bootstrapEndpoint}${separator}include_gamification=0`);
             if (!isReviewContextCurrent(reviewContext)) return;
             applyBootstrapPayload(boot);
         } catch (bootErr) {
@@ -5367,11 +5451,15 @@ async function showMainPage() {
     }
     if (!isReviewContextCurrent(reviewContext)) return;
     if (isParentSession) {
+        setReviewLoading(false);
         showSection('progress');
     } else {
         showSection('review');
     }
-    runWhenIdle(() => {
+    runWhenIdle(async () => {
+        if (!isAccountContextCurrent(accountContext)) return;
+        if (!boot?.gamification) await refreshGamification(accountContext);
+        if (!isAccountContextCurrent(accountContext)) return;
         void refreshPkInviteIndicator();
         if (typeof window.chatRoomEnsureSse === 'function') window.chatRoomEnsureSse();
     }, 5000);
@@ -5477,6 +5565,7 @@ function syncReviewSectionChromeClass() {
 
 function showSection(sectionId) {
     closeDailySummaryPopover();
+    closeDesktopMoreMenu(true);
 
     _saveScrollPos(_currentSectionId);
 
@@ -5493,9 +5582,10 @@ function showSection(sectionId) {
     document.querySelectorAll(`.nav-item[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
     document.querySelectorAll(`.mobile-tab[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
     document.querySelectorAll(`.mobile-more-link[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
+    syncDesktopMoreActive(sectionId);
 
     const moreBtn = document.getElementById('mobile-more-btn');
-    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook')) {
+    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook' || sectionId === 'exam-preparation')) {
         moreBtn.classList.add('active');
     }
 
@@ -5512,6 +5602,8 @@ function showSection(sectionId) {
         loadDiscovery();
     } else if (sectionId === 'textbook') {
         loadTextbookSection();
+    } else if (sectionId === 'exam-preparation') {
+        void window.examPreparation?.open();
     } else if (sectionId === 'progress') {
         if (_isSectionFresh('progress')) { _restoreScrollPos('progress'); return; }
         loadProgress();
@@ -6078,11 +6170,13 @@ function finishPendingReviewAdvance() {
     return true;
 }
 
-function scheduleReviewAdvance(reviewContext, submissionIndex, word, delayMs) {
+function scheduleReviewAdvance(reviewContext, submissionIndex, word, delayMs = null) {
     cancelPendingReviewAdvance();
     isAdvancing = true;
     pendingReviewAdvance = { reviewContext, submissionIndex, word };
     setReviewSubmitButtonState('next');
+    // Final wrong answers stay visible until an explicit click or Enter press.
+    if (delayMs === null) return;
     reviewAdvanceTimer = setTimeout(
         () => finishPendingReviewAdvance(),
         Math.max(0, Number(delayMs) || 0),
@@ -6162,6 +6256,7 @@ function handleSemanticQuestionKeydown(event) {
     if (!word) return;
     if (event.key === 'Enter' && isAdvancing && pendingReviewAdvance) {
         event.preventDefault();
+        if (event.repeat) return;
         finishPendingReviewAdvance();
         return;
     }
@@ -6992,6 +7087,7 @@ function showInitialEmptyReview() {
 }
 
 async function loadReviewList() {
+    setReviewLoading(true);
     reviewSessionGeneration += 1;
     cancelPendingReviewAdvance();
     pendingReviewSubmission = null;
@@ -7057,6 +7153,11 @@ async function loadReviewList() {
             requestSequence !== reviewDataRequestSequence
         ) return;
         showMainBanner('加载复习列表失败，请稍后重试');
+        document.getElementById('review-box').style.display = 'none';
+    } finally {
+        if (isReviewContextCurrent(reviewContext) && requestSequence === reviewDataRequestSequence) {
+            setReviewLoading(false);
+        }
     }
 }
 
@@ -7862,7 +7963,6 @@ async function submitAnswerRequest() {
                     reviewContext,
                     submissionIndex,
                     word,
-                    reviewFeedbackDelayMs(word, result, { isSemantic }),
                 );
             } else {
                 // 还有尝试机会，更新提示字符串
@@ -10428,7 +10528,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 导航切换
-    document.querySelectorAll('.nav-item').forEach(item => {
+    initDesktopMoreNavigation();
+    document.querySelectorAll('.nav-item[data-page]').forEach(item => {
         item.addEventListener('click', () => {
             const page = item.dataset.page;
             showSection(page);

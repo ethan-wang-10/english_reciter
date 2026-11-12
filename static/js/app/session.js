@@ -155,7 +155,9 @@ function handleInviteRegistrationNavigation() {
 
 function resetAccountSessionView() {
     if (typeof window.chatRoomOnLogout === 'function') window.chatRoomOnLogout();
+    closeDesktopMoreMenu();
     resetInviteCardState();
+    window.examPreparation?.reset();
     preloadedReviewData = null;
     reviewDataStaleAfterImport = false;
     resetActiveReviewSession();
@@ -330,9 +332,18 @@ function applyBootstrapPayload(boot) {
     }
 }
 
+function setReviewLoading(loading) {
+    const section = document.getElementById('review-section');
+    section?.classList.toggle('is-loading', loading);
+    section?.setAttribute('aria-busy', String(loading));
+    const status = document.getElementById('review-loading-status');
+    if (status) status.hidden = !loading;
+}
+
 async function showMainPage() {
     const accountContext = captureAccountContext();
     const reviewContext = captureReviewContext();
+    setReviewLoading(true);
     document.getElementById('login-page').classList.remove('active');
     document.getElementById('main-page').classList.add('active');
     const gl = document.getElementById('admin-gear-login');
@@ -341,7 +352,9 @@ async function showMainPage() {
     let boot = null;
     if (token) {
         try {
-            boot = await apiRequest(reviewQueueEndpoint('/bootstrap'));
+            const bootstrapEndpoint = reviewQueueEndpoint('/bootstrap');
+            const separator = bootstrapEndpoint.includes('?') ? '&' : '?';
+            boot = await apiRequest(`${bootstrapEndpoint}${separator}include_gamification=0`);
             if (!isReviewContextCurrent(reviewContext)) return;
             applyBootstrapPayload(boot);
         } catch (bootErr) {
@@ -387,11 +400,15 @@ async function showMainPage() {
     }
     if (!isReviewContextCurrent(reviewContext)) return;
     if (isParentSession) {
+        setReviewLoading(false);
         showSection('progress');
     } else {
         showSection('review');
     }
-    runWhenIdle(() => {
+    runWhenIdle(async () => {
+        if (!isAccountContextCurrent(accountContext)) return;
+        if (!boot?.gamification) await refreshGamification(accountContext);
+        if (!isAccountContextCurrent(accountContext)) return;
         void refreshPkInviteIndicator();
         if (typeof window.chatRoomEnsureSse === 'function') window.chatRoomEnsureSse();
     }, 5000);
@@ -497,6 +514,7 @@ function syncReviewSectionChromeClass() {
 
 function showSection(sectionId) {
     closeDailySummaryPopover();
+    closeDesktopMoreMenu(true);
 
     _saveScrollPos(_currentSectionId);
 
@@ -513,9 +531,10 @@ function showSection(sectionId) {
     document.querySelectorAll(`.nav-item[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
     document.querySelectorAll(`.mobile-tab[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
     document.querySelectorAll(`.mobile-more-link[data-page="${sectionId}"]`).forEach(el => el.classList.add('active'));
+    syncDesktopMoreActive(sectionId);
 
     const moreBtn = document.getElementById('mobile-more-btn');
-    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook')) {
+    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook' || sectionId === 'exam-preparation')) {
         moreBtn.classList.add('active');
     }
 
@@ -532,6 +551,8 @@ function showSection(sectionId) {
         loadDiscovery();
     } else if (sectionId === 'textbook') {
         loadTextbookSection();
+    } else if (sectionId === 'exam-preparation') {
+        void window.examPreparation?.open();
     } else if (sectionId === 'progress') {
         if (_isSectionFresh('progress')) { _restoreScrollPos('progress'); return; }
         loadProgress();

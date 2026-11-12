@@ -1,0 +1,800 @@
+{
+  "id": "builtin-shanghai-grade4-u1-u4",
+  "name": "上海四年级上册英语 · U1-U4 期中自测（含听力）",
+  "edition": "上海教育出版社五·四学制四年级上册；教材版本按手册所述“2026年7月第一版”整理。",
+  "description": "26 道固定题：10 道听力选择、8 道语法填空、4 道句型转换和 4 道邀请卡阅读选择，建议 30 分钟完成。",
+  "time_minutes": 30,
+  "source_file": "shanghai-grade4-u1-u4.pdf",
+  "source_note": "原 16 道笔试题依据期中复习手册整理，邀请卡阅读改编为单选；新增 10 道原创听力练习，供 U1-U4 复习自测使用。",
+  "knowledge": {
+    "title": "上海四年级上册英语 U1-U4 知识点梳理",
+    "intro": "依据复习手册第 2-6 页整理。先复习词汇与核心结构，再用自己的话介绍学校、同学、动物和生日活动。词汇表为重点项，完整默写范围以课本和老师要求为准。",
+    "sections": [
+      {
+        "id": "u1",
+        "title": "U1 学校 · My school",
+        "blocks": [
+          {
+            "title": "重点词汇",
+            "items": [
+              "classroom 教室；hall 礼堂、 大厅；computer room 电脑房；school building 校舍。",
+              "sports field 运动场；library 图书馆；art room 美术室；reading room 阅览室。",
+              "ground floor 底层；bamboo 竹子。"
+            ]
+          },
+          {
+            "title": "位置与交际表达",
+            "items": [
+              "in the library / in the reading room：在图书馆 / 阅览室。",
+              "on the sports field：在运动场；on the ground floor：在底层。",
+              "Where is James? - He is in the reading room.",
+              "Shall we meet in the computer room? 我们在电脑房见面好吗？",
+              "Let's meet there. 我们在那里见面吧。"
+            ]
+          },
+          {
+            "title": "核心语法：have no 与 not have any",
+            "items": [
+              "The reading room has no computers. = The reading room doesn't have any computers.",
+              "These buildings have no walls. = These buildings don't have any walls.",
+              "he / she / it 等第三人称单数用 has / doesn't have；其他人称用 have / don't have。",
+              "doesn't 后的 have 保持动词原形。"
+            ]
+          },
+          {
+            "title": "阅读与表达",
+            "items": [
+              "A bamboo school：抓住“竹子建造、像大蘑菇、没有墙”三个特点。",
+              "look like 看起来像；be made of bamboo 用竹子制成。",
+              "介绍校园场所时按“喜欢哪里 → 在哪里 → 有什么特点 → 在那里做什么”的顺序。",
+              "I like the library in my school. It is on the ground floor. It has many books. I read books there."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u2",
+        "title": "U2 同学 · My classmates",
+        "blocks": [
+          {
+            "title": "重点词汇与短语",
+            "items": [
+              "lovely 可爱的；great 很棒的；interesting 有趣的；friendly 友好的。",
+              "different 不同的；polite 有礼貌的；helpful 乐于助人的；classmate 同学。",
+              "tell stories 讲故事；clean the blackboard 擦黑板；learn English 学英语。"
+            ]
+          },
+          {
+            "title": "三个常用结构",
+            "items": [
+              "help + 人 + 动词原形：He helps me learn English.",
+              "be good at + 名词 / 动词-ing：She is good at drawing.",
+              "want to be + 职业：He wants to be a painter."
+            ]
+          },
+          {
+            "title": "核心语法：第三人称单数",
+            "items": [
+              "I / we / they：help、tell、want、have。",
+              "he / she：helps、tells、wants、has。",
+              "He often helps other students learn English. helps 随 he 变化；learn 在“帮助某人做某事”的结构中保持原形。",
+              "Does he help his brother? - Yes, he does. 一般疑问句中，Does 后使用动词原形。"
+            ]
+          },
+          {
+            "title": "阅读与人物介绍",
+            "items": [
+              "Who's he?：结合人物品质和具体行为来判断人物。",
+              "You can do it!：理解 James 遇到的困难，以及同学怎样帮助、鼓励他。",
+              "介绍人物时按“性格 → 经常做什么 → 擅长什么 → 理想职业”的顺序。",
+              "Lily is friendly and helpful. She often helps me learn English. She is good at drawing. She wants to be a painter."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u3",
+        "title": "U3 动物及其住所 · Animals and their homes",
+        "blocks": [
+          {
+            "title": "重点词汇与短语",
+            "items": [
+              "panda 熊猫；monkey 猴子；elephant 大象；baby elephant 小象；polar bear 北极熊。",
+              "hometown 家乡；family 家庭；river 河流；trunk 象鼻；the North Pole 北极。",
+              "keep warm 保暖；live in 住在；live near 住在附近；be kind to 友善地对待。"
+            ]
+          },
+          {
+            "title": "核心语法：现在进行时",
+            "items": [
+              "结构：am / is / are + 动词-ing，描述正在发生的动作。",
+              "I 用 am；he / she / it 用 is；we / you / they 用 are。",
+              "The baby elephant is swimming in the river. The monkeys are playing in the trees.",
+              "否定时在 be 后加 not：The monkeys aren't sleeping.",
+              "一般疑问句把 be 放在主语前：Is it swimming? - Yes, it is.",
+              "对动作提问：What is it doing? / What are they doing?"
+            ]
+          },
+          {
+            "title": "动词-ing 的变化",
+            "items": [
+              "直接加 -ing：play → playing；read → reading。",
+              "去掉不发音的 e 再加 -ing：write → writing；make → making。",
+              "部分词双写末尾辅音字母再加 -ing：swim → swimming；run → running。"
+            ]
+          },
+          {
+            "title": "生活习性与眼前动作",
+            "items": [
+              "Elephants live near water. 描述生活习性。",
+              "An elephant is drinking water now. 描述此刻正在发生的动作。",
+              "阅读 Polar bears 时关注住所、外形、食物、能力，以及冰雪融化带来的影响。",
+              "动物介绍顺序：名称 → 住所 → 外形 → 食物 → 能力。",
+              "Polar bears live near the North Pole. They have thick fur. They eat fish and seals. They can swim well."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u4",
+        "title": "U4 生日 · Our birthday",
+        "blocks": [
+          {
+            "title": "重点词汇与短语",
+            "items": [
+              "invitation 请柬；party 聚会；activity 活动；letter 信；noodles 面条；egg 鸡蛋。",
+              "share a cake 分享蛋糕；a bowl of noodles 一碗面条；take a family photo 拍全家福。",
+              "invite...to... 邀请……参加……；come true 实现；on my birthday 在我生日那天。"
+            ]
+          },
+          {
+            "title": "核心语法：介绍传统",
+            "items": [
+              "It's a tradition to + 动词原形，表示“做某事是一种传统”。",
+              "It's a tradition to eat a bowl of noodles on my birthday.",
+              "It's a tradition to take a family photo on my birthday.",
+              "Shall we + 动词原形...?；want to + 动词原形。",
+              "Thank you for your help. 谢谢你的帮助。",
+              "注意介词搭配：on my birthday；at the birthday party。"
+            ]
+          },
+          {
+            "title": "邀请卡阅读：找齐五类信息",
+            "items": [
+              "对象：谁邀请谁？",
+              "Time：几点、哪一天？",
+              "Place：在哪里？",
+              "Activities：做什么？",
+              "Things to bring：需要带什么？"
+            ]
+          },
+          {
+            "title": "阅读与表达感谢",
+            "items": [
+              "Letters of love：理解父母的鼓励和孩子的感谢。",
+              "A bowl of birthday noodles：理解生日习俗中的亲情。",
+              "说生日计划时，要交代清楚地点、活动，以及想为家人做什么。",
+              "Thank you for your love. You help me every day. I love you!"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "check",
+        "title": "易错点速查与复习方法",
+        "blocks": [
+          {
+            "title": "语法与词形检查",
+            "items": [
+              "doesn't 后用动词原形：doesn't have，不是 doesn't has。",
+              "no 与 not...any 可以表示相同意思：has no books = doesn't have any books。",
+              "一般现在时注意主语与动词一致；help + 人后面的动作保持原形。",
+              "be good at 后接名词或动词-ing；现在进行时同时检查 be 动词和动词-ing。",
+              "注意 swimming、running、writing、making 的拼写。",
+              "Shall we 和本册所学的 to 结构后接动词原形。"
+            ]
+          },
+          {
+            "title": "搭配与代词检查",
+            "items": [
+              "位置：in the room；on the ground floor。",
+              "生日与聚会：on my birthday；at the party。",
+              "parents' letters 表示“父母的信”，注意所有格的撇号位置。",
+              "主格、宾格和物主代词要区分：He helps me. / This is his book."
+            ]
+          },
+          {
+            "title": "三轮复习",
+            "items": [
+              "第一轮：读词汇和短语，再遮住英文，按中文默写。",
+              "第二轮：复习核心语法，口头造句，再做句型转换。",
+              "第三轮：复述课文，每个主题说或写 4-5 句，再独立完成自测。",
+              "语音请配合课本 Sound 栏和音频逐词跟读；注意手册提示的 U1 的 w 与 U3 的 v 发音区别。"
+            ]
+          },
+          {
+            "title": "作答后的四项检查",
+            "items": [
+              "找主语：是单数还是复数？",
+              "找时间：是平时如此，还是正在发生？",
+              "看结构：助动词、be 动词、动词形式是否匹配？",
+              "查书写：句首和人名是否大写、拼写和标点是否正确、单词间是否留空、句子意思是否完整？"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "listening",
+        "title": "听力复习与答题方法",
+        "blocks": [
+          {
+            "title": "四个单元分别听什么",
+            "items": [
+              "U1：听清学校场所与位置；注意 in / on，以及 has no 表示没有。",
+              "U2：听清人物的品质，以及谁帮助谁、帮助做什么；不要把人名和行为配错。",
+              "U3：先判断在说哪种动物，再听正在做什么或生活在哪里；注意 is / are 与动词-ing。",
+              "U4：邀请卡信息要分清日期或星期、钟点、地点、活动和需要带的物品；不要把聚会活动当成要带的东西。"
+            ]
+          },
+          {
+            "title": "先看题，再听两遍",
+            "items": [
+              "先读问题与选项，明确本题在问地点、人物特点、动作、住所、时间还是物品。",
+              "本卷每段录音读两遍，中间间隔约两秒；在线复习可重复播放。",
+              "第一遍抓主要信息，第二遍核对细节；特别留意 no / not、不同人物和上午或晚上。",
+              "语音跟读仍以课本 Sound 栏与老师要求为准，本套听力重点训练信息提取。"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "questions": [
+    {
+      "id": "l01",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 James 现在所在的地方。",
+      "english": "Listening 1",
+      "chinese": "听录音，选择 James 现在所在的地方。",
+      "options": [
+        {
+          "id": "a",
+          "text": "The computer room."
+        },
+        {
+          "id": "b",
+          "text": "The library."
+        },
+        {
+          "id": "c",
+          "text": "The reading room."
+        },
+        {
+          "id": "d",
+          "text": "The hall."
+        }
+      ],
+      "answer": "c",
+      "explanation": "James 在阅览室读故事；电脑房里的是他的朋友。",
+      "listening_text": "James is in the reading room. He is reading a story there. His friend is in the computer room.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-01.wav"
+    },
+    {
+      "id": "l02",
+      "type": "listening_choice",
+      "prompt": "听录音，选择阅览室里没有的东西。",
+      "english": "Listening 2",
+      "chinese": "听录音，选择阅览室里没有的东西。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Books."
+        },
+        {
+          "id": "b",
+          "text": "Tables."
+        },
+        {
+          "id": "c",
+          "text": "Chairs."
+        },
+        {
+          "id": "d",
+          "text": "Computers."
+        }
+      ],
+      "answer": "d",
+      "explanation": "录音明确说阅览室有书、桌子和椅子，没有电脑。",
+      "listening_text": "Our reading room has many books, tables and chairs. It has no computers.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-02.wav"
+    },
+    {
+      "id": "l03",
+      "type": "listening_choice",
+      "prompt": "听录音，选择录音中描述 Ben 的词。",
+      "english": "Listening 3",
+      "chinese": "听录音，选择录音中描述 Ben 的词。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Helpful."
+        },
+        {
+          "id": "b",
+          "text": "Polite."
+        },
+        {
+          "id": "c",
+          "text": "Quiet."
+        },
+        {
+          "id": "d",
+          "text": "Shy."
+        }
+      ],
+      "answer": "a",
+      "explanation": "录音用 helpful 介绍 Ben，并说他经常帮助别人学英语。",
+      "listening_text": "Ben is helpful. He often helps me learn English. He helps other children, too.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-03.wav"
+    },
+    {
+      "id": "l04",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Lily 帮助说话者做的事。",
+      "english": "Listening 4",
+      "chinese": "听录音，选择 Lily 帮助说话者做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Clean the classroom."
+        },
+        {
+          "id": "b",
+          "text": "Learn English."
+        },
+        {
+          "id": "c",
+          "text": "Play football."
+        },
+        {
+          "id": "d",
+          "text": "Draw pictures."
+        }
+      ],
+      "answer": "b",
+      "explanation": "Lily 帮助说话者学英语、读生词，因此选择 Learn English。",
+      "listening_text": "Lily often helps me learn English. She helps me read new words. I say, \"Thank you for your help, Lily.\"",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-04.wav"
+    },
+    {
+      "id": "l05",
+      "type": "listening_choice",
+      "prompt": "听录音，选择小象正在做的事。",
+      "english": "Listening 5",
+      "chinese": "听录音，选择小象正在做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Sleeping."
+        },
+        {
+          "id": "b",
+          "text": "Walking."
+        },
+        {
+          "id": "c",
+          "text": "Swimming."
+        },
+        {
+          "id": "d",
+          "text": "Drinking water."
+        }
+      ],
+      "answer": "c",
+      "explanation": "小象正在河里游泳，不是在睡觉。",
+      "listening_text": "Look at the baby elephant. It is swimming in the river. It is not sleeping.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-05.wav"
+    },
+    {
+      "id": "l06",
+      "type": "listening_choice",
+      "prompt": "听录音，选择猴子正在做的事。",
+      "english": "Listening 6",
+      "chinese": "听录音，选择猴子正在做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Playing in the trees."
+        },
+        {
+          "id": "b",
+          "text": "Drinking water."
+        },
+        {
+          "id": "c",
+          "text": "Sleeping in the trees."
+        },
+        {
+          "id": "d",
+          "text": "Swimming in the river."
+        }
+      ],
+      "answer": "a",
+      "explanation": "猴子正在树上玩耍；喝水的是大象，不要混淆动物与动作。",
+      "listening_text": "The monkeys are playing in the trees. Two elephants are drinking water near the river.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-06.wav"
+    },
+    {
+      "id": "l07",
+      "type": "listening_choice",
+      "prompt": "听录音，选择北极熊的住所。",
+      "english": "Listening 7",
+      "chinese": "听录音，选择北极熊的住所。",
+      "options": [
+        {
+          "id": "a",
+          "text": "In a bamboo school."
+        },
+        {
+          "id": "b",
+          "text": "Near a hot desert."
+        },
+        {
+          "id": "c",
+          "text": "In the school library."
+        },
+        {
+          "id": "d",
+          "text": "Near the North Pole."
+        }
+      ],
+      "answer": "d",
+      "explanation": "录音说北极熊生活在北极附近，厚厚的毛可以保暖。",
+      "listening_text": "Polar bears live near the North Pole. They have thick fur to keep warm.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-07.wav"
+    },
+    {
+      "id": "l08",
+      "type": "listening_choice",
+      "prompt": "听录音，选择生日聚会的时间。",
+      "english": "Listening 8",
+      "chinese": "听录音，选择生日聚会的时间。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Nine in the evening on Sunday."
+        },
+        {
+          "id": "b",
+          "text": "Nine in the morning on Sunday."
+        },
+        {
+          "id": "c",
+          "text": "Eight in the morning on Sunday."
+        },
+        {
+          "id": "d",
+          "text": "Nine in the morning on Saturday."
+        }
+      ],
+      "answer": "b",
+      "explanation": "聚会在星期日早上九点开始，注意钟点、上午或晚上以及星期。",
+      "listening_text": "Please come to our birthday party in the hall. It starts at nine o'clock on Sunday morning.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-08.wav"
+    },
+    {
+      "id": "l09",
+      "type": "listening_choice",
+      "prompt": "听录音，选择录音中介绍的生日传统。",
+      "english": "Listening 9",
+      "chinese": "听录音，选择录音中介绍的生日传统。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Taking a family photo."
+        },
+        {
+          "id": "b",
+          "text": "Sharing a birthday cake."
+        },
+        {
+          "id": "c",
+          "text": "Eating a bowl of noodles."
+        },
+        {
+          "id": "d",
+          "text": "Writing a letter."
+        }
+      ],
+      "answer": "c",
+      "explanation": "录音介绍的生日传统是和家人一起吃一碗面条。",
+      "listening_text": "On my birthday, it is a tradition to eat a bowl of noodles. I have the noodles with my family. I like this tradition.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-09.wav"
+    },
+    {
+      "id": "l10",
+      "type": "listening_choice",
+      "prompt": "听录音，选择参加聚会需要带的东西。",
+      "english": "Listening 10",
+      "chinese": "听录音，选择参加聚会需要带的东西。",
+      "options": [
+        {
+          "id": "a",
+          "text": "A birthday card."
+        },
+        {
+          "id": "b",
+          "text": "A cake."
+        },
+        {
+          "id": "c",
+          "text": "A bowl of noodles."
+        },
+        {
+          "id": "d",
+          "text": "Some books."
+        }
+      ],
+      "answer": "a",
+      "explanation": "录音要求带一张生日贺卡；分享蛋糕和拍照是聚会活动。",
+      "listening_text": "Please bring a birthday card to the party. We can share a cake and take photos together.",
+      "audio_file": "shanghai-grade4-midterm-normal/listen-10.wav"
+    },
+    {
+      "id": "q01",
+      "type": "fill_blank",
+      "prompt": "The reading room ________ (have) no computers.\n按提示填写正确形式。",
+      "english": "Reading room",
+      "chinese": "按提示填写正确形式",
+      "answer": "has",
+      "accepted_answers": [
+        "has"
+      ],
+      "explanation": "主语 the reading room 是第三人称单数，表示“有”时用 has。"
+    },
+    {
+      "id": "q02",
+      "type": "fill_blank",
+      "prompt": "He often ________ (help) me clean the classroom.\n按提示填写正确形式。",
+      "english": "Helping a classmate",
+      "chinese": "按提示填写正确形式",
+      "answer": "helps",
+      "accepted_answers": [
+        "helps"
+      ],
+      "explanation": "often 表示经常发生的行为；主语 he 是第三人称单数，所以 help 要加 -s。"
+    },
+    {
+      "id": "q03",
+      "type": "fill_blank",
+      "prompt": "She is good at ________ (draw).\n按提示填写正确形式。",
+      "english": "Being good at something",
+      "chinese": "按提示填写正确形式",
+      "answer": "drawing",
+      "accepted_answers": [
+        "drawing"
+      ],
+      "explanation": "be good at 后接名词或动词-ing，因此 draw 要写成 drawing。"
+    },
+    {
+      "id": "q04",
+      "type": "fill_blank",
+      "prompt": "The children ________ (be) reading now.\n按提示填写正确形式。",
+      "english": "Reading now",
+      "chinese": "按提示填写正确形式",
+      "answer": "are",
+      "accepted_answers": [
+        "are"
+      ],
+      "explanation": "children 是复数；现在进行时的结构是 be 动词加动词-ing，这里用 are。"
+    },
+    {
+      "id": "q05",
+      "type": "fill_blank",
+      "prompt": "Look! The baby elephant ________ (swim) in the river.\n按提示填写正确形式。",
+      "english": "A baby elephant",
+      "chinese": "按提示填写正确形式",
+      "answer": "is swimming",
+      "accepted_answers": [
+        "is swimming"
+      ],
+      "explanation": "Look! 提示眼前正在发生的动作；主语是单数，用 is swimming。swim 变为 swimming 时要双写 m。"
+    },
+    {
+      "id": "q06",
+      "type": "fill_blank",
+      "prompt": "It's a tradition ________ (eat) noodles on my birthday.\n按提示填写正确形式。",
+      "english": "Birthday tradition",
+      "chinese": "按提示填写正确形式",
+      "answer": "to eat",
+      "accepted_answers": [
+        "to eat"
+      ],
+      "explanation": "固定结构：It's a tradition to + 动词原形。"
+    },
+    {
+      "id": "q07",
+      "type": "fill_blank",
+      "prompt": "We share a cake ________ my birthday.\n从 in / on / at 中选择一个词填空。",
+      "english": "Birthday preposition",
+      "chinese": "按提示填写正确形式",
+      "answer": "on",
+      "accepted_answers": [
+        "on"
+      ],
+      "explanation": "固定搭配是 on my birthday，表示“在我生日那天”。"
+    },
+    {
+      "id": "q08",
+      "type": "fill_blank",
+      "prompt": "Shall we ________ (meet) in the library?\n按提示填写正确形式。",
+      "english": "Making a suggestion",
+      "chinese": "按提示填写正确形式",
+      "answer": "meet",
+      "accepted_answers": [
+        "meet"
+      ],
+      "explanation": "Shall we 后接动词原形，所以用 meet。"
+    },
+    {
+      "id": "q09",
+      "type": "rewrite",
+      "prompt": "The building has no walls.\n改为含 any 的同义句，请填写完整英文句子。",
+      "english": "Sentence transformation 1",
+      "chinese": "按要求改写句子",
+      "answer": "The building doesn't have any walls.",
+      "accepted_answers": [
+        "The building doesn't have any walls.",
+        "The building does not have any walls."
+      ],
+      "explanation": "has no 与 doesn't have any 含义相同；doesn't 后用动词原形 have。"
+    },
+    {
+      "id": "q10",
+      "type": "rewrite",
+      "prompt": "He helps his brother learn English.\n改为一般疑问句，请填写完整英文句子。",
+      "english": "Sentence transformation 2",
+      "chinese": "按要求改写句子",
+      "answer": "Does he help his brother learn English?",
+      "accepted_answers": [
+        "Does he help his brother learn English?"
+      ],
+      "explanation": "主语 he 对应助动词 Does；Does 后的 helps 要还原为 help，learn 保持原形。"
+    },
+    {
+      "id": "q11",
+      "type": "rewrite",
+      "prompt": "The monkeys are playing in the trees.\n改为否定句，请填写完整英文句子。",
+      "english": "Sentence transformation 3",
+      "chinese": "按要求改写句子",
+      "answer": "The monkeys aren't playing in the trees.",
+      "accepted_answers": [
+        "The monkeys aren't playing in the trees.",
+        "The monkeys are not playing in the trees."
+      ],
+      "explanation": "现在进行时的否定形式是在 be 动词后加 not；are not 可以缩写为 aren't。"
+    },
+    {
+      "id": "q12",
+      "type": "rewrite",
+      "prompt": "The baby elephant is swimming.\n对“正在做什么”提问，请填写完整英文问句。",
+      "english": "Sentence transformation 4",
+      "chinese": "按要求改写句子",
+      "answer": "What is the baby elephant doing?",
+      "accepted_answers": [
+        "What is the baby elephant doing?",
+        "What's the baby elephant doing?"
+      ],
+      "explanation": "对正在发生的动作提问，用 What + be 动词 + 主语 + doing?；the baby elephant 是单数，用 is。"
+    },
+    {
+      "id": "q13",
+      "type": "reading_choice",
+      "prompt": "阅读邀请卡，选择正确答案。\n\nDear friends,\nPlease come to our birthday party.\nTime: 9:00 a.m., 8 November\nPlace: Hall, School Building 2\nActivities: Watch a play; share a cake.\nPlease bring a birthday card.\nClass 4A\n\n聚会在什么时间举行？",
+      "english": "Party time",
+      "chinese": "邀请卡阅读",
+      "options": [
+        {
+          "id": "a",
+          "text": "9:00 p.m., 8 November"
+        },
+        {
+          "id": "b",
+          "text": "9:00 a.m., 8 November"
+        },
+        {
+          "id": "c",
+          "text": "9:00 a.m., 18 November"
+        },
+        {
+          "id": "d",
+          "text": "8:00 a.m., 9 November"
+        }
+      ],
+      "answer": "b",
+      "explanation": "邀请卡的 Time 一栏写着 9:00 a.m., 8 November，即 11 月 8 日上午 9 点。"
+    },
+    {
+      "id": "q14",
+      "type": "reading_choice",
+      "prompt": "阅读邀请卡，选择正确答案。\n\nDear friends,\nPlease come to our birthday party.\nTime: 9:00 a.m., 8 November\nPlace: Hall, School Building 2\nActivities: Watch a play; share a cake.\nPlease bring a birthday card.\nClass 4A\n\n聚会在什么地点举行？",
+      "english": "Party place",
+      "chinese": "邀请卡阅读",
+      "options": [
+        {
+          "id": "a",
+          "text": "The library in School Building 2"
+        },
+        {
+          "id": "b",
+          "text": "The hall in School Building 1"
+        },
+        {
+          "id": "c",
+          "text": "The computer room in School Building 2"
+        },
+        {
+          "id": "d",
+          "text": "The hall in School Building 2"
+        }
+      ],
+      "answer": "d",
+      "explanation": "邀请卡的 Place 一栏是 Hall, School Building 2，即 2 号校舍的礼堂。"
+    },
+    {
+      "id": "q15",
+      "type": "reading_choice",
+      "prompt": "阅读邀请卡，选择正确答案。\n\nDear friends,\nPlease come to our birthday party.\nTime: 9:00 a.m., 8 November\nPlace: Hall, School Building 2\nActivities: Watch a play; share a cake.\nPlease bring a birthday card.\nClass 4A\n\n下面哪一项是邀请卡中的聚会活动？",
+      "english": "Party activity",
+      "chinese": "邀请卡阅读",
+      "options": [
+        {
+          "id": "a",
+          "text": "Watch a play."
+        },
+        {
+          "id": "b",
+          "text": "Read books in the library."
+        },
+        {
+          "id": "c",
+          "text": "Go to the zoo."
+        },
+        {
+          "id": "d",
+          "text": "Play on the sports field."
+        }
+      ],
+      "answer": "a",
+      "explanation": "Activities 一栏列出 Watch a play 和 share a cake；本题选项中只有 Watch a play 属于邀请卡中的活动。"
+    },
+    {
+      "id": "q16",
+      "type": "reading_choice",
+      "prompt": "阅读邀请卡，选择正确答案。\n\nDear friends,\nPlease come to our birthday party.\nTime: 9:00 a.m., 8 November\nPlace: Hall, School Building 2\nActivities: Watch a play; share a cake.\nPlease bring a birthday card.\nClass 4A\n\n参加聚会需要带什么？",
+      "english": "Things to bring",
+      "chinese": "邀请卡阅读",
+      "options": [
+        {
+          "id": "a",
+          "text": "A family photo."
+        },
+        {
+          "id": "b",
+          "text": "A book."
+        },
+        {
+          "id": "c",
+          "text": "A birthday card."
+        },
+        {
+          "id": "d",
+          "text": "A bowl of noodles."
+        }
+      ],
+      "answer": "c",
+      "explanation": "邀请卡写着 Please bring a birthday card.，需要带一张生日贺卡。"
+    }
+  ],
+  "exam_file": "shanghai-grade4-u1-u4-midterm-listening.pdf"
+}

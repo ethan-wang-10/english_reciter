@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-10-17T07:32:20.680447+00:00",
+  "expires_at": "2026-10-18T07:32:20.680447+00:00",
+  "instructions": "",
+  "items": [],
+  "job_id": "4b7bb6226c3547918b466cc1f743f32c",
+  "kind": "context_blind",
+  "request_id": "global-audit-20261017-context-b05-reclaim",
+  "status": "completed",
+  "versions": {
+    "audit": 5,
+    "generation_prompt": 7
+  },
+  "worker_id": "codex-context-independent-20261017-b05"
+}

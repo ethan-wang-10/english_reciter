@@ -1,0 +1,5 @@
+{
+  "details": null,
+  "error": "job is no longer active; get a current claim",
+  "http_status": 409
+}

@@ -20,6 +20,7 @@ GENERATION_FIELDS = {
     "english", "recognition_distractors", "recognition_explanation_zh",
     "context_sentence", "context_translation_zh", "context_distractors", "context_explanation_zh",
 }
+REVISION_KINDS = {"revision", "legacy_revision"}
 
 
 class AuthoringError(Exception):
@@ -86,6 +87,67 @@ def _has_raw(value) -> bool:
         _has_raw(child) for child in value.values())
 
 
+def _legacy_upgradeable(record, source: Optional[dict] = None) -> bool:
+    return bool(isinstance(record, dict) and not record.get("withdrawn_at")
+                and (not questions._is_approved_record(record)
+                     or (source is not None and not questions.record_matches_source(record, source))))
+
+
+def _retained_manuscript(source: dict, record: dict) -> Optional[dict]:
+    if questions.normalize_word(record.get("word_key")) != source["english"]:
+        return None
+    raw = {"english": source["english"]}
+    for kind in questions.QUESTION_TYPES:
+        question = record.get(kind)
+        if not isinstance(question, dict) or not isinstance(question.get("options"), list):
+            return None
+        options = question["options"]
+        if (len(options) != 4 or any(not isinstance(row, dict) or not isinstance(row.get("text"), str)
+                                    or not isinstance(row.get("id"), str) for row in options)
+                or len({row["id"] for row in options}) != 4):
+            return None
+        answer = next((row for row in options if row.get("id") == question.get("answer_option_id")), None)
+        if not answer:
+            return None
+        raw[f"{kind}_distractors"] = [row["text"] for row in options if row is not answer]
+        raw[f"{kind}_explanation_zh"] = question.get("explanation_zh")
+        if kind == "context":
+            prompt = question.get("prompt")
+            if not isinstance(prompt, str) or prompt.count("____") != 1:
+                return None
+            raw["context_sentence"] = prompt.replace("____", answer["text"])
+            raw["context_translation_zh"] = question.get("translation_zh")
+    return raw
+
+
+def _check_legacy_snapshot(bank: dict, key: str, expected_hash: str, source: dict) -> None:
+    original = bank["questions"].get(key)
+    if not _legacy_upgradeable(original, source) or _digest(original) != expected_hash:
+        raise AuthoringError("retained legacy question changed; overwrite refused", 409)
+
+
+def _reserved_revision_records(item: dict, job: dict) -> dict:
+    previous = {name: value for name, value in item["previous_records"].items() if name != "questions"}
+    owned = _revision_owned(previous, job["job_id"])
+    if job["kind"] == "legacy_revision" and not owned:
+        # Block model-backed imports during authoring without touching the old publication.
+        owned["candidates"] = {
+            "pool": {
+                "source": copy.deepcopy(item["source"]), "raw": {}, "record": {},
+                "generation_prompt_version": questions.GENERATION_PROMPT_VERSION,
+                "audit_provider": "external",
+                "external_authoring": {
+                    "state": "claimed", "generator_id": job["worker_id"],
+                    "generation_job_id": job["job_id"], "legacy_question_hash": item["legacy_question_hash"],
+                    "audits": {}, "receipts": {},
+                },
+            },
+            "record": {}, "audit_provider": "external", "revision_job_id": job["job_id"],
+            "created_at": job["created_at"],
+        }
+    return owned
+
+
 class QuestionAuthoringService:
     def __init__(self, sources: Callable[[str], list[dict]], source_lookup: Callable[[str], Optional[dict]]):
         self.sources = sources
@@ -131,6 +193,8 @@ class QuestionAuthoringService:
             if len(set(normalized)) != len(normalized):
                 raise AuthoringError("words must contain unique normalized keys")
             params["words"] = sorted(normalized)
+        if kind == "legacy_revision" and "words" not in params:
+            raise AuthoringError("legacy_revision requires explicit words")
         return params
 
     @staticmethod
@@ -169,11 +233,12 @@ class QuestionAuthoringService:
     def _eligible(self, params: dict, now: datetime, count: int) -> list[dict]:
         kind, worker = params["kind"], params["worker_id"]
         active = self._jobs().active_words(now=now, kind=kind)
-        if kind == "revision":
+        if kind in REVISION_KINDS:
             for other in JOB_KINDS:
                 active.update(self._jobs().active_words(now=now, kind=other))
         else:
-            active.update(self._jobs().active_words(now=now, kind="revision"))
+            for revision_kind in REVISION_KINDS:
+                active.update(self._jobs().active_words(now=now, kind=revision_kind))
         sources = self.sources(params["level"])
         if "words" in params:
             wanted = set(params["words"])
@@ -197,6 +262,21 @@ class QuestionAuthoringService:
                     ):
                         continue
                     selected.append({"english": key, "source": source})
+                elif kind == "legacy_revision":
+                    published = bank["questions"].get(key)
+                    if not _legacy_upgradeable(published, source):
+                        continue
+                    pool = _pool(candidate)
+                    if (pool and metadata.get("state") == "generated"
+                            and not candidate.get("manual_review_required")
+                            and not candidate.get("revision_job_id")
+                            and metadata.get("legacy_question_hash") == _digest(published)
+                            and questions.source_content_hash(pool["source"]) == questions.source_content_hash(source)):
+                        continue
+                    records = _revision_records(bank, key)
+                    records["questions"] = copy.deepcopy(published)
+                    selected.append({"english": key, "source": source, "previous_records": records,
+                                     "legacy_question_hash": _digest(published), "mode": "repair"})
                 elif kind == "revision":
                     records = _revision_records(bank, key)
                     if key in bank["questions"] or not records:
@@ -211,6 +291,14 @@ class QuestionAuthoringService:
                             or metadata.get("state") != "generated"):
                         continue
                     if questions.source_content_hash(pool["source"]) != questions.source_content_hash(source):
+                        continue
+                    legacy_hash = metadata.get("legacy_question_hash")
+                    if legacy_hash:
+                        try:
+                            _check_legacy_snapshot(bank, key, legacy_hash, source)
+                        except AuthoringError:
+                            continue
+                    elif key in bank["questions"]:
                         continue
                     prior = self._prior(candidate)
                     if kind in prior or not self._reviewer_allowed(candidate, kind, worker):
@@ -237,13 +325,16 @@ class QuestionAuthoringService:
         result = {key: job[key] for key in (
             "job_id", "kind", "worker_id", "request_id", "created_at", "expires_at", "status",
         )}
-        if kind in {"generation", "revision"}:
+        if kind in {"generation", *REVISION_KINDS}:
             result["instructions"] = questions.build_generation_prompt([item["source"] for item in job["items"]])
             result["items"] = [{"item_id": item["item_id"], "source": item["source"]} for item in job["items"]]
-            if kind == "revision":
+            if kind in REVISION_KINDS:
                 result["instructions"] += "\nRepair existing raw content when mode is repair; retain its useful material and correct errors. Generate only when mode is generate. All independent audits will restart."
                 for visible, item in zip(result["items"], job["items"]):
                     visible.update(previous_records=item["previous_records"], mode=item["mode"])
+                    if kind == "legacy_revision":
+                        visible["retained_manuscript"] = _retained_manuscript(item["source"], item["previous_records"]["questions"])
+                        visible["legacy_question_hash"] = item["legacy_question_hash"]
         else:
             result["instructions"] = job["items"][0]["protocol"]["instructions"] if job["items"] else ""
             result["items"] = [{"item_id": item["item_id"], **item["protocol"]["task"]} for item in job["items"]]
@@ -266,24 +357,28 @@ class QuestionAuthoringService:
         visible = items[:params["limit"]]
         return {
             "kind": params["kind"], "has_more": len(items) > len(visible),
-            "items": ([{key: value for key, value in item.items() if key != "english"} for item in visible] if params["kind"] in {"generation", "revision"}
+            "items": ([{key: value for key, value in item.items() if key != "english"} for item in visible] if params["kind"] in {"generation", *REVISION_KINDS}
                       else [item["protocol"]["task"] for item in visible]),
         }
 
     def _reserve(self, job: dict) -> None:
-        if job["kind"] == "revision" and job["items"] and job["status"] == "active":
+        if job["kind"] in REVISION_KINDS and job["items"] and job["status"] == "active":
             # The immutable job items are the durable archive, committed before ownership changes.
             with self._bank([item["english"] for item in job["items"]]) as bank:
                 for item in job["items"]:
                     key = item["english"]
-                    previous = item["previous_records"]
-                    owned = _revision_owned(previous, job["job_id"])
+                    previous = {name: value for name, value in item["previous_records"].items() if name != "questions"}
+                    owned = _reserved_revision_records(item, job)
                     current = _revision_records(bank, key)
                     if any(_meta(value).get("generation_job_id") == job["job_id"]
                            and _meta(value).get("state") in {"generated", "manual"}
                            for value in current.values()):
                         continue
-                    if key in bank["questions"] or current not in (previous, owned):
+                    if job["kind"] == "legacy_revision":
+                        _check_legacy_snapshot(bank, key, item["legacy_question_hash"], item["source"])
+                    elif key in bank["questions"]:
+                        raise AuthoringError("question state changed before revision reservation", 409)
+                    if current not in (previous, owned):
                         raise AuthoringError("question state changed before revision reservation", 409)
                     for name, value in owned.items():
                         bank[name][key] = value
@@ -439,9 +534,12 @@ class QuestionAuthoringService:
                             raise AuthoringError("wordbank source changed; upload was not applied", 409)
                         candidate = bank["candidates"].get(key)
                         pool = _pool(candidate)
-                        if job["kind"] == "revision":
-                            if (key in bank["questions"] or _revision_records(bank, key) !=
-                                    _revision_owned(item["previous_records"], job_id)):
+                        if job["kind"] in REVISION_KINDS:
+                            if job["kind"] == "legacy_revision":
+                                _check_legacy_snapshot(bank, key, item["legacy_question_hash"], source)
+                            elif key in bank["questions"]:
+                                raise AuthoringError("revision source records changed; overwrite refused", 409)
+                            if _revision_records(bank, key) != _reserved_revision_records(item, job):
                                 raise AuthoringError("revision source records changed; overwrite refused", 409)
                             authors = {job["worker_id"]}
                             for old in item["previous_records"].values():
@@ -451,14 +549,20 @@ class QuestionAuthoringService:
                             metadata = {"state": "claimed", "generator_id": job["worker_id"],
                                         "generation_job_id": job_id, "author_ids": sorted(authors),
                                         "revision_archive_job_id": job_id, "audits": {}, "receipts": {}}
+                            if job["kind"] == "legacy_revision":
+                                metadata["legacy_question_hash"] = item["legacy_question_hash"]
                         elif not pool:
                             raise AuthoringError("candidate no longer belongs to external authoring", 409)
                         else:
                             if candidate.get("revision_job_id"):
                                 raise AuthoringError("candidate is reserved for revision", 409)
                             metadata = copy.deepcopy(_meta(candidate))
+                            if metadata.get("legacy_question_hash"):
+                                _check_legacy_snapshot(bank, key, metadata["legacy_question_hash"], source)
+                            elif key in bank["questions"]:
+                                raise AuthoringError("published question exists; overwrite refused", 409)
                         payload = by_id[item["item_id"]]
-                        if job["kind"] in {"generation", "revision"}:
+                        if job["kind"] in {"generation", *REVISION_KINDS}:
                             if job["kind"] == "generation" and (metadata.get("generation_job_id") != job_id or metadata.get("state") != "claimed"
                                     or pool.get("raw") or key in bank["questions"] or key in bank["rejections"]):
                                 raise AuthoringError("generated content already exists; overwrite refused", 409)
@@ -504,7 +608,7 @@ class QuestionAuthoringService:
 
                     for item, pool, metadata, outcome, record in prepared:
                         key = item["english"]
-                        if job["kind"] == "revision":
+                        if job["kind"] in REVISION_KINDS:
                             for namespace in ("candidates", "rejections", "failures"):
                                 bank[namespace].pop(key, None)
                         metadata.setdefault("receipts", {})[receipt_key] = {"digest": digest, "result": outcome}

@@ -790,6 +790,74 @@ function setupXpHistoryModal() {
     });
 }
 
+function desktopMoreVisibleLinks() {
+    return Array.from(document.querySelectorAll('.desktop-more-link'))
+        .filter((link) => !link.hidden && link.style.display !== 'none');
+}
+
+function setDesktopMoreOpen(open, focusFirst = false) {
+    const menu = document.getElementById('desktop-more-menu');
+    const button = document.getElementById('desktop-more-btn');
+    if (!menu || !button) return;
+    menu.hidden = !open;
+    button.setAttribute('aria-expanded', String(open));
+    if (open && focusFirst) desktopMoreVisibleLinks()[0]?.focus();
+}
+
+function closeDesktopMoreMenu(returnFocus = false) {
+    const menu = document.getElementById('desktop-more-menu');
+    const wasOpen = menu && !menu.hidden;
+    setDesktopMoreOpen(false);
+    if (wasOpen && returnFocus) document.getElementById('desktop-more-btn')?.focus();
+}
+
+function syncDesktopMoreActive(sectionId) {
+    document.getElementById('desktop-more-btn')?.classList.toggle(
+        'active', ['discover', 'textbook', 'progress', 'mastered'].includes(sectionId),
+    );
+}
+
+function initDesktopMoreNavigation() {
+    const wrap = document.getElementById('desktop-more-wrap');
+    const button = document.getElementById('desktop-more-btn');
+    const menu = document.getElementById('desktop-more-menu');
+    if (!wrap || !button || !menu) return;
+    button.addEventListener('click', () => setDesktopMoreOpen(menu.hidden));
+    button.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        setDesktopMoreOpen(true, event.key === 'ArrowDown');
+        if (event.key === 'ArrowUp') desktopMoreVisibleLinks().at(-1)?.focus();
+    });
+    menu.addEventListener('keydown', (event) => {
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        const links = desktopMoreVisibleLinks();
+        if (!links.length) return;
+        event.preventDefault();
+        const current = links.indexOf(event.target);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? links.length - 1
+            : (current + (event.key === 'ArrowDown' ? 1 : -1) + links.length) % links.length;
+        links[next]?.focus();
+    });
+    document.addEventListener('click', (event) => {
+        if (!wrap.contains(event.target)) closeDesktopMoreMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !menu.hidden) {
+            event.preventDefault();
+            closeDesktopMoreMenu(true);
+        }
+    });
+    wrap.addEventListener('focusout', (event) => {
+        if (!wrap.contains(event.relatedTarget)) closeDesktopMoreMenu();
+    });
+    if (typeof window.matchMedia === 'function') {
+        window.matchMedia('(max-width: 1199px)').addEventListener('change', (event) => {
+            if (event.matches) closeDesktopMoreMenu();
+        });
+    }
+}
+
 function openMobileMoreSheet() {
     const sheet = document.getElementById('mobile-more-sheet');
     const btn = document.getElementById('mobile-more-btn');

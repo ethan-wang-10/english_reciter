@@ -31,3 +31,5 @@ def test_docker_copies_transitive_runtime_modules():
             elif isinstance(node, ast.ImportFrom) and node.module:
                 names = [node.module.split('.')[0]]
             pending.extend(name for name in names if (root / f'{name}.py').is_file())
+
+    assert 'builtin_exams' in copied, 'Docker image is missing built-in exam data'

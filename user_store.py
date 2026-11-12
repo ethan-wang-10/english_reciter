@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS users (
     invite_quota_used INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
+CREATE INDEX IF NOT EXISTS idx_users_username_nocase ON users (username COLLATE NOCASE);
 """
 
 
@@ -409,6 +410,27 @@ def get_email_owner(email: str, *, exclude: str = "") -> Optional[str]:
             (key, exclude),
         ).fetchone()
         return str(row[0]) if row is not None else None
+
+
+def resolve_username(username: str) -> Optional[str]:
+    """Resolve a login spelling to the stored username, ignoring ASCII case.
+
+    Usernames are limited to ASCII letters, digits, and underscores by the web
+    app. If legacy data contains names that differ only by case, an exact match
+    remains usable while an ambiguous mixed-case spelling is rejected.
+    """
+    with _lock:
+        conn = _ensure_conn_unlocked()
+        rows = conn.execute(
+            "SELECT username FROM users WHERE username = ? COLLATE NOCASE ORDER BY username",
+            (username,),
+        ).fetchall()
+    matches = [str(row[0]) for row in rows]
+    if username in matches:
+        return username
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 def update_password_hash(username: str, expected_hash: str, new_hash: str) -> bool:

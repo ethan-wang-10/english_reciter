@@ -20,6 +20,9 @@ ENV/
 htmlcov/
 .tox/
 .nox/
+.cache/
+.test_tmp/
+node_modules/
 
 # --- Logs ---
 *.log

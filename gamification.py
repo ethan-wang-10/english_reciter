@@ -1733,6 +1733,21 @@ def sync_achievements_only(
     pk_matches: int = 0,
 ) -> List[Dict[str, Any]]:
     """不加分，仅根据已掌握数等补发成就（老用户首次打开）。"""
+    return _synced_profile_state(
+        data_dir, username, mastered_words=mastered_words,
+        pk_wins=pk_wins, pk_matches=pk_matches,
+    )[1]
+
+
+def _synced_profile_state(
+    data_dir: Path,
+    username: str,
+    *,
+    mastered_words: int,
+    pk_wins: int = 0,
+    pk_matches: int = 0,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Read and validate history once, returning the snapshot used for achievement synchronization."""
     with _locked_user_state(data_dir, username):
         state = load_state(data_dir, username)
         before = set(state.get("achievements", {}).keys())
@@ -1745,7 +1760,7 @@ def sync_achievements_only(
         after = set(state.get("achievements", {}).keys())
         if after != before:
             _save_state_unlocked(data_dir, username, state)
-        return new
+        return state, new
 
 
 def public_profile(
@@ -1757,14 +1772,13 @@ def public_profile(
     pk_matches: int = 0,
 ) -> Dict[str, Any]:
     """GET /api/gamification 用；会补同步成就。"""
-    sync_achievements_only(
+    state, _ = _synced_profile_state(
         data_dir,
         username,
         mastered_words=mastered_words,
         pk_wins=pk_wins,
         pk_matches=pk_matches,
     )
-    state = load_state(data_dir, username)
     total_xp, xp_balance = _account_values(state)
     lv, need = xp_to_next_level(total_xp)
     ach = state.get("achievements") or {}
