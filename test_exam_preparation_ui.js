@@ -10,6 +10,7 @@ const appSource = fs.readFileSync(path.join(__dirname, 'static/js/app.js'), 'utf
 
 function examUI(storage = new Map()) {
     class Element {
+        constructor(tagName = 'div') { this.tagName = tagName; }
         value = '';
         hidden = false;
         disabled = false;
@@ -26,7 +27,12 @@ function examUI(storage = new Map()) {
         removeAttribute(key) { delete this.attributes[key]; if (key === 'src') this.src = ''; }
         pause() { this.pauseCount = (this.pauseCount || 0) + 1; }
         load() { this.loadCount = (this.loadCount || 0) + 1; }
-        querySelectorAll() { return this.children; }
+        querySelectorAll(selector) {
+            if (selector === 'button') return this.children.flatMap((child) => [
+                ...(child.tagName === 'button' ? [child] : []), ...child.querySelectorAll('button'),
+            ]);
+            return this.children;
+        }
         querySelector(selector) {
             return selector.includes('aria-pressed')
                 ? this.children.find((child) => child.attributes['aria-pressed'] === 'true')
@@ -45,7 +51,7 @@ function examUI(storage = new Map()) {
     elements.get('exam-import-panel').hidden = true;
     const account = { token: 'alice-token', username: 'alice' };
     const state = { calls: [], failCreation: false };
-    const paper = { id: 'paper-1', name: '期中考试', word_count: 2, words: [{ english: 'apple' }, { english: 'look after' }], created_at: '2026-11-10T12:00:00', attempt_count: 0 };
+    const paper = { id: 'paper-1', grade: 4, term: 1, name: '期中考试', word_count: 2, words: [{ english: 'apple' }, { english: 'look after' }], created_at: '2026-11-10T12:00:00', attempt_count: 0 };
     const attempt = {
         id: 'attempt-1', paper_id: paper.id, paper_name: paper.name, word_count: 2, choice_count: 0,
         questions: [
@@ -59,7 +65,7 @@ function examUI(storage = new Map()) {
         window: {},
         document: {
             getElementById: (id) => elements.get(id),
-            createElement: () => new Element(),
+            createElement: (tagName) => new Element(tagName),
             addEventListener: (_, callback) => { state.ready = callback; },
         },
         sessionStorage: {
@@ -113,6 +119,8 @@ function examUI(storage = new Map()) {
                 if (state.save) return state.save(body);
                 Object.assign(paper, {
                     name: body.name,
+                    grade: body.grade,
+                    term: body.term,
                     sentences: body.sentences,
                     sentence_count: body.sentences.length,
                 });
@@ -124,7 +132,7 @@ function examUI(storage = new Map()) {
     });
     vm.runInContext(source, context);
     state.ready();
-    return { state, storage, account, context, api: context.window.examPreparation, field: (id) => elements.get(id) };
+    return { state, storage, account, context, api: context.window.examPreparation, field: (id) => elements.get(id), paperRows: () => elements.get('exam-paper-list').children.flatMap((group) => group.children.slice(1)) };
 }
 
 test('creating a paper sends both fields and retains input on failure', async () => {
@@ -140,7 +148,7 @@ test('creating a paper sends both fields and retains input on failure', async ()
     ui.state.failCreation = false;
     await ui.field('exam-create-form').fire('submit');
     const call = ui.state.calls.find((call) => call.body?.name);
-    assert.deepEqual(call.body, { name: '期中考试', words: 'apple,look after,apple', sentences: [] });
+    assert.deepEqual(call.body, { name: '期中考试', grade: null, term: null, words: 'apple,look after,apple', sentences: [] });
     assert.equal(ui.field('exam-words').value, '');
     assert.equal(ui.field('exam-include-choices').disabled, false);
     assert.match(ui.field('exam-preparation-message').textContent, /已合并 1 个重复单词/);
@@ -228,7 +236,7 @@ test('abandonment returns to the selected paper, preserves the editor draft and 
     await ui.api.open();
     ui.field('exam-paper-name').value = '未保存的新考卷';
     ui.field('exam-words').value = 'banana';
-    await ui.field('exam-paper-list').children[1].fire('click');
+    await ui.paperRows()[1].fire('click');
     await ui.field('exam-start').fire('click');
     ui.field('exam-spelling-answer').value = 'apple';
     await ui.field('exam-spelling-answer').fire('input');
@@ -238,7 +246,7 @@ test('abandonment returns to the selected paper, preserves the editor draft and 
     assert.equal(ui.field('exam-attempt-view').hidden, true);
     assert.equal(ui.field('exam-setup-view').hidden, false);
     assert.equal(ui.field('exam-abandon-confirmation').hidden, true);
-    assert.equal(ui.field('exam-paper-list').children[1].attributes['aria-pressed'], 'true');
+    assert.equal(ui.paperRows()[1].attributes['aria-pressed'], 'true');
     assert.equal(ui.field('exam-paper-name').value, '未保存的新考卷');
     assert.equal(ui.field('exam-words').value, 'banana');
     assert.equal(ui.storage.has('english-reciter-exam:alice'), false);
@@ -338,7 +346,7 @@ test('account reset discards private draft and ignores a late response', async (
     ui.account.username = 'bob';
     resolve({ papers: [{ id: 'private', name: 'Alice 私有卷', words: [], created_at: '2026-11-10' }] });
     await opening;
-    assert.equal(ui.field('exam-paper-list').children.length, 0);
+    assert.equal(ui.paperRows().length, 0);
     assert.equal(ui.field('exam-start').disabled, true);
     assert.equal(ui.storage.size, 0);
 });
@@ -397,11 +405,11 @@ test('saving edits uses the original paper id and retains changes after failure'
     const calls = ui.state.calls.filter((call) => call.method === 'PUT');
     assert.equal(calls.length, 2);
     assert.equal(calls[1].url, '/exam-preparation/papers/paper-1');
-    assert.deepEqual(calls[1].body, { name: '修改后的期中考试', words: 'look after', sentences: [] });
+    assert.deepEqual(calls[1].body, { name: '修改后的期中考试', grade: 4, term: 1, words: 'look after', sentences: [] });
     assert.match(ui.field('exam-preparation-message').textContent, /已更新/);
     assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
-    assert.equal(ui.field('exam-paper-list').children.length, 1);
-    assert.equal(ui.field('exam-paper-list').children[0].children[0].textContent, '修改后的期中考试');
+    assert.equal(ui.paperRows().length, 1);
+    assert.equal(ui.paperRows()[0].children[0].textContent, '修改后的期中考试');
 });
 
 test('sentence questions load for editing, accept multiple reference answers and can be removed', async () => {
@@ -469,7 +477,7 @@ test('account reset clears sentence answers in the editor and ignores an in-flig
     resolve({ paper: ui.state.paper, duplicates_removed: 0 });
     await saving;
     assert.equal(ui.field('exam-sentence-list').children.length, 0);
-    assert.equal(ui.field('exam-paper-list').children.length, 0);
+    assert.equal(ui.paperRows().length, 0);
     assert.equal(ui.field('exam-paper-name').value, '');
     assert.equal(ui.field('exam-editor-title').textContent, '新建考卷');
     assert.equal(ui.field('exam-word-chips').children.length, 0);
@@ -713,7 +721,7 @@ test('saving disables chip removal and the add field until the request finishes'
 
 function addBuiltinFixture(ui) {
     const paper = {
-        id: 'builtin-shanghai-grade4-u1-u4', builtin: true,
+        id: 'builtin-shanghai-grade4-u1-u4', builtin: true, grade: 4, term: 1,
         name: '上海四年级上册英语 · U1-U4 期中自测', question_count: 16,
         word_count: 0, sentence_count: 0, words: [], sentences: [],
         time_minutes: 20, description: '8 道填空、4 道句型转换和 4 道阅读单选。',
@@ -730,12 +738,89 @@ function addBuiltinFixture(ui) {
     return paper;
 }
 
+test('papers are grouped into collapsible grade and term collections with counts', async () => {
+    const ui = examUI();
+    const builtin = addBuiltinFixture(ui);
+    ui.state.list = async () => ({ papers: [
+        ui.state.paper,
+        { ...ui.state.paper, id: 'four-lower', grade: 4, term: 2, name: '四年级下册复习' },
+        { ...ui.state.paper, id: 'grade-6', grade: 6, term: 2, name: '六年级期末' },
+        { ...ui.state.paper, id: 'unknown', grade: null, term: null, name: '综合训练' },
+    ], builtin_papers: [builtin] });
+    await ui.api.open();
+    assert.deepEqual(ui.field('exam-paper-list').children.map((group) => group.children[0].textContent), ['四年级上册', '四年级下册', '六年级下册', '未分类']);
+    assert.equal(ui.field('exam-paper-list').children[0].children[0].children[0].textContent, '2 份');
+    assert.match(ui.field('exam-grade-summary').textContent, /已收录 5 份/);
+    const upper = ui.field('exam-paper-list').children[0];
+    assert.equal(upper.tagName, 'details');
+    assert.equal(upper.children[0].tagName, 'summary');
+    assert.equal(upper.open, true);
+    assert.equal(ui.field('exam-paper-list').children[1].open, false);
+    upper.open = false;
+    await upper.fire('toggle');
+    ui.field('exam-grade-filter').value = '4';
+    await ui.field('exam-grade-filter').fire('change');
+    assert.equal(ui.field('exam-paper-list').children[0].open, false);
+    ui.field('exam-term-filter').value = '2';
+    await ui.field('exam-term-filter').fire('change');
+    assert.equal(ui.paperRows().length, 1);
+    assert.equal(ui.paperRows()[0].children[0].textContent, '四年级下册复习');
+    assert.equal(ui.field('exam-paper-term').value, '2');
+
+    ui.field('exam-grade-filter').value = '6';
+    await ui.field('exam-grade-filter').fire('change');
+    assert.equal(ui.paperRows().length, 1);
+    assert.equal(ui.paperRows()[0].children[0].textContent, '六年级期末');
+    assert.equal(ui.paperRows()[0].attributes['aria-pressed'], 'true');
+    assert.equal(ui.field('exam-paper-grade').value, '6');
+
+    ui.field('exam-grade-filter').value = '5';
+    await ui.field('exam-grade-filter').fire('change');
+    assert.equal(ui.paperRows().length, 0);
+    assert.match(ui.field('exam-paper-empty').textContent, /五年级下册暂无考卷/);
+    assert.equal(ui.field('exam-start').disabled, true);
+    assert.equal(ui.field('exam-paper-settings').hidden, true);
+
+    ui.field('exam-grade-filter').value = '';
+    ui.field('exam-term-filter').value = 'all';
+    await ui.field('exam-grade-filter').fire('change');
+    assert.equal(ui.paperRows()[0].children[0].textContent, '综合训练');
+    ui.api.reset();
+    assert.equal(ui.field('exam-grade-filter').value, 'all');
+    assert.equal(ui.field('exam-paper-grade').value, '');
+    assert.equal(ui.field('exam-term-filter').value, 'all');
+    assert.equal(ui.field('exam-paper-term').value, '');
+});
+
+test('reclassifying a paper keeps it selected in its new grade and preserves the editor draft grade', async () => {
+    const ui = examUI();
+    await ui.api.open();
+    ui.field('exam-grade-filter').value = '4';
+    await ui.field('exam-grade-filter').fire('change');
+    ui.field('exam-paper-name').value = '待保存的高一卷';
+    ui.field('exam-paper-grade').value = '10';
+    ui.field('exam-paper-term').value = '2';
+    await ui.field('exam-edit-paper').fire('click');
+    assert.equal(ui.field('exam-paper-grade').value, '4');
+    assert.equal(ui.field('exam-paper-term').value, '1');
+    ui.field('exam-paper-grade').value = '6';
+    ui.field('exam-paper-term').value = '2';
+    await ui.field('exam-create-form').fire('submit');
+    assert.equal(ui.state.calls.find((call) => call.method === 'PUT').body.grade, 6);
+    assert.equal(ui.state.calls.find((call) => call.method === 'PUT').body.term, 2);
+    assert.equal(ui.field('exam-grade-filter').value, '6');
+    assert.equal(ui.paperRows()[0].attributes['aria-pressed'], 'true');
+    assert.equal(ui.field('exam-paper-name').value, '待保存的高一卷');
+    assert.equal(ui.field('exam-paper-grade').value, '10');
+    assert.equal(ui.field('exam-paper-term').value, '2');
+});
+
 test('built-in papers share the selection list and have a neighboring knowledge button', async () => {
     const ui = examUI();
     addBuiltinFixture(ui);
     await ui.api.open();
-    assert.equal(ui.field('exam-paper-list').children.length, 2);
-    const builtinRow = ui.field('exam-paper-list').children[1];
+    assert.equal(ui.paperRows().length, 2);
+    const builtinRow = ui.paperRows()[1];
     assert.equal(builtinRow.children[1].textContent, '知识点梳理');
     assert.match(builtinRow.children[0].children[1].textContent, /16 道题/);
     await builtinRow.children[0].fire('click');
@@ -754,7 +839,7 @@ test('knowledge opens for reading and returning keeps the personal editor draft'
     await ui.field('exam-edit-paper').fire('click');
     ui.field('exam-paper-name').value = '未保存的修改';
     ui.field('exam-add-words').value = 'banana';
-    await ui.field('exam-paper-list').children[1].children[1].fire('click');
+    await ui.paperRows()[1].children[1].fire('click');
     assert.equal(ui.field('exam-knowledge-view').hidden, false);
     assert.equal(ui.field('exam-setup-view').hidden, true);
     assert.equal(ui.field('exam-knowledge-title').textContent, 'U1-U4 知识点梳理');
@@ -780,7 +865,7 @@ test('fixed built-in questions use written fields and reading choices with the r
         ],
     } });
     await ui.api.open();
-    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.paperRows()[1].children[0].fire('click');
     await ui.field('exam-start').fire('click');
     assert.match(ui.field('exam-preparation-message').textContent, /内置固定考卷/);
     assert.equal(ui.field('exam-answer-label').textContent, '请填写空缺部分');
@@ -804,9 +889,9 @@ test('parents may read built-in knowledge while the exam remains disabled', asyn
     addBuiltinFixture(ui);
     ui.context.isParentSession = true;
     await ui.api.open();
-    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.paperRows()[1].children[0].fire('click');
     assert.equal(ui.field('exam-start').disabled, true);
-    await ui.field('exam-paper-list').children[1].children[1].fire('click');
+    await ui.paperRows()[1].children[1].fire('click');
     assert.equal(ui.field('exam-knowledge-view').hidden, false);
 });
 
@@ -817,7 +902,7 @@ test('account reset ignores a late knowledge response and clears study content',
     let resolve;
     ui.state.knowledge = () => new Promise((callback) => { resolve = callback; });
     await ui.api.open();
-    const opening = ui.field('exam-paper-list').children[1].children[1].fire('click');
+    const opening = ui.paperRows()[1].children[1].fire('click');
     ui.api.reset();
     ui.account.token = 'bob-token';
     ui.account.username = 'bob';
@@ -849,7 +934,7 @@ test('abandoning a listening exam stops its audio and returns to the same built-
     const ui = examUI();
     listeningFixture(ui);
     await ui.api.open();
-    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.paperRows()[1].children[0].fire('click');
     await ui.field('exam-start').fire('click');
     const audio = ui.field('exam-listening-audio');
     const pauses = audio.pauseCount;
@@ -861,7 +946,7 @@ test('abandoning a listening exam stops its audio and returns to the same built-
     assert.equal(audio.onerror, null);
     assert.equal(ui.field('exam-listening-wrap').hidden, true);
     assert.equal(ui.field('exam-setup-view').hidden, false);
-    assert.equal(ui.field('exam-paper-list').children[1].children[0].attributes['aria-pressed'], 'true');
+    assert.equal(ui.paperRows()[1].children[0].attributes['aria-pressed'], 'true');
     lateError();
     assert.equal(ui.field('exam-listening-error').hidden, true);
     assert.equal(ui.storage.size, 0);
@@ -872,7 +957,7 @@ test('listening questions provide reusable native audio and retain selected answ
     const ui = examUI();
     listeningFixture(ui);
     await ui.api.open();
-    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.paperRows()[1].children[0].fire('click');
     await ui.field('exam-start').fire('click');
     const audio = ui.field('exam-listening-audio');
     assert.equal(ui.field('exam-listening-wrap').hidden, false);
@@ -898,7 +983,7 @@ test('audio errors are visible for the current question and reset stops playback
     const ui = examUI();
     listeningFixture(ui);
     await ui.api.open();
-    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.paperRows()[1].children[0].fire('click');
     await ui.field('exam-start').fire('click');
     const audio = ui.field('exam-listening-audio');
     const failed = audio.onerror;
@@ -917,7 +1002,7 @@ test('knowledge offers a separate downloadable exam without changing the study h
     addBuiltinFixture(ui);
     ui.state.knowledge.exam_pdf_url = '/static/exam-preparation/shanghai-grade4-u5-u10-final.pdf';
     await ui.api.open();
-    await ui.field('exam-paper-list').children[1].children[1].fire('click');
+    await ui.paperRows()[1].children[1].fire('click');
     assert.equal(ui.field('exam-knowledge-exam-pdf').hidden, false);
     assert.equal(ui.field('exam-knowledge-exam-pdf').href, '/static/exam-preparation/shanghai-grade4-u5-u10-final.pdf');
     assert.match(ui.field('exam-knowledge-pdf').textContent, /知识点复习手册/);
@@ -929,7 +1014,7 @@ test('leaving exam preparation pauses the recording and preserves its source for
     const ui = examUI();
     listeningFixture(ui);
     await ui.api.open();
-    await ui.field('exam-paper-list').children[1].children[0].fire('click');
+    await ui.paperRows()[1].children[0].fire('click');
     await ui.field('exam-start').fire('click');
     const audio = ui.field('exam-listening-audio');
     const pauses = audio.pauseCount;

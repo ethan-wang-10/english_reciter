@@ -112,6 +112,8 @@ def client(tmp_path):
 def test_builtin_is_available_without_copying_or_importing_and_private_papers_remain_separate(store):
     paper = store.get_paper(BUILTIN_ID)
     assert paper["builtin"] is True
+    assert paper["grade"] == 4
+    assert paper["term"] == 1
     assert paper["question_count"] == 26
     assert paper["listening_count"] == 10
     assert paper["words"] == []
@@ -125,6 +127,40 @@ def test_builtin_is_available_without_copying_or_importing_and_private_papers_re
     assert not store.get_paper(private["id"]).get("builtin", False)
     assert {row["id"] for row in store.list_papers()} >= {BUILTIN_ID, private["id"]}
     assert ExamPreparationStore(store.path).get_paper(BUILTIN_ID)["question_count"] == 26
+
+
+def test_grade_api_creates_reclassifies_and_preserves_older_clients(client):
+    headers = {'Authorization': 'Bearer alice'}
+    root = '/api/exam-preparation/papers'
+    response = client.post(root, headers=headers, json={'name': '我的期中卷', 'words': 'apple', 'grade': 4, 'term': 1})
+    assert response.status_code == 201
+    paper = response.get_json()['paper']
+    assert paper['grade'] == 4
+    assert paper['term'] == 1
+    url = root + '/' + paper['id']
+    old_client = client.put(url, headers=headers, json={'name': '改名', 'words': 'apple'})
+    assert old_client.get_json()['paper']['grade'] == 4
+    assert old_client.get_json()['paper']['term'] == 1
+    changed = client.put(url, headers=headers, json={'name': '六年级卷', 'words': 'apple', 'grade': 6, 'term': 2})
+    assert changed.get_json()['paper']['grade'] == 6
+    assert changed.get_json()['paper']['term'] == 2
+    listed = client.get(root, headers=headers).get_json()
+    assert listed['papers'][0]['grade'] == 6
+    assert all(row['grade'] == 4 for row in listed['builtin_papers'])
+    assert all(row['term'] == 1 for row in listed['builtin_papers'])
+    assert client.get(root, headers={'Authorization': 'Bearer bob'}).get_json()['papers'] == []
+    assert client.put(url, headers={'Authorization': 'Bearer bob'}, json={'name': '越权修改', 'words': 'apple', 'grade': 2}).status_code == 404
+    cleared = client.put(url, headers=headers, json={'name': '六年级卷', 'words': 'apple', 'grade': None})
+    assert cleared.get_json()['paper']['grade'] is None
+    assert client.get(root, headers=headers).get_json()['papers'][0]['grade'] is None
+
+
+@pytest.mark.parametrize('grade', [True, 0, 13, [], 4.5, '四年级'])
+def test_grade_api_rejects_invalid_values_without_creating_papers(client, grade):
+    headers = {'Authorization': 'Bearer alice'}
+    root = '/api/exam-preparation/papers'
+    assert client.post(root, headers=headers, json={'name': '无效卷', 'words': 'apple', 'grade': grade}).status_code == 400
+    assert client.get(root, headers=headers).get_json()['papers'] == []
 
 
 def test_listing_builtin_catalog_does_not_create_a_personal_paper_row(store):

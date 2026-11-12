@@ -38,7 +38,7 @@ def listening_catalog(monkeypatch, tmp_path):
     directory = tmp_path / 'catalog'
     directory.mkdir()
     paper = {
-        'id': PAPER_ID, 'name': '听力测试卷', 'edition': '测试材料',
+        'id': PAPER_ID, 'name': '听力测试卷', 'grade': 4, 'edition': '测试材料',
         'description': '固定听力题。', 'source_note': '独立测试材料。', 'time_minutes': 10,
         'source_file': 'listening-study.pdf', 'exam_file': 'listening-exam.pdf',
         'knowledge': {'title': '听力知识点', 'intro': '听人物和地点。', 'sections': []},

@@ -14,6 +14,7 @@ from pathlib import Path
 from app_time import china_now_iso
 import builtin_exam_catalog
 import exam_mistakes
+from exam_grades import infer_grade, infer_term, normalize_grade, normalize_term
 from wordbank_v2 import normalize_english_key
 
 
@@ -23,6 +24,7 @@ MAX_WORD_TEXT = 20000
 MAX_EXAM_SENTENCES = 100
 MAX_SENTENCE_TEXT = 500
 MAX_SENTENCE_ANSWERS = 10
+_GRADE_UNSET = object()
 CHOICE_TYPES = ("recognition", "context")
 EXAM_CHOICE_TYPES = CHOICE_TYPES + builtin_exam_catalog.CHOICE_TYPES
 EXTENDED_WRITTEN_TYPES = ("translation",) + builtin_exam_catalog.WRITTEN_TYPES
@@ -33,6 +35,20 @@ class ExamPreparationError(ValueError):
         super().__init__(message)
         self.status = status
         self.details = details
+
+
+def parse_paper_grade(value):
+    try:
+        return normalize_grade(value)
+    except ValueError as error:
+        raise ExamPreparationError(str(error)) from error
+
+
+def parse_paper_term(value):
+    try:
+        return normalize_term(value)
+    except ValueError as error:
+        raise ExamPreparationError(str(error)) from error
 
 
 def normalize_answer(value: str) -> str:
@@ -221,6 +237,8 @@ class ExamPreparationStore:
                     name TEXT NOT NULL,
                     words_json TEXT NOT NULL,
                     sentences_json TEXT NOT NULL DEFAULT '[]',
+                    grade INTEGER,
+                    term INTEGER,
                     created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS exam_attempts (
@@ -234,10 +252,26 @@ class ExamPreparationStore:
                 );
                 CREATE INDEX IF NOT EXISTS exam_attempts_paper ON exam_attempts(paper_id, submitted_at);
             """)
-            if "sentences_json" not in {row["name"] for row in connection.execute("PRAGMA table_info(exam_papers)")}:
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(exam_papers)")}
+            if not {"sentences_json", "grade", "term"} <= columns:
                 connection.execute("BEGIN IMMEDIATE")
-                if "sentences_json" not in {row["name"] for row in connection.execute("PRAGMA table_info(exam_papers)")}:
+                columns = {row["name"] for row in connection.execute("PRAGMA table_info(exam_papers)")}
+                if "sentences_json" not in columns:
                     connection.execute("ALTER TABLE exam_papers ADD COLUMN sentences_json TEXT NOT NULL DEFAULT '[]'")
+                if "grade" not in columns:
+                    connection.execute("ALTER TABLE exam_papers ADD COLUMN grade INTEGER")
+                    connection.executemany(
+                        "UPDATE exam_papers SET grade=? WHERE id=?",
+                        [(grade, row["id"]) for row in connection.execute("SELECT id, name FROM exam_papers")
+                         if (grade := infer_grade(row["name"])) is not None],
+                    )
+                if "term" not in columns:
+                    connection.execute("ALTER TABLE exam_papers ADD COLUMN term INTEGER")
+                    connection.executemany(
+                        "UPDATE exam_papers SET term=? WHERE id=?",
+                        [(term, row["id"]) for row in connection.execute("SELECT id, name FROM exam_papers")
+                         if (term := infer_term(row["name"])) is not None],
+                    )
                 connection.commit()
             exam_mistakes.ensure_schema(connection)
             exam_mistakes.ensure_migrated(connection)
@@ -252,6 +286,7 @@ class ExamPreparationStore:
         sentences = json.loads(row["sentences_json"])
         paper = {
             "id": row["id"], "name": row["name"], "created_at": row["created_at"],
+            "grade": row["grade"], "term": row["term"],
             "words": words, "word_count": len(words),
             "sentences": sentences, "sentence_count": len(sentences),
         }
@@ -259,23 +294,33 @@ class ExamPreparationStore:
             paper.update(builtin_exam_catalog.public_paper(paper['id']))
         return paper
 
-    def create_paper(self, name: str, words: list[dict], sentences: list[dict] | None = None) -> dict:
+    def create_paper(self, name: str, words: list[dict], sentences: list[dict] | None = None, *, grade=_GRADE_UNSET, term=_GRADE_UNSET) -> dict:
+        grade = parse_paper_grade(infer_grade(name) if grade is _GRADE_UNSET else grade)
+        term = parse_paper_term(infer_term(name) if term is _GRADE_UNSET else term)
         paper_id = uuid.uuid4().hex
         with self._connection() as connection:
             connection.execute(
-                "INSERT INTO exam_papers(id, name, words_json, sentences_json, created_at) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO exam_papers(id, name, words_json, sentences_json, grade, term, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (paper_id, name, json.dumps(words, ensure_ascii=False),
-                 json.dumps(sentences or [], ensure_ascii=False), china_now_iso()),
+                 json.dumps(sentences or [], ensure_ascii=False), grade, term, china_now_iso()),
             )
             return self._paper(connection.execute("SELECT * FROM exam_papers WHERE id=?", (paper_id,)).fetchone())
 
-    def update_paper(self, paper_id: str, name: str, words: list[dict], sentences: list[dict]) -> dict:
+    def update_paper(self, paper_id: str, name: str, words: list[dict], sentences: list[dict], *, grade=_GRADE_UNSET, term=_GRADE_UNSET) -> dict:
         if builtin_exam_catalog.is_builtin(paper_id):
             raise ExamPreparationError("内置考卷不支持修改，请编辑自己的考卷", 403)
         with self._connection() as connection:
+            if grade is _GRADE_UNSET or term is _GRADE_UNSET:
+                row = connection.execute("SELECT grade, term FROM exam_papers WHERE id=?", (paper_id,)).fetchone()
+                if grade is _GRADE_UNSET:
+                    grade = row["grade"] if row else None
+                if term is _GRADE_UNSET:
+                    term = row["term"] if row else None
+            grade = parse_paper_grade(grade)
+            term = parse_paper_term(term)
             cursor = connection.execute(
-                "UPDATE exam_papers SET name=?, words_json=?, sentences_json=? WHERE id=?",
-                (name, json.dumps(words, ensure_ascii=False), json.dumps(sentences, ensure_ascii=False), paper_id),
+                "UPDATE exam_papers SET name=?, words_json=?, sentences_json=?, grade=?, term=? WHERE id=?",
+                (name, json.dumps(words, ensure_ascii=False), json.dumps(sentences, ensure_ascii=False), grade, term, paper_id),
             )
             if not cursor.rowcount:
                 raise ExamPreparationError("考卷不存在，请重新选择", 404)

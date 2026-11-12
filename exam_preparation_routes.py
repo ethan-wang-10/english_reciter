@@ -9,7 +9,10 @@ from exam_preparation import (
     MAX_PAPER_NAME,
     parse_exam_sentences,
     parse_exam_words,
+    parse_paper_grade,
+    parse_paper_term,
 )
+from exam_grades import infer_grade, infer_term
 
 
 def _body() -> dict:
@@ -56,6 +59,8 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
         name = body.get("name")
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > MAX_PAPER_NAME:
             raise ExamPreparationError(f"请填写 1～{MAX_PAPER_NAME} 个字符的考卷名称")
+        grade = parse_paper_grade(body.get("grade", infer_grade(name)))
+        term = parse_paper_term(body.get("term", infer_term(name)))
         sentences = parse_exam_sentences(body.get("sentences", []))
         keys, duplicates = parse_exam_words(body.get("words", ""), allow_empty=bool(sentences))
         found = word_lookup(username, keys) if keys else {}
@@ -67,13 +72,13 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
                 missing_words=missing,
             )
         words = [{"english": found[key]["english"], "chinese": found[key]["chinese"]} for key in keys]
-        return name.strip(), words, sentences, duplicates
+        return name.strip(), words, sentences, duplicates, grade, term
 
     @routes.post("/papers")
     @token_required
     def create_paper(username):
-        name, words, sentences, duplicates = paper_content(username, _body())
-        paper = store(username).create_paper(name, words, sentences)
+        name, words, sentences, duplicates, grade, term = paper_content(username, _body())
+        paper = store(username).create_paper(name, words, sentences, grade=grade, term=term)
         return jsonify({"paper": paper, "duplicates_removed": duplicates}), 201
 
     @routes.put("/papers/<paper_id>")
@@ -86,8 +91,10 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
         body = _body()
         # Older clients editing only words must preserve any existing sentence questions.
         body.setdefault("sentences", existing["sentences"])
-        name, words, sentences, duplicates = paper_content(username, body)
-        paper = user_store.update_paper(paper_id, name, words, sentences)
+        body.setdefault("grade", existing.get("grade"))
+        body.setdefault("term", existing.get("term"))
+        name, words, sentences, duplicates, grade, term = paper_content(username, body)
+        paper = user_store.update_paper(paper_id, name, words, sentences, grade=grade, term=term)
         return jsonify({"paper": paper, "duplicates_removed": duplicates})
 
     @routes.post("/papers/<paper_id>/attempts")

@@ -1,8 +1,12 @@
 (() => {
     const base = '/exam-preparation';
     const typeNames = { spelling: '单词默写', translation: '句子中译英', recognition: '英文识义', context: '语境选词', fill_blank: '语法填空', rewrite: '句型转换', reading_choice: '阅读选择', listening_choice: '听力选择' };
+    const gradeLabels = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '七年级（初一）', '八年级（初二）', '九年级（初三）', '高一', '高二', '高三'];
     let papers = [];
     let selectedPaper = '';
+    let gradeFilter = 'all';
+    let termFilter = 'all';
+    const expandedGroups = new Map();
     let editingPaper = '';
     let newPaperDraft = null;
     let sentenceRows = [];
@@ -24,6 +28,12 @@
     const current = (ctx) => ctx.generation === generation && isAccountContextCurrent(ctx.account);
     const canImportWords = () => typeof userPlan !== 'undefined' && userPlan === 'paid';
     const isWrittenQuestion = (question) => ['spelling', 'translation', 'fill_blank', 'rewrite'].includes(question.type);
+    const paperGrade = (paper) => Number.isInteger(paper?.grade) && paper.grade >= 1 && paper.grade <= 12 ? String(paper.grade) : '';
+    const gradeLabel = (value) => gradeLabels[Number(value) - 1] || '未分类';
+    const paperTerm = (paper) => paper?.term === 1 || paper?.term === 2 ? String(paper.term) : '';
+    const termLabel = (value) => value === '1' ? '上册' : value === '2' ? '下册' : '未分学期';
+    const collectionKey = (paper) => `${paperGrade(paper)}:${paperTerm(paper)}`;
+    const collectionLabel = (grade, term) => `${gradeLabel(grade)}${term ? termLabel(term) : (grade ? '（未分学期）' : '')}`;
     const paperContents = (paper) => paper.builtin ? `${paper.question_count} 道题` : [
         paper.word_count ? `${paper.word_count} 个单词` : '',
         paper.sentence_count ? `${paper.sentence_count} 道句子题` : '',
@@ -32,6 +42,8 @@
     function editorValue() {
         return {
             name: el('exam-paper-name').value,
+            grade: el('exam-paper-grade').value ? Number(el('exam-paper-grade').value) : null,
+            term: el('exam-paper-term').value ? Number(el('exam-paper-term').value) : null,
             words: el('exam-words').value,
             sentences: sentenceRows.map((row) => ({ chinese: row.chinese.value, answers: row.answers.value.split(/\r?\n/) })),
         };
@@ -303,6 +315,8 @@
     function fillEditor(value) {
         hideMissingImport();
         el('exam-paper-name').value = value?.name || '';
+        el('exam-paper-grade').value = value ? paperGrade(value) : (gradeFilter === 'all' ? '' : gradeFilter);
+        el('exam-paper-term').value = value ? paperTerm(value) : (termFilter === 'all' ? '' : termFilter);
         el('exam-words').value = value?.words || '';
         el('exam-add-words').value = '';
         wordEditorStatus();
@@ -318,7 +332,7 @@
         if (!paper || paper.builtin) return;
         newPaperDraft = editorValue();
         editingPaper = paper.id;
-        fillEditor({ name: paper.name, words: paper.words.map((word) => word.english).join(', '), sentences: paper.sentences || [] });
+        fillEditor({ name: paper.name, grade: paper.grade, term: paper.term, words: paper.words.map((word) => word.english).join(', '), sentences: paper.sentences || [] });
         message(`正在编辑“${paper.name}”，修改后请保存。`);
         el('exam-editor-title').scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
         el('exam-add-words').focus({ preventScroll: true });
@@ -353,7 +367,7 @@
         updateMistakeControls();
         ['exam-save-paper', 'exam-start', 'exam-previous', 'exam-next', 'exam-submit',
             'exam-abandon', 'exam-abandon-confirm', 'exam-abandon-cancel',
-            'exam-words', 'exam-paper-name', 'exam-cancel-edit', 'exam-back-to-papers', 'exam-knowledge-back'].forEach((id) => {
+            'exam-words', 'exam-paper-name', 'exam-paper-grade', 'exam-paper-term', 'exam-grade-filter', 'exam-term-filter', 'exam-cancel-edit', 'exam-back-to-papers', 'exam-knowledge-back'].forEach((id) => {
             const button = el(id);
             if (button) button.disabled = value;
         });
@@ -430,14 +444,78 @@
         el('exam-start').focus({ preventScroll: true });
     }
 
+    function gradeOptions(select, filter = false) {
+        select.replaceChildren();
+        const counts = new Map();
+        const available = papers.filter((paper) => !filter || termFilter === 'all' || paperTerm(paper) === termFilter);
+        available.forEach((paper) => {
+            const grade = paperGrade(paper);
+            counts.set(grade, (counts.get(grade) || 0) + 1);
+        });
+        const option = (parent, value, label) => {
+            const node = document.createElement('option');
+            node.value = value;
+            node.textContent = label;
+            parent.appendChild(node);
+        };
+        if (filter) option(select, 'all', `全部年级（${available.length}）`);
+        else option(select, '', '未分类');
+        for (const [stage, start, end] of [['小学', 1, 6], ['初中', 7, 9], ['高中', 10, 12]]) {
+            const group = document.createElement('optgroup');
+            group.label = stage;
+            for (let grade = start; grade <= end; grade += 1) {
+                option(group, String(grade), gradeLabel(grade) + (filter ? `（${counts.get(String(grade)) || 0}）` : ''));
+            }
+            select.appendChild(group);
+        }
+        if (filter) option(select, '', `未分类（${counts.get('') || 0}）`);
+    }
+
     function renderPapers() {
         const list = el('exam-paper-list');
         list.replaceChildren();
-        el('exam-paper-empty').hidden = papers.length > 0;
-        el('exam-paper-empty').textContent = '还没有考卷，先添加单词或句子题并保存一张吧。';
-        el('exam-paper-settings').hidden = papers.length === 0;
-        if (!papers.some((paper) => paper.id === selectedPaper)) selectedPaper = papers[0]?.id || '';
-        for (const paper of papers) {
+        gradeOptions(el('exam-grade-filter'), true);
+        el('exam-grade-filter').value = gradeFilter;
+        el('exam-term-filter').value = termFilter;
+        const visible = papers.filter((paper) => (gradeFilter === 'all' || paperGrade(paper) === gradeFilter)
+            && (termFilter === 'all' || paperTerm(paper) === termFilter));
+        const scope = gradeFilter === 'all'
+            ? `全部年级${termFilter === 'all' ? '' : ` · ${termLabel(termFilter)}`}`
+            : termFilter === 'all' ? gradeLabel(gradeFilter) : collectionLabel(gradeFilter, termFilter);
+        el('exam-grade-summary').textContent = `${scope} · 已收录 ${visible.length} 份考卷`;
+        el('exam-paper-empty').hidden = visible.length > 0;
+        el('exam-paper-empty').textContent = gradeFilter === 'all' && termFilter === 'all'
+            ? '还没有考卷，先添加单词或句子题并保存一张吧。'
+            : `${scope}暂无考卷，可在新建考卷中选择对应年级和学期后收录。`;
+        el('exam-paper-settings').hidden = visible.length === 0;
+        if (!visible.some((paper) => paper.id === selectedPaper)) selectedPaper = visible[0]?.id || '';
+        const groups = new Map();
+        const keys = [...new Set(visible.map(collectionKey))].sort((left, right) => {
+            const rank = (key) => {
+                const [grade, term] = key.split(':');
+                return (Number(grade) || 13) * 3 + (Number(term) || 3);
+            };
+            return rank(left) - rank(right);
+        });
+        const selectedKey = collectionKey(visible.find((paper) => paper.id === selectedPaper));
+        keys.forEach((key) => {
+            const [grade, term] = key.split(':');
+            const group = document.createElement('details');
+            group.className = 'exam-grade-group';
+            group.open = expandedGroups.get(key) ?? key === selectedKey;
+            group.addEventListener('toggle', () => expandedGroups.set(key, group.open));
+            const heading = document.createElement('summary');
+            heading.className = 'exam-grade-heading';
+            heading.textContent = collectionLabel(grade, term);
+            const count = document.createElement('span');
+            count.textContent = `${visible.filter((paper) => collectionKey(paper) === key).length} 份`;
+            heading.appendChild(count);
+            group.appendChild(heading);
+            groups.set(key, group);
+            list.appendChild(group);
+        });
+        for (const paper of visible) {
+            const group = groups.get(collectionKey(paper));
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'exam-paper-card';
@@ -474,9 +552,9 @@
                 knowledgeButton.setAttribute('aria-controls', 'exam-knowledge-view');
                 knowledgeButton.addEventListener('click', () => openKnowledge(paper.id, knowledgeButton));
                 row.append(button, knowledgeButton);
-                list.appendChild(row);
+                group.appendChild(row);
             } else {
-                list.appendChild(button);
+                group.appendChild(button);
             }
         }
         const selected = papers.find((paper) => paper.id === selectedPaper);
@@ -624,6 +702,9 @@
             });
             if (!current(ctx)) return;
             selectedPaper = data.paper.id;
+            if (gradeFilter !== 'all') gradeFilter = paperGrade(data.paper);
+            if (termFilter !== 'all') termFilter = paperTerm(data.paper);
+            expandedGroups.set(collectionKey(data.paper), true);
             if (paperId) finishEditing();
             else fillEditor(null);
             papers = [data.paper, ...papers.filter((paper) => paper.id !== data.paper.id)];
@@ -873,6 +954,9 @@
         clearDraft();
         papers = [];
         selectedPaper = '';
+        gradeFilter = 'all';
+        termFilter = 'all';
+        expandedGroups.clear();
         editingPaper = '';
         newPaperDraft = null;
         knowledgeReturnButton = null;
@@ -907,6 +991,22 @@
 
     window.examPreparation = { open, reset };
     document.addEventListener('DOMContentLoaded', () => {
+        gradeOptions(el('exam-paper-grade'));
+        gradeOptions(el('exam-grade-filter'), true);
+        el('exam-grade-filter').value = gradeFilter;
+        el('exam-term-filter').value = termFilter;
+        const filterPapers = () => {
+            if (busy) return;
+            gradeFilter = el('exam-grade-filter').value;
+            termFilter = el('exam-term-filter').value;
+            if (!editingPaper && !el('exam-paper-name').value && !el('exam-words').value && !sentenceRows.length) {
+                el('exam-paper-grade').value = gradeFilter === 'all' ? '' : gradeFilter;
+                el('exam-paper-term').value = termFilter === 'all' ? '' : termFilter;
+            }
+            renderPapers();
+        };
+        el('exam-grade-filter').addEventListener('change', filterPapers);
+        el('exam-term-filter').addEventListener('change', filterPapers);
         if (typeof MutationObserver === 'function') {
             new MutationObserver(() => {
                 if (!el('exam-preparation-section').classList.contains('active')) el('exam-listening-audio').pause?.();

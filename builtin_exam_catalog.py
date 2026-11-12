@@ -5,6 +5,7 @@ from functools import lru_cache
 import json
 from pathlib import Path
 import re
+from exam_grades import normalize_grade, normalize_term
 
 
 CATALOG_DIR = Path(__file__).resolve().parent / 'builtin_exams'
@@ -42,6 +43,10 @@ def _catalog():
     papers = {}
     for path in sorted(CATALOG_DIR.glob('*.json')):
         paper = json.loads(path.read_text(encoding='utf-8'))
+        paper['grade'] = normalize_grade(paper.get('grade'))
+        paper['term'] = normalize_term(paper.get('term'))
+        if paper['grade'] is None:
+            raise ValueError(f'Missing grade for built-in paper: {path.name}')
         paper_id = paper['id']
         if not paper_id.startswith('builtin-') or paper_id in papers or not paper['questions']:
             raise ValueError(f'Invalid built-in paper: {path.name}')
@@ -80,7 +85,7 @@ def is_builtin(paper_id):
 def public_paper(paper_id):
     paper = _catalog()[paper_id]
     return {
-        **{key: paper[key] for key in ('id', 'name', 'edition', 'description', 'source_note', 'time_minutes')},
+        **{key: paper[key] for key in ('id', 'name', 'grade', 'term', 'edition', 'description', 'source_note', 'time_minutes')},
         'builtin': True, 'question_count': len(paper['questions']),
         'listening_count': sum(question['type'] == 'listening_choice' for question in paper['questions']),
         'word_count': 0, 'sentence_count': 0, 'words': [], 'sentences': [], 'created_at': '',
