@@ -58,6 +58,7 @@ COPY reward_store.py .
 COPY reward_schema.py .
 COPY rate_limit_store.py .
 COPY builtin_exam_catalog.py .
+COPY exam_grades.py .
 COPY exam_mistakes.py .
 COPY exam_preparation.py .
 COPY exam_preparation_routes.py .
