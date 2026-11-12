@@ -4,11 +4,50 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator
+
+
+class PersistentStateLoadError(RuntimeError):
+    """Existing state could not be read safely and must not be overwritten."""
+
+
+def read_json_state(path: Path, default: Any) -> Any:
+    try:
+        with path.open("r", encoding="utf-8") as source:
+            value = json.load(source)
+    except FileNotFoundError:
+        return default
+    except (OSError, ValueError) as exc:
+        raise PersistentStateLoadError(f"Cannot safely read persisted state: {path}") from exc
+    if not isinstance(value, type(default)):
+        raise PersistentStateLoadError(f"Invalid persisted state root: {path}")
+    return value
+
+
+def preserve_file_metadata(path: Path, original: os.stat_result, *, file_descriptor: int | None = None) -> None:
+    if file_descriptor is not None and hasattr(os, "fchown"):
+        os.fchown(file_descriptor, original.st_uid, original.st_gid)
+    elif hasattr(os, "chown"):
+        os.chown(path, original.st_uid, original.st_gid)
+    if file_descriptor is not None and hasattr(os, "fchmod"):
+        os.fchmod(file_descriptor, stat.S_IMODE(original.st_mode))
+    else:
+        os.chmod(path, stat.S_IMODE(original.st_mode))
+
+
+def fsync_directory(path: Path) -> None:
+    if os.name != "posix":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 @contextmanager

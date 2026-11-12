@@ -11,10 +11,12 @@ import logging
 import sqlite3
 import threading
 import time
+from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from app_time import china_now_iso
+from storage_utils import PersistentStateLoadError, read_json_state
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,19 @@ _conn: Optional[sqlite3.Connection] = None
 DEFAULT_INVITE_QUOTA = 15
 _DEFAULT_INVITE_QUOTA = DEFAULT_INVITE_QUOTA
 _OLD_DEFAULT_INVITE_QUOTA = 5
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
+_USER_COLUMNS = (
+    "username, password_hash, email, created_at, enabled, role, child_username, plan, "
+    "invite_quota_limit, invite_quota_used"
+)
+
+
+class EmailAlreadyUsedError(ValueError):
+    """A normalized email address is already bound to another account."""
+
+
+class DuplicateEmailMigrationError(ValueError):
+    """Legacy email conflicts require correction before the store can open."""
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -107,19 +121,26 @@ def _open_conn_and_migrate_unlocked() -> None:
     assert _data_dir is not None
     path = _data_dir / "users.sqlite3"
     path.parent.mkdir(parents=True, exist_ok=True)
-    _conn = sqlite3.connect(
+    conn = sqlite3.connect(
         str(path),
         check_same_thread=False,
         timeout=30.0,
     )
-    _conn.execute("PRAGMA journal_mode=WAL")
-    _conn.execute("PRAGMA synchronous=NORMAL")
-    _conn.execute("PRAGMA busy_timeout=30000")
-    _conn.executescript(_SCHEMA)
-    _ensure_user_columns_unlocked(_conn)
-    _run_schema_migrations_unlocked(_conn)
-    _conn.commit()
-    _auto_migrate_from_json_unlocked(_conn)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.executescript(_SCHEMA)
+        conn.execute("BEGIN IMMEDIATE")
+        _ensure_user_columns_unlocked(conn)
+        _run_schema_migrations_unlocked(conn)
+        conn.commit()
+        _auto_migrate_from_json_unlocked(conn)
+    except Exception:
+        conn.rollback()
+        conn.close()
+        raise
+    _conn = conn
 
 
 def _ensure_user_columns_unlocked(conn: sqlite3.Connection) -> None:
@@ -130,6 +151,8 @@ def _ensure_user_columns_unlocked(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN invite_quota_limit INTEGER NOT NULL DEFAULT 15")
     if "invite_quota_used" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN invite_quota_used INTEGER NOT NULL DEFAULT 0")
+    if "email_key" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email_key TEXT")
 
 
 def _run_schema_migrations_unlocked(conn: sqlite3.Connection) -> None:
@@ -144,14 +167,38 @@ def _run_schema_migrations_unlocked(conn: sqlite3.Connection) -> None:
             "UPDATE users SET invite_quota_limit = ? WHERE invite_quota_limit = ?",
             (_DEFAULT_INVITE_QUOTA, _OLD_DEFAULT_INVITE_QUOTA),
         )
+    if version < 2:
+        owners: Dict[str, str] = {}
+        updates = []
+        for username, email in conn.execute("SELECT username, email FROM users"):
+            key = _email_key(email)
+            if key and key in owners:
+                raise DuplicateEmailMigrationError(
+                    f"Duplicate normalized email for accounts {owners[key]!r} and {username!r}; "
+                    "resolve the conflict in users.sqlite3 before restarting"
+                )
+            if key:
+                owners[key] = str(username)
+            updates.append((key, username))
+        conn.executemany("UPDATE users SET email_key = ? WHERE username = ?", updates)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_key ON users (email_key)")
     if version < _SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+
+
+def _email_key(value: Any) -> Optional[str]:
+    return str(value or "").strip().casefold() or None
+
+
+def _raise_email_conflict(error: Exception) -> None:
+    if isinstance(error, sqlite3.IntegrityError) and "users.email_key" in str(error):
+        raise EmailAlreadyUsedError("邮箱已被其他账号使用") from error
 
 
 def _user_row_tuple(
     username: str,
     u: Dict[str, Any],
-) -> Tuple[str, str, Optional[str], str, int, Optional[str], Optional[str], str, int, int]:
+) -> tuple:
     """INSERT / UPSERT 用的元组，与表列顺序一致。"""
     ph = str(u.get("password_hash") or "")
     email = u.get("email")
@@ -195,14 +242,15 @@ def _user_row_tuple(
         plan,
         invite_quota_limit,
         invite_quota_used,
+        _email_key(email),
     )
 
 
 def _upsert_user_unlocked(conn: sqlite3.Connection, username: str, u: Dict[str, Any]) -> None:
     row = _user_row_tuple(username, u)
     conn.execute(
-        "INSERT INTO users (username, password_hash, email, created_at, enabled, role, child_username, plan, invite_quota_limit, invite_quota_used) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?) "
+        "INSERT INTO users (username, password_hash, email, created_at, enabled, role, child_username, plan, invite_quota_limit, invite_quota_used, email_key) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(username) DO UPDATE SET "
         "password_hash=excluded.password_hash, "
         "email=excluded.email, "
@@ -212,7 +260,8 @@ def _upsert_user_unlocked(conn: sqlite3.Connection, username: str, u: Dict[str, 
         "child_username=excluded.child_username, "
         "plan=excluded.plan, "
         "invite_quota_limit=excluded.invite_quota_limit, "
-        "invite_quota_used=excluded.invite_quota_used",
+        "invite_quota_used=excluded.invite_quota_used, "
+        "email_key=excluded.email_key",
         row,
     )
 
@@ -230,6 +279,7 @@ def _sync_users_table_unlocked(conn: sqlite3.Connection, users: Dict[str, Any]) 
         return
     placeholders = ",".join("?" * len(wanted))
     conn.execute(f"DELETE FROM users WHERE username NOT IN ({placeholders})", tuple(wanted))
+    conn.execute("UPDATE users SET email_key = NULL WHERE email_key IS NOT NULL")
     for uname, u in pairs:
         _upsert_user_unlocked(conn, uname, u)
 
@@ -275,10 +325,7 @@ def _row_to_user_dict(row: tuple) -> Dict[str, Any]:
 
 
 def _load_users_unlocked(conn: sqlite3.Connection) -> Dict[str, Any]:
-    cur = conn.execute(
-        "SELECT username, password_hash, email, created_at, enabled, role, child_username, plan, invite_quota_limit, invite_quota_used "
-        "FROM users ORDER BY username"
-    )
+    cur = conn.execute(f"SELECT {_USER_COLUMNS} FROM users ORDER BY username")
     out: Dict[str, Any] = {}
     for row in cur.fetchall():
         uname = str(row[0])
@@ -291,20 +338,18 @@ def _auto_migrate_from_json_unlocked(conn: sqlite3.Connection) -> None:
     if int(cur.fetchone()[0]) > 0:
         return
     jf = _data_dir / "users.json"
-    if not jf.is_file():
+    data = read_json_state(jf, {})
+    if not data:
         return
-    try:
-        raw = jf.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except Exception as e:
-        logger.warning("users.json 存在但无法解析，跳过自动迁移: %s", e)
-        return
-    if not isinstance(data, dict) or not data:
-        return
+    if any(not isinstance(user, dict) for user in data.values()):
+        raise PersistentStateLoadError(f"Invalid legacy user account: {jf}")
 
     inserted = 0
     try:
         conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None:
+            conn.rollback()
+            return
         to_sync: Dict[str, Any] = {}
         for uname, u in data.items():
             if not isinstance(u, dict):
@@ -316,10 +361,11 @@ def _auto_migrate_from_json_unlocked(conn: sqlite3.Connection) -> None:
             inserted += 1
         _sync_users_table_unlocked(conn, to_sync)
         conn.commit()
-    except Exception:
+    except Exception as error:
         conn.rollback()
         logger.exception("从 users.json 迁移到 SQLite 失败")
-        return
+        _raise_email_conflict(error)
+        raise PersistentStateLoadError(f"Cannot safely migrate legacy users: {jf}") from error
 
     if inserted == 0:
         logger.warning("users.json 有键但无有效用户字典，未重命名源文件")
@@ -345,11 +391,24 @@ def get_user(username: str) -> Optional[Dict[str, Any]]:
     with _lock:
         conn = _ensure_conn_unlocked()
         row = conn.execute(
-            "SELECT username, password_hash, email, created_at, enabled, role, child_username, plan, "
-            "invite_quota_limit, invite_quota_used FROM users WHERE username = ?",
+            f"SELECT {_USER_COLUMNS} FROM users WHERE username = ?",
             (username,),
         ).fetchone()
         return _row_to_user_dict(row) if row is not None else None
+
+
+def get_email_owner(email: str, *, exclude: str = "") -> Optional[str]:
+    """Look up a normalized email using the unique index."""
+    key = _email_key(email)
+    if key is None:
+        return None
+    with _lock:
+        conn = _ensure_conn_unlocked()
+        row = conn.execute(
+            "SELECT username FROM users WHERE email_key = ? AND username != ?",
+            (key, exclude),
+        ).fetchone()
+        return str(row[0]) if row is not None else None
 
 
 def update_password_hash(username: str, expected_hash: str, new_hash: str) -> bool:
@@ -380,32 +439,62 @@ def save_users(users: Dict[str, Any]) -> None:
         except Exception as e:
             conn.rollback()
             logger.error("保存用户表失败: %s", e)
+            _raise_email_conflict(e)
+            raise
 
 
 def mutate_users(
     mutator: Callable[[Dict[str, Any]], Any],
     *,
+    usernames: Optional[Iterable[str]] = None,
     rollback_on_error: bool = True,
 ) -> Any:
     """
-    在同一 SQLite 写事务内读取、修改并保存用户表。
+    Atomically mutate users, reading only ``usernames`` when supplied.
 
-    供 Web 请求替代 ``load_users() -> 修改 -> save_users()`` 的旧模式，避免并发请求基于
-    过期快照执行全量同步而删除或覆盖彼此的更新。
+    The callback sees existing rows within that scope and may insert or delete scoped
+    usernames. Only changed rows are written. Omitting the scope preserves the legacy
+    whole-dictionary callback API. ``rollback_on_error`` is retained for compatibility;
+    failed owned transactions always roll back.
     """
     with _lock:
         conn = _ensure_conn_unlocked()
         try:
             conn.execute("BEGIN IMMEDIATE")
-            users = _load_users_unlocked(conn)
+            scope = None if usernames is None else set(map(str, usernames))
+            if scope is None:
+                users = _load_users_unlocked(conn)
+            else:
+                users = {}
+                for username in sorted(scope):
+                    row = conn.execute(
+                        f"SELECT {_USER_COLUMNS} FROM users WHERE username = ?", (username,)
+                    ).fetchone()
+                    if row is not None:
+                        users[username] = _row_to_user_dict(row)
+            original = deepcopy(users)
             result = mutator(users)
-            _sync_users_table_unlocked(conn, users)
+            if scope is not None and set(users).difference(scope):
+                raise ValueError("User mutation attempted to write outside its username scope")
+            for username in original:
+                if not isinstance(users.get(username), dict):
+                    conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            for username, user in users.items():
+                if (
+                    isinstance(user, dict)
+                    and username in original
+                    and _email_key(user.get("email")) != _email_key(original[username].get("email"))
+                ):
+                    conn.execute("UPDATE users SET email_key = NULL WHERE username = ?", (username,))
+            for username, user in users.items():
+                if isinstance(user, dict) and user != original.get(username):
+                    _upsert_user_unlocked(conn, str(username), user)
             conn.commit()
             return result
-        except Exception:
-            if rollback_on_error:
-                conn.rollback()
+        except Exception as error:
+            conn.rollback()
             logger.exception("事务化修改用户表失败")
+            _raise_email_conflict(error)
             raise
 
 
@@ -428,6 +517,8 @@ def import_users_from_json(
     data = json.loads(raw)
     if not isinstance(data, dict):
         raise ValueError("JSON 根须为对象（用户名 -> 用户字段）")
+    if any(not isinstance(user, dict) for user in data.values()):
+        raise ValueError("JSON 用户字段须为对象")
 
     init_user_store(data_dir)
     with _lock:
@@ -438,19 +529,27 @@ def import_users_from_json(
             raise ValueError(
                 f"users.sqlite3 中已有 {existing} 条用户；若需覆盖请先备份数据库并传入 replace_existing=True"
             )
-        conn.execute("BEGIN IMMEDIATE")
-        to_sync: Dict[str, Any] = {}
-        inserted = 0
-        for uname, u in data.items():
-            if not isinstance(u, dict):
-                continue
-            u2 = dict(u)
-            if "enabled" not in u2:
-                u2["enabled"] = True
-            to_sync[str(uname)] = u2
-            inserted += 1
-        _sync_users_table_unlocked(conn, to_sync)
-        conn.commit()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = int(conn.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+            if existing > 0 and not replace_existing:
+                raise ValueError("users.sqlite3 already contains users; replacement was not requested")
+            to_sync: Dict[str, Any] = {}
+            inserted = 0
+            for uname, u in data.items():
+                if not isinstance(u, dict):
+                    continue
+                u2 = dict(u)
+                if "enabled" not in u2:
+                    u2["enabled"] = True
+                to_sync[str(uname)] = u2
+                inserted += 1
+            _sync_users_table_unlocked(conn, to_sync)
+            conn.commit()
+        except Exception as error:
+            conn.rollback()
+            _raise_email_conflict(error)
+            raise
 
     if backup_json and json_path.is_file():
         try:

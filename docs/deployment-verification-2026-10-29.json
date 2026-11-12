@@ -1,0 +1,68 @@
+{
+  "phase": "deployment_complete",
+  "url": "https://english.itorange.online",
+  "backup": "/data/english_reciter-backups/review-20261029-99b7a1",
+  "release_sha256": "33dd2765f40bf414d5d0a7c4c14d8b1c3dfbc09e35fa8e6bc631180b877ef884",
+  "local_assets": 7,
+  "public_assets": 7,
+  "source_files": 172,
+  "user_count": 28,
+  "users_unchanged_since_backup": true,
+  "wordbank_files_unchanged": 602,
+  "config_unchanged": true,
+  "existing_secrets_and_environment_preserved": true,
+  "rewards": {
+    "reward_documents": 31,
+    "reward_events": 6906
+  },
+  "listen": "127.0.0.1:8000",
+  "workers": 1,
+  "threads": 4,
+  "unauthenticated_requests_rejected": true,
+  "pm2_saved": true,
+  "restore_rehearsal": {
+    "files": 1229,
+    "databases": 53,
+    "migration_accounts": 28
+  },
+  "static_directory_permissions_corrected": true,
+  "post_release_patch": {
+    "reason": "Public asset permissions under restrictive deployment umask",
+    "archive": "/data/english_reciter-releases/review-20261029-99b7a1/asset-permissions-patch.tar.gz",
+    "sha256": "263247336de8dafbaf50c5568b6d2888cb71cb24e193b6fda27a4e3215d52443",
+    "files": {
+      "scripts/build_assets.py": "952818d56f2306da175d4e8555fcae225cefcd55452d8f2e5596086f08bfd519",
+      "test_build_assets.py": "69bc425aad4677f6c605fb035501e53a85155270d22ce975be9cb71e9d8288a8"
+    },
+    "pytest_passed": 871,
+    "subtests_passed": 12,
+    "test_seconds": 24.3
+  },
+  "backup_status": "deleted",
+  "backup_cleanup": {
+    "status": "deleted",
+    "requested_by_user": true,
+    "completed_at": "2026-10-29T13:22:15+08:00",
+    "deleted_paths": [
+      "/data/english_reciter-backups/review-20261029-99b7a1",
+      "/data/english_reciter-releases/review-20261029-99b7a1/.verification/production-copy",
+      "/data/english_reciter-releases/review-20261029-99b7a1/.verification/restore-rehearsal",
+      "/data/english_reciter-releases/review-20261029-99b7a1/.env",
+      "/data/english_reciter-releases/review-20261029-99b7a1/config.json"
+    ],
+    "removed_file_bytes": 1760462562,
+    "verification": {
+      "healthy": true,
+      "pm2_online": true,
+      "public_assets": 7,
+      "auth_rejected": true,
+      "databases_checked": 22,
+      "users": 28,
+      "dependencies_ok": true,
+      "active_environment": "/data/english_reciter-releases/review-20261029-99b7a1/.venv"
+    },
+    "post_cleanup_healthy": true,
+    "active_environment_preserved": true,
+    "rollback_backup_available": false
+  }
+}

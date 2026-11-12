@@ -21,6 +21,39 @@ const textbookLemmaImportBusy = new Set();
 const textbookLemmaMissNotBefore = new Map();
 /** 非 VIP：某词「智能还原」已尝试仍无词条时记录，刷新页面前不再显示该按钮 */
 const textbookNlpFreeExhausted = new Set();
+let textbookAccountGeneration = 0;
+let textbookLessonRequestSequence = 0;
+let textbookCatalogRequestSequence = 0;
+
+function captureTextbookContext() {
+    return { account: captureAccountContext(), generation: textbookAccountGeneration };
+}
+
+function isTextbookContextCurrent(context) {
+    return context.generation === textbookAccountGeneration && isAccountContextCurrent(context.account);
+}
+
+function resetTextbookAccountState() {
+    textbookAccountGeneration++;
+    textbookLessonRequestSequence++;
+    textbookCatalogRequestSequence++;
+    textbookFullReadAbort();
+    hideTextbookTooltip();
+    textbookCatalogCache = null;
+    textbookReaderContext = null;
+    [textbookWordCache, textbookTroubleBlockedCache, textbookTroubleStatusInflight,
+        textbookLookupInflight, textbookImplicitMorphHint, textbookLemmaImportBusy,
+        textbookLemmaMissNotBefore, textbookNlpFreeExhausted].forEach((cache) => cache.clear());
+    const reader = document.getElementById('textbook-reader');
+    if (reader) {
+        reader.innerHTML = '';
+        reader.style.display = 'none';
+    }
+    const catalogWrap = document.getElementById('textbook-catalog-wrap');
+    if (catalogWrap) catalogWrap.style.display = '';
+    const catalog = document.getElementById('textbook-catalog');
+    if (catalog) catalog.innerHTML = '';
+}
 
 // ----- 全文朗读（逐句、高亮；暂停/继续/从头/退出） -----
 /** 图标栏内 SVG（currentColor 随主题） */
@@ -407,6 +440,7 @@ function positionTextbookTooltipNearEl(anchorEl) {
 }
 
 function showTextbookTooltip(html, anchorEl) {
+    if (!anchorEl || !anchorEl.isConnected) return;
     const tip = document.getElementById('textbook-word-tooltip');
     if (!tip) return;
     ensureTextbookTooltipHoverBridge();
@@ -484,6 +518,7 @@ function hydrateTextbookFromSearchResponse(data) {
  * opts.nlp === true 时在用户确认「智能还原」后调用，走 spaCy。
  */
 async function textbookLookupWord(lemma, opts = {}) {
+    const context = captureTextbookContext();
     const k = normalizeTextbookLemmaKey(lemma);
     if (!k || k.length < 2) return null;
     const wantNlp = opts.nlp === true;
@@ -499,12 +534,13 @@ async function textbookLookupWord(lemma, opts = {}) {
             const data = await apiRequest(
                 `/wordbank/csv/search?q=${encodeURIComponent(k)}&per_surface=1&nlp=${nlp}&heuristics=1`,
             );
+            if (!isTextbookContextCurrent(context)) return null;
             hydrateTextbookFromSearchResponse(data);
             return textbookWordCache.has(k) ? textbookWordCache.get(k) : null;
         } catch (_) {
             return null;
         } finally {
-            textbookLookupInflight.delete(inflightKey);
+            if (isTextbookContextCurrent(context)) textbookLookupInflight.delete(inflightKey);
         }
     })();
     textbookLookupInflight.set(inflightKey, p);
@@ -533,6 +569,7 @@ function buildTextbookMissingTooltipHtml(lemma, k, sub, opts = {}) {
 }
 
 async function runTextbookNlpResolve(lemma, anchorEl) {
+    const context = captureTextbookContext();
     const k = normalizeTextbookLemmaKey(lemma);
     if (userPlan !== 'paid' && textbookNlpFreeExhausted.has(k)) return;
     ensureTextbookTooltipHoverBridge();
@@ -542,6 +579,7 @@ async function runTextbookNlpResolve(lemma, anchorEl) {
             : '<div class="tb-tip-meta tb-tip-loading">正在查询…</div>';
     showTextbookTooltip(loadingHtml, anchorEl);
     const row = await textbookLookupWord(lemma, { nlp: true });
+    if (!isTextbookContextCurrent(context)) return;
     if (row) {
         showTextbookTooltip(
             buildTextbookTooltipHtmlFromRow(row, lemma, textbookImplicitMorphHint.get(k) || null),
@@ -549,6 +587,7 @@ async function runTextbookNlpResolve(lemma, anchorEl) {
         );
     } else {
         const sub = await textbookSubtextWhenMissingInWordbank(lemma, k);
+        if (!isTextbookContextCurrent(context)) return;
         if (userPlan !== 'paid') {
             textbookNlpFreeExhausted.add(k);
             showTextbookTooltip(buildTextbookMissingTooltipHtml(lemma, k, sub, { nlpFreeExhausted: true }), anchorEl);
@@ -565,6 +604,8 @@ async function runTextbookNlpResolve(lemma, anchorEl) {
 
 /** 课文打开后批量预取本页生词，悬停时多数已命中缓存 */
 async function textbookPrefetchLessonWords(rootEl) {
+    const context = captureTextbookContext();
+    const lessonSequence = textbookLessonRequestSequence;
     const keys = new Set();
     rootEl.querySelectorAll('.textbook-token--word[data-lemma]').forEach((el) => {
         const k = normalizeTextbookLemmaKey(el.getAttribute('data-lemma'));
@@ -574,12 +615,14 @@ async function textbookPrefetchLessonWords(rootEl) {
     if (list.length === 0) return;
     const CHUNK = 100;
     for (let i = 0; i < list.length; i += CHUNK) {
+        if (!isTextbookContextCurrent(context) || lessonSequence !== textbookLessonRequestSequence) return;
         const chunk = list.slice(i, i + CHUNK);
         const q = chunk.join(',');
         try {
             const data = await apiRequest(
                 `/wordbank/csv/search?q=${encodeURIComponent(q)}&per_surface=1&nlp=0&heuristics=1`,
             );
+            if (!isTextbookContextCurrent(context) || lessonSequence !== textbookLessonRequestSequence) return;
             hydrateTextbookFromSearchResponse(data);
         } catch (_) {
             /* 预取失败不阻塞阅读 */
@@ -588,6 +631,7 @@ async function textbookPrefetchLessonWords(rootEl) {
 }
 
 async function textbookSubtextWhenMissingInWordbank(lemma, k, touchHint) {
+    const context = captureTextbookContext();
     let sub = touchHint
         ? `词库暂无；短按可导入${userPlan === 'paid' ? '（AI 生成）' : '（需 VIP）'}`
         : `词库暂无，点击可尝试导入${userPlan === 'paid' ? '（VIP 自动 AI 生成）' : '（需 VIP）'}`;
@@ -601,11 +645,12 @@ async function textbookSubtextWhenMissingInWordbank(lemma, k, touchHint) {
         let p = textbookTroubleStatusInflight.get(k);
         if (!p) {
             p = apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(lemma)}`).finally(() => {
-                textbookTroubleStatusInflight.delete(k);
+                if (textbookTroubleStatusInflight.get(k) === p) textbookTroubleStatusInflight.delete(k);
             });
             textbookTroubleStatusInflight.set(k, p);
         }
         const ts = await p;
+        if (!isTextbookContextCurrent(context)) return sub;
         if (ts && ts.blocked) {
             sub = '词库暂无；该词已列入疑难词，请联系管理员配置映射';
             textbookTroubleBlockedCache.set(k, true);
@@ -671,6 +716,7 @@ function buildImportItemFromCsvRow(w) {
 }
 
 async function importWordFromTextbookLemma(lemma, anchorEl) {
+    const context = captureTextbookContext();
     const raw = String(lemma || '').trim();
     if (!raw) return;
     const k = raw.toLowerCase();
@@ -681,8 +727,10 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
     textbookLemmaImportBusy.add(k);
     try {
         let row = await textbookLookupWord(k);
+        if (!isTextbookContextCurrent(context)) return;
         if (!row) {
             row = await textbookLookupWord(k, { nlp: true });
+            if (!isTextbookContextCurrent(context)) return;
         }
         if (row) {
             try {
@@ -690,9 +738,11 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
                     method: 'POST',
                     body: JSON.stringify([buildImportItemFromCsvRow(row)]),
                 });
+                if (!isTextbookContextCurrent(context)) return;
                 const added = data.added || 0;
                 const skipped = data.skipped_duplicate || 0;
                 if (added > 0) {
+                    invalidateReviewDataAfterImport();
                     showTextbookImportFeedback(anchorEl, `「${row.english}」已加入待复习`, 'ok');
                 } else if (skipped > 0) {
                     showTextbookImportFeedback(anchorEl, `「${row.english}」已在学习列表中`, 'warn');
@@ -701,6 +751,7 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
                 }
                 loadStats();
             } catch (e) {
+                if (!isTextbookContextCurrent(context)) return;
                 showTextbookImportFeedback(anchorEl, e.message || '导入失败', 'error');
             }
             return;
@@ -724,6 +775,7 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
 
         try {
             const ts = await apiRequest(`/wordbank/csv/trouble-status?q=${encodeURIComponent(k)}`);
+            if (!isTextbookContextCurrent(context)) return;
             if (ts && ts.blocked) {
                 showTextbookImportFeedback(
                     anchorEl,
@@ -735,15 +787,23 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
         } catch (_) {
             /* 继续尝试导入 */
         }
+        if (!isTextbookContextCurrent(context)) return;
 
         try {
-            const data = await apiRequest('/wordbank/csv/import-words', {
+            let data = await apiRequest('/wordbank/csv/import-words', {
                 method: 'POST',
                 body: JSON.stringify({
                     words: k,
                     also_add_to_queue: true,
                 }),
             });
+            if (!isTextbookContextCurrent(context)) return;
+            if (data.job_id) {
+                showTextbookImportFeedback(anchorEl, '后台导入中…', 'warn');
+                data = await waitForVocabImportJob(data.job_id, context.account);
+                if (!isTextbookContextCurrent(context)) return;
+            }
+            if (Number(data.queue_result?.added) > 0) invalidateReviewDataAfterImport();
             const msg = data.message || '已完成';
             showTextbookImportFeedback(anchorEl, msg, 'ok');
             textbookWordCache.delete(k);
@@ -751,10 +811,11 @@ async function importWordFromTextbookLemma(lemma, anchorEl) {
             textbookTroubleBlockedCache.delete(k);
             loadStats();
         } catch (e) {
+            if (!isTextbookContextCurrent(context)) return;
             showTextbookImportFeedback(anchorEl, e.message || '词汇导入失败', 'error');
         }
     } finally {
-        textbookLemmaImportBusy.delete(k);
+        if (isTextbookContextCurrent(context)) textbookLemmaImportBusy.delete(k);
     }
 }
 
@@ -791,10 +852,12 @@ function renderTextbookEnglishTokens(english, lineIndex) {
 }
 
 function bindTextbookReaderInteractions(root) {
+    const context = captureTextbookContext();
     const tip = document.getElementById('textbook-word-tooltip');
     const canHover = typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover)').matches;
 
     root.querySelectorAll('.textbook-token--word').forEach((el) => {
+        const isCurrentToken = () => isTextbookContextCurrent(context) && el.isConnected && textbookTooltipToken === el;
         let longPressFired = false;
         let pressTimer = null;
 
@@ -806,6 +869,7 @@ function bindTextbookReaderInteractions(root) {
             const cx = e.clientX;
             const cy = e.clientY;
             pressTimer = setTimeout(async () => {
+                if (!isTextbookContextCurrent(context) || !el.isConnected) return;
                 pressTimer = null;
                 longPressFired = true;
                 if (!lemma) return;
@@ -820,6 +884,7 @@ function bindTextbookReaderInteractions(root) {
                     );
                 }
                 const row = await textbookLookupWord(lemma);
+                if (!isCurrentToken()) return;
                 if (row) {
                     showTextbookTooltip(
                         buildTextbookTooltipHtmlFromRow(row, lemma, textbookImplicitMorphHint.get(lemma.toLowerCase()) || null),
@@ -827,6 +892,7 @@ function bindTextbookReaderInteractions(root) {
                     );
                 } else {
                     const sub = await textbookSubtextWhenMissingInWordbank(lemma, k, true);
+                    if (!isCurrentToken()) return;
                     showTextbookTooltip(
                         buildTextbookMissingTooltipHtml(lemma, k, sub, {
                             nlpFreeExhausted: userPlan !== 'paid' && textbookNlpFreeExhausted.has(k),
@@ -848,6 +914,7 @@ function bindTextbookReaderInteractions(root) {
 
         el.addEventListener('mouseenter', async (ev) => {
             if (!canHover) return;
+            if (!isTextbookContextCurrent(context) || !el.isConnected) return;
             const lemma = el.getAttribute('data-lemma');
             if (!lemma) return;
             clearTextbookTooltipHideTimer();
@@ -861,6 +928,7 @@ function bindTextbookReaderInteractions(root) {
                 );
             }
             const row = await textbookLookupWord(lemma);
+            if (!isCurrentToken()) return;
             if (row) {
                 showTextbookTooltip(
                     buildTextbookTooltipHtmlFromRow(row, lemma, textbookImplicitMorphHint.get(lemma.toLowerCase()) || null),
@@ -868,6 +936,7 @@ function bindTextbookReaderInteractions(root) {
                 );
             } else {
                 const sub = await textbookSubtextWhenMissingInWordbank(lemma, k);
+                if (!isCurrentToken()) return;
                 showTextbookTooltip(
                     buildTextbookMissingTooltipHtml(lemma, k, sub, {
                         nlpFreeExhausted: userPlan !== 'paid' && textbookNlpFreeExhausted.has(k),
@@ -1028,6 +1097,7 @@ function renderTextbookReader(data) {
     void textbookPrefetchLessonWords(reader);
 
     document.getElementById('textbook-back-btn')?.addEventListener('click', () => {
+        textbookLessonRequestSequence++;
         textbookFullReadAbort();
         hideTextbookTooltip();
         reader.style.display = 'none';
@@ -1038,6 +1108,9 @@ function renderTextbookReader(data) {
 }
 
 async function openTextbookLesson(corpusId, jsonPath) {
+    const context = captureTextbookContext();
+    const requestSequence = ++textbookLessonRequestSequence;
+    const isCurrent = () => isTextbookContextCurrent(context) && requestSequence === textbookLessonRequestSequence;
     hideTextbookTooltip();
     textbookFullReadAbort();
     textbookReaderContext = { corpusId, jsonPath };
@@ -1050,8 +1123,10 @@ async function openTextbookLesson(corpusId, jsonPath) {
     try {
         const params = new URLSearchParams({ corpus: corpusId, path: jsonPath });
         const data = await apiRequest(`/textbooks/lesson?${params}`);
+        if (!isCurrent()) return;
         renderTextbookReader(data);
     } catch (e) {
+        if (!isCurrent()) return;
         showMainBanner(e.message || '加载失败');
         const catalogWrap = document.getElementById('textbook-catalog-wrap');
         if (reader) reader.style.display = 'none';
@@ -1127,6 +1202,9 @@ function renderTextbookCatalog(corpora) {
 }
 
 async function loadTextbookSection() {
+    const context = captureTextbookContext();
+    const requestSequence = ++textbookCatalogRequestSequence;
+    const isCurrent = () => isTextbookContextCurrent(context) && requestSequence === textbookCatalogRequestSequence;
     const root = document.getElementById('textbook-catalog');
     if (!root) return;
 
@@ -1138,10 +1216,12 @@ async function loadTextbookSection() {
     root.innerHTML = '<p class="textbook-catalog-loading"><span class="loading-dots">加载教材目录</span></p>';
     try {
         const data = await apiRequest('/textbooks/catalog');
+        if (!isCurrent()) return;
         const corpora = Array.isArray(data.corpora) ? data.corpora : [];
         textbookCatalogCache = corpora;
         renderTextbookCatalog(corpora);
     } catch (e) {
+        if (!isCurrent()) return;
         root.innerHTML = `<p class="textbook-catalog-empty">${escapeHtml(e.message || '加载失败')}</p>`;
         showMainBanner(e.message || '教材目录加载失败');
     }

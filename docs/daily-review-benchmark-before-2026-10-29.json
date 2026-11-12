@@ -1,0 +1,436 @@
+{
+  "python": "3.11.6",
+  "platform": "Linux-6.6.117-45.1.oc9.x86_64-x86_64-with-glibc2.38",
+  "scope": "Synthetic sequential warm-cache functions and in-process Flask test-client HTTP routes; real authentication, user locks, persistence and rewards; gzip review responses; no TCP/TLS/network latency or concurrent load. All daily exercises use spelling. Sample p95 is not a production SLO.",
+  "history_events_per_word": 20,
+  "pending_share": 0.5,
+  "mastered_due_after_days": 30,
+  "source_sha256": {
+    "reciter": "d627d38201d888ebd280d5cf95032490f551de294d825820e0f6f82314d37fd0",
+    "learning_sqlite_store": "7e47de63ef2f55b22cafc058dc346c2cc55c66f1e416637ee68e075ba08e8d86",
+    "web_learning_routes": "e81fca8a0ef70b7744d6a8e55b7dc11bfb0f576246fa8ca035dd0ef44e0cf3e2",
+    "simple_web_app": "3d065c2ec3aec3e9aa20118238d5efce1bf640e2e0ae788132113ba8c9f0f284"
+  },
+  "results": [
+    {
+      "total_words": 1000,
+      "daily_task_words": 100,
+      "functions": {
+        "first_plan_ms": 96.745,
+        "warm_plan": {
+          "samples": 7,
+          "p50_ms": 64.969,
+          "p95_ms": 65.656,
+          "min_ms": 62.824,
+          "max_ms": 65.656,
+          "samples_ms": [
+            62.824,
+            65.286,
+            64.969,
+            65.656,
+            64.535,
+            65.012,
+            64.688
+          ]
+        },
+        "count_due": {
+          "samples": 7,
+          "p50_ms": 22.764,
+          "p95_ms": 35.687,
+          "min_ms": 21.973,
+          "max_ms": 35.687,
+          "samples_ms": [
+            22.764,
+            22.875,
+            22.824,
+            21.973,
+            22.535,
+            22.657,
+            35.687
+          ]
+        },
+        "unchanged_save": {
+          "samples": 7,
+          "p50_ms": 174.277,
+          "p95_ms": 214.386,
+          "min_ms": 171.158,
+          "max_ms": 214.386,
+          "samples_ms": [
+            178.002,
+            172.5,
+            174.277,
+            171.807,
+            171.158,
+            214.386,
+            174.74
+          ]
+        },
+        "one_word_save": {
+          "samples": 7,
+          "p50_ms": 186.814,
+          "p95_ms": 237.42,
+          "min_ms": 179.896,
+          "max_ms": 237.42,
+          "samples_ms": [
+            199.716,
+            186.814,
+            179.896,
+            181.092,
+            237.42,
+            187.353,
+            185.899
+          ]
+        },
+        "cold_store_load": {
+          "samples": 7,
+          "p50_ms": 113.303,
+          "p95_ms": 130.587,
+          "min_ms": 90.926,
+          "max_ms": 130.587,
+          "samples_ms": [
+            118.367,
+            95.377,
+            90.981,
+            124.932,
+            90.926,
+            113.303,
+            130.587
+          ]
+        }
+      },
+      "http": {
+        "review_get": {
+          "samples": 7,
+          "p50_ms": 253.926,
+          "p95_ms": 302.306,
+          "min_ms": 235.238,
+          "max_ms": 302.306,
+          "samples_ms": [
+            243.443,
+            271.636,
+            253.926,
+            235.238,
+            302.306,
+            236.179,
+            255.414
+          ]
+        },
+        "answer_post": {
+          "samples": 7,
+          "p50_ms": 212.209,
+          "p95_ms": 244.598,
+          "min_ms": 205.94,
+          "max_ms": 244.598,
+          "samples_ms": [
+            216.704,
+            211.847,
+            212.994,
+            212.209,
+            244.598,
+            205.94,
+            206.746
+          ]
+        },
+        "answer_replay_post": {
+          "samples": 7,
+          "p50_ms": 186.361,
+          "p95_ms": 193.646,
+          "min_ms": 180.945,
+          "max_ms": 193.646,
+          "samples_ms": [
+            189.931,
+            185.737,
+            186.361,
+            182.513,
+            180.945,
+            192.244,
+            193.646
+          ]
+        },
+        "review_gzip_bytes": 3042,
+        "durable_answers_verified": 8,
+        "idempotent_replay_verified": true
+      }
+    },
+    {
+      "total_words": 2000,
+      "daily_task_words": 100,
+      "functions": {
+        "first_plan_ms": 181.594,
+        "warm_plan": {
+          "samples": 7,
+          "p50_ms": 149.318,
+          "p95_ms": 153.942,
+          "min_ms": 139.892,
+          "max_ms": 153.942,
+          "samples_ms": [
+            139.892,
+            150.413,
+            146.594,
+            149.318,
+            153.942,
+            149.986,
+            147.249
+          ]
+        },
+        "count_due": {
+          "samples": 7,
+          "p50_ms": 48.051,
+          "p95_ms": 49.147,
+          "min_ms": 47.042,
+          "max_ms": 49.147,
+          "samples_ms": [
+            48.051,
+            47.212,
+            49.045,
+            47.042,
+            48.499,
+            47.2,
+            49.147
+          ]
+        },
+        "unchanged_save": {
+          "samples": 7,
+          "p50_ms": 344.693,
+          "p95_ms": 364.378,
+          "min_ms": 335.573,
+          "max_ms": 364.378,
+          "samples_ms": [
+            354.191,
+            364.378,
+            344.693,
+            339.718,
+            356.014,
+            341.667,
+            335.573
+          ]
+        },
+        "one_word_save": {
+          "samples": 7,
+          "p50_ms": 388.213,
+          "p95_ms": 415.28,
+          "min_ms": 376.081,
+          "max_ms": 415.28,
+          "samples_ms": [
+            388.213,
+            376.081,
+            376.682,
+            414.253,
+            394.178,
+            382.95,
+            415.28
+          ]
+        },
+        "cold_store_load": {
+          "samples": 7,
+          "p50_ms": 196.655,
+          "p95_ms": 284.109,
+          "min_ms": 191.557,
+          "max_ms": 284.109,
+          "samples_ms": [
+            195.929,
+            284.109,
+            194.978,
+            256.3,
+            191.557,
+            196.655,
+            248.047
+          ]
+        }
+      },
+      "http": {
+        "review_get": {
+          "samples": 7,
+          "p50_ms": 562.501,
+          "p95_ms": 616.403,
+          "min_ms": 529.223,
+          "max_ms": 616.403,
+          "samples_ms": [
+            616.403,
+            561.199,
+            584.738,
+            529.223,
+            559.98,
+            562.501,
+            570.199
+          ]
+        },
+        "answer_post": {
+          "samples": 7,
+          "p50_ms": 406.783,
+          "p95_ms": 463.993,
+          "min_ms": 393.274,
+          "max_ms": 463.993,
+          "samples_ms": [
+            413.623,
+            463.993,
+            410.795,
+            401.94,
+            393.274,
+            396.382,
+            406.783
+          ]
+        },
+        "answer_replay_post": {
+          "samples": 7,
+          "p50_ms": 355.361,
+          "p95_ms": 360.905,
+          "min_ms": 353.322,
+          "max_ms": 360.905,
+          "samples_ms": [
+            359.499,
+            360.905,
+            353.322,
+            354.381,
+            358.437,
+            355.361,
+            354.705
+          ]
+        },
+        "review_gzip_bytes": 3035,
+        "durable_answers_verified": 8,
+        "idempotent_replay_verified": true
+      }
+    },
+    {
+      "total_words": 2000,
+      "daily_task_words": 1000,
+      "functions": {
+        "first_plan_ms": 3328.914,
+        "warm_plan": {
+          "samples": 7,
+          "p50_ms": 383.579,
+          "p95_ms": 435.67,
+          "min_ms": 372.242,
+          "max_ms": 435.67,
+          "samples_ms": [
+            372.242,
+            384.247,
+            377.533,
+            383.579,
+            435.67,
+            375.299,
+            385.591
+          ]
+        },
+        "count_due": {
+          "samples": 7,
+          "p50_ms": 49.199,
+          "p95_ms": 50.135,
+          "min_ms": 47.664,
+          "max_ms": 50.135,
+          "samples_ms": [
+            50.135,
+            47.664,
+            49.459,
+            48.065,
+            49.199,
+            48.096,
+            49.471
+          ]
+        },
+        "unchanged_save": {
+          "samples": 7,
+          "p50_ms": 374.14,
+          "p95_ms": 386.836,
+          "min_ms": 359.25,
+          "max_ms": 386.836,
+          "samples_ms": [
+            386.836,
+            374.14,
+            359.25,
+            361.335,
+            384.996,
+            374.712,
+            369.095
+          ]
+        },
+        "one_word_save": {
+          "samples": 7,
+          "p50_ms": 410.578,
+          "p95_ms": 520.976,
+          "min_ms": 366.632,
+          "max_ms": 520.976,
+          "samples_ms": [
+            410.578,
+            390.739,
+            444.289,
+            504.831,
+            520.976,
+            369.928,
+            366.632
+          ]
+        },
+        "cold_store_load": {
+          "samples": 7,
+          "p50_ms": 181.06,
+          "p95_ms": 245.694,
+          "min_ms": 174.792,
+          "max_ms": 245.694,
+          "samples_ms": [
+            174.792,
+            245.694,
+            176.656,
+            181.06,
+            231.017,
+            180.643,
+            237.221
+          ]
+        }
+      },
+      "http": {
+        "review_get": {
+          "samples": 7,
+          "p50_ms": 904.838,
+          "p95_ms": 951.535,
+          "min_ms": 889.206,
+          "max_ms": 951.535,
+          "samples_ms": [
+            889.206,
+            898.849,
+            913.98,
+            908.139,
+            904.838,
+            902.542,
+            951.535
+          ]
+        },
+        "answer_post": {
+          "samples": 7,
+          "p50_ms": 405.562,
+          "p95_ms": 418.225,
+          "min_ms": 397.257,
+          "max_ms": 418.225,
+          "samples_ms": [
+            413.688,
+            418.132,
+            397.257,
+            405.562,
+            400.694,
+            399.048,
+            418.225
+          ]
+        },
+        "answer_replay_post": {
+          "samples": 7,
+          "p50_ms": 370.372,
+          "p95_ms": 407.843,
+          "min_ms": 361.285,
+          "max_ms": 407.843,
+          "samples_ms": [
+            361.285,
+            370.372,
+            382.411,
+            364.455,
+            389.897,
+            407.843,
+            363.971
+          ]
+        },
+        "review_gzip_bytes": 22782,
+        "durable_answers_verified": 8,
+        "idempotent_replay_verified": true
+      }
+    }
+  ]
+}

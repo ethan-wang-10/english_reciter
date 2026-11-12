@@ -1,24 +1,21 @@
 """
 学习游戏化：XP、连续打卡、成就、排行榜元数据。
-数据文件：user_data_simple/<username>/gamification.json
+数据存储：user_data_simple/_shared/rewards.sqlite3；旧 JSON 仅作一次迁移源。
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import calendar
-import os
-import sys
-import tempfile
-import threading
 from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from app_time import china_now_iso, china_today
+import reward_schema
+import reward_store
 
 # ---------- 数值与上限 ----------
 XP_PLAN_CORRECT = 10
@@ -147,63 +144,11 @@ def gamification_path(data_dir: Path, username: str) -> Path:
     return data_dir / username / "gamification.json"
 
 
-_process_locks_guard = threading.Lock()
-_process_locks: Dict[str, threading.RLock] = {}
-
-
-def _state_process_lock(data_dir: Path, username: str) -> threading.RLock:
-    key = str((data_dir / username).resolve())
-    with _process_locks_guard:
-        lock = _process_locks.get(key)
-        if lock is None:
-            lock = threading.RLock()
-            _process_locks[key] = lock
-        return lock
-
-
 @contextmanager
 def _locked_user_state(data_dir: Path, username: str) -> Generator[None, None, None]:
-    """同一用户 gamification.json 的跨线程/跨进程写锁。"""
-    lock = _state_process_lock(data_dir, username)
-    with lock:
-        lock_path = data_dir / username / ".gamification.lock"
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        f = open(lock_path, "a+b", buffering=0)
-        try:
-            if sys.platform == "win32":
-                import msvcrt
-
-                f.seek(0, os.SEEK_END)
-                if f.tell() == 0:
-                    f.write(b"\0")
-                    f.flush()
-                f.seek(0)
-                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            yield
-        finally:
-            if sys.platform == "win32":
-                import msvcrt
-
-                try:
-                    f.seek(0)
-                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-                except OSError:
-                    pass
-            else:
-                import fcntl
-
-                try:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                except OSError:
-                    pass
-            try:
-                f.close()
-            except OSError:
-                pass
+    """Join the enclosing settlement transaction, or begin one for this update."""
+    with reward_store.transaction(data_dir):
+        yield
 
 
 def default_state() -> Dict[str, Any]:
@@ -241,15 +186,10 @@ def default_state() -> Dict[str, Any]:
 
 def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
     path = gamification_path(data_dir, username)
-    if not path.exists():
-        return default_state()
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-    except Exception:
-        return default_state()
-    if not isinstance(raw, dict):
-        return default_state()
+    raw = reward_store.load_document(
+        data_dir, path, default_state(), reward_schema.gamification_state,
+        on_migrate=lambda state: _seed_reward_events(data_dir, username, state),
+    )
     base = default_state()
     for k in base:
         if k in raw:
@@ -406,23 +346,35 @@ def _save_state_unlocked(data_dir: Path, username: str, state: Dict[str, Any]) -
     state["xp_balance"] = max(0, int(state.get("xp_balance") or 0))
     state["total_xp"] = int(state["lifetime_xp"])
     path = gamification_path(data_dir, username)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(suffix=".json", dir=str(path.parent), text=True)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    reward_store.save_document(data_dir, path, state, reward_schema.gamification_state)
 
 
 def save_state(data_dir: Path, username: str, state: Dict[str, Any]) -> None:
+    reward_schema.gamification_state(state)
     with _locked_user_state(data_dir, username):
+        load_state(data_dir, username)
         _save_state_unlocked(data_dir, username, state)
+        _seed_reward_events(data_dir, username, state)
+
+
+def _practice_ledger_key(scope: str, event_id: str) -> str:
+    return scope + "\n" + event_id
+
+
+def _seed_reward_events(data_dir: Path, username: str, state: Dict[str, Any]) -> None:
+    for event_id, event in state.get("xp_transactions", {}).items():
+        record = {
+            "balance_delta": event["balance_delta"],
+            "lifetime_delta": event["lifetime_delta"],
+            "source": event["source"][:64],
+            "created_at": str(event.get("created_at") or "")[:32],
+        }
+        reward_store.put_event(data_dir, username, "xp", event_id.strip()[:160], record)
+    for event in state.get("practice_events", []):
+        scope = _stored_practice_event_scope_key(event.get("scope"), event.get("scope_encoding"))
+        reward_store.put_event(
+            data_dir, username, "practice", _practice_ledger_key(scope, event["event_id"].strip()[:96]), event["payload"],
+        )
 
 
 def days_inclusive_today_through_month_end(today: date) -> int:
@@ -515,6 +467,8 @@ def _set_account_values(state: Dict[str, Any], lifetime: int, balance: int) -> N
 
 
 def _transaction_matches(
+    data_dir: Path,
+    username: str,
     state: Dict[str, Any],
     transaction_id: str,
     *,
@@ -529,7 +483,9 @@ def _transaction_matches(
     if not isinstance(transactions, dict):
         transactions = {}
         state["xp_transactions"] = transactions
-    existing = transactions.get(tx_id)
+    existing = reward_store.get_event(data_dir, username, "xp", tx_id)
+    if existing is None:
+        existing = transactions.get(tx_id)
     if existing is None:
         return None
     if not isinstance(existing, dict):
@@ -542,6 +498,8 @@ def _transaction_matches(
 
 
 def _record_transaction_unlocked(
+    data_dir: Path,
+    username: str,
     state: Dict[str, Any],
     transaction_id: str,
     *,
@@ -562,6 +520,7 @@ def _record_transaction_unlocked(
         "source": str(source)[:64],
         "created_at": china_now_iso(timespec="seconds"),
     }
+    reward_store.put_event(data_dir, username, "xp", tx_id, transactions[tx_id])
     while len(transactions) > XP_TRANSACTION_LIMIT:
         transactions.pop(next(iter(transactions)))
 
@@ -1274,6 +1233,8 @@ def apply_xp_delta(
         else:
             earned_delta = max(0, int(lifetime_delta))
         duplicate = _transaction_matches(
+            data_dir,
+            username,
             state,
             transaction_id,
             balance_delta=balance_delta,
@@ -1290,6 +1251,8 @@ def apply_xp_delta(
         _set_account_values(state, lifetime + earned_delta, new_balance)
         _record_xp_flow_unlocked(state, source, balance_delta)
         _record_transaction_unlocked(
+            data_dir,
+            username,
             state,
             transaction_id,
             balance_delta=balance_delta,
@@ -1319,6 +1282,8 @@ def spend_xp_with_reserve(
         state = load_state(data_dir, username)
         lifetime, balance = _account_values(state)
         duplicate = _transaction_matches(
+            data_dir,
+            username,
             state,
             transaction_id,
             balance_delta=-cost,
@@ -1339,6 +1304,8 @@ def spend_xp_with_reserve(
         _set_account_values(state, lifetime, new_total)
         _record_xp_flow_unlocked(state, source, -cost)
         _record_transaction_unlocked(
+            data_dir,
+            username,
             state,
             transaction_id,
             balance_delta=-cost,
@@ -1364,7 +1331,9 @@ def rollback_spend_transaction(
         state = load_state(data_dir, username)
         lifetime, balance = _account_values(state)
         transactions = state.get("xp_transactions") or {}
-        tx = transactions.get(tx_id) if isinstance(transactions, dict) else None
+        tx = reward_store.get_event(data_dir, username, "xp", tx_id)
+        if tx is None:
+            tx = transactions.get(tx_id) if isinstance(transactions, dict) else None
         if tx is None:
             return True, "", balance
         if not isinstance(tx, dict):
@@ -1375,7 +1344,8 @@ def rollback_spend_transaction(
         refund = -debit
         _set_account_values(state, lifetime, balance + refund)
         _record_xp_flow_unlocked(state, refund_source, refund)
-        del transactions[tx_id]
+        transactions.pop(tx_id, None)
+        reward_store.delete_event(data_dir, username, "xp", tx_id)
         _save_state_unlocked(data_dir, username, state)
         return True, "", balance + refund
 
@@ -1601,6 +1571,16 @@ def award_correct_answer(
         state = load_state(data_dir, username)
         event_key = str(event_id or '').strip()[:96]
         event_scope_key = _practice_event_scope_key(event_scope)
+        if event_key:
+            replay = reward_store.get_event(
+                data_dir, username, "practice", _practice_ledger_key(event_scope_key, event_key),
+            )
+            if replay is None and event_scope_key:
+                replay = reward_store.get_event(
+                    data_dir, username, "practice", _practice_ledger_key("", event_key),
+                )
+            if replay is not None:
+                return replay
         practice_events = state.setdefault('practice_events', [])
         if not isinstance(practice_events, list):
             practice_events = []
@@ -1715,6 +1695,9 @@ def award_correct_answer(
             "makeup_checkin": makeup_checkin_offer(state, today),
         }
         if event_key:
+            reward_store.put_event(
+                data_dir, username, "practice", _practice_ledger_key(event_scope_key, event_key), payload,
+            )
             event_record = {'event_id': event_key, 'payload': payload}
             if event_scope_key:
                 event_record['scope'] = event_scope_key
@@ -1932,7 +1915,7 @@ def patch_settings(
 def load_states_batch(
     data_dir: Path, usernames: List[str]
 ) -> Dict[str, Dict[str, Any]]:
-    """一次请求内对多个用户各读一次 gamification.json，供排行榜等复用。"""
+    """一次请求内对多个用户各读一次游戏化状态，供排行榜等复用。"""
     return {un: load_state(data_dir, un) for un in usernames}
 
 

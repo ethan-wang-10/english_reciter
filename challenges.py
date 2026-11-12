@@ -1,12 +1,10 @@
 """
 月度群体奖池、1v1 打卡 PK（赌注 XP）。
-数据目录：user_data_simple/_challenges/
+持久化：共享 rewards.sqlite3；旧 _challenges/*.json 仅作首次迁移源。
 """
 
 from __future__ import annotations
 
-import json
-import threading
 import uuid
 from calendar import monthrange
 from contextlib import contextmanager
@@ -16,7 +14,9 @@ from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from app_time import china_now, china_now_iso, china_today
 import gamification as gamification_mod
-from storage_utils import interprocess_file_lock, write_json_atomic
+from storage_utils import read_json_state
+import reward_schema
+import reward_store
 
 MONTHLY_POOL_FEE_XP = 150
 STAKE_SAFETY_RESERVE_XP = 50
@@ -27,9 +27,6 @@ JOIN_WINDOW_LAST_DAY = PREPARATION_LAST_DAY  # 仅准备期内可加入奖池
 WAGER_TIERS = (0, 50, 100, 200)
 # 1v1 邀约：自发起日起第 N 个自然日 23:59:59 前未接受则自动过期
 DUEL_INVITE_EXPIRY_DAYS = 5
-
-_challenges_lock = threading.RLock()
-
 
 def challenges_dir(data_dir: Path) -> Path:
     p = data_dir / "_challenges"
@@ -46,24 +43,25 @@ def duels_path(data_dir: Path) -> Path:
 
 
 def _load_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return default
+    if path.parent.name != "_challenges":
+        return read_json_state(path, default)
+    validator = reward_schema.duels if path.name == "duels.json" else reward_schema.monthly_pool
+    return reward_store.load_document(path.parent.parent, path, default, validator)
 
 
 def _save_json(path: Path, data: Any) -> None:
-    write_json_atomic(path, data)
+    data_dir = path.parent.parent
+    validator = reward_schema.duels if path.name == "duels.json" else reward_schema.monthly_pool
+    default = {"duels": []} if path.name == "duels.json" else {"months": {}}
+    with reward_store.transaction(data_dir):
+        reward_store.load_document(data_dir, path, default, validator)
+        reward_store.save_document(data_dir, path, data, validator)
 
 
 @contextmanager
 def _locked_challenges_storage(data_dir: Path) -> Generator[None, None, None]:
-    with _challenges_lock:
-        with interprocess_file_lock(challenges_dir(data_dir) / ".challenges.lock"):
-            yield
+    with reward_store.transaction(data_dir):
+        yield
 
 
 def month_key(d: date) -> str:
@@ -282,7 +280,7 @@ def _settle_monthly_pool_if_needed_unlocked(data_dir: Path) -> None:
             if not ok:
                 payout_failed = True
         if payout_failed:
-            continue
+            raise RuntimeError(f"月度奖池奖励入账失败: {ym}")
         block["settled"] = True
         block["settled_at"] = china_now_iso(timespec="seconds")
         block["winners"] = winners
@@ -482,34 +480,29 @@ def respond_duel(
         if w > 0:
             stake_a_id = f"duel:{duel_id}:stake:{a}"
             stake_b_id = f"duel:{duel_id}:stake:{b}"
-            ok1, msg1, _ = gamification_mod.spend_xp_with_reserve(
-                data_dir,
-                str(a),
-                w,
-                STAKE_SAFETY_RESERVE_XP,
-                source="duel_stake",
-                transaction_id=stake_a_id,
-            )
-            if not ok1:
-                return False, f"发起方{msg1}", None
-            ok2, msg2, _ = gamification_mod.spend_xp_with_reserve(
-                data_dir,
-                str(b),
-                w,
-                STAKE_SAFETY_RESERVE_XP,
-                source="duel_stake",
-                transaction_id=stake_b_id,
-            )
-            if not ok2:
-                rolled_back, rollback_msg, _ = gamification_mod.rollback_spend_transaction(
+            with reward_store.savepoint(data_dir) as rollback:
+                ok1, msg1, _ = gamification_mod.spend_xp_with_reserve(
                     data_dir,
                     str(a),
-                    stake_a_id,
-                    refund_source="duel_refund",
+                    w,
+                    STAKE_SAFETY_RESERVE_XP,
+                    source="duel_stake",
+                    transaction_id=stake_a_id,
                 )
-                if not rolled_back:
-                    return False, f"应战方{msg2}；发起方扣款回退失败：{rollback_msg}", None
-                return False, f"应战方{msg2}", None
+                if not ok1:
+                    rollback()
+                    return False, f"发起方{msg1}", None
+                ok2, msg2, _ = gamification_mod.spend_xp_with_reserve(
+                    data_dir,
+                    str(b),
+                    w,
+                    STAKE_SAFETY_RESERVE_XP,
+                    source="duel_stake",
+                    transaction_id=stake_b_id,
+                )
+                if not ok2:
+                    rollback()
+                    return False, f"应战方{msg2}", None
         found["month"] = accept_month
         found["status"] = "active"
         found["accepted_at"] = accept_now.isoformat(timespec="seconds")
@@ -573,7 +566,7 @@ def settle_due_duels(data_dir: Path) -> None:
                 )
                 payout_ok = refund_a_ok and refund_b_ok
             if not payout_ok:
-                continue
+                raise RuntimeError(f"PK 奖励入账失败: {d.get('id')}")
             d["settled"] = True
             d["settled_at"] = china_now_iso(timespec="seconds")
             d["days_a"] = da
@@ -718,3 +711,4 @@ def purge_user_challenges_refs(data_dir: Path, username: str) -> None:
             and str(d.get("target_user") or "") != username
         ]
         _save_duels(data_dir, data)
+        reward_store.purge_user(data_dir, username)

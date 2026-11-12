@@ -11,6 +11,7 @@ import hashlib
 import json
 import sqlite3
 import zlib
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -60,10 +61,14 @@ class LearningSQLiteStore:
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(str(self.db_path), timeout=15.0)
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        connection.execute("PRAGMA busy_timeout=15000")
-        connection.execute("PRAGMA foreign_keys=ON")
+        try:
+            connection.execute("PRAGMA busy_timeout=15000")
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            connection.execute("PRAGMA foreign_keys=ON")
+        except Exception:
+            connection.close()
+            raise
         return connection
 
     @staticmethod
@@ -173,6 +178,12 @@ class LearningSQLiteStore:
         pending, mastered, state = self._read_legacy()
         connection.execute("BEGIN IMMEDIATE")
         try:
+            # A competing first reader may finish migration while we wait.
+            if connection.execute(
+                "SELECT 1 FROM metadata WHERE key='legacy_migrated'"
+            ).fetchone():
+                connection.commit()
+                return
             connection.executemany(
                 """INSERT INTO words(
                        row_key, word_key, bucket, position, payload, payload_hash
@@ -196,8 +207,9 @@ class LearningSQLiteStore:
             raise
 
     def load(self) -> Tuple[List[dict], List[dict], Dict[str, Any]]:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
+            connection.execute("BEGIN")
             pending: List[dict] = []
             mastered: List[dict] = []
             for bucket, payload in connection.execute(
@@ -218,17 +230,36 @@ class LearningSQLiteStore:
         state: Dict[str, Any],
     ) -> bool:
         desired = list(self._rows(pending, mastered))
-        state_payload, state_hash = _encode(self._normal_state(state))
-        with self._connect() as connection:
+        desired_metadata = {
+            row[0]: (row[2], row[3], row[5], row[1]) for row in desired
+        }
+        state_raw = _json_bytes(self._normal_state(state))
+        state_hash = hashlib.sha256(state_raw).hexdigest()
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
+            # Compare one read snapshot before reserving the single SQLite writer.
+            connection.execute("BEGIN")
+            try:
+                existing = self._word_metadata(connection)
+                old_state = connection.execute(
+                    "SELECT payload_hash FROM learning_state WHERE singleton=1"
+                ).fetchone()
+                state_changed = not old_state or old_state[0] != state_hash
+                unchanged = existing == desired_metadata and not state_changed
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+            if unchanged:
+                return False
+
+            state_payload = (
+                b"z" + zlib.compress(state_raw, level=1) if state_changed else None
+            )
             connection.execute("BEGIN IMMEDIATE")
             try:
-                existing = {
-                    row[0]: (row[1], row[2], row[3], row[4])
-                    for row in connection.execute(
-                        "SELECT row_key, bucket, position, payload_hash, word_key FROM words"
-                    )
-                }
+                # Another process may have committed since the read snapshot.
+                existing = self._word_metadata(connection)
                 desired_keys = {row[0] for row in desired}
                 changed = False
                 for row_key in existing.keys() - desired_keys:
@@ -255,6 +286,8 @@ class LearningSQLiteStore:
                     "SELECT payload_hash FROM learning_state WHERE singleton=1"
                 ).fetchone()
                 if not old_state or old_state[0] != state_hash:
+                    if state_payload is None:
+                        state_payload = b"z" + zlib.compress(state_raw, level=1)
                     connection.execute(
                         """INSERT INTO learning_state(singleton, payload, payload_hash)
                            VALUES(1, ?, ?)
@@ -274,11 +307,20 @@ class LearningSQLiteStore:
                 connection.rollback()
                 raise
 
+    @staticmethod
+    def _word_metadata(connection: sqlite3.Connection) -> Dict[str, tuple]:
+        return {
+            row[0]: (row[1], row[2], row[3], row[4])
+            for row in connection.execute(
+                "SELECT row_key, bucket, position, payload_hash, word_key FROM words"
+            )
+        }
+
     def revision(self) -> int:
         if not self.db_path.is_file():
             return 0
         try:
-            with sqlite3.connect(str(self.db_path), timeout=2.0) as connection:
+            with closing(sqlite3.connect(str(self.db_path), timeout=2.0)) as connection:
                 row = connection.execute(
                     "SELECT value FROM metadata WHERE key='revision'"
                 ).fetchone()
@@ -287,7 +329,7 @@ class LearningSQLiteStore:
             return 0
 
     def summary(self) -> Dict[str, int]:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             counts = dict(
                 connection.execute(
@@ -302,7 +344,7 @@ class LearningSQLiteStore:
     def backup_to(self, destination: Path | str) -> None:
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as source, sqlite3.connect(str(destination)) as target:
+        with closing(self._connect()) as source, closing(sqlite3.connect(str(destination))) as target:
             self._ensure_migrated(source)
             source.backup(target)
 
@@ -312,7 +354,7 @@ def learning_store_revision(db_path: Path | str) -> int:
     if not path.is_file():
         return 0
     try:
-        with sqlite3.connect(str(path), timeout=2.0) as connection:
+        with closing(sqlite3.connect(str(path), timeout=2.0)) as connection:
             row = connection.execute(
                 "SELECT value FROM metadata WHERE key='revision'"
             ).fetchone()

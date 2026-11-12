@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">智能英语背诵鹦鹉吉祥物</title>
+  <desc id="desc">一只戴蓝色耳机、开心跟读的绿色小鹦鹉</desc>
+
+  <!-- Headphones sit behind the mascot and keep a strong silhouette at small sizes. -->
+  <path d="M101 272V218C101 119 170 57 256 57C342 57 411 119 411 218V272"
+        fill="none" stroke="#263238" stroke-width="54" stroke-linecap="round"/>
+  <path d="M101 272V218C101 119 170 57 256 57C342 57 411 119 411 218V272"
+        fill="none" stroke="#1cb0f6" stroke-width="30" stroke-linecap="round"/>
+
+  <!-- Three soft feathers make the parrot recognizable without copying an owl mascot. -->
+  <path d="M211 92C193 55 210 24 248 33C252 57 242 78 222 96Z"
+        fill="#89e219" stroke="#263238" stroke-width="15" stroke-linejoin="round"/>
+  <path d="M247 82C240 39 266 17 299 38C296 62 282 80 260 94Z"
+        fill="#58cc02" stroke="#263238" stroke-width="15" stroke-linejoin="round"/>
+  <path d="M285 95C294 57 325 45 347 75C335 96 316 107 292 108Z"
+        fill="#46a302" stroke="#263238" stroke-width="15" stroke-linejoin="round"/>
+
+  <!-- Rounded parrot head and chest. -->
+  <path d="M256 76C354 76 421 145 421 247V326C421 411 354 466 256 466C158 466 91 411 91 326V247C91 145 158 76 256 76Z"
+        fill="#58cc02" stroke="#263238" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M142 342C166 319 202 314 229 334C244 345 250 365 256 391C262 365 268 345 283 334C310 314 346 319 370 342C359 410 315 443 256 443C197 443 153 410 142 342Z"
+        fill="#89e219"/>
+
+  <!-- Cream face patches, oversized eyes, and lifted brows create the friendly expression. -->
+  <path d="M126 222C126 164 169 126 220 141C245 149 256 176 256 211C256 176 267 149 292 141C343 126 386 164 386 222C386 279 346 315 296 304C276 300 264 285 256 265C248 285 236 300 216 304C166 315 126 279 126 222Z"
+        fill="#f7fff2"/>
+  <path d="M163 172C179 155 203 150 224 158" fill="none" stroke="#263238" stroke-width="14" stroke-linecap="round"/>
+  <path d="M349 172C333 155 309 150 288 158" fill="none" stroke="#263238" stroke-width="14" stroke-linecap="round"/>
+  <ellipse cx="204" cy="218" rx="39" ry="45" fill="#ffffff" stroke="#263238" stroke-width="13"/>
+  <ellipse cx="308" cy="218" rx="39" ry="45" fill="#ffffff" stroke="#263238" stroke-width="13"/>
+  <circle cx="211" cy="226" r="20" fill="#263238"/>
+  <circle cx="301" cy="226" r="20" fill="#263238"/>
+  <circle cx="218" cy="217" r="7" fill="#ffffff"/>
+  <circle cx="308" cy="217" r="7" fill="#ffffff"/>
+
+  <!-- A single rounded yellow beak stays clear even in the 26px navigation mark. -->
+  <path d="M198 280C214 250 237 237 256 237C275 237 298 250 314 280C299 302 279 313 256 313C233 313 213 302 198 280Z"
+        fill="#ffb020" stroke="#263238" stroke-width="15" stroke-linejoin="round"/>
+
+  <!-- Compact ear cups reinforce the listening-and-speaking theme. -->
+  <path d="M68 244C68 219 86 204 111 204H127V327H111C86 327 68 312 68 287Z"
+        fill="#1cb0f6" stroke="#263238" stroke-width="16" stroke-linejoin="round"/>
+  <path d="M444 244C444 219 426 204 401 204H385V327H401C426 327 444 312 444 287Z"
+        fill="#1cb0f6" stroke="#263238" stroke-width="16" stroke-linejoin="round"/>
+  <path d="M104 253V298M408 253V298" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- Small side wings keep the lower silhouette playful. -->
+  <path d="M100 334C60 350 46 393 69 424C94 412 116 392 132 365Z"
+        fill="#1cb0f6" stroke="#263238" stroke-width="16" stroke-linejoin="round"/>
+  <path d="M412 334C452 350 466 393 443 424C418 412 396 392 380 365Z"
+        fill="#1cb0f6" stroke="#263238" stroke-width="16" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,960 @@
+// ==================== 管理员 ====================
+
+function getAdminToken() {
+    return sessionStorage.getItem('adminToken');
+}
+
+function setAdminToken(t) {
+    if (t) {
+        sessionStorage.setItem('adminToken', t);
+    } else {
+        sessionStorage.removeItem('adminToken');
+    }
+}
+
+async function apiAdminRequest(endpoint, options = {}) {
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers
+    };
+    const at = getAdminToken();
+    if (at) {
+        headers.Authorization = `Bearer ${at}`;
+    }
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers
+    });
+    let data = {};
+    try {
+        data = await response.json();
+    } catch (_) {
+        /* ignore */
+    }
+    if (!response.ok) {
+        if (response.status === 401) {
+            setAdminToken(null);
+        }
+        throw new Error(data.error || data.detail || '请求失败');
+    }
+    return data;
+}
+
+/** multipart/form-data（勿设置 Content-Type，由浏览器带 boundary） */
+async function apiAdminMultipart(endpoint, formData) {
+    const headers = {};
+    const at = getAdminToken();
+    if (at) {
+        headers.Authorization = `Bearer ${at}`;
+    }
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        body: formData,
+        headers
+    });
+    let data = {};
+    try {
+        data = await response.json();
+    } catch (_) {
+        /* ignore */
+    }
+    if (!response.ok) {
+        if (response.status === 401) {
+            setAdminToken(null);
+        }
+        throw new Error(data.error || data.detail || '请求失败');
+    }
+    return data;
+}
+
+function showAdminNotice(msg) {
+    const el = document.getElementById('admin-notice');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.style.display = msg ? 'block' : 'none';
+}
+
+function showAdminLoginPanel() {
+    const lp = document.getElementById('admin-login-panel');
+    const db = document.getElementById('admin-dashboard');
+    if (lp) lp.style.display = 'block';
+    if (db) db.style.display = 'none';
+}
+
+function showAdminDashboardPanel() {
+    const lp = document.getElementById('admin-login-panel');
+    const db = document.getElementById('admin-dashboard');
+    if (lp) lp.style.display = 'none';
+    if (db) db.style.display = 'block';
+}
+
+function renderAdminUsers(users) {
+    const tbody = document.getElementById('admin-users-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = (users || []).map((u) => {
+        const en = u.enabled !== false;
+        const chk = en ? 'checked' : '';
+        const plan = u.plan || 'free';
+        const planLabel = plan === 'paid' ? '<span class="plan-badge-vip">VIP</span>' : '<span class="plan-badge-free">免费</span>';
+        const pchk = u.parent_account_enabled ? 'checked' : '';
+        const parentLogin = `${escapeHtml(u.username)}_parent`;
+        const inviteUsed = Number(u.invite_quota_used) || 0;
+        const inviteLimit = Number(u.invite_quota_limit) || 0;
+        const inviteRemaining = Number(u.invite_quota_remaining) || 0;
+        const planTitle = plan === 'paid' ? '降为免费版' : '升为 VIP';
+        /* 皇冠 = 升为 VIP；星形 = 降为免费（普通版） */
+        const planSvg =
+            plan === 'paid'
+                ? '<svg class="btn-admin-plan-svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 2.2l1.75 3.55L14 6.45l-2.9 2.85.68 3.95L8 11.4l-3.78 2.85.68-3.95L2 6.45l4.25-.7L8 2.2z"/></svg>'
+                : '<svg class="btn-admin-plan-svg btn-admin-plan-svg--crown" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3 12.5h10v1.5H3v-1.5z"/><path fill="currentColor" d="M3 12.5L5 6.5 8 2.5 11 6.5 13 12.5H3z"/></svg>';
+        return `
+            <tr>
+                <td class="admin-table--users-name">${escapeHtml(u.username)}</td>
+                <td class="admin-table-num">${escapeHtml(u.pending_words)}</td>
+                <td class="admin-table-num">${escapeHtml(u.mastered_words)}</td>
+                <td>${planLabel}</td>
+                <td class="admin-table-num admin-invite-quota-cell" title="剩余 ${escapeHtml(inviteRemaining)} 个">${escapeHtml(inviteUsed)} / ${escapeHtml(inviteLimit)}</td>
+                <td class="admin-table-nowrap">${en ? '正常' : '已禁用'}</td>
+                <td class="admin-user-col-parent">
+                    <div class="admin-user-cell-stack">
+                        <label class="admin-toggle admin-toggle--compact" title="勾选后家长可用「用户名_parent」登录（初始密码见开通提示），仅查看孩子进度与导入等">
+                            <input type="checkbox" data-admin-parent="${escapeHtml(u.username)}" ${pchk} ${en ? '' : 'disabled'} />
+                            家长登录
+                        </label>
+                        <code class="admin-parent-id">${parentLogin}</code>
+                        <button type="button" class="btn-admin-parent-pw"
+                            data-admin-parent-password="${escapeHtml(u.username)}"
+                            title="重置家长账户密码"
+                            ${u.parent_account_enabled && en ? '' : 'disabled'}>家长密码</button>
+                    </div>
+                </td>
+                <td class="admin-user-col-student">
+                    <label class="admin-toggle admin-toggle--compact" title="关闭后该学生无法登录本系统（家长登录一并关闭）">
+                        <input type="checkbox" data-admin-user="${escapeHtml(u.username)}" ${chk} />
+                        允许登录
+                    </label>
+                </td>
+                <td class="admin-user-col-actions">
+                    <div class="admin-user-actions">
+                        <button type="button" class="btn-admin-pw" data-admin-set-password="${escapeHtml(u.username)}" title="设置学生登录密码">密码</button>
+                        <button type="button" class="btn-admin-plan btn-admin-plan--icon" data-admin-set-plan="${escapeHtml(u.username)}" data-current-plan="${escapeHtml(plan)}" title="${planTitle}" aria-label="${planTitle}">${planSvg}</button>
+                        <button type="button" class="btn-admin-pw" data-admin-reset-invites="${escapeHtml(u.username)}" title="重置该用户邀请次数">邀请</button>
+                        <button type="button" class="btn btn-danger-outline btn-admin-delete-user btn-admin-del" data-admin-delete-user="${escapeHtml(u.username)}" title="永久删除该用户及全部学习数据">删除</button>
+                    </div>
+                </td>
+            </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('input[data-admin-user]').forEach((inp) => {
+        inp.addEventListener('change', async () => {
+            const un = inp.getAttribute('data-admin-user');
+            const want = inp.checked;
+            try {
+                await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/enabled`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ enabled: want })
+                });
+                await loadAdminDashboard();
+            } catch (e) {
+                showAdminNotice(e.message || '操作失败');
+                inp.checked = !want;
+            }
+        });
+    });
+
+    tbody.querySelectorAll('input[data-admin-parent]').forEach((inp) => {
+        inp.addEventListener('change', async () => {
+            const un = inp.getAttribute('data-admin-parent');
+            const want = inp.checked;
+            try {
+                const res = await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/parent`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ enabled: want })
+                });
+                await loadAdminDashboard();
+                if (want && res.default_password_hint) {
+                    showAdminNotice(
+                        `家长账户已创建：登录名 ${un}_parent，初始密码 ${res.default_password_hint}`
+                    );
+                } else {
+                    showAdminNotice(want ? '家长账户已开启' : '家长账户已关闭');
+                }
+            } catch (e) {
+                showAdminNotice(e.message || '操作失败');
+                inp.checked = !want;
+            }
+        });
+    });
+
+    tbody.querySelectorAll('[data-admin-parent-password]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const un = btn.getAttribute('data-admin-parent-password');
+            const p1 = window.prompt(`为学生「${un}」的家长账户（${un}_parent）设置新密码（至少6位）`, '');
+            if (p1 === null) return;
+            const p2 = window.prompt('请再次输入新密码', '');
+            if (p2 === null) return;
+            if (p1 !== p2) {
+                showAdminNotice('两次输入的密码不一致');
+                return;
+            }
+            if (p1.length < 6) {
+                showAdminNotice('密码至少6个字符');
+                return;
+            }
+            showAdminNotice('');
+            try {
+                await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/parent-password`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ password: p1 })
+                });
+                showAdminNotice('家长密码已更新，该家长需重新登录');
+            } catch (e) {
+                showAdminNotice(e.message || '设置失败');
+            }
+        });
+    });
+
+    tbody.querySelectorAll('[data-admin-set-password]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const un = btn.getAttribute('data-admin-set-password');
+            const p1 = window.prompt(`为用户「${un}」设置新密码（至少6位）`, '');
+            if (p1 === null) return;
+            const p2 = window.prompt('请再次输入新密码', '');
+            if (p2 === null) return;
+            if (p1 !== p2) {
+                showAdminNotice('两次输入的密码不一致');
+                return;
+            }
+            if (p1.length < 6) {
+                showAdminNotice('密码至少6个字符');
+                return;
+            }
+            showAdminNotice('');
+            try {
+                await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/password`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ password: p1 })
+                });
+                showAdminNotice('密码已更新，该用户需重新登录');
+            } catch (e) {
+                showAdminNotice(e.message || '设置失败');
+            }
+        });
+    });
+
+    tbody.querySelectorAll('[data-admin-reset-invites]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const un = btn.getAttribute('data-admin-reset-invites');
+            if (!un) return;
+            const ok = window.confirm(`重置用户「${un}」的邀请码生成次数？\n\n重置后该用户可以继续生成邀请码。`);
+            if (!ok) return;
+            showAdminNotice('');
+            try {
+                const res = await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/invite-quota`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ reset: true })
+                });
+                await loadAdminDashboard();
+                showAdminNotice(`用户 ${un} 邀请次数已重置：剩余 ${res.invite_quota_remaining} 个`);
+            } catch (e) {
+                showAdminNotice(e.message || '重置失败');
+            }
+        });
+    });
+
+    tbody.querySelectorAll('[data-admin-set-plan]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const un = btn.getAttribute('data-admin-set-plan');
+            const cur = btn.getAttribute('data-current-plan');
+            const newPlan = cur === 'paid' ? 'free' : 'paid';
+            showAdminNotice('');
+            try {
+                await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}/plan`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ plan: newPlan })
+                });
+                await loadAdminDashboard();
+                showAdminNotice(`用户 ${un} 已设置为${newPlan === 'paid' ? 'VIP' : '免费'}版`);
+            } catch (e) {
+                showAdminNotice(e.message || '设置失败');
+            }
+        });
+    });
+}
+
+function renderAdminInvites(invites) {
+    const tbody = document.getElementById('admin-invites-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = (invites || []).map((inv) => {
+        const st = inv.status === 'used' ? '已使用' : '未使用';
+        const byKind = inv.created_by_kind === 'user' ? '用户' : '管理员';
+        const by = inv.created_by ? `${byKind}：${inv.created_by}` : byKind;
+        return `
+            <tr>
+                <td>${escapeHtml(inv.created_at || '—')}</td>
+                <td>${escapeHtml(by)}</td>
+                <td>${escapeHtml(st)}</td>
+                <td>${escapeHtml(inv.used_by || '—')}</td>
+            </tr>`;
+    }).join('');
+}
+
+function populateAdminWordsUserSelect(users) {
+    const sel = document.getElementById('admin-words-user');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = (users || []).map((u) => {
+        const un = u.username;
+        return `<option value="${escapeHtml(un)}">${escapeHtml(un)}</option>`;
+    }).join('');
+    if (prev && [...sel.options].some((o) => o.value === prev)) {
+        sel.value = prev;
+    } else if (sel.options.length) {
+        sel.selectedIndex = 0;
+    }
+}
+
+function renderAdminWordsTable(words) {
+    const tbody = document.getElementById('admin-words-tbody');
+    const emptyEl = document.getElementById('admin-words-empty');
+    const selAll = document.getElementById('admin-words-select-all');
+    if (selAll) selAll.checked = false;
+    if (!tbody) return;
+    if (!words || !words.length) {
+        tbody.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    tbody.innerHTML = words.map((w) => {
+        const en = escapeHtml(w.english);
+        const stLabel = w.status === 'mastered' ? '已掌握' : '待复习';
+        return `
+            <tr>
+                <td class="admin-words-col-cb"><input type="checkbox" class="admin-word-cb" data-english="${escapeHtml(w.english)}" /></td>
+                <td>${en}</td>
+                <td>${escapeHtml(w.chinese)}</td>
+                <td>${escapeHtml(stLabel)}</td>
+                <td><button type="button" class="btn btn-danger-outline admin-word-delete" data-english="${escapeHtml(w.english)}">删除</button></td>
+            </tr>`;
+    }).join('');
+}
+
+async function loadAdminUserWords() {
+    const sel = document.getElementById('admin-words-user');
+    const user = sel && sel.value;
+    const tbody = document.getElementById('admin-words-tbody');
+    const emptyEl = document.getElementById('admin-words-empty');
+    if (!user) {
+        if (tbody) tbody.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    try {
+        const status = (document.getElementById('admin-words-status') || {}).value || 'all';
+        const q = ((document.getElementById('admin-words-q') || {}).value || '').trim();
+        const params = new URLSearchParams({ status, q });
+        const data = await apiAdminRequest(`/admin/users/${encodeURIComponent(user)}/words?${params}`);
+        renderAdminWordsTable(data.words || []);
+    } catch (e) {
+        showAdminNotice(e.message || '加载失败');
+        renderAdminWordsTable([]);
+    }
+}
+
+async function adminConfirmDeleteWords(englishList) {
+    const sel = document.getElementById('admin-words-user');
+    const user = sel && sel.value;
+    if (!user || !englishList.length) return;
+    const preview = englishList.slice(0, 5).join('、');
+    const more = englishList.length > 5 ? ` 等共 ${englishList.length} 个` : '';
+    const ok = window.confirm(`确定从用户「${user}」的学词数据中永久删除：${preview}${more}？\n\n此操作不可恢复。`);
+    if (!ok) return;
+    await adminDeleteUserWords(englishList);
+}
+
+async function adminDeleteUserWords(englishList) {
+    const sel = document.getElementById('admin-words-user');
+    const user = sel && sel.value;
+    if (!user || !englishList || !englishList.length) return;
+    showAdminNotice('');
+    try {
+        const data = await apiAdminRequest(`/admin/users/${encodeURIComponent(user)}/words`, {
+            method: 'DELETE',
+            body: JSON.stringify({ english: englishList })
+        });
+        const parts = [];
+        if (data.removed) parts.push(`已删除 ${data.removed} 个`);
+        if (data.not_found && data.not_found.length) parts.push(`未找到 ${data.not_found.length} 个`);
+        showAdminNotice(parts.join('；') || '完成');
+        await loadAdminDashboard();
+    } catch (e) {
+        showAdminNotice(e.message || '删除失败');
+    }
+}
+
+let adminTroublesHandlersBound = false;
+
+function bindAdminTroublesOnce() {
+    if (adminTroublesHandlersBound) return;
+    adminTroublesHandlersBound = true;
+    document.getElementById('admin-troubles-refresh')?.addEventListener('click', () => {
+        void loadAdminTroubles();
+    });
+    document.getElementById('admin-lemma-map-save')?.addEventListener('click', () => {
+        void adminSaveLemmaMapping();
+    });
+    document.getElementById('admin-troubles-difficult-tbody')?.addEventListener('click', async (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('[data-remove-difficult]');
+        if (!btn) return;
+        const surface = btn.getAttribute('data-surface');
+        if (!surface) return;
+        if (!window.confirm(`从疑难词列表中移除「${surface}」？（不添加映射时用户可能再次触发 AI）`)) return;
+        showAdminNotice('');
+        try {
+            await apiAdminRequest('/admin/wordbank/troubles/difficult', {
+                method: 'DELETE',
+                body: JSON.stringify({ surface }),
+            });
+            await loadAdminTroubles();
+        } catch (err) {
+            showAdminNotice(err.message || '删除失败');
+        }
+    });
+    document.getElementById('admin-troubles-mapping-tbody')?.addEventListener('click', async (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('[data-remove-mapping]');
+        if (!btn) return;
+        const surface = btn.getAttribute('data-surface');
+        if (!surface) return;
+        if (!window.confirm(`删除映射「${surface}」？`)) return;
+        showAdminNotice('');
+        try {
+            await apiAdminRequest('/admin/wordbank/troubles/mapping', {
+                method: 'DELETE',
+                body: JSON.stringify({ surface }),
+            });
+            await loadAdminTroubles();
+        } catch (err) {
+            showAdminNotice(err.message || '删除失败');
+        }
+    });
+}
+
+function renderAdminTroublesDifficult(items) {
+    const tbody = document.getElementById('admin-troubles-difficult-tbody');
+    const emptyEl = document.getElementById('admin-troubles-difficult-empty');
+    if (!tbody) return;
+    if (!items || !items.length) {
+        tbody.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    tbody.innerHTML = items.map((it) => {
+        const s = escapeHtml(it.surface || '');
+        return `
+            <tr>
+                <td>${s}</td>
+                <td>${escapeHtml(String(it.attempts != null ? it.attempts : '—'))}</td>
+                <td>${escapeHtml(it.last_attempt || it.added_at || '—')}</td>
+                <td>
+                    <button type="button" class="btn btn-secondary" data-fill-map="${s}">填入映射表单</button>
+                    <button type="button" class="btn btn-danger-outline" data-remove-difficult data-surface="${s}">移除</button>
+                </td>
+            </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-fill-map]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const surf = btn.getAttribute('data-fill-map');
+            const i1 = document.getElementById('admin-lemma-map-surface');
+            const i2 = document.getElementById('admin-lemma-map-canonical');
+            if (i1) i1.value = surf || '';
+            if (i2) i2.value = '';
+            i2 && i2.focus();
+        });
+    });
+}
+
+function renderAdminTroublesMapping(items) {
+    const tbody = document.getElementById('admin-troubles-mapping-tbody');
+    const emptyEl = document.getElementById('admin-troubles-mapping-empty');
+    if (!tbody) return;
+    if (!items || !items.length) {
+        tbody.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    tbody.innerHTML = items.map((it) => {
+        const s = escapeHtml(it.surface || '');
+        return `
+            <tr>
+                <td>${s}</td>
+                <td>${escapeHtml(it.lemma || '')}</td>
+                <td><button type="button" class="btn btn-danger-outline" data-remove-mapping data-surface="${s}">删除映射</button></td>
+            </tr>`;
+    }).join('');
+}
+
+async function adminSaveLemmaMapping() {
+    const i1 = document.getElementById('admin-lemma-map-surface');
+    const i2 = document.getElementById('admin-lemma-map-canonical');
+    const surface = (i1 && i1.value || '').trim();
+    const lemma = (i2 && i2.value || '').trim();
+    if (!surface || !lemma) {
+        showAdminNotice('请填写表面形与词汇原形');
+        return;
+    }
+    showAdminNotice('');
+    try {
+        await apiAdminRequest('/admin/wordbank/troubles/mapping', {
+            method: 'POST',
+            body: JSON.stringify({ surface, lemma }),
+        });
+        if (i1) i1.value = '';
+        if (i2) i2.value = '';
+        await loadAdminTroubles();
+        showAdminNotice('映射已保存');
+    } catch (e) {
+        showAdminNotice(e.message || '保存失败');
+    }
+}
+
+async function loadAdminTroubles() {
+    bindAdminTroublesOnce();
+    try {
+        const data = await apiAdminRequest('/admin/wordbank/troubles');
+        renderAdminTroublesDifficult(data.difficult || []);
+        renderAdminTroublesMapping(data.mappings || []);
+    } catch (e) {
+        showAdminNotice(e.message || '加载疑难词失败');
+    }
+}
+
+let adminDeleteTargetUser = null;
+
+function closeAdminDeleteUserDialog() {
+    const d = document.getElementById('admin-delete-user-dialog');
+    if (d) {
+        d.style.display = 'none';
+        d.setAttribute('aria-hidden', 'true');
+    }
+    const p1 = document.getElementById('admin-delete-pw1');
+    const p2 = document.getElementById('admin-delete-pw2');
+    if (p1) p1.value = '';
+    if (p2) p2.value = '';
+    adminDeleteTargetUser = null;
+}
+
+function openAdminDeleteUserDialog(username) {
+    adminDeleteTargetUser = username;
+    const d = document.getElementById('admin-delete-user-dialog');
+    const disp = document.getElementById('admin-delete-user-display');
+    if (disp) disp.textContent = `用户名：${username}`;
+    if (d) {
+        d.style.display = 'flex';
+        d.setAttribute('aria-hidden', 'false');
+    }
+    const p1 = document.getElementById('admin-delete-pw1');
+    const p2 = document.getElementById('admin-delete-pw2');
+    if (p2) p2.value = '';
+    if (p1) {
+        p1.value = '';
+        p1.focus();
+    }
+    showAdminNotice('');
+}
+
+let adminDeleteUserHandlersBound = false;
+
+function bindAdminDeleteUserOnce() {
+    if (adminDeleteUserHandlersBound) return;
+    adminDeleteUserHandlersBound = true;
+    document.getElementById('admin-dashboard')?.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('[data-admin-delete-user]');
+        if (!btn) return;
+        const un = btn.getAttribute('data-admin-delete-user');
+        if (!un) return;
+        openAdminDeleteUserDialog(un);
+    });
+    document.getElementById('admin-delete-user-cancel')?.addEventListener('click', () => {
+        closeAdminDeleteUserDialog();
+    });
+    document.getElementById('admin-delete-user-dialog')?.addEventListener('click', (e) => {
+        if (e.target.id === 'admin-delete-user-dialog') closeAdminDeleteUserDialog();
+    });
+    document.getElementById('admin-delete-user-confirm')?.addEventListener('click', async () => {
+        const un = adminDeleteTargetUser;
+        if (!un) return;
+        const pw1 = document.getElementById('admin-delete-pw1')?.value || '';
+        const pw2 = document.getElementById('admin-delete-pw2')?.value || '';
+        if (!pw1.trim() || !pw2.trim()) {
+            showAdminNotice('请填写两遍管理员密码');
+            return;
+        }
+        if (pw1 !== pw2) {
+            showAdminNotice('两次输入的管理员密码不一致');
+            return;
+        }
+        showAdminNotice('');
+        try {
+            await apiAdminRequest(`/admin/users/${encodeURIComponent(un)}`, {
+                method: 'DELETE',
+                body: JSON.stringify({
+                    admin_password: pw1,
+                    admin_password_confirm: pw2,
+                }),
+            });
+            closeAdminDeleteUserDialog();
+            await loadAdminDashboard();
+            showAdminNotice(`用户 ${un} 已删除`);
+        } catch (err) {
+            showAdminNotice(err.message || '删除失败');
+        }
+    });
+}
+
+let adminSystemBroadcastBound = false;
+
+function bindAdminSystemBroadcastOnce() {
+    if (adminSystemBroadcastBound) return;
+    adminSystemBroadcastBound = true;
+    document.getElementById('admin-system-broadcast-save')?.addEventListener('click', async () => {
+        const ta = document.getElementById('admin-system-broadcast-text');
+        const msg = (ta && ta.value) || '';
+        showAdminNotice('');
+        try {
+            await apiAdminRequest('/admin/system-broadcast', {
+                method: 'PUT',
+                body: JSON.stringify({ message: msg }),
+            });
+            showAdminNotice('系统广播已保存');
+            await loadAdminSystemBroadcast();
+        } catch (e) {
+            showAdminNotice(e.message || '保存失败');
+        }
+    });
+}
+
+async function loadAdminSystemBroadcast() {
+    try {
+        const data = await apiAdminRequest('/admin/system-broadcast');
+        const ta = document.getElementById('admin-system-broadcast-text');
+        if (ta) ta.value = data.message || '';
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+const ADMIN_AUTHORING_STORAGE_KEY = 'adminQuestionAuthoringDraftV1';
+const ADMIN_AUTHORING_FIELDS = {
+    kind: 'kind', worker_id: 'worker-id', level: 'level', limit: 'limit', ttl_seconds: 'ttl',
+    request_id: 'request-id', job_id: 'job-id', submission_id: 'submission-id',
+    input: 'input', output: 'output',
+};
+let adminAuthoringBound = false;
+let adminAuthoringBusy = false;
+let adminAuthoringSessionRevision = 0;
+
+function adminAuthoringElement(field) {
+    return document.getElementById(`admin-authoring-${ADMIN_AUTHORING_FIELDS[field] || field}`);
+}
+
+function adminAuthoringId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function redactAdminAuthoringText(value, token = getAdminToken()) {
+    const text = String(value || '');
+    return token ? text.split(token).join('[REDACTED]') : text;
+}
+
+function readAdminAuthoringState() {
+    return Object.fromEntries(Object.keys(ADMIN_AUTHORING_FIELDS).map((key) => [
+        key, adminAuthoringElement(key)?.value || '',
+    ]));
+}
+
+function saveAdminAuthoringDraft() {
+    const state = readAdminAuthoringState();
+    state.output = redactAdminAuthoringText(state.output);
+    try {
+        sessionStorage.setItem(ADMIN_AUTHORING_STORAGE_KEY, JSON.stringify(state));
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function showAdminAuthoringStatus(text, state = '') {
+    const status = adminAuthoringElement('status');
+    if (status) {
+        status.textContent = redactAdminAuthoringText(text);
+        status.dataset.state = state;
+    }
+}
+
+function resetAdminAuthoringBatch(clearSession = false) {
+    if (adminAuthoringBusy && !clearSession) return;
+    if (clearSession) {
+        adminAuthoringSessionRevision += 1;
+        adminAuthoringBusy = false;
+        const controls = adminAuthoringElement('controls');
+        if (controls) controls.disabled = false;
+        for (const [key, value] of Object.entries({
+            kind: 'generation', worker_id: '', level: '高中', limit: '3', ttl_seconds: '3600',
+        })) {
+            if (adminAuthoringElement(key)) adminAuthoringElement(key).value = value;
+        }
+    }
+    for (const [key, value] of Object.entries({
+        request_id: adminAuthoringId(), submission_id: adminAuthoringId(), job_id: '',
+        input: JSON.stringify({ items: [] }, null, 2), output: '',
+    })) {
+        if (adminAuthoringElement(key)) adminAuthoringElement(key).value = value;
+    }
+    showAdminAuthoringStatus('');
+    if (clearSession) {
+        sessionStorage.removeItem(ADMIN_AUTHORING_STORAGE_KEY);
+    } else if (!saveAdminAuthoringDraft()) {
+        showAdminAuthoringStatus('本地草稿保存失败', 'error');
+    }
+}
+
+function buildAdminAuthoringRequest(action, state) {
+    const identifier = (value, label) => {
+        const text = String(value || '').trim();
+        if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(text)) throw new Error(`${label}格式不正确`);
+        return text;
+    };
+    const integer = (value, minimum, maximum, label) => {
+        if (!/^\d+$/.test(value) || Number(value) < minimum || Number(value) > maximum) {
+            throw new Error(`${label}须为 ${minimum} 至 ${maximum} 的整数`);
+        }
+        return Number(value);
+    };
+    const root = '/admin/gaokao/authoring';
+    const worker_id = identifier(state.worker_id, '执行者标识');
+    if (action === 'pending' || action === 'claim') {
+        if (!['generation', 'revision', 'recognition_blind', 'context_blind', 'feedback'].includes(state.kind)) {
+            throw new Error('任务阶段不正确');
+        }
+        const parameters = {
+            kind: state.kind, worker_id, level: state.level,
+            limit: integer(state.limit, 1, 10, '每批数量'),
+        };
+        if (action === 'pending') {
+            return { endpoint: `${root}/pending?${new URLSearchParams(parameters)}`, options: { redirect: 'error' } };
+        }
+        return {
+            endpoint: `${root}/claims`,
+            options: { method: 'POST', redirect: 'error', body: JSON.stringify({
+                ...parameters, request_id: identifier(state.request_id, '领取标识'),
+                ttl_seconds: integer(state.ttl_seconds, 60, 86400, '租约秒数'),
+            }) },
+        };
+    }
+    const job = `${root}/claims/${encodeURIComponent(identifier(state.job_id, '任务标识'))}`;
+    if (action === 'get') {
+        return { endpoint: `${job}?${new URLSearchParams({ worker_id })}`, options: { redirect: 'error' } };
+    }
+    let body = { worker_id };
+    let suffix = action;
+    if (action === 'renew') {
+        body.ttl_seconds = integer(state.ttl_seconds, 60, 86400, '租约秒数');
+    } else if (action === 'submit') {
+        let payload;
+        try {
+            payload = JSON.parse(state.input);
+        } catch (_) {
+            throw new Error('上传内容不是有效的 JSON');
+        }
+        if (!payload || Array.isArray(payload) || typeof payload !== 'object'
+            || Object.keys(payload).length !== 1 || !Array.isArray(payload.items)
+            || payload.items.length < 1 || payload.items.length > 10) {
+            throw new Error('上传 JSON 须仅包含 items 数组，共 1 至 10 项');
+        }
+        const ids = payload.items.map((item) => {
+            if (!item || typeof item !== 'object' || Object.keys(item).length !== 2
+                || !item.result || typeof item.result !== 'object' || Array.isArray(item.result)) {
+                throw new Error('每项须包含 item_id 和 result 对象');
+            }
+            return identifier(item.item_id, 'item_id');
+        });
+        if (new Set(ids).size !== ids.length) throw new Error('上传内容有重复 item_id');
+        body = { ...body, submission_id: identifier(state.submission_id, '上传标识'), items: payload.items };
+        suffix = 'submissions';
+        if (new TextEncoder().encode(JSON.stringify(body)).length > 256 * 1024) {
+            throw new Error('上传内容超过 256 KB');
+        }
+    } else if (action !== 'release') {
+        throw new Error('未知题目任务操作');
+    }
+    return { endpoint: `${job}/${suffix}`, options: { method: 'POST', redirect: 'error', body: JSON.stringify(body) } };
+}
+
+async function runAdminAuthoringAction(action) {
+    if (adminAuthoringBusy) return;
+    const token = getAdminToken();
+    const revision = adminAuthoringSessionRevision;
+    const state = readAdminAuthoringState();
+    try {
+        if (!token) throw new Error('管理员登录已失效');
+        const request = buildAdminAuthoringRequest(action, state);
+        if (!saveAdminAuthoringDraft()) throw new Error('本地草稿保存失败');
+        adminAuthoringBusy = true;
+        adminAuthoringElement('controls').disabled = true;
+        showAdminAuthoringStatus('请求中');
+        const data = await apiAdminRequest(request.endpoint, request.options);
+        if (revision !== adminAuthoringSessionRevision) return;
+        if (!data || !Array.isArray(data.items) || (action !== 'pending' && typeof data.job_id !== 'string')) {
+            throw new Error('服务器响应格式不正确');
+        }
+        if (data.job_id) adminAuthoringElement('job_id').value = data.job_id;
+        adminAuthoringElement('output').value = redactAdminAuthoringText(JSON.stringify(data, null, 2), token);
+        const labels = { pending: '待办', claim: '已领取', get: '已读取', renew: '已续租', release: '已释放', submit: '已提交' };
+        showAdminAuthoringStatus(`${labels[action]}: ${data.items.length} 项${data.expires_at ? `，到期 ${data.expires_at}` : ''}`);
+        if (!saveAdminAuthoringDraft()) showAdminAuthoringStatus('请求成功，本地草稿保存失败', 'error');
+    } catch (error) {
+        if (revision !== adminAuthoringSessionRevision) return;
+        const message = redactAdminAuthoringText(error.message || '请求失败', token);
+        adminAuthoringElement('output').value = redactAdminAuthoringText(JSON.stringify({
+            error: message, action, request_id: state.request_id,
+            submission_id: state.submission_id, job_id: state.job_id,
+        }, null, 2), token);
+        showAdminAuthoringStatus(message, 'error');
+        saveAdminAuthoringDraft();
+    } finally {
+        if (revision === adminAuthoringSessionRevision) {
+            adminAuthoringBusy = false;
+            adminAuthoringElement('controls').disabled = false;
+        }
+    }
+}
+
+function bindAdminAuthoringOnce() {
+    if (adminAuthoringBound || !adminAuthoringElement('controls')) return;
+    adminAuthoringBound = true;
+    let saved = {};
+    try {
+        saved = JSON.parse(sessionStorage.getItem(ADMIN_AUTHORING_STORAGE_KEY) || '{}') || {};
+    } catch (_) {
+        /* Keep usable defaults when a stored draft cannot be decoded. */
+    }
+    for (const key of Object.keys(ADMIN_AUTHORING_FIELDS)) {
+        const element = adminAuthoringElement(key);
+        if (!element) continue;
+        if (typeof saved[key] === 'string') element.value = redactAdminAuthoringText(saved[key]);
+        if (key !== 'output') {
+            for (const event of ['input', 'change']) {
+                element.addEventListener(event, () => {
+                    if (!saveAdminAuthoringDraft()) showAdminAuthoringStatus('本地草稿保存失败', 'error');
+                });
+            }
+        }
+    }
+    for (const key of ['request_id', 'submission_id']) {
+        if (!adminAuthoringElement(key).value) adminAuthoringElement(key).value = adminAuthoringId();
+    }
+    if (!adminAuthoringElement('input').value) adminAuthoringElement('input').value = JSON.stringify({ items: [] }, null, 2);
+    for (const action of ['pending', 'claim', 'get', 'renew', 'release', 'submit']) {
+        adminAuthoringElement(action).addEventListener('click', () => runAdminAuthoringAction(action));
+    }
+    adminAuthoringElement('new').addEventListener('click', () => resetAdminAuthoringBatch());
+    document.getElementById('admin-logout')?.addEventListener('click', () => resetAdminAuthoringBatch(true));
+    saveAdminAuthoringDraft();
+}
+
+async function loadAdminDashboard() {
+    bindAdminDeleteUserOnce();
+    bindAdminSystemBroadcastOnce();
+    bindAdminAuthoringOnce();
+    const [usersRes, invRes, cfgRes] = await Promise.all([
+        apiAdminRequest('/admin/users'),
+        apiAdminRequest('/admin/invites'),
+        apiAdminRequest('/admin/config').catch(() => null),
+    ]);
+    renderAdminUsers(usersRes.users);
+    renderAdminInvites(invRes.invites);
+    renderAdminDeepseekStatus(cfgRes);
+    populateAdminWordsUserSelect(usersRes.users);
+    await loadAdminUserWords();
+    await loadAdminTroubles();
+    await loadAdminSystemBroadcast();
+    showAdminDashboardPanel();
+}
+
+function renderAdminDeepseekStatus(cfg) {
+    const el = document.getElementById('admin-deepseek-status');
+    if (!el) return;
+    const cb = document.getElementById('admin-article-ai-extract');
+    if (!cfg) {
+        el.textContent = '无法读取配置';
+        if (cb) cb.checked = false;
+        return;
+    }
+    if (typeof cfg.article_ai_extract_enabled === 'boolean' && cb) {
+        cb.checked = cfg.article_ai_extract_enabled;
+    }
+    if (cfg.deepseek_api_key_set) {
+        el.textContent = `当前已配置 API Key（${cfg.deepseek_api_key_preview}）。词汇 AI 导入等可用；课文导入默认 spaCy，开启下方开关后管理员可选用 AI 分词。`;
+        el.style.color = 'var(--primary-dark)';
+    } else {
+        el.textContent = '尚未配置 DeepSeek API Key。词汇 AI 导入与课文 AI 分词将不可用。';
+        el.style.color = 'var(--error-color)';
+    }
+}
+
+async function openAdminOverlay() {
+    const ov = document.getElementById('admin-overlay');
+    if (!ov) return;
+    ov.style.display = 'flex';
+    ov.setAttribute('aria-hidden', 'false');
+    showAdminNotice('');
+    const once = document.getElementById('admin-invite-once');
+    if (once) {
+        once.style.display = 'none';
+        once.textContent = '';
+    }
+
+    try {
+        const st = await fetch(`${API_BASE}/admin/status`).then((r) => r.json());
+        if (!st.admin_configured) {
+            showAdminNotice('服务器未配置管理员：请设置环境变量 ADMIN_USERNAME 与 ADMIN_PASSWORD，或 ADMIN_PASSWORD_HASH。');
+            showAdminLoginPanel();
+            const lp = document.getElementById('admin-login-panel');
+            if (lp) lp.style.display = 'none';
+            const db = document.getElementById('admin-dashboard');
+            if (db) db.style.display = 'none';
+            return;
+        }
+    } catch (_) {
+        /* 忽略 */
+    }
+
+    const at = getAdminToken();
+    if (at) {
+        try {
+            await loadAdminDashboard();
+            return;
+        } catch (_) {
+            setAdminToken(null);
+        }
+    }
+    showAdminLoginPanel();
+}
+
+function closeAdminOverlay() {
+    closeAdminDeleteUserDialog();
+    const ov = document.getElementById('admin-overlay');
+    if (!ov) return;
+    ov.style.display = 'none';
+    ov.setAttribute('aria-hidden', 'true');
+}

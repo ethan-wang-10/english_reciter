@@ -4,6 +4,7 @@
 import argparse
 import base64
 import copy
+from contextlib import closing
 import csv
 import hashlib
 import io
@@ -11,13 +12,13 @@ import json
 import os
 from pathlib import Path
 import sqlite3
-import stat
 import sys
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from learning_sqlite_store import _decode, _encode
 from project_paths import STATIC_WB_DIR
+from storage_utils import fsync_directory, preserve_file_metadata
 
 MAPPINGS = dict(zip(
     ("at all time", "in distance", "hope sb do", "behavious", "curs", "fer", "fric", "instalation",
@@ -52,7 +53,7 @@ def read_json(path):
 
 
 def db_snapshot(path):
-    with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         rows = [list(row[:4]) + [bytes(row[4]).hex(), row[5]] for row in db.execute(
             "SELECT row_key,word_key,bucket,position,payload,payload_hash FROM words ORDER BY row_key")]
         state = [[row[0], bytes(row[1]).hex(), row[2]] for row in db.execute("SELECT singleton,payload,payload_hash FROM learning_state ORDER BY singleton")]
@@ -222,19 +223,17 @@ def atomic(path, raw, template=None):
     saved = (template or path).stat() if (template or path).exists() else None
     temp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
     descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "wb") as stream:
-        stream.write(raw)
-        stream.flush()
-        os.fsync(stream.fileno())
-    if saved:
-        os.chmod(temp, stat.S_IMODE(saved.st_mode))
-        os.chown(temp, saved.st_uid, saved.st_gid)
-    os.replace(temp, path)
-    directory = os.open(path.parent, os.O_RDONLY)
     try:
-        os.fsync(directory)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if saved:
+            preserve_file_metadata(temp, saved)
+        os.replace(temp, path)
+        fsync_directory(path.parent)
     finally:
-        os.close(directory)
+        temp.unlink(missing_ok=True)
 
 
 def apply_plan(plan, plan_path):
@@ -282,12 +281,11 @@ def apply_plan(plan, plan_path):
         backup = backup_dir / f"{index:03d}-{path.name}"
         if path.exists():
             if "before" in change:
-                with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as source:
-                    with sqlite3.connect(backup) as target:
+                with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as source:
+                    with closing(sqlite3.connect(backup)) as target:
                         source.backup(target)
                 saved = path.stat()
-                os.chmod(backup, stat.S_IMODE(saved.st_mode))
-                os.chown(backup, saved.st_uid, saved.st_gid)
+                preserve_file_metadata(backup, saved)
             else:
                 atomic(backup, path.read_bytes(), template=path)
             journal["backups"][str(path)] = str(backup)
@@ -298,7 +296,7 @@ def apply_plan(plan, plan_path):
         path = Path(change["path"])
         if "before" in change:
             if db_snapshot(path) != change["after"]:
-                with sqlite3.connect(path) as db:
+                with closing(sqlite3.connect(path)) as db, db:
                     db.execute("BEGIN IMMEDIATE")
                     current = db_snapshot(path)
                     if current != change["before"]:

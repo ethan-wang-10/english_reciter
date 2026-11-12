@@ -1,0 +1,4 @@
+index.html text eol=lf
+asset-manifest.json text eol=lf
+js/app.js text eol=lf
+assets/** -text

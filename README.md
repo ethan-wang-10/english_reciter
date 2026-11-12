@@ -11,12 +11,12 @@
 | 高考多维掌握 | Web 端以英文识义、语境选词和拼写作为掌握门槛；可靠音频可用时，听写作为已掌握词的增强练习 |
 | 私有选择题库 | 英文识义与语境选词由服务端判分；支持离线批量生成、断点续跑和缺题时在线补题 |
 | 外部题目编写 | 管理员 API 支持领取未生成词、上传题目和分阶段独立审核；该流程不调用 DeepSeek |
-| 关联复习顺序 | 每日任务选词不变；任务内按本地拼写相似度将近形词排在一起，便于对比记忆 |
+| 关联复习顺序 | 每日任务选词不变；按本地拼写相似度聚合近形词，RapidFuzz 加速最多 300 词的任务排序 |
 | 例句 | 本地例句库（`word_examples.json`），离线可用 |
 | Web 版 | Flask 应用、注册登录、多用户数据隔离（`user_data_simple/`）、静态前端 |
 | CLI 版 | 交互菜单：今日复习、进度、已掌握词汇与巩固 |
 | 备份 | 可配置自动备份学习数据到 `backups/` |
-| 游戏化 | Web 端积分与成就（见 `gamification.py`） |
+| 游戏化 | 积分、成就、PK 与榜单结算共享 SQLite 事务及持久事件回执 |
 
 ## 环境要求
 
@@ -28,7 +28,9 @@
 ### Web 版（推荐）
 
 ```bash
-pip install -r requirements-simple.txt
+python -m pip install -r requirements-bootstrap.txt
+python -m pip install -r requirements-simple.txt
+python scripts/build_assets.py
 python simple_web_app.py
 ```
 
@@ -44,7 +46,7 @@ docker compose up -d
 
 ### 部署脚本
 
-生产环境可使用跨 macOS/Linux 的一键脚本，自动兼容 PM2、Docker Compose v1/v2 和原生 Gunicorn：
+当前生产验收目标为单机 PM2/Linux，使用 Python 3.11+ 与独立 `.venv/`。部署脚本也兼容 Docker Compose v1/v2 和原生 Gunicorn：
 
 ```bash
 scripts/deploy.sh --mode auto
@@ -52,12 +54,13 @@ scripts/deploy.sh --mode pm2
 scripts/deploy.sh --mode docker
 ```
 
-脚本会确保 `.env` 中存在 `SECRET_KEY`，并在重启后访问 `/api/health` 做健康检查；更多参数见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+脚本会确保 `.env` 中存在 `SECRET_KEY`，安装 bootstrap/应用依赖、生成内容哈希资产，并访问 `/api/health` 做健康检查。已有服务器应先停止所有旧 worker、后台任务及维护脚本，备份同一时点的整套数据后再更新，禁止滚动重载或混跑新旧版本。迁移与回滚步骤见 [DEPLOYMENT.md](DEPLOYMENT.md#2026-10-29-可靠性升级)。
 
 ### 命令行版
 
 ```bash
-pip install -r requirements-simple.txt
+python -m pip install -r requirements-bootstrap.txt
+python -m pip install -r requirements-simple.txt
 python reciter.py
 ```
 
@@ -89,6 +92,12 @@ cp config.example.json config.json
 | `learning_data.json` | CLI 默认学习数据（可从 `words.txt` 初始化） |
 | `learning_data.learning_state_v2.json` | 自适应排期与每日任务兼容 sidecar；主数据已包含同一状态 |
 | `user_data_simple/<用户名>/` | Web 版每用户独立数据 |
+| `user_data_simple/users.sqlite3` | 账号持久化，按账户读取/更新；规范化邮箱唯一约束 |
+| `user_data_simple/<用户名>/learning.sqlite3` | Web 学习进度与任务状态；旧学习 JSON 是迁移源 |
+| `user_data_simple/_shared/rewards.sqlite3` | 积分、挑战、榜单统一事务及持久幂等事件 |
+| `user_data_simple/_shared/rate_limits.sqlite3` | 同一主机数据目录下所有 worker 共用限流 |
+| `user_data_simple/_shared/import_jobs.sqlite3` | 导入租约、外部请求步骤、已确认响应和候选批次 checkpoint |
+| `user_data_simple/_shared/chat_messages.sqlite3` | 聊天历史与索引分页，旧 JSONL 为迁移源 |
 | `static/wordbanks/words.csv` | 内置词库（**不随 Git 发布**；本地从 `words.csv.example` 复制或自备；线上勿被 `git pull` 覆盖，由服务器文件或管理后台「增量上传」维护） |
 | `static/wordbanks/words_v2.json` | 新版内置词库（线上运行时数据；仓库只保留空占位，部署脚本会保护服务器本地文件） |
 | `user_data_simple/_shared/gaokao_questions_v2.json` | 服务端私有的版本化高考选择题库，包含答案，不得放入 `static/` |
@@ -98,6 +107,18 @@ cp config.example.json config.json
 | `reciter.log` | 运行日志 |
 
 **已有服务器升级到此版本时**：拉取前请先备份 `static/wordbanks/words.csv` 和 `static/wordbanks/words_v2.json`。`words_v2.json` 若已在服务器由后台生成大量词条，首次部署前可执行 `git update-index --skip-worktree static/wordbanks/words_v2.json`，后续 `scripts/deploy.sh` 会自动保护该本地词库文件，避免 `git pull` 因本地词库变更中断。
+
+奖励、学习及聊天迁移后的旧 JSON/JSONL 保留用于核对，不再同步更新，不能当作当前备份；账号 JSON 成功导入后重命名保留。题库仍检查旧 JSON 的变动，不能单独恢复旧文件。回滚必须停止全部写入并恢复同一时点的代码、依赖、配置、用户数据和词库。升级前已裁剪的事件 ID、重复奖励和历史差异不会自动修复；邮箱冲突或损坏账号文件会阻止启动并保留数据，需人工核对归属。
+
+## 本轮架构与性能改进
+
+- 鉴权、学习、词库和聊天拆为四个 Flask Blueprint；前端源文件按账户、会话、学习、词库等模块放在 `static/js/app/`。
+- `scripts/build_assets.py` 生成兼容 bundle、内容哈希资产及 manifest，发布不再依赖手工修改查询版本；不要直接编辑生成的 `static/js/app.js`。
+- 奖励的账户变动与结算标记在同一 SQLite 事务提交，永久事件回执防止新记录在历史展示裁剪后再次发奖；应用限流在同机 worker 之间共享。
+- 导入任务持久化外部请求步骤和候选批次 checkpoint，恢复时复用已确认结果；付费请求结果未知时停止自动重试，必须先人工核查供应商记录和账单。
+- 单账户更新在 1 万合成账户下由约 258 ms 降到 0.22 ms；300 词排序的三组本地基准提速约 8-316 倍，输出顺序逐项一致。方法、原始样本和限制见 [性能与依赖专项报告](docs/performance-security-review-2026-10-29.md)。
+
+已部署到 [english.itorange.online](https://english.itorange.online)。Linux 最终回归为 **871 项测试与 12 项子测试全部通过**。双 worker 三轮共 1500 次隔离 HTTP 请求零错误，p95 为 26.56–34.99 ms；真实 OCR、Piper、spaCy、DeepSeek 只读鉴权及 SMTP TLS 登录通过。正式发布及备份恢复记录见 [审查报告](docs/code-review-2026-10-29.md)。这些短时验收结果不代表长期生产容量或 SLA。
 
 ## 高考选择题库生成
 
@@ -141,7 +162,9 @@ python3 scripts/generate_gaokao_questions.py --level "" --limit 200 --refresh-pr
 
 ## 依赖说明
 
-主要依赖见 [requirements-simple.txt](requirements-simple.txt)（Flask、Flask-CORS、Gunicorn、prettytable、readchar、NLTK 等）。安装 Web 与 CLI 共用该文件即可。
+主要依赖见 [requirements-simple.txt](requirements-simple.txt)（Flask、Flask-CORS、Gunicorn、NLTK、RapidFuzz、Pillow 等），Web 与 CLI 共用。先安装 [requirements-bootstrap.txt](requirements-bootstrap.txt) 中审核过的 pip/setuptools，再安装应用依赖；离线环境应准备对应平台/Python 的完整 wheel 包。
+
+本轮依据 PyPI/OSV 已确认公告升级 Flask、Werkzeug、Flask-CORS、Gunicorn、certifi、cryptography、NLTK 和 Pillow，最低 Python 版本为 3.11。服务器 `pip-audit` 检查 96 个可审计包，未发现已知漏洞；本地安装的 spaCy 模型 `en-core-web-sm` 不在 PyPI，公告查询跳过，实际推理验证通过。证据见 [installed 审计](docs/installed-dependency-audit-2026-10-29.json)。可用 `python scripts/audit_dependency_versions.py --output audit.json` 复查直接声明，该脚本不解析或审核完整传递依赖。
 
 `en_core_web_sm` spaCy 模型不作为必装依赖，避免国内/离线服务器因 GitHub wheel 下载失败而部署中断；模型缺失时会降级为启发式词形处理。需要 VIP 课文 spaCy 分词时，在网络可用环境执行 `.venv/bin/python -m spacy download en_core_web_sm`。
 
@@ -153,6 +176,7 @@ OCR 运行时不调用云 API，也不自动下载模型；固定读取 `rapidoc
 
 ## 更多文档
 
+- [全代码审查与优化报告](docs/code-review-2026-10-29.md)：架构、性能、用户体验的已落地修复、验证证据和后续计划
 - [QUICK_START.md](QUICK_START.md) — 启动步骤与使用流程
 - [DEPLOYMENT.md](DEPLOYMENT.md) — 生产部署与安全项（如 `SECRET_KEY`）
 - [USAGE.md](USAGE.md) — 使用说明（若与当前版本有出入，以代码与配置为准）

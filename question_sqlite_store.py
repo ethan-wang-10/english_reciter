@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import zlib
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional
+
+from storage_utils import PersistentStateLoadError
 
 
 NAMESPACES = ("questions", "candidates", "rejections", "failures")
@@ -33,9 +36,13 @@ class QuestionSQLiteStore:
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(str(self.db_path), timeout=30.0)
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        connection.execute("PRAGMA busy_timeout=30000")
+        try:
+            connection.execute("PRAGMA busy_timeout=30000")
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+        except Exception:
+            connection.close()
+            raise
         return connection
 
     @staticmethod
@@ -73,24 +80,34 @@ class QuestionSQLiteStore:
         try:
             stat = self.legacy_path.stat()
             return int(stat.st_mtime_ns), int(stat.st_size)
-        except OSError:
+        except FileNotFoundError:
             return 0, 0
+        except OSError as error:
+            raise PersistentStateLoadError(
+                f"Cannot inspect legacy question bank: {self.legacy_path}"
+            ) from error
 
     def _read_legacy(self) -> dict:
-        if not self.legacy_path.is_file():
-            return self._empty_bank()
         try:
             with self.legacy_path.open("r", encoding="utf-8") as source:
                 raw = json.load(source)
-        except (OSError, json.JSONDecodeError):
-            return self._empty_bank()
+        except (OSError, ValueError) as error:
+            raise PersistentStateLoadError(
+                f"Cannot safely read legacy question bank: {self.legacy_path}"
+            ) from error
+        if not isinstance(raw, dict):
+            raise PersistentStateLoadError(
+                f"Invalid legacy question bank root: {self.legacy_path}"
+            )
         bank = self._empty_bank()
-        if isinstance(raw, dict):
-            for namespace in NAMESPACES:
-                value = raw.get(namespace)
-                if isinstance(value, dict):
-                    bank[namespace] = dict(value)
-            bank["updated_at"] = raw.get("updated_at")
+        for namespace in NAMESPACES:
+            value = raw.get(namespace, {})
+            if not isinstance(value, dict):
+                raise PersistentStateLoadError(
+                    f"Invalid legacy question bank namespace {namespace}: {self.legacy_path}"
+                )
+            bank[namespace] = dict(value)
+        bank["updated_at"] = raw.get("updated_at")
         return bank
 
     @staticmethod
@@ -158,12 +175,32 @@ class QuestionSQLiteStore:
         )
         stored_mtime = int(meta.get("legacy_mtime_ns", "-1"))
         stored_size = int(meta.get("legacy_size", "-1"))
+        if source_signature == (0, 0) and "legacy_mtime_ns" in meta:
+            self._legacy_signature_seen = source_signature
+            return
         if stored_mtime == source_mtime and stored_size == source_size:
             self._legacy_signature_seen = source_signature
             return
         connection.execute("BEGIN IMMEDIATE")
         try:
-            self._replace_all(connection, self._read_legacy())
+            source_mtime, source_size = self._legacy_signature()
+            source_signature = (source_mtime, source_size)
+            meta = dict(connection.execute(
+                "SELECT key, value FROM metadata WHERE key IN ('legacy_mtime_ns', 'legacy_size')"
+            ).fetchall())
+            if source_signature == (0, 0) and "legacy_mtime_ns" in meta:
+                connection.commit()
+                self._legacy_signature_seen = source_signature
+                return
+            if (
+                int(meta.get("legacy_mtime_ns", "-1")) == source_mtime
+                and int(meta.get("legacy_size", "-1")) == source_size
+            ):
+                connection.commit()
+                self._legacy_signature_seen = source_signature
+                return
+            bank = self._empty_bank() if source_signature == (0, 0) else self._read_legacy()
+            self._replace_all(connection, bank)
             self._set_meta(connection, "legacy_mtime_ns", source_mtime)
             self._set_meta(connection, "legacy_size", source_size)
             connection.commit()
@@ -173,7 +210,7 @@ class QuestionSQLiteStore:
             raise
 
     def revision(self) -> int:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             row = connection.execute(
                 "SELECT value FROM metadata WHERE key='revision'"
@@ -181,8 +218,9 @@ class QuestionSQLiteStore:
             return int(row[0]) if row else 0
 
     def load_all(self) -> dict:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
+            connection.execute("BEGIN")
             bank = self._empty_bank()
             for namespace, word_key, payload in connection.execute(
                 "SELECT namespace, word_key, payload FROM records ORDER BY namespace, word_key"
@@ -197,7 +235,7 @@ class QuestionSQLiteStore:
     def load_namespace(self, namespace: str) -> Dict[str, Any]:
         if namespace not in NAMESPACES:
             return {}
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             return {
                 word_key: _decode(payload)
@@ -210,7 +248,7 @@ class QuestionSQLiteStore:
     def get(self, namespace: str, word_key: str) -> Any:
         if namespace not in NAMESPACES:
             return None
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             row = connection.execute(
                 "SELECT payload FROM records WHERE namespace=? AND word_key=?",
@@ -223,7 +261,7 @@ class QuestionSQLiteStore:
         if namespace not in NAMESPACES or not keys:
             return {}
         placeholders = ",".join("?" for _ in keys)
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             return {
                 key: _decode(payload)
@@ -239,7 +277,7 @@ class QuestionSQLiteStore:
         if not keys:
             return bank
         placeholders = ",".join("?" for _ in keys)
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             for namespace, word_key, payload in connection.execute(
                 f"""SELECT namespace, word_key, payload FROM records
@@ -266,7 +304,7 @@ class QuestionSQLiteStore:
         self.mutate(keys, apply)
 
     def get_question_by_id(self, question_id: str) -> Optional[tuple[dict, dict]]:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             row = connection.execute(
                 """SELECT r.payload, q.question_type
@@ -286,7 +324,7 @@ class QuestionSQLiteStore:
         if not keys:
             return
         placeholders = ",".join("?" for _ in keys)
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             connection.execute("BEGIN IMMEDIATE")
             try:
@@ -339,7 +377,7 @@ class QuestionSQLiteStore:
                 raise
 
     def replace_all(self, bank: dict) -> None:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._ensure_migrated(connection)
             connection.execute("BEGIN IMMEDIATE")
             try:

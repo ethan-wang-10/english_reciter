@@ -1,0 +1,39 @@
+{
+  "phase": "deployment_complete",
+  "backup": "/data/english_reciter-backups/daily-review-20261029-v1",
+  "existing": [
+    "reciter.py",
+    "learning_sqlite_store.py",
+    "test_learning_sqlite_store.py"
+  ],
+  "active_environment": "/data/english_reciter-releases/review-20261029-99b7a1/.venv",
+  "preserved": {
+    ".env": "a2e2dcbb84a829c275ea3956790fb15f2876173fbb50048ef0ecab906dd106c1",
+    "config.json": "37b843fb8d72eb6279b866268f66c6de0b7c3f3c32c3372486139d432c130505",
+    "static/asset-manifest.json": "656977e46794b44b1e69452ce0fbf623db38c5355ad2a94649638032bb8a6371"
+  },
+  "source_sha256": {
+    "reciter.py": "a354048af2896263dda144d7215e3f08865a296348203511963025248bd4b525",
+    "learning_sqlite_store.py": "6e616b1141248b8f41c89fd7d486ccc17b231102d4dbae0b6eae6691048b22ce",
+    "test_learning_sqlite_store.py": "609a9b034c82a6fd884f7266e9717cf400aa86a1758fd875f88311e75ebee4f7",
+    "test_daily_review_read_paths.py": "93513571377d62c6e5ef51692146d86637dc3aa7fe375a1d02df7cdd7f2f3ab3",
+    "scripts/benchmark_daily_review.py": "abb03d88cd059dfaa133c827d365ebb31693c26516af89b2362a2d2ce9561c5d"
+  },
+  "pytest_passed": 889,
+  "schema_changed": false,
+  "local_health": true,
+  "hashed_assets": 7,
+  "backup_status": "deleted_after_verification",
+  "pytest_subtests_passed": 12,
+  "public_health": true,
+  "databases_checked": 57,
+  "deployed_core_smoke_passed": true,
+  "rollback_backup_available": false,
+  "verification_source_copies_removed": [
+    "/tmp/english-reciter-daily-review-benchmark-20261029",
+    "/data/english_reciter-releases/daily-review-20261029-v1/.verification/baseline-source",
+    "/data/english_reciter-releases/daily-review-20261029-v1/daily-review-baseline.tar.gz"
+  ],
+  "pm2_pid": 1459063,
+  "verification_completed_at_utc": "2026-10-29T06:12:09.796424+00:00"
+}

@@ -7,6 +7,7 @@
 
 import os
 import sys
+import sqlite3
 import atexit
 import csv
 import json
@@ -15,6 +16,7 @@ import tempfile
 import base64
 import gzip
 import hashlib
+import ipaddress
 import secrets
 import shutil
 import smtplib
@@ -34,9 +36,9 @@ from functools import wraps
 from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 from time import sleep, time
 import uuid
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response, g, stream_with_context
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response, g, stream_with_context, has_request_context
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -79,8 +81,10 @@ from auth_session_store import (
 )
 from user_store import (
     DEFAULT_INVITE_QUOTA,
+    EmailAlreadyUsedError,
     close_connection as close_user_store_sqlite,
     get_user,
+    get_email_owner,
     init_user_store,
     load_users,
     mutate_users,
@@ -104,7 +108,9 @@ from performance_store import (
     write_performance_events,
 )
 from learning_sqlite_store import LearningSQLiteStore, learning_store_revision
-from import_job_store import ImportJobStore
+from import_job_store import ImportJobStore, ImportLeaseLost, ImportOutcomeUnknown
+from rate_limit_store import RateLimitStore
+from storage_utils import PersistentStateLoadError
 
 try:
     from tts_piper import (
@@ -196,6 +202,12 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB上传限制
 CORS(app, supports_credentials=True)
 
 
+@app.errorhandler(PersistentStateLoadError)
+def _persistent_state_unavailable(error):
+    logger.error("持久化状态无法读取，已阻止覆盖: %s", error)
+    return jsonify({'error': '数据暂不可用，原记录已保留，请联系管理员恢复'}), 503
+
+
 @app.after_request
 def _gzip_large_text_responses(response: Response) -> Response:
     """压缩首屏文本资源和较大的 JSON，缩短慢网络首次打开时间。"""
@@ -204,10 +216,6 @@ def _gzip_large_text_responses(response: Response) -> Response:
             return response
         if response.headers.get("Content-Encoding") or request.headers.get("Range"):
             return response
-        ae = request.headers.get("Accept-Encoding") or ""
-        if "gzip" not in ae.lower():
-            return response
-
         ct = (response.headers.get("Content-Type") or "").lower()
         path = request.path or ""
         text_like = (
@@ -218,6 +226,9 @@ def _gzip_large_text_responses(response: Response) -> Response:
         )
         json_like = "application/json" in ct
         if not (text_like or json_like):
+            return response
+        response.vary.add("Accept-Encoding")
+        if not request.accept_encodings["gzip"]:
             return response
 
         try:
@@ -234,7 +245,6 @@ def _gzip_large_text_responses(response: Response) -> Response:
         response.set_data(gz)
         response.headers["Content-Encoding"] = "gzip"
         response.headers["Content-Length"] = str(len(gz))
-        response.headers.add("Vary", "Accept-Encoding")
         return response
     finally:
         # This hook is registered first and therefore runs last in Flask's
@@ -246,7 +256,6 @@ USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
 
 USER_ROLE_PARENT = "parent"
 PARENT_LOGIN_SUFFIX = "_parent"
-DEFAULT_PARENT_PASSWORD = "123123"
 SESSION_KIND_CHAT_STREAM = "chat_stream"
 USER_SESSION_TTL = timedelta(days=30)
 PASSWORD_RESET_TTL_MINUTES_DEFAULT = 30
@@ -258,6 +267,7 @@ USER_INVITE_QUOTA_DEFAULT = DEFAULT_INVITE_QUOTA
 # 数据目录
 DATA_DIR = Path(os.getenv("ENGLISH_RECITER_DATA_DIR", "user_data_simple")).expanduser()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+chat_room.configure_data_dir(DATA_DIR)
 init_auth_session_store(DATA_DIR)
 init_user_store(DATA_DIR)
 
@@ -1709,8 +1719,7 @@ def merged_example_from_pair(en: str, cn: str) -> str:
 
 def get_user_plan(username: str) -> str:
     """返回用户套餐: 'free' 或 'paid'（paid 对应 VIP）。默认 free。"""
-    users = load_users()
-    u = users.get(username)
+    u = get_user(username)
     if isinstance(u, dict):
         return u.get("plan", "free")
     return "free"
@@ -1727,7 +1736,7 @@ def set_user_plan(username: str, plan: str) -> bool:
         users[username]["plan"] = plan
         return True
 
-    return bool(mutate_users(_set_plan))
+    return bool(mutate_users(_set_plan, usernames=[username]))
 
 
 def is_paid_user(username: str) -> bool:
@@ -1793,6 +1802,30 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                    thinking: bool = False,
                    timeout_sec: Optional[float] = None,
                    strict_errors: bool = False) -> Optional[str]:
+    context = getattr(g, 'import_job_context', None) if has_request_context() else None
+    if context is None:
+        return _deepseek_chat_request(messages, model, max_tokens, temperature,
+                                      thinking, timeout_sec, strict_errors)
+    store, job = context
+    key = hashlib.sha256(json.dumps({
+        'messages': messages, 'model': model or DEEPSEEK_CHAT_MODEL,
+        'max_tokens': max_tokens, 'temperature': temperature, 'thinking': thinking,
+    }, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest()
+    def execute():
+        reply = _deepseek_chat_request(messages, model, max_tokens, temperature,
+                                       thinking, timeout_sec, strict_errors)
+        return None if reply is None else {
+            'content': str(reply), 'finish_reason': getattr(reply, 'finish_reason', ''),
+        }
+    saved = store.external_step(job['job_id'], job['attempts'], key, execute)
+    return None if saved is None else _DeepSeekResponse(saved['content'], saved['finish_reason'])
+
+
+def _deepseek_chat_request(messages: List[dict], model: Optional[str] = None,
+                   max_tokens: int = 4096, temperature: float = 0.7,
+                   thinking: bool = False,
+                   timeout_sec: Optional[float] = None,
+                   strict_errors: bool = False) -> Optional[str]:
     """调用 DeepSeek Chat API；批处理可用 strict_errors 接收分类错误。"""
     api_key = get_deepseek_api_key()
     if not api_key:
@@ -1835,7 +1868,9 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
         "Authorization": f"Bearer {api_key}",
     }
     last_err: Optional[BaseException] = None
-    for attempt in range(1, DEEPSEEK_HTTP_RETRIES + 1):
+    durable_import = bool(getattr(g, 'import_job_context', None)) if has_request_context() else False
+    retry_limit = 1 if durable_import else DEEPSEEK_HTTP_RETRIES
+    for attempt in range(1, retry_limit + 1):
         req = urllib.request.Request(DEEPSEEK_API_URL, data=payload, headers=headers, method="POST")
         try:
             deepseek_policy.check_before_request()
@@ -1948,7 +1983,7 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                 e.code,
                 detail,
             )
-            if attempt < DEEPSEEK_HTTP_RETRIES and last_err.retryable:
+            if attempt < retry_limit and last_err.retryable:
                 wait = max(
                     0.0, DEEPSEEK_RETRY_BACKOFF_SEC * (2 ** (attempt - 1)),
                     last_err.retry_after_sec or 0.0,
@@ -1974,7 +2009,7 @@ def _deepseek_chat(messages: List[dict], model: Optional[str] = None,
                 DEEPSEEK_HTTP_RETRIES,
                 e,
             )
-            if attempt < DEEPSEEK_HTTP_RETRIES and last_err.retryable:
+            if attempt < retry_limit and last_err.retryable:
                 wait = max(0.0, DEEPSEEK_RETRY_BACKOFF_SEC * (2 ** (attempt - 1)))
                 if wait > 60:
                     logger.info("DeepSeek 重试需等待 %.1f 秒，暂停当前请求供后续续跑", wait)
@@ -2307,10 +2342,9 @@ def finalize_combined_gaokao_candidates(
     return records, errors
 
 
-# 登录/注册简单限流（按 IP，内存存储）
-_rate_buckets: Dict[str, List[float]] = defaultdict(list)
-_rate_buckets_lock = threading.Lock()
+# Limits are persisted so worker count and restarts do not multiply quotas.
 _RATE_WINDOW_SEC = 60
+_RATE_MAX_BUCKETS = 10000
 _RATE_MAX_LOGIN = 20
 _RATE_MAX_REGISTER = 10
 _RATE_MAX_FORGOT_PASSWORD = 5
@@ -2387,21 +2421,36 @@ def _put_cached_user_reciter(username: str, reciter: WordReciter) -> None:
 
 
 def _client_ip() -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.remote_addr or "unknown"
+    remote = request.remote_addr or "unknown"
+    configured = (os.getenv("TRUSTED_PROXY_IPS") or "").strip()
+    if not configured:
+        return remote
+    try:
+        trusted = [ipaddress.ip_network(value.strip()) for value in configured.split(",")]
+        peer = ipaddress.ip_address(remote)
+        if not any(peer in network for network in trusted):
+            return remote
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if len(forwarded) > 2048:
+            return remote
+        chain = [ipaddress.ip_address(value.strip()) for value in forwarded.split(",")]
+        for address in reversed(chain):
+            if not any(address in network for network in trusted):
+                return str(address)
+    except ValueError:
+        return remote
+    return remote
 
 
 def _rate_allow(bucket_key: str, max_events: int) -> bool:
-    now = time()
-    with _rate_buckets_lock:
-        window: List[float] = _rate_buckets[bucket_key]
-        window[:] = [t for t in window if now - t < _RATE_WINDOW_SEC]
-        if len(window) >= max_events:
-            return False
-        window.append(now)
-        return True
+    try:
+        return RateLimitStore(DATA_DIR / '_shared' / 'rate_limits.sqlite3').allow(
+            bucket_key, max_events, now=time(), window=_RATE_WINDOW_SEC,
+            max_buckets=_RATE_MAX_BUCKETS,
+        )
+    except (OSError, sqlite3.Error):
+        logger.exception('共享限流存储不可用')
+        return False
 
 
 def is_valid_username(username: str) -> bool:
@@ -2799,8 +2848,26 @@ def _list_unused_invites_created_by(username: str) -> List[dict]:
 def _public_origin() -> str:
     configured = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
     if configured:
+        try:
+            parsed = urlsplit(configured)
+            parsed.port
+        except ValueError as exc:
+            raise RuntimeError("PUBLIC_BASE_URL 站点地址无效") from exc
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username or parsed.password or parsed.query or parsed.fragment
+                or parsed.path not in {"", "/"}):
+            raise RuntimeError("PUBLIC_BASE_URL 必须是完整的 HTTP(S) 站点地址")
         return configured
+    if os.getenv("FLASK_ENV", "").lower() == "production":
+        raise RuntimeError("密码找回必须配置 PUBLIC_BASE_URL")
+    parsed = urlsplit(request.url_root)
+    if parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        raise RuntimeError("密码找回必须配置 PUBLIC_BASE_URL")
     return request.url_root.rstrip("/")
+
+
+def _invite_registration_url() -> str:
+    return f"{_public_origin()}/" if (os.getenv("PUBLIC_BASE_URL") or "").strip() else "/"
 
 
 @contextmanager
@@ -3000,6 +3067,8 @@ def register_user_with_invite(
                 break
         if not matched:
             return False, '邀请码无效或已使用'
+        if email and get_email_owner(email):
+            return False, '该邮箱已被其他账号使用'
 
         def _add_user(users: Dict[str, Any]) -> Tuple[bool, str]:
             if matched.get('created_by_kind') == 'user':
@@ -3024,23 +3093,28 @@ def register_user_with_invite(
             matched['used_by'] = username
             matched.pop('code_ciphertext', None)
             matched.pop('invite_code', None)
-            (DATA_DIR / username).mkdir(exist_ok=True)
             save_invites(data)
             return True, ''
 
         original_invite = dict(matched)
         try:
-            ok, err = mutate_users(_add_user)
-        except Exception:
+            scope = [username]
+            if matched.get('created_by_kind') == 'user':
+                scope.append(str(matched.get('created_by') or ''))
+            ok, err = mutate_users(_add_user, usernames=scope)
+        except Exception as exc:
             matched.clear()
             matched.update(original_invite)
             try:
                 save_invites(data)
             except Exception:
                 logger.exception("注册失败后恢复邀请码状态失败: invite_id=%s", matched.get('id'))
+            if isinstance(exc, EmailAlreadyUsedError):
+                return False, '该邮箱已被其他账号使用'
             raise
         if not ok:
             return False, err
+        (DATA_DIR / username).mkdir(exist_ok=True)
         logger.info("新用户注册: %s (invite_id=%s)", username, matched.get('id'))
         return True, ''
 
@@ -3107,7 +3181,7 @@ def _purge_student_account_completely(username: str) -> None:
             return True
 
         try:
-            deleted = mutate_users(_delete_users)
+            deleted = mutate_users(_delete_users, usernames=[username, pname] if pname else [username])
         except Exception:
             invite_data["invites"] = original_invite_rows
             try:
@@ -3762,145 +3836,10 @@ def performance_report():
     return jsonify({"ok": True, "stored": stored}), 202
 
 
-@app.route('/api/auth/register', methods=['POST'])
-def register():
-    """用户注册"""
-    try:
-        if not _rate_allow(f"reg:{_client_ip()}", _RATE_MAX_REGISTER):
-            return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
-
-        data = request.get_json(silent=True)
-        if not isinstance(data, dict):
-            return jsonify({'error': '无效的JSON数据'}), 400
-        
-        username = data.get('username', '').strip()
-        password = data.get('password', '').strip()
-        try:
-            email = normalize_email(data.get('email'))
-        except ValueError as exc:
-            return jsonify({'error': str(exc)}), 400
-        
-        if not username or not password:
-            return jsonify({'error': '用户名和密码不能为空'}), 400
-        
-        if not is_valid_username(username):
-            return jsonify({'error': '用户名须为3-32位字母、数字或下划线'}), 400
-        
-        if len(password) < 6:
-            return jsonify({'error': '密码至少6个字符'}), 400
-
-        invite_code = (data.get('invite_code') or '').strip()
-        if not invite_code:
-            return jsonify({'error': '请填写邀请码'}), 400
-
-        ok, err = register_user_with_invite(username, password, email, invite_code)
-        if ok:
-            token = create_token(username)
-            return jsonify({
-                'username': username,
-                'email': email,
-                'created_at': china_now_iso(timespec="seconds"),
-                'access_token': token,
-                'token_type': 'bearer',
-                **_auth_session_payload(username),
-            }), 201
-        return jsonify({'error': err or '注册失败'}), 400
-    except Exception as e:
-        logger.error(f"注册失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
 
-@app.route('/api/auth/forgot-password', methods=['POST'])
-def forgot_password():
-    """按邮箱发送一次性重置链接；无论邮箱是否存在均返回统一结果。"""
-    if not _rate_allow(f"forgot_password:{_client_ip()}", _RATE_MAX_FORGOT_PASSWORD):
-        return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
-    data = request.get_json(silent=True) or {}
-    try:
-        email = normalize_email(data.get('email'))
-    except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-    if not email:
-        return jsonify({'error': '请填写邮箱'}), 400
-
-    generic = {'message': '如果该邮箱已绑定账号，重置邮件将在几分钟内发送'}
-    try:
-        _smtp_config()
-        ttl_minutes, cooldown_seconds = _password_reset_policy()
-    except RuntimeError as exc:
-        logger.error("无法发送密码重置邮件: %s", exc)
-        return jsonify({'error': '邮件服务暂不可用，请联系管理员'}), 503
-
-    users = load_users()
-    matches = [
-        uname
-        for uname, row in users.items()
-        if isinstance(row, dict)
-        and str(row.get('email') or '').strip().casefold() == email.casefold()
-        and row.get('enabled', True) is not False
-    ]
-    if len(matches) != 1:
-        if len(matches) > 1:
-            logger.error("邮箱绑定到多个账号，拒绝发送重置邮件: %s", email)
-        return jsonify(generic), 200
-
-    login_username = matches[0]
-    cooldown_token = None
-    if cooldown_seconds > 0:
-        cooldown_token = create_session_if_absent(
-            SESSION_KIND_PASSWORD_RESET_COOLDOWN,
-            login_username,
-            timedelta(seconds=cooldown_seconds),
-        )
-        if not cooldown_token:
-            return jsonify(generic), 200
-    revoke_principal(SESSION_KIND_PASSWORD_RESET, login_username)
-    reset_token = _db_create_auth_session(
-        SESSION_KIND_PASSWORD_RESET,
-        login_username,
-        timedelta(minutes=ttl_minutes),
-    )
-    reset_url = f"{_public_origin()}/?reset_token={quote(reset_token, safe='')}"
-    try:
-        _send_password_reset_email(email, reset_url, ttl_minutes)
-    except Exception as exc:
-        revoke_token(SESSION_KIND_PASSWORD_RESET, reset_token)
-        if cooldown_token:
-            revoke_token(SESSION_KIND_PASSWORD_RESET_COOLDOWN, cooldown_token)
-        logger.exception("发送密码重置邮件失败: %s", exc)
-    return jsonify(generic), 200
 
 
-@app.route('/api/auth/reset-password', methods=['POST'])
-def reset_password():
-    if not _rate_allow(f"reset_password:{_client_ip()}", _RATE_MAX_RESET_PASSWORD):
-        return jsonify({'error': '请求过于频繁，请稍后再试'}), 429
-    data = request.get_json(silent=True) or {}
-    reset_token = str(data.get('token') or '').strip()
-    password = str(data.get('password') or '').strip()
-    password_confirm = str(data.get('password_confirm') or '').strip()
-    if len(password) < 6:
-        return jsonify({'error': '密码至少6个字符'}), 400
-    if password != password_confirm:
-        return jsonify({'error': '两次输入的密码不一致'}), 400
-
-    login_username = consume_session(reset_token, SESSION_KIND_PASSWORD_RESET)
-    if not login_username:
-        return jsonify({'error': '重置链接无效或已过期，请重新申请'}), 400
-
-    def _set_password(users: Dict[str, Any]) -> bool:
-        row = users.get(login_username)
-        if not isinstance(row, dict):
-            return False
-        row['password_hash'] = hash_password(password)
-        return True
-
-    if not mutate_users(_set_password):
-        return jsonify({'error': '重置链接无效或已过期，请重新申请'}), 400
-    revoke_principal(SESSION_KIND_PASSWORD_RESET, login_username)
-    _revoke_user_tokens(login_username)
-    logger.info("用户通过邮箱重置密码: %s", login_username)
-    return jsonify({'message': '密码已重置，请使用新密码登录'}), 200
 
 def _auth_session_payload(login_username: str) -> dict:
     """供登录与 /api/auth/session 返回家长/学生标识。"""
@@ -3917,67 +3856,9 @@ def _auth_session_payload(login_username: str) -> dict:
     return out
 
 
-@app.route('/api/auth/login', methods=['POST'])
-def login():
-    """用户登录"""
-    try:
-        if not _rate_allow(f"login:{_client_ip()}", _RATE_MAX_LOGIN):
-            return jsonify({'error': '登录尝试过多，请稍后再试'}), 429
-
-        # 支持表单数据和JSON数据
-        if request.is_json:
-            data = request.get_json(silent=True)
-            if not isinstance(data, dict):
-                return jsonify({'error': '无效的JSON数据'}), 400
-            username = data.get('username', '').strip()
-            password = data.get('password', '').strip()
-        else:
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '').strip()
-        
-        if not username or not password:
-            return jsonify({'error': '用户名和密码不能为空'}), 400
-
-        if verify_user(username, password):
-            urow = get_user(username)
-            if not isinstance(urow, dict) or urow.get('enabled', True) is False:
-                return jsonify({'error': '账号已停用，请联系管理员'}), 403
-            if isinstance(urow, dict) and is_parent_user_record(urow):
-                child = (urow.get('child_username') or '').strip()
-                if not child or not is_valid_username(child):
-                    return jsonify({'error': '家长账户配置错误'}), 403
-                child_row = get_user(child)
-                if not isinstance(child_row, dict) or child_row.get('enabled', True) is False:
-                    return jsonify({'error': '学生账号已停用，无法以家长身份登录'}), 403
-            token = create_token(username)
-            body = {
-                'access_token': token,
-                'token_type': 'bearer',
-                'username': username,
-                **_auth_session_payload(username),
-            }
-            return jsonify(body), 200
-        return jsonify({'error': '用户名或密码错误'}), 401
-    except Exception as e:
-        logger.error(f"登录失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
-
-@app.route('/api/auth/logout', methods=['POST'])
-@token_required
-def logout(username):
-    """用户退出"""
-    # 清除所有该登录身份的 token（家长与学生登录名不同）
-    login = getattr(g, "login_username", username)
-    _revoke_user_tokens(login)
-    return jsonify({'message': '已退出登录'}), 200
 
 
-@app.route('/api/auth/session', methods=['GET'])
-@token_required
-def auth_session(username):
-    """刷新页后恢复 is_parent / child_username。"""
-    login = getattr(g, 'login_username', username)
-    return jsonify(_auth_session_payload(login)), 200
+
 
 
 @app.route('/api/bootstrap', methods=['GET'])
@@ -4029,6 +3910,8 @@ def bootstrap(username):
                 "piper": listening_available,
             },
         }), 200
+    except PersistentStateLoadError:
+        raise
     except LearningDataLoadError as e:
         _invalidate_user_reciter_cache(username)
         logger.error("首屏 bootstrap 读取学习数据失败: user=%s error=%s", username, e)
@@ -4038,98 +3921,10 @@ def bootstrap(username):
         return jsonify({'error': '服务器内部错误'}), 500
 
 
-@app.route('/api/auth/broadcast/ack', methods=['POST'])
-@token_required
-def ack_system_broadcast(username):
-    """用户确认已读当前系统广播，之后不再展示同一条。"""
-    login = getattr(g, 'login_username', username)
-    data = request.get_json(silent=True) or {}
-    bid = (data.get('id') or '').strip()
-    if not bid:
-        return jsonify({'error': '缺少广播 id'}), 400
-    with _SYSTEM_BROADCAST_LOCK:
-        doc = _read_system_broadcast_unlocked()
-    cur = (doc.get('id') or '').strip()
-    if bid != cur:
-        return jsonify({'error': '无效或过期的广播'}), 400
-    lock = _user_mutex(login)
-    with lock:
-        _write_user_broadcast_ack(login, bid)
-    return jsonify({'ok': True}), 200
 
 
-@app.route('/api/auth/parent-password', methods=['PATCH'])
-@token_required
-def patch_parent_password(username):
-    """家长修改自己的登录密码（不影响学生账号）。"""
-    if not getattr(g, 'is_parent', False):
-        return jsonify({'error': '仅家长账户可修改'}), 403
-    data = request.get_json(silent=True) or {}
-    p1 = (data.get('password') or '').strip()
-    p2 = (data.get('password_confirm') or '').strip()
-    if len(p1) < 6:
-        return jsonify({'error': '密码至少6个字符'}), 400
-    if p1 != p2:
-        return jsonify({'error': '两次输入的密码不一致'}), 400
-    login = getattr(g, 'login_username', username)
-    def _set_password(users: Dict[str, Any]) -> bool:
-        if login not in users:
-            return False
-        users[login]['password_hash'] = hash_password(p1)
-        return True
-
-    if not mutate_users(_set_password):
-        return jsonify({'error': '用户不存在'}), 404
-    logger.info("家长账户修改密码: login=%s", login)
-    return jsonify({'message': '密码已更新'}), 200
 
 
-@app.route('/api/user/learning-settings', methods=['GET', 'PATCH'])
-@token_required
-def user_learning_settings(username):
-    """家长读取或调整关联学生的每日学习任务上限。"""
-    if not getattr(g, 'is_parent', False):
-        return jsonify({'error': '仅家长账户可调整学习任务上限'}), 403
-
-    if request.method == 'PATCH':
-        data = request.get_json(silent=True)
-        if not isinstance(data, dict):
-            return jsonify({'error': '无效的JSON数据'}), 400
-        try:
-            daily_review_limit = data['daily_review_limit']
-        except KeyError:
-            return jsonify({'error': '请填写每日任务上限'}), 400
-        if (
-            not isinstance(daily_review_limit, int)
-            or isinstance(daily_review_limit, bool)
-        ):
-            return jsonify({'error': '学习任务上限须为整数'}), 400
-        if not 1 <= daily_review_limit <= MAX_DAILY_REVIEW_LIMIT:
-            return jsonify({
-                'error': f'每日任务上限须在 1–{MAX_DAILY_REVIEW_LIMIT} 之间',
-            }), 400
-        with _user_mutex(username):
-            with _user_learning_interprocess_lock(username):
-                settings = _read_user_learning_settings(username)
-                settings['daily_review_limit'] = daily_review_limit
-                settings.pop('daily_new_word_limit', None)
-                _write_user_learning_settings(username, settings)
-        _invalidate_user_reciter_cache(username)
-        logger.info(
-            "家长更新学生学习任务上限: student=%s daily=%s",
-            username,
-            daily_review_limit,
-        )
-
-    config = _build_user_config(username)
-    return jsonify({
-        'daily_review_limit': config.DAILY_REVIEW_LIMIT,
-        'default_daily_review_limit': DEFAULT_DAILY_REVIEW_LIMIT,
-        'max_daily_review_limit': MAX_DAILY_REVIEW_LIMIT,
-        'new_words_are_automatic': True,
-        'minimum_review_share_percent': 60,
-        'applies_from_next_task': True,
-    }), 200
 
 
 def _pk_stats_for_gamification(username: str) -> Tuple[int, int]:
@@ -4153,6 +3948,8 @@ def get_gamification(username):
             pk_matches=pkm,
         )
         return jsonify(profile), 200
+    except PersistentStateLoadError:
+        raise
     except Exception as e:
         logger.error(f"获取游戏化数据失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -4164,6 +3961,8 @@ def get_xp_history(username):
     """最近 2 个月 XP 收支历史"""
     try:
         return jsonify(gamification_mod.xp_history_recent(DATA_DIR, username)), 200
+    except PersistentStateLoadError:
+        raise
     except Exception as e:
         logger.error(f"获取 XP 收支历史失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -4226,6 +4025,8 @@ def patch_gamification_settings(username):
             'total_xp', 'lifetime_xp', 'xp_balance', 'level', 'xp_to_next_level',
             'makeup_checkin', 'makeup_checkin_days_this_month',
         ) if k in profile}}), 200
+    except PersistentStateLoadError:
+        raise
     except Exception as e:
         logger.error(f"更新游戏化设置失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -4259,6 +4060,8 @@ def post_makeup_checkin(username):
             pk_matches=pkm,
         )
         return jsonify({**profile, "makeup_checkin_purchase": purchase}), 200
+    except PersistentStateLoadError:
+        raise
     except Exception as e:
         logger.error(f"补打卡失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
@@ -4307,300 +4110,29 @@ def get_leaderboard(username):
             for t in pl["top"]:
                 t["avatar_url"] = _leaderboard_avatar_url(t.get("username") or "", avatar_cache)
         return jsonify(payload), 200
+    except PersistentStateLoadError:
+        raise
     except Exception as e:
         logger.error(f"获取排行榜失败: {e}")
         return jsonify({'error': '服务器内部错误'}), 500
 
 
-@app.route('/api/user/settings', methods=['GET'])
-@token_required
-def get_user_settings(username):
-    """设置页汇总：游戏化、月度奖池、挑战列表、头像。"""
-    try:
-        with user_reciter_session(username) as reciter:
-            mastered_n = len(reciter.mastered_words)
-        pkw, pkm = _pk_stats_for_gamification(username)
-        prof = gamification_mod.public_profile(
-            DATA_DIR,
-            username,
-            mastered_words=mastered_n,
-            pk_wins=pkw,
-            pk_matches=pkm,
-        )
-        pool = enrich_monthly_pool_with_avatars(
-            challenges_mod.get_monthly_pool_state(DATA_DIR, username)
-        )
-        duels = challenges_mod.list_duels_for_user(DATA_DIR, username)
-        av = user_avatar_disk_path(username)
-        prof["avatar_url"] = f"/api/user/avatar/{username}" if av else None
-        prof.update(invite_quota_payload(load_users().get(username) or {}))
-        with _locked_invite_storage():
-            prof["invites"] = _list_invites_created_by(username)
-        prof["invite_register_url"] = f"{_public_origin()}/"
-        prof["monthly_pool"] = pool
-        prof["duels"] = duels
-        prof["wager_tiers"] = list(challenges_mod.WAGER_TIERS)
-        prof["stake_safety_reserve_xp"] = challenges_mod.STAKE_SAFETY_RESERVE_XP
-        prof["duel_opponents"] = list_challenge_opponent_usernames(username)
-        return jsonify(prof), 200
-    except Exception as e:
-        logger.error(f"获取用户设置失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
 
-@app.route('/api/user/email', methods=['GET', 'PATCH'])
-@token_required
-def user_email(username):
-    """读取或更新当前登录身份的邮箱；家长账号不会写到关联学生上。"""
-    login_username = getattr(g, 'login_username', username)
-    if request.method == 'GET':
-        row = load_users().get(login_username)
-        if not isinstance(row, dict):
-            return jsonify({'error': '用户不存在'}), 404
-        return jsonify({'email': row.get('email') or ''}), 200
-
-    data = request.get_json(silent=True) or {}
-    try:
-        email = normalize_email(data.get('email'))
-    except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-
-    def _set_email(users: Dict[str, Any]) -> Tuple[bool, str]:
-        row = users.get(login_username)
-        if not isinstance(row, dict):
-            return False, '用户不存在'
-        if email and _email_owner(users, email, exclude=login_username):
-            return False, '该邮箱已被其他账号使用'
-        if email:
-            row['email'] = email
-        else:
-            row.pop('email', None)
-        return True, ''
-
-    ok, error = mutate_users(_set_email)
-    if not ok:
-        return jsonify({'error': error}), 404 if error == '用户不存在' else 409
-    return jsonify({
-        'email': email or '',
-        'message': '邮箱已保存' if email else '邮箱已移除',
-    }), 200
 
 
-@app.route('/api/user/avatar-meta', methods=['GET'])
-@token_required
-def get_user_avatar_meta(username):
-    """轻量头像元信息；避免顶栏头像刷新调用完整 settings。"""
-    av = user_avatar_disk_path(username)
-    return jsonify({
-        'avatar_url': f"/api/user/avatar/{username}" if av else None,
-    }), 200
 
 
-@app.route('/api/user/avatar/<uname>', methods=['GET'])
-def get_user_avatar_file(uname):
-    """公开读取头像（供 img src）。可选 ?w=64 等生成小尺寸 WebP，减轻传输。"""
-    path = user_avatar_disk_path(uname)
-    if not path:
-        return '', 404
-    wq = request.args.get("w", type=int)
-    if (
-        wq is not None
-        and PILImage is not None
-        and AVATAR_THUMB_MIN <= wq <= AVATAR_THUMB_MAX
-    ):
-        try:
-            im = PILImage.open(path)
-            im = _avatar_pil_to_rgb(im)
-            im = im.resize((wq, wq), PILImage.LANCZOS)
-            buf = BytesIO()
-            im.save(
-                buf,
-                "WEBP",
-                quality=AVATAR_THUMB_WEBP_QUALITY,
-                method=4,
-            )
-            buf.seek(0)
-            return send_file(buf, mimetype="image/webp", max_age=86400)
-        except Exception as e:
-            logger.warning("头像缩略图生成失败，回退原文件: %s", e)
-    return send_file(path, max_age=3600)
 
 
-@app.route('/api/user/avatar', methods=['POST'])
-@token_required
-@parent_forbidden
-def post_user_avatar(username):
-    """上传头像：有 Pillow 时统一为压缩 WebP；否则原样保存为单个 avatar.<ext>（覆盖旧文件）。"""
-    if 'file' not in request.files:
-        return jsonify({'error': '缺少 file 字段'}), 400
-    f = request.files['file']
-    if not f or not f.filename:
-        return jsonify({'error': '未选择文件'}), 400
-    ct = (f.mimetype or '').lower()
-    if ct not in ('image/jpeg', 'image/png', 'image/webp'):
-        return jsonify({'error': '仅支持 JPEG、PNG、WebP'}), 400
-    ext_map = {
-        'image/jpeg': '.jpg',
-        'image/png': '.png',
-        'image/webp': '.webp',
-    }
-    user_dir = DATA_DIR / username
-    user_dir.mkdir(parents=True, exist_ok=True)
-    for old in user_dir.glob('avatar.*'):
-        try:
-            old.unlink()
-        except OSError:
-            pass
-    if PILImage is not None:
-        dst = user_dir / "avatar.webp"
-        try:
-            _save_user_avatar_webp(f.stream, dst)
-        except Exception as e:
-            logger.error(f"保存头像失败: {e}")
-            try:
-                if dst.exists():
-                    dst.unlink()
-            except OSError:
-                pass
-            return jsonify({'error': '无法解析或保存图片'}), 400
-    else:
-        dst = user_dir / f"avatar{ext_map[ct]}"
-        logger.warning(
-            "Pillow 未安装，头像以原图保存；建议执行 pip install -r requirements-simple.txt"
-        )
-        try:
-            f.stream.seek(0)
-        except (OSError, AttributeError, TypeError):
-            pass
-        try:
-            f.save(dst)
-        except OSError as e:
-            logger.error(f"保存头像失败: {e}")
-            return jsonify({'error': '保存失败'}), 500
-    return jsonify({
-        'ok': True,
-        'avatar_url': f'/api/user/avatar/{username}',
-    }), 200
 
 
-@app.route('/api/user/avatar', methods=['DELETE'])
-@token_required
-@parent_forbidden
-def delete_user_avatar(username):
-    path = user_avatar_disk_path(username)
-    if path:
-        try:
-            path.unlink()
-        except OSError:
-            pass
-    return jsonify({'ok': True, 'avatar_url': None}), 200
 
 
-@app.route('/api/user/invites', methods=['GET'])
-@token_required
-@parent_forbidden
-def get_user_invites(username):
-    """当前用户创建的邀请码列表与剩余额度（不含明文）。"""
-    users = load_users()
-    u = users.get(username)
-    if not isinstance(u, dict) or is_parent_user_record(u):
-        return jsonify({'error': '用户不存在'}), 404
-    with _locked_invite_storage():
-        invites = _list_invites_created_by(username)
-    return jsonify({
-        **invite_quota_payload(u),
-        "invites": invites,
-        "invite_register_url": f"{_public_origin()}/",
-    }), 200
 
 
-@app.route('/api/user/invites/unused', methods=['GET'])
-@token_required
-@parent_forbidden
-def get_unused_user_invites(username):
-    """Return only this user's unused invite codes, without allowing intermediary caching."""
-    users = load_users()
-    u = users.get(username)
-    if not isinstance(u, dict) or is_parent_user_record(u):
-        return jsonify({'error': '用户不存在'}), 404
-    with _locked_invite_storage():
-        invites = _list_unused_invites_created_by(username)
-    response = jsonify({
-        **invite_quota_payload(u),
-        "invites": invites,
-        "invite_register_url": f"{_public_origin()}/",
-    })
-    response.headers["Cache-Control"] = "private, no-store"
-    return response, 200
 
 
-@app.route('/api/user/invites', methods=['POST'])
-@token_required
-@parent_forbidden
-def create_user_invite(username):
-    """当前用户生成一次性邀请码（每个用户默认最多 15 个）。"""
-    with _locked_invite_storage():
-        data = load_invites()
-        invites = data.setdefault("invites", [])
-        plain = _fresh_invite_code(invites).strip().upper()
-        try:
-            ciphertext = _encrypt_invite_code_for_storage(plain)
-        except RuntimeError:
-            return jsonify({"error": "邀请码安全存储暂不可用，请稍后重试"}), 503
-        inv_id = str(uuid.uuid4())
-        quota_after: Optional[dict] = None
-        entry = {
-            "id": inv_id,
-            "code_hash": _hash_invite_code(plain),
-            "code_ciphertext": ciphertext,
-            "created_at": china_now_iso(timespec="seconds"),
-            "created_by": username,
-            "created_by_kind": "user",
-            "used_at": None,
-            "used_by": None,
-        }
-
-        def _consume_quota(users: Dict[str, Any]) -> Tuple[bool, int, str, Optional[dict]]:
-            u = users.get(username)
-            if not isinstance(u, dict):
-                return False, 404, "用户不存在", None
-            if is_parent_user_record(u):
-                return False, 403, "家长账户不能生成邀请码", None
-            limit = invite_quota_limit(u)
-            used = invite_quota_used(u)
-            if used >= limit:
-                return False, 400, "邀请码次数已用完，请联系管理员重置", invite_quota_payload(u)
-            u["invite_quota_limit"] = limit
-            u["invite_quota_used"] = used + 1
-            invites.append(entry)
-            try:
-                save_invites(data)
-            except Exception:
-                invites.remove(entry)
-                raise
-            return True, 201, "", invite_quota_payload(u)
-
-        try:
-            ok, status_code, err, quota_after = mutate_users(_consume_quota)
-        except Exception:
-            if entry in invites:
-                invites.remove(entry)
-                try:
-                    save_invites(data)
-                except Exception:
-                    logger.exception("生成失败后恢复邀请码列表失败: invite_id=%s", inv_id)
-            raise
-        if not ok:
-            return jsonify({"error": err, **(quota_after or {})}), status_code
-
-    logger.info("用户生成邀请码: user=%s id=%s", username, inv_id)
-    return jsonify({
-        "id": inv_id,
-        "invite_code": plain,
-        "invite_register_url": f"{_public_origin()}/",
-        "hint": "未使用前可在邀请窗口中再次选择",
-        **(quota_after or {}),
-    }), 201
 
 
 @app.route('/api/monthly-pool', methods=['GET'])
@@ -4691,166 +4223,10 @@ def api_monthly_pk_board(username):
     return jsonify(board), 200
 
 
-@app.route('/api/words/status', methods=['GET'])
-@token_required
-def get_status(username):
-    """获取学习状态"""
-    try:
-        with user_reciter_session(username) as reciter:
-            all_words = []
-            today_d = china_today()
-            for w in reciter.all_words:
-                csv_row = lookup_csv_word(w.english)
-                nd = w.next_review_date
-                is_co = nd < today_d
-                examples_list: List[dict] = []
-                if csv_row:
-                    examples_list = examples_from_csv_row(csv_row)
-                if not examples_list and getattr(w, 'example', None):
-                    raw = (w.example or '').strip()
-                    if raw:
-                        if '_' in raw:
-                            a, b = raw.split('_', 1)
-                            examples_list = [{'en': a.strip(), 'cn': b.strip()}]
-                        else:
-                            examples_list = [{'en': raw, 'cn': ''}]
-                ex_text = ''
-                if examples_list:
-                    fe = examples_list[0]
-                    ex_text = merged_example_from_pair(fe.get('en', ''), fe.get('cn', ''))
-                display_zh = w.chinese
-                if csv_row and (csv_row.get("chinese") or "").strip():
-                    display_zh = (csv_row.get("chinese") or "").strip()
-                row_payload = {
-                    'english': w.english,
-                    'chinese': display_zh,
-                    'phonetic': csv_row.get('phonetic', '') if csv_row else '',
-                    'level': (csv_row.get('level') or '').strip() if csv_row else '',
-                    'example': ex_text,
-                    'examples': examples_list,
-                    'success_count': w.success_count,
-                    'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
-                    'review_round': w.review_round,
-                    'review_count': w.review_count,
-                    'next_review_date': nd.isoformat(),
-                    'remaining_days': (nd - today_d).days,
-                    'is_carryover': is_co,
-                    'carryover_days': (today_d - nd).days if is_co else 0,
-                    **reciter.review_state_payload(w),
-                }
-                if csv_row:
-                    csl = csv_row.get("chinese_sense_lines")
-                    if isinstance(csl, list) and csl:
-                        row_payload["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
-                all_words.append(row_payload)
-
-            overview_stats = _summary_payload_from_reciter(reciter)['stats']
-            stats = {
-                **overview_stats,
-                'total_words': len(all_words),
-                'mastered_words': len(reciter.mastered_words),
-                'avg_review_count': sum(w['review_count'] for w in all_words) / len(all_words) if all_words else 0,
-                'avg_mastery_percent': (
-                    sum(w['mastery']['overall_percent'] for w in all_words) / len(all_words)
-                    if all_words
-                    else 0
-                ),
-            }
-
-            return jsonify({'words': all_words, 'stats': stats}), 200
-    except Exception as e:
-        logger.error(f"获取状态失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
 
-@app.route('/api/words/summary', methods=['GET'])
-@token_required
-def get_words_summary(username):
-    """获取导航与首屏所需轻量统计，避免为统计拉取完整单词列表。"""
-    try:
-        with user_reciter_session(username) as reciter:
-            return jsonify(_summary_payload_from_reciter(reciter)), 200
-    except Exception as e:
-        logger.error(f"获取轻量统计失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
-@app.route('/api/words/review', methods=['GET'])
-@token_required
-def get_review_list(username):
-    """获取今日复习列表（从CSV中补充 example_form、随机选择例句）"""
-    try:
-        listening_available = _reliable_listening_available()
-        with user_reciter_session(username) as reciter:
-            task_bundle = reciter.get_today_learning_plan(
-                listening_available=listening_available,
-                new_words_first=_new_words_first_requested(),
-            )
-            payload = _review_words_payload(
-                reciter,
-                task_bundle['words'],
-                task_bundle,
-                listening_available=listening_available,
-            )
-            reciter.save_learning_data(backup=False)
-            return jsonify(payload), 200
-    except Exception as e:
-        logger.error(f"获取复习列表失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
-@app.route('/api/words/extra-review', methods=['GET'])
-@token_required
-def get_extra_review_list(username):
-    """今日无待复习时：按复习次数最少优先、同层随机抽取 10 个加练词。"""
-    try:
-        with user_reciter_session(username) as reciter:
-            task_bundle = reciter.get_today_learning_plan(
-                listening_available=_reliable_listening_available(),
-            )
-            if int((task_bundle.get('plan') or {}).get('remaining') or 0) > 0:
-                return jsonify({'error': '请先完成今日学习任务，再开始随机加练'}), 409
-            bonus_session_id, picked = reciter.create_bonus_practice_session(BONUS_PRACTICE_WORD_COUNT)
-            words = []
-            for w in picked:
-                nd = w.next_review_date
-                state_payload = reciter.review_state_payload(w)
-                item = {
-                    'english': w.english,
-                    'chinese': w.chinese,
-                    'success_count': w.success_count,
-                    'max_success_count': reciter.config.MAX_SUCCESS_COUNT,
-                    'review_count': w.review_count,
-                    'example': w.example,
-                    'example_form': '',
-                    'scheduled_due_date': nd.isoformat(),
-                    'is_carryover': False,
-                    'carryover_days': 0,
-                    'examples': [],
-                    'task_id': '',
-                    'task_item_id': '',
-                    'task_reason': 'bonus',
-                    'bonus_session_id': bonus_session_id,
-                    'exercise_type': 'spelling',
-                    'mastery': state_payload['mastery'],
-                    'scheduler': state_payload['scheduler'],
-                }
-                csv_row = lookup_csv_word(w.english)
-                if csv_row:
-                    if (csv_row.get("chinese") or "").strip():
-                        item["chinese"] = (csv_row.get("chinese") or "").strip()
-                    apply_review_display_from_wordbank(item, csv_row, w.english)
-                    csl = csv_row.get("chinese_sense_lines")
-                    if isinstance(csl, list) and csl:
-                        item["chinese_sense_lines"] = [str(x).strip() for x in csl if str(x).strip()]
-                words.append(item)
-            reciter.save_learning_data(backup=False)
-            return jsonify({
-                'words': words,
-                'count': len(words),
-                'bonus_session_id': bonus_session_id,
-            }), 200
-    except Exception as e:
-        logger.error(f"获取加练列表失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
 def _spelling_fallback_word_payload(word: Any) -> dict:
     item = {
@@ -4875,372 +4251,9 @@ def _spelling_fallback_word_payload(word: Any) -> dict:
     return item
 
 
-@app.route('/api/words/question', methods=['POST'])
-@token_required
-@parent_forbidden
-def get_or_generate_word_question(username):
-    """Load an approved private-bank question or fall back without blocking."""
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({'error': '无效的JSON数据'}), 400
-    word_id = str(data.get('word_id') or '').strip()
-    task_id = str(data.get('task_id') or '').strip()
-    task_item_id = str(data.get('task_item_id') or '').strip()
-    requested_type = str(data.get('exercise_type') or '').strip()
-    if not word_id or not task_id or not task_item_id:
-        return jsonify({'error': '今日任务参数不完整，请刷新后重试'}), 400
-    if requested_type not in gaokao_questions.QUESTION_TYPES:
-        return jsonify({'error': '当前题型不需要加载选择题'}), 400
-
-    try:
-        with user_reciter_session(username) as reciter:
-            task_item = reciter.resolve_daily_task_item(task_id, task_item_id, '')
-            if not task_item:
-                return jsonify({'error': '今日任务已更新，请刷新后继续'}), 409
-            exercise_type = str(task_item.get('exercise_type') or '')
-            if exercise_type != requested_type:
-                return jsonify({'error': '当前任务题型已更新，请刷新后继续'}), 409
-            word = reciter.find_word(task_item.get('word_key', ''), include_mastered=True)
-            if not word:
-                return jsonify({'error': '单词未找到'}), 404
-
-            question = gaokao_questions.get_question(
-                word.english, exercise_type, source=_current_gaokao_source(word.english),
-            )
-            if not question:
-                reciter.mark_exercise_unavailable(word, exercise_type)
-                task_item['exercise_type'] = 'spelling'
-                task_item.pop('question_id', None)
-                task_item['question_fallback_reason'] = 'question_not_approved'
-                reciter.save_learning_data(backup=False)
-                fallback_word = _spelling_fallback_word_payload(word)
-                state_payload = reciter.review_state_payload(word)
-                fallback_word['mastery'] = state_payload['mastery']
-                fallback_word['memory_status'] = state_payload['memory_status']
-                return jsonify({
-                    'fallback': True,
-                    'exercise_type': 'spelling',
-                    'message': '选择题尚未生成或不可用，已自动切换为拼写练习',
-                    'word': fallback_word,
-                }), 200
-
-            task_item['question_id'] = question['question_id']
-            task_item.pop('question_fallback_reason', None)
-            reciter.save_learning_data(backup=False)
-            return jsonify({
-                'fallback': False,
-                'generated': False,
-                'exercise_type': exercise_type,
-                'question': gaokao_questions.public_question(question),
-            }), 200
-    except Exception as exc:
-        _invalidate_user_reciter_cache(username)
-        logger.error(
-            "加载高考选择题失败: user=%s word=%s error=%s",
-            username,
-            word_id,
-            exc,
-        )
-        return jsonify({'error': '题目加载失败，请稍后重试'}), 500
 
 
-@app.route('/api/words/practice', methods=['POST'])
-@token_required
-@parent_forbidden
-def practice_word(username):
-    """练习单词"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': '无效的JSON数据'}), 400
-        
-        word_id = str(data.get('word_id') or '').strip()
-        answer = str(data.get('answer') or '').strip()
-        selected_option_id = str(data.get('selected_option_id') or '').strip()
-        question_id = str(data.get('question_id') or '').strip()
-        # 当日错题巩固轮次：答对不计入掌握进度（success_count）与排期，见前端 wrongRoundNumber>0
-        remedial = data.get('remedial') is True
-        # 无今日待复习时的加练：仅计复习次数，不改变掌握进度与排期
-        bonus_practice = data.get('bonus_practice') is True
-        bonus_session_id = str(data.get('bonus_session_id') or '').strip()[:96]
-        # True：要求拼写与例句中形式一致（如复数、时态）；False：仅词库原形（lemma）
-        test_inflection = data.get('test_inflection') is True
-        task_id = str(data.get('task_id') or '').strip()
-        task_item_id = str(data.get('task_item_id') or '').strip()
-        requested_exercise_type = str(data.get('exercise_type') or 'spelling').strip()
-        review_event_id = str(data.get('review_event_id') or '').strip()[:96]
-        audio_available = data.get('audio_available') is True
-        try:
-            attempt_number = max(1, min(1000, int(data.get('attempt_number') or 1)))
-        except (TypeError, ValueError, OverflowError):
-            attempt_number = 1
-        try:
-            hint_count = max(0, min(100, int(data.get('hint_count') or 0)))
-        except (TypeError, ValueError, OverflowError):
-            hint_count = 0
-        try:
-            elapsed_ms = max(0, min(600000, int(data.get('elapsed_ms') or 0)))
-        except (TypeError, ValueError, OverflowError):
-            elapsed_ms = 0
 
-        if not word_id:
-            return jsonify({'error': '单词ID不能为空'}), 400
-        if bool(task_id) != bool(task_item_id):
-            return jsonify({'error': '今日任务参数不完整，请刷新后重试'}), 400
-        if not review_event_id:
-            return jsonify({'error': '缺少作答事件标识，请刷新后重试'}), 400
-        if not task_id and not bonus_practice:
-            return jsonify({'error': '请从今日任务进入练习'}), 409
-        if bonus_practice and not bonus_session_id:
-            return jsonify({'error': '加练会话已失效，请重新获取随机加练'}), 409
-
-        with user_reciter_session(username) as reciter:
-            task_item = None
-            if task_id and not bonus_practice:
-                task_item = reciter.resolve_daily_task_item(
-                    task_id,
-                    task_item_id,
-                    '' if requested_exercise_type in gaokao_questions.QUESTION_TYPES else word_id,
-                    review_event_id,
-                )
-                if not task_item:
-                    return jsonify({'error': '今日任务已更新，请刷新后继续'}), 409
-
-            if bonus_practice:
-                word = reciter.resolve_bonus_practice_word(
-                    bonus_session_id,
-                    word_id,
-                    review_event_id,
-                )
-                if not word:
-                    return jsonify({'error': '加练题目不属于当前会话，请重新获取随机加练'}), 409
-            else:
-                word = reciter.find_word(
-                    task_item.get('word_key', '') if task_item else word_id,
-                    include_mastered=True,
-                )
-            if word in reciter.mastered_words and not (bonus_practice or task_item or remedial):
-                word = None
-
-            if not word:
-                return jsonify({'error': '单词未找到'}), 404
-
-            # 错题巩固固定使用拼写题。主轮仍以服务端任务题型为准，避免客户端
-            # 任意改写正常任务；remedial 作答由下方 apply_scored_review_attempt
-            # 排除在掌握度和近期正确率之外。
-            if remedial and requested_exercise_type == 'spelling':
-                exercise_type = 'spelling'
-            else:
-                exercise_type = (
-                    str(task_item.get('exercise_type') or 'spelling')
-                    if task_item
-                    else requested_exercise_type
-                )
-            if exercise_type == 'listening' and not audio_available:
-                exercise_type = 'spelling'
-            if exercise_type not in EXERCISE_TYPES:
-                exercise_type = 'spelling'
-            if (
-                task_item
-                and exercise_type not in gaokao_questions.QUESTION_TYPES
-                and reciter.word_state_key(word_id) != reciter.word_state_key(word)
-            ):
-                return jsonify({'error': '当前任务单词已更新，请刷新后继续'}), 409
-            if exercise_type == 'listening':
-                test_inflection = False
-
-            answer_feedback = None
-            if exercise_type in gaokao_questions.QUESTION_TYPES:
-                if not task_item or not question_id or not selected_option_id:
-                    return jsonify({'error': '选择题作答参数不完整，请重新加载题目'}), 400
-                question = gaokao_questions.get_question(
-                    word.english, exercise_type, source=_current_gaokao_source(word.english),
-                )
-                bound_question_id = str(task_item.get('question_id') or '')
-                if (
-                    not question
-                    or question.get('question_id') != question_id
-                    or bound_question_id != question_id
-                ):
-                    return jsonify({'error': '题目版本已更新，请重新加载题目'}), 409
-                valid_option_ids = {
-                    str(option.get('id') or '')
-                    for option in question.get('options') or []
-                    if isinstance(option, dict)
-                }
-                if selected_option_id not in valid_option_ids:
-                    return jsonify({'error': '所选答案无效，请重新选择'}), 400
-                is_correct = gaokao_questions.check_answer(question, selected_option_id)
-                submission_fingerprint = hashlib.sha256(
-                    f'{question_id}\0{selected_option_id}'.encode('utf-8')
-                ).hexdigest()
-                test_inflection = False
-            else:
-                if not answer:
-                    return jsonify({'error': '答案不能为空'}), 400
-                submitted = answer.strip().lower()
-                lemma = word.english.strip().lower()
-                if test_inflection:
-                    csv_row = lookup_csv_word(word.english)
-                    if csv_row:
-                        picked = pick_example_for_word(csv_row, word.english)
-                        eff = (picked.get('example_form') or '').strip().lower()
-                        expected = eff if eff else lemma
-                    else:
-                        expected = lemma
-                    is_correct = submitted == expected
-                else:
-                    is_correct = submitted == lemma
-                submission_fingerprint = hashlib.sha256(
-                    submitted.encode('utf-8')
-                ).hexdigest()
-            applied = reciter.apply_scored_review_attempt(
-                word,
-                exercise_type=exercise_type,
-                correct=is_correct,
-                task_item=task_item,
-                event_id=review_event_id,
-                elapsed_ms=elapsed_ms,
-                hint_count=hint_count,
-                attempt_number=attempt_number,
-                remedial=remedial,
-                bonus_practice=bonus_practice,
-                audio_available=audio_available,
-                submission_fingerprint=submission_fingerprint,
-            )
-            if task_item and applied['recorded'] and not audio_available:
-                task_item['exercise_type'] = exercise_type
-            if bonus_practice and is_correct:
-                if not reciter.complete_bonus_practice_word(
-                    bonus_session_id,
-                    word_id,
-                    review_event_id,
-                ):
-                    return jsonify({'error': '加练题目已完成，请重新获取随机加练'}), 409
-            reciter.save_learning_data(backup=False)
-
-            recorded = applied['recorded']
-            message = applied['message']
-            mastered_now = applied['mastered_now']
-            if exercise_type in gaokao_questions.QUESTION_TYPES:
-                if not is_correct and not applied['final_attempt']:
-                    message = '答案不正确'
-                if is_correct or applied['final_attempt']:
-                    answer_feedback = gaokao_questions.answer_explanation(question)
-            gam_payload = None
-            if is_correct and (recorded or review_event_id):
-                pkw, pkm = _pk_stats_for_gamification(username)
-                bonus_session_completed = bool(
-                    bonus_practice
-                    and reciter.is_bonus_practice_completion_event(
-                        bonus_session_id, word_id, review_event_id,
-                    )
-                )
-                gam_payload = gamification_mod.award_correct_answer(
-                    DATA_DIR,
-                    username,
-                    bonus_practice=bonus_practice,
-                    remedial=applied['remedial'],
-                    old_success_count=applied['old_success_count'],
-                    new_success_count=applied['new_success_count'],
-                    mastered_now=mastered_now,
-                    mastered_words=len(reciter.mastered_words),
-                    pk_wins=pkw,
-                    pk_matches=pkm,
-                    event_id=hashlib.sha256(
-                        f'{reciter.word_state_key(word)}\0{review_event_id}'.encode('utf-8')
-                    ).hexdigest(),
-                    event_scope=reciter.word_state_key(word),
-                    bonus_session_completed=bonus_session_completed,
-                )
-
-            body = {
-                'correct': is_correct,
-                'message': message,
-                'recorded': recorded,
-                'mastered_now': mastered_now,
-                'remedial': applied['remedial'],
-                'attempt_number': applied['attempt_number'],
-                'attempt_limit': applied['attempt_limit'],
-                'final_attempt': applied['final_attempt'],
-                'task_remedial': bool(
-                    task_item
-                    and (
-                        task_item.get('phase') == 'remedial'
-                        or reciter.task_attempt_count(task_item) >= applied['attempt_limit']
-                    )
-                ),
-                'exercise_type': exercise_type,
-                'task_progress': reciter.daily_task_progress(),
-                'word': {
-                    'english': word.english,
-                    'chinese': word.chinese,
-                    'success_count': word.success_count,
-                    'next_review_date': word.next_review_date.isoformat(),
-                    **reciter.review_state_payload(word),
-                }
-            }
-            if gam_payload is not None:
-                body['gamification'] = gam_payload
-            if answer_feedback is not None:
-                body['answer_feedback'] = answer_feedback
-            if is_correct:
-                extra_rows = other_v2_sense_extra_for_review_slot(word.english)
-                if extra_rows:
-                    body['other_senses_extra'] = extra_rows
-            return jsonify(body), 200
-    except ReviewEventConflict:
-        return jsonify({'error': '作答事件与原请求不一致，请重新提交'}), 409
-    except Exception as e:
-        _invalidate_user_reciter_cache(username)
-        logger.error(f"练习单词失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
-
-@app.route('/api/words/speak', methods=['POST'])
-@token_required
-@parent_forbidden
-def speak_text(username):
-    """朗读文本（跨平台支持）
-    
-    - macOS: 使用系统 say 命令
-    - Linux/Windows: 如果 say 命令不存在则静默跳过
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': '无效的JSON数据'}), 400
-        
-        text = data.get('text', '').strip()
-        if not text:
-            return jsonify({'error': '文本不能为空'}), 400
-
-        safe_text = sanitize_tts_text(text)
-        if not safe_text:
-            return jsonify({'error': '文本无效或过长'}), 400
-        
-        if shutil.which('say') is None:
-            logger.debug(f"用户 {username} 尝试朗读但 say 命令不可用")
-            return jsonify({'message': '语音播放不可用，已跳过'}), 200
-        
-        try:
-            # 始终使用参数列表传递，禁止 shell=True，避免命令注入
-            subprocess.run(
-                ['say', safe_text],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        except subprocess.TimeoutExpired:
-            logger.warning(f"用户 {username} 的朗读超时")
-            return jsonify({'message': '朗读超时，音频过长'}), 200
-        except Exception as e:
-            logger.error(f"朗读执行失败: {e}")
-            return jsonify({'message': '朗读执行失败'}), 200
-        
-        return jsonify({'message': '朗读完成'}), 200
-    except Exception as e:
-        logger.error(f"朗读失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
 
 @app.route('/api/tts/capabilities')
@@ -5251,45 +4264,6 @@ def tts_capabilities():
     return jsonify({'piper': bool(piper_runtime_ready())}), 200
 
 
-@app.route('/api/words/speak-audio', methods=['POST'])
-@token_required
-@parent_forbidden
-def speak_text_audio(username):
-    """使用 Piper 合成英文 WAV 并返回，供浏览器播放（远程可用）。"""
-    if not _rate_allow(f"tts_audio:{username}", _RATE_MAX_TTS_AUDIO):
-        return jsonify({'error': '朗读请求过于频繁，请稍后再试'}), 429
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': '无效的JSON数据'}), 400
-
-        text = data.get('text', '').strip()
-        if not text:
-            return jsonify({'error': '文本不能为空'}), 400
-
-        safe_text = sanitize_tts_text(text)
-        if not safe_text:
-            return jsonify({'error': '文本无效或过长'}), 400
-
-        if piper_runtime_ready is None or not piper_runtime_ready():
-            return jsonify({'error': 'Piper 未配置'}), 503
-
-        if piper_synthesize_wav is None:
-            return jsonify({'error': 'Piper 不可用'}), 503
-
-        wav = piper_synthesize_wav(safe_text)
-        if not wav:
-            return jsonify({'error': '语音合成失败'}), 503
-
-        response = Response(wav, mimetype='audio/wav')
-        if piper_last_result_metadata is not None:
-            metadata = piper_last_result_metadata()
-            response.headers['X-TTS-Cache'] = 'HIT' if metadata.get('cache_hit') else 'MISS'
-            response.headers['Server-Timing'] = f"piper;dur={float(metadata.get('duration_ms') or 0):.1f}"
-        return response
-    except Exception as e:
-        logger.error(f"Piper 朗读失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
 
 def _parse_import_json_body(request):
@@ -5306,62 +4280,8 @@ def _parse_import_json_body(request):
     return None, '请提供 JSON 数组，或包含 words 数组的对象'
 
 
-@app.route('/api/words/import-json', methods=['POST'])
-@token_required
-def import_words_json(username):
-    """家长粘贴学习数据格式的 JSON，合并到当前用户的待复习词库。"""
-    if not _rate_allow(f"import_json:{username}", _RATE_MAX_IMPORT_JSON):
-        return jsonify({'error': '导入过于频繁，请稍后再试'}), 429
-    items, err = _parse_import_json_body(request)
-    if err:
-        return jsonify({'error': err}), 400
-    if not items:
-        return jsonify({'error': '单词列表为空'}), 400
-    if len(items) > 5000:
-        return jsonify({'error': '单次最多导入 5000 条'}), 400
-    norm_items: List[dict] = []
-    for it in items:
-        if not isinstance(it, dict):
-            norm_items.append(it)
-            continue
-        row = dict(it)
-        en = str(row.get("english", "")).strip()
-        if en:
-            row["english"] = _normalize_import_english_surface(en)[:500]
-        norm_items.append(row)
-    try:
-        with user_reciter_session(username) as reciter:
-            result = reciter.add_words_from_dicts(norm_items)
-        n = result['added']
-        skipped = result['skipped_duplicate']
-        invalid = result['skipped_invalid']
-        msg = f'成功加入 {n} 个新单词'
-        if skipped:
-            msg += f'，已跳过 {skipped} 个重复'
-        if invalid:
-            msg += f'，{invalid} 条无效已忽略'
-        logger.info(
-            "用户 %s JSON 导入: added=%s dup=%s invalid=%s",
-            username,
-            n,
-            skipped,
-            invalid,
-        )
-        return jsonify({'message': msg, **result}), 200
-    except Exception as e:
-        logger.error(f"JSON 导入失败: {e}")
-        return jsonify({'error': '导入失败，请检查 JSON 格式'}), 500
 
 
-@app.route('/api/user/plan', methods=['GET'])
-@token_required
-def get_user_plan_api(username):
-    """获取当前用户套餐类型。"""
-    return jsonify({
-        'plan': get_user_plan(username),
-        'article_ai_extract_available': bool(get_deepseek_api_key()),
-        'article_ai_extract_enabled': _article_ai_extract_enabled(),
-    }), 200
 
 
 def _textbooks_load_index() -> dict:
@@ -5416,132 +4336,10 @@ def _textbooks_resolve_lesson_file(corpus_root: Path, rel_path: str) -> Optional
     return full
 
 
-@app.route('/api/textbooks/catalog', methods=['GET'])
-@token_required
-def textbooks_catalog(username):
-    """课文学习：返回教材索引及各套 manifest（如 nce/manifest.json）。"""
-    idx = _textbooks_load_index()
-    corpora_out: List[dict] = []
-    for c in idx.get("corpora") or []:
-        cid = str(c.get("id", "")).strip()
-        title = str(c.get("title", "")).strip()
-        manifest_rel = str(c.get("manifestRelativePath", "")).strip()
-        if not cid or not manifest_rel:
-            continue
-        mp = (STATIC_WB_DIR / manifest_rel).resolve()
-        if not str(mp).startswith(str(STATIC_WB_DIR.resolve())) or not mp.is_file():
-            continue
-        try:
-            with open(mp, "r", encoding="utf-8") as f:
-                mdata = json.load(f)
-        except Exception as e:
-            logger.warning("读取教材 manifest %s 失败: %s", manifest_rel, e)
-            mdata = {}
-        corpora_out.append(
-            {
-                "id": cid,
-                "title": title or cid,
-                "manifest": mdata,
-            }
-        )
-    return jsonify({"schema": idx.get("schema"), "corpora": corpora_out}), 200
 
 
-@app.route('/api/textbooks/lesson', methods=['GET'])
-@token_required
-def textbooks_lesson(username):
-    """课文学习：按 corpus id + 相对于该教材根目录的 json 路径返回课文。"""
-    corpus_id = request.args.get("corpus", "").strip()
-    rel_path = request.args.get("path", "").strip()
-    if not corpus_id or not rel_path:
-        return jsonify({"error": "缺少 corpus 或 path 参数"}), 400
-
-    idx = _textbooks_load_index()
-    corpus_root: Optional[Path] = None
-    manifest_rel: str = ""
-    for c in idx.get("corpora") or []:
-        if str(c.get("id", "")).strip() != corpus_id:
-            continue
-        manifest_rel = str(c.get("manifestRelativePath", "")).strip()
-        if manifest_rel:
-            corpus_root = _corpus_root_from_manifest_relative(manifest_rel)
-        break
-
-    if corpus_root is None:
-        return jsonify({"error": "无效的教材"}), 400
-
-    lesson_path = _textbooks_resolve_lesson_file(corpus_root, rel_path)
-    if lesson_path is None:
-        return jsonify({"error": "无效的课文路径"}), 400
-
-    if not is_paid_user(username) and manifest_rel:
-        mp = (STATIC_WB_DIR / manifest_rel).resolve()
-        if str(mp).startswith(str(STATIC_WB_DIR.resolve())) and mp.is_file():
-            try:
-                with open(mp, "r", encoding="utf-8") as f:
-                    manifest_data = json.load(f)
-                uidx = _textbooks_unit_index_for_path(manifest_data, rel_path)
-                if uidx is not None and uidx >= TEXTBOOK_FREE_UNITS_PER_BOOK:
-                    return jsonify(
-                        {
-                            "error": f"普通用户每册仅可学习前 {TEXTBOOK_FREE_UNITS_PER_BOOK} 篇课文，升级 VIP 后可查看全部",
-                        }
-                    ), 403
-            except Exception as e:
-                logger.warning("课文权限校验读取 manifest 失败: %s", e)
-
-    try:
-        with open(lesson_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        logger.warning("读取课文 JSON 失败: %s", e)
-        return jsonify({"error": "课文读取失败"}), 500
-
-    return jsonify(data), 200
 
 
-@app.route('/api/wordbank/csv', methods=['GET'])
-@token_required
-def get_wordbank_csv(username):
-    """返回系统词库扁平行（与 ``merge_wordbank_rows_for_search`` 一致：v2 优先，同键覆盖 CSV）。
-
-    Query:
-    - level: 可选，按难度过滤
-    - fields: ``full``（默认）或 ``minimal``（省略 example*_form 等，供单词学习等场景）
-    支持 If-None-Match / ETag，内容未变时返回 304（ETag 含 words.csv 与 words_v2.json 的 mtime）。
-    """
-    level = request.args.get('level', '').strip()
-    fields_mode = request.args.get('fields', 'full').strip().lower()
-    if fields_mode not in ('full', 'minimal'):
-        fields_mode = 'full'
-
-    rows, _ = merge_wordbank_rows_for_search(level)
-    count = len(rows)
-    try:
-        csv_mtime = WORDS_CSV_FILE.stat().st_mtime if WORDS_CSV_FILE.exists() else 0.0
-    except OSError:
-        csv_mtime = 0.0
-    try:
-        v2_mtime = wordbank_v2.WORDS_V2_FILE.stat().st_mtime if wordbank_v2.WORDS_V2_FILE.exists() else 0.0
-    except OSError:
-        v2_mtime = 0.0
-    # ETag 必须为 ASCII；level 可能含中文（小学、初中等），不可直接拼进响应头
-    _etag_seed = f"{csv_mtime:.9f}\0{v2_mtime:.9f}\0{level}\0{fields_mode}\0{count}".encode("utf-8")
-    etag_digest = hashlib.sha256(_etag_seed).hexdigest()[:32]
-    etag = f'W/"wbcsv-{etag_digest}"'
-    inm = (request.headers.get('If-None-Match') or '').strip()
-    if inm == etag:
-        resp = Response(status=304)
-        resp.headers['ETag'] = etag
-        return resp
-
-    if fields_mode == 'minimal':
-        out_rows = [_wordbank_csv_row_minimal(r) for r in rows]
-    else:
-        out_rows = rows
-    resp = jsonify({'words': out_rows, 'count': count})
-    resp.headers['ETag'] = etag
-    return resp, 200
 
 
 def _dedupe_preserve_order(items: List[str]) -> List[str]:
@@ -6153,310 +4951,8 @@ def _vocab_import_spacy_accepts_surface(
     return False
 
 
-@app.route('/api/wordbank/csv/search', methods=['GET'])
-@token_required
-def search_wordbank_csv(username):
-    """在 CSV 词汇表中搜索（支持英文/中文，逗号分隔多词）。
-
-    - ``heuristics=1``：启用缩写/复数/-ed/-ing/派生等快速规则。
-    - ``heuristics=0``：关闭（仅表面形、管理员映射与 spaCy）。
-    - 未指定 ``heuristics`` 时：``per_surface=1``（课文学习逐词）默认开启启发式；否则默认关闭（导入页词库搜索）。
-    - ``surface_first=1``（导入页「从词库搜索」）：英文词先仅用表面形与管理员映射匹配，未命中再启用 spaCy 原型匹配。
-    """
-    if not _rate_allow(f"wordbank_search:{username}", _RATE_MAX_WORDBANK_SEARCH):
-        return jsonify({'error': '词库搜索过于频繁，请稍后再试'}), 429
-    q = request.args.get('q', '').strip()
-    level = request.args.get('level', '').strip()
-    per_surface = request.args.get('per_surface', '').strip().lower() in ('1', 'true', 'yes')
-    surface_first = request.args.get('surface_first', '').strip().lower() in (
-        '1', 'true', 'yes', 'on',
-    )
-    # nlp=0：无 spaCy；启发式由 heuristics 控制
-    use_spacy = request.args.get('nlp', '1').strip().lower() not in ('0', 'false', 'no', 'off')
-    raw_heur = (request.args.get('heuristics') or '').strip().lower()
-    if raw_heur in ('1', 'true', 'yes', 'on'):
-        use_heuristics = True
-    elif raw_heur in ('0', 'false', 'no', 'off'):
-        use_heuristics = False
-    else:
-        # 未传参：课文学习（per_surface 逐词）默认开启启发式；导入页词库搜索无 per_surface，默认关
-        use_heuristics = per_surface
-    if not q:
-        return jsonify({
-            'words': [],
-            'count': 0,
-            'lemma_resolution': {},
-            'implicit_lemma_nlp_resolution': {},
-            'implicit_plural_resolution': {},
-            'implicit_past_resolution': {},
-            'implicit_ing_resolution': {},
-            'implicit_contraction_resolution': {},
-            'implicit_suffix_resolution': {},
-            'surface_hits': {},
-            'surface_blocked': {},
-            'nlp_enabled': use_spacy,
-            'heuristics_enabled': use_heuristics,
-            'surface_first': surface_first,
-        }), 200
-    if len(q) > 2000:
-        return jsonify({'error': '搜索内容过长，请减少后重试'}), 400
-    terms = _dedupe_preserve_order([
-        _normalize_apostrophe_token(t.strip())
-        for t in re.split(r'[,，]', q) if t.strip()
-    ])
-    if len(terms) > 64:
-        return jsonify({'error': '单次最多搜索 64 个词'}), 400
-    mappings = get_wordbank_lemma_mappings()
-    rows, csv_row_keys = merge_wordbank_rows_for_search(level)
-    lemma_resolution: Dict[str, str] = {}
-    implicit_lemma_nlp_resolution: Dict[str, str] = {}
-    implicit_plural_resolution: Dict[str, str] = {}
-    implicit_past_resolution: Dict[str, str] = {}
-    implicit_ing_resolution: Dict[str, str] = {}
-    implicit_contraction_resolution: Dict[str, str] = {}
-    implicit_suffix_resolution: Dict[str, str] = {}
-    surface_hits: Dict[str, Optional[dict]] = {}
-    surface_blocked: Dict[str, bool] = {}
-    difficult: Dict[str, object] = {}
-    if per_surface:
-        with _TROUBLES_LOCK:
-            difficult = dict(_read_troubles_unlocked().get('difficult') or {})
-    spacy_lemma_map: Optional[Dict[str, str]] = None
-    if use_spacy:
-        batch_terms = [t for t in terms if re.match(r'[a-z]', t)]
-        if batch_terms:
-            spacy_lemma_map = _spacy_lemma_map_for_surfaces(batch_terms)
-            if not spacy_lemma_map:
-                spacy_lemma_map = None
-
-    def _resolve_term_hit(t: str) -> Tuple[Optional[str], Optional[str]]:
-        """解析英文检索词在词库中的命中原形；surface_first 时先表面形与映射，未命中再 spaCy。"""
-        if surface_first:
-            h1, k1 = _first_lemma_in_csv_with_kind(
-                t, mappings, csv_row_keys, False, None, use_heuristics,
-            )
-            if h1 is not None or not use_spacy:
-                return h1, k1
-            return _first_lemma_in_csv_with_kind(
-                t, mappings, csv_row_keys, True, spacy_lemma_map, use_heuristics,
-            )
-        return _first_lemma_in_csv_with_kind(
-            t, mappings, csv_row_keys, use_spacy, spacy_lemma_map, use_heuristics,
-        )
-
-    term_hits: Dict[str, Optional[str]] = {}
-    for term in terms:
-        if re.match(r'[a-z]', term):
-            hit, kind = _resolve_term_hit(term)
-            term_hits[term] = hit
-            if per_surface and term not in surface_hits:
-                if hit is None:
-                    surface_hits[term] = None
-                    surface_blocked[term] = term in difficult
-                else:
-                    surface_hits[term] = lookup_csv_word(hit)
-                    surface_blocked[term] = False
-            if hit is not None and hit != term:
-                lemma_resolution[term] = hit
-                if term not in mappings:
-                    if kind == 'lemma_nlp':
-                        implicit_lemma_nlp_resolution[term] = hit
-                    elif kind == 'plural':
-                        implicit_plural_resolution[term] = hit
-                    elif kind == 'past':
-                        implicit_past_resolution[term] = hit
-                    elif kind == 'ing':
-                        implicit_ing_resolution[term] = hit
-                    elif kind == 'contraction':
-                        implicit_contraction_resolution[term] = hit
-                    elif kind == 'suffix':
-                        implicit_suffix_resolution[term] = hit
-    _nk = wordbank_v2.normalize_english_key
-    english_target_keys: Set[str] = set()
-    chinese_terms: List[str] = []
-    for term in terms:
-        if re.match(r'[a-z]', term):
-            if surface_first:
-                hit = term_hits.get(term)
-                if hit is not None:
-                    english_target_keys.add(_nk(hit))
-                continue
-            for candidate, _kind in _iter_csv_lemma_candidates(
-                term, mappings, use_spacy, spacy_lemma_map, use_heuristics,
-            ):
-                english_target_keys.add(_nk(candidate))
-        else:
-            chinese_terms.append(term)
-
-    result = []
-    seen = set()
-    for row in rows:
-        en = _nk(row.get("english", ""))
-        zh = row.get("chinese", "")
-        matched = en in english_target_keys or any(term in zh for term in chinese_terms)
-        if matched and en not in seen:
-            seen.add(en)
-            result.append(row)
-    out: Dict[str, object] = {
-        'words': result,
-        'count': len(result),
-        'lemma_resolution': lemma_resolution,
-        'implicit_lemma_nlp_resolution': implicit_lemma_nlp_resolution,
-        'implicit_plural_resolution': implicit_plural_resolution,
-        'implicit_past_resolution': implicit_past_resolution,
-        'implicit_ing_resolution': implicit_ing_resolution,
-        'implicit_contraction_resolution': implicit_contraction_resolution,
-        'implicit_suffix_resolution': implicit_suffix_resolution,
-    }
-    if per_surface:
-        out['surface_hits'] = surface_hits
-        out['surface_blocked'] = surface_blocked
-    out['nlp_enabled'] = use_spacy
-    out['heuristics_enabled'] = use_heuristics
-    out['surface_first'] = surface_first
-    return jsonify(out), 200
 
 
-@app.route('/api/words/import-from-article', methods=['POST'])
-@token_required
-def import_from_article(username):
-    """
-    从文章文本提取单词，返回匹配词条列表（不直接加入待复习）：
-    - 免费版：按空格分词后去查 CSV；可勾选 use_spacy 在匹配步用 spaCy
-    - VIP：默认 extract_mode=spacy；extract_mode=ai 仅当管理后台开启且请求携带有效管理员 token
-    前端拿到词条列表后注入选框，让用户确认后再加入待复习。
-    """
-    internal_job = bool(getattr(g, 'import_job_execution', False))
-    if not internal_job and not _rate_allow(f"article_import:{username}", _RATE_MAX_ARTICLE_IMPORT):
-        return jsonify({'error': '文章提取过于频繁，请稍后再试'}), 429
-    data = request.get_json(silent=True) or {}
-    text = str(data.get('text', '')).strip()
-    if not text:
-        return jsonify({'error': '文章内容不能为空'}), 400
-    if len(text) > 20000:
-        return jsonify({'error': '文章内容过长（最多20000字符）'}), 400
-
-    plan = get_user_plan(username)
-    extract_mode = ''
-    if plan == 'paid':
-        has_ds = bool(get_deepseek_api_key())
-        raw_mode = str(data.get('extract_mode', '') or '').strip().lower()
-        if raw_mode in ('ai', 'deepseek'):
-            admin_tok = _admin_token_from_request()
-            if not _article_ai_extract_enabled():
-                return jsonify({
-                    'error': '未在管理后台开启「AI 文章分词」，VIP 默认使用 spaCy 分词',
-                }), 403
-            if not has_ds:
-                return jsonify({
-                    'error': '未配置 DeepSeek API，无法使用 AI 分词',
-                }), 400
-            if not internal_job and not verify_admin_token(admin_tok):
-                return jsonify({
-                    'error': 'AI 分词仅限管理员：请先登录管理后台并保持会话有效',
-                }), 403
-            extract_mode = 'ai'
-        else:
-            extract_mode = 'spacy'
-        if _import_jobs_async_enabled() and not internal_job:
-            job = _import_job_store().enqueue(
-                'article_extract',
-                username,
-                {'text': text, 'extract_mode': extract_mode},
-            )
-            _IMPORT_JOB_WAKE_EVENT.set()
-            return jsonify({
-                'job_id': job['job_id'],
-                'status': job['status'],
-                'message': '文章已提交后台提取',
-            }), 202
-        if extract_mode == 'spacy':
-            lemmas = spacy_extract_lemmas_from_article(text)
-            if lemmas is None:
-                return jsonify({
-                    'error': 'spaCy 模型未就绪，请安装 en_core_web_sm 或稍后重试',
-                }), 500
-            method = 'spacy'
-        else:
-            lemmas = deepseek_extract_lemmas(text)
-            if lemmas is None:
-                return jsonify({'error': 'DeepSeek API 调用失败，请稍后重试'}), 500
-            method = 'deepseek'
-        use_spacy = True
-    else:
-        raw_us = data.get('use_spacy', False)
-        if isinstance(raw_us, str):
-            use_spacy = raw_us.strip().lower() in ('1', 'true', 'yes', 'on')
-        else:
-            use_spacy = bool(raw_us)
-        raw_words = re.findall(r"[a-zA-Z']+", text)
-        lemmas = list({w.lower().strip("'") for w in raw_words if len(w) >= 2})
-        method = 'simple'
-
-    csv_set = get_wordbank_english_set()
-    mappings = get_wordbank_lemma_mappings()
-    unique_lemmas = list(dict.fromkeys(lemmas))
-    # VIP「spaCy 分词」已在全文 nlp 中得到 lemma，匹配阶段无需再逐词 spaCy（否则双倍耗时）
-    use_spacy_match = use_spacy
-    if plan == 'paid' and extract_mode == 'spacy':
-        use_spacy_match = False
-    spacy_lemma_map: Optional[Dict[str, str]] = None
-    if use_spacy_match:
-        spacy_lemma_map = _spacy_lemma_map_for_surfaces(unique_lemmas)
-    unmatched_lemmas: List[str] = []
-    matched_effective: List[str] = []
-    seen_eff = set()
-    matched_surface_count = 0
-    for w in unique_lemmas:
-        eff = _first_lemma_in_csv(
-            w, mappings, csv_set, use_spacy_match, spacy_lemma_map,
-            use_heuristics=False,
-        )
-        if eff is None:
-            unmatched_lemmas.append(w)
-        else:
-            matched_surface_count += 1
-            if eff not in seen_eff:
-                seen_eff.add(eff)
-                matched_effective.append(eff)
-    stats = {
-        'lemmas_total': len(unique_lemmas),
-        'matched_in_csv': matched_surface_count,
-        'not_in_csv': len(unmatched_lemmas),
-    }
-    if not matched_effective:
-        empty_out: Dict[str, object] = {
-            'message': '未在词库中找到匹配词汇',
-            'method': method,
-            'words': [],
-            'stats': stats,
-            'unmatched_lemmas': unmatched_lemmas,
-            'use_spacy': use_spacy_match,
-        }
-        if plan == 'paid':
-            empty_out['extract_mode'] = extract_mode
-        return jsonify(empty_out), 200
-
-    # 返回完整词条数据，供前端注入选框（按管理员映射解析到词库原形）
-    words = []
-    for en in matched_effective:
-        row = lookup_csv_word(en)
-        if row:
-            words.append(row)
-
-    stats['matched_in_csv'] = len(words)
-
-    ok_out: Dict[str, object] = {
-        'message': f'从文章提取到 {len(words)} 个匹配词汇，请勾选后加入待复习',
-        'method': method,
-        'words': words,
-        'stats': stats,
-        'unmatched_lemmas': unmatched_lemmas,
-        'use_spacy': use_spacy_match,
-    }
-    if plan == 'paid':
-        ok_out['extract_mode'] = extract_mode
-    return jsonify(ok_out), 200
 
 
 # 词汇导入：RapidOCR + ONNX Runtime，Tesseract 作为降级引擎。
@@ -7199,13 +5695,64 @@ def _import_jobs_async_enabled() -> bool:
     return not app.testing and raw not in ('0', 'false', 'no', 'off')
 
 
-def _execute_vocab_import_job(username: str, payload: dict) -> dict:
+def _require_import_ownership() -> None:
+    context = getattr(g, 'import_job_context', None) if has_request_context() else None
+    if context:
+        store, job = context
+        store.require_owner(job['job_id'], job['attempts'])
+
+
+def _save_import_batch(rows: list[dict], records: dict, errors: dict) -> None:
+    context = getattr(g, 'import_job_context', None)
+    if context:
+        store, job = context
+        key = hashlib.sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest()
+        store.checkpoint(job['job_id'], job['attempts'], key,
+                         {'rows': rows, 'records': records, 'errors': errors})
+
+
+def _restore_import_batches() -> tuple[list[dict], dict, dict]:
+    context = getattr(g, 'import_job_context', None)
+    if not context:
+        return [], {}, {}
+    store, job = context
+    rows, records, errors = [], {}, {}
+    for batch in store.checkpoints(job['job_id'], job['attempts']):
+        with gaokao_backfill.generation_job_lock(blocking=False) as acquired:
+            if not acquired:
+                raise RuntimeError('题目任务正在处理，请稍后恢复导入')
+            _require_import_ownership()
+            wordbank_v2.append_words_v2_entries(batch['rows'])
+            protected = gaokao_questions.externally_authored_words(
+                row.get('english') for row in batch['rows'])
+            pending = {}
+            for key, record in batch['records'].items():
+                source_hash = str(record.get('source_hash') or '')
+                if (key not in protected
+                        and not gaokao_questions.has_complete_questions(key, source_hash=source_hash)
+                        and not gaokao_questions.has_pending_candidate(key, source_hash=source_hash)):
+                    pending[key] = record
+            failures = {key: error for key, error in batch['errors'].items() if key not in protected}
+            if pending or failures:
+                gaokao_questions.persist_candidate_pool_result(pending, failures)
+            rows.extend(batch['rows'])
+            records.update(pending)
+            errors.update(failures)
+    if rows:
+        wordbank_v2.invalidate_words_v2_cache()
+        invalidate_merge_wordbank_rows_cache()
+    return rows, records, errors
+
+
+def _execute_vocab_import_job(username: str, payload: dict, *, context=None) -> dict:
     with app.test_request_context(
         '/api/wordbank/csv/import-words',
         method='POST',
         json=payload,
     ):
         g.import_job_execution = True
+        g.import_job_context = context
+        _require_import_ownership()
         value = import_vocab_to_csv.__wrapped__(username)
         status = 200
         response = value
@@ -7220,13 +5767,15 @@ def _execute_vocab_import_job(username: str, payload: dict) -> dict:
         return body
 
 
-def _execute_article_import_job(username: str, payload: dict) -> dict:
+def _execute_article_import_job(username: str, payload: dict, *, context=None) -> dict:
     with app.test_request_context(
         '/api/words/import-from-article',
         method='POST',
         json=payload,
     ):
         g.import_job_execution = True
+        g.import_job_context = context
+        _require_import_ownership()
         value = import_from_article.__wrapped__(username)
         status = 200
         response = value
@@ -7239,6 +5788,28 @@ def _execute_article_import_job(username: str, payload: dict) -> dict:
         if status >= 400:
             raise RuntimeError(str(body.get('error') or f'文章提取失败（HTTP {status}）'))
         return body
+
+
+@contextmanager
+def _maintain_import_job_lease(store: ImportJobStore, job: dict):
+    stopped = threading.Event()
+
+    def heartbeat():
+        while not stopped.wait(30.0):
+            try:
+                if not store.renew_lease(job['job_id'], job['attempts']):
+                    logger.warning("导入任务租约已变更: job=%s", job['job_id'])
+                    return
+            except Exception:
+                logger.exception("导入任务续租失败: job=%s", job['job_id'])
+
+    thread = threading.Thread(target=heartbeat, name='import-job-lease', daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        thread.join(timeout=2.0)
 
 
 def _import_job_loop() -> None:
@@ -7259,18 +5830,19 @@ def _import_job_loop() -> None:
             continue
         started = time()
         try:
-            if job.get('kind') == 'vocab_import':
-                result = _execute_vocab_import_job(job['username'], job.get('payload') or {})
-            elif job.get('kind') == 'article_extract':
-                result = _execute_article_import_job(job['username'], job.get('payload') or {})
-            else:
-                raise RuntimeError('未知导入任务类型')
-            result['job_duration_ms'] = round((time() - started) * 1000, 1)
-            store.complete(job['job_id'], result)
+            with _maintain_import_job_lease(store, job):
+                if job.get('kind') == 'vocab_import':
+                    result = _execute_vocab_import_job(job['username'], job.get('payload') or {}, context=(store, job))
+                elif job.get('kind') == 'article_extract':
+                    result = _execute_article_import_job(job['username'], job.get('payload') or {}, context=(store, job))
+                else:
+                    raise RuntimeError('未知导入任务类型')
+                result['job_duration_ms'] = round((time() - started) * 1000, 1)
+                store.complete(job['job_id'], result, attempt=job['attempts'])
         except Exception as exc:
             logger.exception("导入任务失败: job=%s", job.get('job_id'))
             try:
-                store.fail(job['job_id'], str(exc))
+                store.fail(job['job_id'], str(exc), attempt=job['attempts'])
             except Exception:
                 logger.exception("记录导入任务失败状态失败: job=%s", job.get('job_id'))
 
@@ -7362,702 +5934,22 @@ def _ensure_gaokao_auto_backfill_scheduler() -> None:
         start_import_job_runner()
 
 
-@app.route('/api/wordbank/ocr-extract', methods=['POST'])
-@token_required
-def wordbank_ocr_extract(username):
-    """默认离线英文手写识别，返回可编辑的原图读法与词库候选。"""
-    if not _rate_allow(f"ocr:{username}", _RATE_MAX_OCR):
-        return jsonify({'error': '图片识别过于频繁，请稍后再试'}), 429
-    if not _ocr_stack_ready():
-        return jsonify({
-            'error': '服务器未启用图片识别：请安装 Pillow 与 RapidOCR/ONNX Runtime，或安装 Tesseract 降级引擎',
-        }), 503
-    if 'file' not in request.files:
-        return jsonify({'error': '缺少 file 字段'}), 400
-    f = request.files['file']
-    if not f or not f.filename:
-        return jsonify({'error': '未选择文件'}), 400
-    ct = (f.mimetype or '').lower()
-    if ct not in ('image/jpeg', 'image/png', 'image/webp', 'image/gif'):
-        return jsonify({'error': '仅支持 JPEG、PNG、WebP、GIF'}), 400
-    try:
-        f.stream.seek(0)
-    except (OSError, AttributeError, TypeError):
-        pass
-    try:
-        im = _prepare_image_for_ocr(f.stream)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        logger.exception("OCR 图片解析失败: %s", e)
-        return jsonify({'error': '无法解析图片'}), 400
-    english_only = (request.form.get('english_only', '1') or '').strip().lower() in {
-        '1', 'true', 'yes', 'on',
-    }
-    handwriting = english_only and (request.form.get('handwriting', '1') or '').strip().lower() in {
-        '1', 'true', 'yes', 'on',
-    }
-    review_lines = []
-    enhancement_applied = False
-    try:
-        if handwriting:
-            raw_text, ocr_engine, review_lines, enhancement_applied = _recognize_handwriting(im)
-        else:
-            raw_text, ocr_engine = _recognize_ocr_image(im)
-    except OCRUnavailableError as e:
-        return jsonify({'error': f'服务器未启用可用的图片识别引擎：{e}'}), 503
-    except TesseractNotFoundError:
-        return jsonify({
-            'error': 'RapidOCR 不可用，且未检测到降级引擎 Tesseract。请检查 OCR 依赖安装。',
-        }), 503
-    except Exception as e:
-        logger.exception("OCR 识别失败: %s", e)
-        return jsonify({'error': '文字识别失败'}), 500
-    if english_only:
-        raw_text = _english_only_ocr_text(raw_text)
-    tokens = _english_tokens_from_ocr_text(raw_text)
-    return jsonify({
-        'raw_text': (raw_text or "").strip(),
-        'tokens': tokens,
-        'ocr_engine': ocr_engine,
-        'english_only': english_only,
-        'handwriting': handwriting,
-        'enhancement_applied': enhancement_applied,
-        'review_lines': review_lines,
-    }), 200
 
 
-@app.route('/api/wordbank/csv/import-words', methods=['POST'])
-@token_required
-def import_vocab_to_csv(username):
-    """
-    词汇导入功能（仅 VIP）：
-    - 接收逗号分隔的单词列表
-    - 管理员映射（表面形 -> 原形）优先；未映射时先用 spaCy 校验词形是否可识别，不通过则跳过
-    - 未映射时：名词「简单复数」表面形（如 apples）规范为原形（apple）再写入词库与待复习；不规则复数（feet 等）保持表面形；动词/形容词不因 lemma 误收成原形（避免 are→be）
-    - 疑难词（AI 曾失败）不再重复调用 DeepSeek，直至管理员配置映射或删除记录
-    - 仅当 **words_v2.json** 中尚无该英文键时调用 DeepSeek 生成并写入 v2；仅在旧 ``words.csv`` 中有仍会生成并写入 v2。已存在于 v2 则跳过生成。
-    - 新写入 v2 的词会继续生成高考题候选，并自动审查；通过后写入私有题库正式区。
-    - 可选 also_add_to_queue（默认 True）：是否将词加入当前用户待复习；为 False 时仅写词库
-    """
-    internal_job = bool(getattr(g, 'import_job_execution', False))
-    if not internal_job:
-        if not _rate_allow(f"vocab_import:{username}", _RATE_MAX_VOCAB_IMPORT):
-            return jsonify({'error': '词汇导入过于频繁，请稍后再试'}), 429
-        if not is_paid_user(username):
-            return jsonify({'error': '词汇导入功能仅限 VIP 用户使用'}), 403
-
-    body = request.get_json(silent=True) or {}
-    raw = str(body.get('words', '')).strip()
-    level_hint = str(body.get('level', '')).strip()  # 用户指定的level（可选）
-    also_queue = bool(body.get('also_add_to_queue', True))
-
-    if not raw:
-        return jsonify({'error': '单词列表不能为空'}), 400
-
-    # 解析逗号分隔（支持 a,b 和 a, b）
-    input_surfaces = [w.strip().lower() for w in re.split(r'[,，]', raw) if w.strip()]
-    if not input_surfaces:
-        return jsonify({'error': '未解析到有效单词'}), 400
-    if len(input_surfaces) > 500:
-        return jsonify({'error': '单次最多处理 500 个单词'}), 400
-
-    if _import_jobs_async_enabled() and not internal_job:
-        job = _import_job_store().enqueue(
-            'vocab_import',
-            username,
-            {
-                'words': raw,
-                'level': level_hint,
-                'also_add_to_queue': also_queue,
-            },
-        )
-        _IMPORT_JOB_WAKE_EVENT.set()
-        return jsonify({
-            'job_id': job['job_id'],
-            'status': job['status'],
-            'message': f"已提交 {len(input_surfaces)} 个单词，正在后台处理",
-        }), 202
-
-    # 是否调用 AI：仅看新词库 v2；老 CSV 仅有仍会生成并写入 v2
-    v2_keys = wordbank_v2.get_v2_english_key_set()
-
-    with _TROUBLES_LOCK:
-        tdoc = _read_troubles_unlocked()
-        mappings = dict(tdoc.get('mappings') or {})
-        difficult = dict(tdoc.get('difficult') or {})
-
-    # 批量 spaCy：仅用于校验「是否可识别词形」，不用于写入词库时的英文键
-    uniq_for_spacy = list(
-        dict.fromkeys(s for s in input_surfaces if s not in mappings),
-    )
-    lemma_map: Optional[Dict[str, str]] = None
-    if uniq_for_spacy and _wordbank_lemma_spacy_enabled() and _get_spacy_nlp() is not None:
-        lemma_map = _spacy_lemma_map_for_surfaces(uniq_for_spacy)
-        if not lemma_map:
-            lemma_map = None
-
-    invalid_surfaces: List[str] = []
-    surface_to_target: Dict[str, str] = {}
-    for s in input_surfaces:
-        if not _vocab_import_spacy_accepts_surface(s, mappings, lemma_map):
-            invalid_surfaces.append(s)
-            continue
-        surface_to_target[s] = (
-            mappings[s] if s in mappings else _normalize_import_english_surface(s)
-        )
-
-    already_in_v2 = [
-        s for s in input_surfaces
-        if s in surface_to_target and surface_to_target[s] in v2_keys
-    ]
-
-    # 待生成：按用户输入顺序去重表面形；英文键 = 管理员映射目标或原词
-    to_generate_unique: List[str] = []
-    seen_tg = set()
-    for s in input_surfaces:
-        if s not in surface_to_target:
-            continue
-        t = surface_to_target[s]
-        if t in v2_keys:
-            continue
-        if s in difficult:
-            continue
-        if s in seen_tg:
-            continue
-        seen_tg.add(s)
-        to_generate_unique.append(s)
-
-    blocked_surfaces: List[str] = []
-    for s in input_surfaces:
-        if s not in surface_to_target:
-            continue
-        t = surface_to_target[s]
-        if t in v2_keys:
-            continue
-        if s in difficult:
-            blocked_surfaces.append(s)
-    blocked_surfaces = _dedupe_preserve_order(blocked_surfaces)
-
-    to_generate = to_generate_unique
-
-    if to_generate and not get_deepseek_api_key():
-        return jsonify({'error': '服务端未配置 DEEPSEEK_API_KEY，无法使用此功能'}), 503
-
-    generated_entries: List[dict] = []
-    failed_surfaces: List[str] = []
-    gaokao_generated_records: Dict[str, dict] = {}
-    gaokao_generation_errors: Dict[str, str] = {}
-
-    if to_generate:
-        wordbank_so_far = set(v2_keys)
-        # surface -> 本次写入词库使用的英文键（用户原词或映射目标）
-        gen_key_to_surface: Dict[str, str] = {}  # 同一 batch 内 key 应对应唯一 surface（去重后）
-        for s in to_generate:
-            gen_key_to_surface[surface_to_target[s]] = s
-
-        for i in range(0, len(to_generate), _GAOKAO_IMPORT_BATCH_WORDS):
-            batch_surfaces = to_generate[i : i + _GAOKAO_IMPORT_BATCH_WORDS]
-            batch_words = [surface_to_target[s] for s in batch_surfaces]
-            # Keep ownership stable until both vocabulary and candidate writes finish.
-            with gaokao_backfill.generation_job_lock(blocking=False) as acquired:
-                if not acquired:
-                    return jsonify({'error': '题目任务正在处理，请稍后重试；此前已导入的批次已保存'}), 409
-                protected = gaokao_questions.externally_authored_words(batch_words)
-                for include_gaokao in (True, False):
-                    batch = [
-                        word for word in batch_words
-                        if (gaokao_questions.normalize_word(word) not in protected) == include_gaokao
-                    ]
-                    if not batch:
-                        continue
-                    entries = deepseek_generate_word_entries_v2(
-                        batch,
-                        level=level_hint,
-                        include_gaokao_candidate=include_gaokao,
-                    )
-                    batch_lower = {b.lower() for b in batch}
-                    if entries is not None:
-                        rows, success = accumulate_valid_deepseek_v2_entries(
-                            entries,
-                            level_hint=level_hint,
-                            v2_so_far=wordbank_so_far,
-                            batch_lower=batch_lower,
-                        )
-                        if rows:
-                            try:
-                                _, skipped_dup = wordbank_v2.append_words_v2_entries(rows)
-                                wordbank_v2.invalidate_words_v2_cache()
-                                invalidate_merge_wordbank_rows_cache()
-                                if skipped_dup:
-                                    logger.info("words_v2 批次落盘，跳过已存在键: %s", skipped_dup[:20])
-                            except Exception as e:
-                                logger.error("写入 words_v2.json 失败（本批落盘）: %s", e)
-                                return jsonify(
-                                    {
-                                        'error': f'写入新词库失败（此前批次若已成功则已保存）: {e}',
-                                    }
-                                ), 500
-                            generated_records, generation_errors = finalize_combined_gaokao_candidates(
-                                entries,
-                                rows,
-                            )
-                            try:
-                                if generated_records or generation_errors:
-                                    gaokao_questions.persist_candidate_pool_result(
-                                        generated_records,
-                                        generation_errors,
-                                    )
-                                gaokao_generated_records.update(generated_records)
-                                gaokao_generation_errors.update(generation_errors)
-                            except Exception as exc:
-                                logger.exception(
-                                    "新词已写入 words_v2，但高考题发布失败: %s",
-                                    exc,
-                                )
-                                for row in rows:
-                                    key = gaokao_questions.normalize_word(row.get("english"))
-                                    if key and key not in protected:
-                                        gaokao_generation_errors[key] = (
-                                            f"combined question persistence failed: {exc}"
-                                        )
-                            generated_entries.extend(rows)
-                            wordbank_so_far = wordbank_v2.get_v2_english_key_set()
-                        miss_lemmas = [b for b in batch if b.lower() not in success]
-                    else:
-                        miss_lemmas = list(batch)
-                    for key in miss_lemmas:
-                        surf = gen_key_to_surface.get(key, key)
-                        failed_surfaces.append(surf)
-
-        failed_surfaces = _dedupe_preserve_order(failed_surfaces)
-        if failed_surfaces:
-            record_surfaces_to_difficult(failed_surfaces)
-
-    # 加入待复习
-    queue_result = None
-    if also_queue:
-        items_to_queue = []
-        for s in already_in_v2:
-            t = surface_to_target[s]
-            row = lookup_csv_word(t)
-            if row:
-                picked = pick_example_for_word(row, row.get("english") or "")
-                items_to_queue.append({
-                    'english': picked['english'],
-                    'chinese': picked['chinese'],
-                    'example': picked['example'],
-                })
-        for entry in generated_entries:
-            flat = wordbank_v2.v2_entry_to_flat_csv_row(entry)
-            picked = pick_example_for_word(flat, flat.get("english") or "")
-            items_to_queue.append({
-                'english': picked['english'],
-                'chinese': picked['chinese'],
-                'example': picked['example'],
-            })
-        if items_to_queue:
-            try:
-                with user_reciter_session(username) as reciter:
-                    queue_result = reciter.add_words_from_dicts(items_to_queue)
-            except Exception as e:
-                logger.error("加入待复习失败: %s", e)
-
-    try:
-        gaokao_result = _publish_combined_gaokao_questions_for_new_entries(
-            generated_entries,
-            gaokao_generated_records,
-            gaokao_generation_errors,
-        )
-    except Exception as exc:
-        gaokao_words = sorted({
-            gaokao_questions.normalize_word(entry.get("english"))
-            for entry in generated_entries
-            if gaokao_questions.normalize_word(entry.get("english"))
-        })
-        logger.exception("新词已入库，但自动生成高考题流程失败: %s", exc)
-        gaokao_result = {
-            "requested": len(generated_entries),
-            "eligible": len(gaokao_words),
-            "candidates_generated": 0,
-            "approved": 0,
-            "already_published": 0,
-            "rejected": 0,
-            "generation_failed": len(gaokao_words),
-            "audit_retry": 0,
-            "skipped_no_source": 0,
-            "generated_words": [],
-            "approved_words": [],
-            "rejected_words": [],
-            "generation_failed_words": gaokao_words,
-            "audit_retry_words": [],
-            "skipped_words": [],
-        }
-
-    msg = f"处理 {len(input_surfaces)} 个单词：{len(generated_entries)} 个新词已写入新词库（words_v2.json）"
-    if already_in_v2:
-        msg += f"，{len(already_in_v2)} 个已在新词库（words_v2.json）中，未再生成"
-    if invalid_surfaces:
-        inv = _dedupe_preserve_order(invalid_surfaces)
-        msg += f"，{len(inv)} 个未通过词形校验（已跳过）"
-    if blocked_surfaces:
-        msg += f"，{len(blocked_surfaces)} 个疑难词（已跳过 AI 生成）"
-    if failed_surfaces:
-        msg += f"，{len(failed_surfaces)} 个生成失败已记入疑难词"
-    if gaokao_result["approved"]:
-        msg += f"；已按题库规则生成并发布高考题 {gaokao_result['approved']} 个"
-    if gaokao_result["already_published"]:
-        msg += f"；{gaokao_result['already_published']} 个已有可用高考题"
-    if gaokao_result["rejected"]:
-        msg += f"；{gaokao_result['rejected']} 个高考题候选未通过语义审查"
-    gaokao_deferred = len({
-        *gaokao_result["generation_failed_words"],
-        *gaokao_result["audit_retry_words"],
-        *gaokao_result["skipped_words"],
-    })
-    if gaokao_deferred:
-        msg += f"；{gaokao_deferred} 个高考题待后台自动补全"
-    if queue_result:
-        msg += f"；已加入待复习 {queue_result.get('added', 0)} 个"
-    elif not also_queue:
-        msg += "；未加入待复习（仅写入词库）"
-
-    return jsonify({
-        'message': msg,
-        'new_in_csv': len(generated_entries),
-        'already_in_v2': len(already_in_v2),
-        'already_in_v2_words': already_in_v2,
-        # 兼容旧前端字段名（语义：已在新词库 v2，非「仅 CSV」）
-        'already_in_csv': len(already_in_v2),
-        'already_in_csv_words': already_in_v2,
-        'failed': failed_surfaces,
-        'blocked_surfaces': blocked_surfaces,
-        'invalid_surfaces': _dedupe_preserve_order(invalid_surfaces),
-        'queue_result': queue_result,
-        'also_add_to_queue': also_queue,
-        'gaokao_questions': gaokao_result,
-    }), 200
 
 
-@app.route('/api/wordbank/import-jobs/<job_id>', methods=['GET'])
-@token_required
-def get_vocab_import_job(username, job_id: str):
-    if not re.fullmatch(r'[0-9a-f]{32}', str(job_id or '')):
-        return jsonify({'error': '导入任务不存在'}), 404
-    job = _import_job_store().get(job_id, username)
-    if not job:
-        return jsonify({'error': '导入任务不存在'}), 404
-    return jsonify(job), 200
 
 
-@app.route('/api/wordbank/csv/trouble-status', methods=['GET'])
-@token_required
-def wordbank_trouble_status(username):
-    """
-    课文/导入前查询：某表面形是否被疑难词拦截、是否已有管理员映射。
-    """
-    q = request.args.get('q', '').strip().lower()
-    if not q:
-        return jsonify({
-            'blocked': False,
-            'mapped_to': None,
-            'in_difficult': False,
-            'in_csv': False,
-            'resolved_lemma': None,
-        }), 200
-    with _TROUBLES_LOCK:
-        tdoc = _read_troubles_unlocked()
-        mappings = dict(tdoc.get('mappings') or {})
-        difficult = dict(tdoc.get('difficult') or {})
-    csv_set = get_wordbank_english_set()
-    hit = _first_lemma_in_csv(q, mappings, csv_set, use_spacy=True, use_heuristics=False)
-    if hit is not None:
-        in_csv = True
-        resolved_lemma = hit
-        mapped_to = hit if hit != q else None
-    else:
-        in_csv = False
-        resolved_lemma = _lemma_for_vocab_not_in_csv(q, mappings, use_heuristics=False)
-        mapped_to = resolved_lemma if resolved_lemma != q else None
-    blocked = (q in difficult) and not in_csv
-    return jsonify({
-        'blocked': blocked,
-        'mapped_to': mapped_to,
-        'in_difficult': q in difficult,
-        'in_csv': in_csv,
-        'resolved_lemma': resolved_lemma,
-    }), 200
 
 
-@app.route('/api/wordbank/community', methods=['GET'])
-@token_required
-def get_community_wordbank(username):
-    """返回社区待审区（家长贡献）；正式词条仍以 words_v2.json 为准。"""
-    with _community_wb_guard():
-        data = _read_community_file_unlocked()
-    return jsonify(
-        {
-            "schema": data.get("schema"),
-            "phase": "community",
-            "label": data.get("label", "社区词库（待审核）"),
-            "count": len(data.get("words") or []),
-            "words": data.get("words") or [],
-        }
-    ), 200
 
 
-@app.route('/api/words/pending', methods=['GET'])
-@token_required
-def list_pending_words_for_settings(username):
-    """待复习单词列表（配置页；家长登录时可删；学生仅在未开通家长账户时可删）。"""
-    is_parent = getattr(g, "is_parent", False)
-    has_parent = student_has_enabled_parent_account(username)
-    can_remove = bool(is_parent or not has_parent)
-    try:
-        with user_reciter_session(username) as reciter:
-            today_d = china_today()
-            out: List[dict] = []
-            for w in reciter.all_words:
-                csv_row = lookup_csv_word(w.english)
-                nd = w.next_review_date
-                out.append(
-                    {
-                        "english": w.english,
-                        "chinese": w.chinese,
-                        "phonetic": csv_row.get("phonetic", "") if csv_row else "",
-                        "next_review_date": nd.isoformat(),
-                        "remaining_days": (nd - today_d).days,
-                        "review_count": w.review_count,
-                    }
-                )
-            return jsonify(
-                {
-                    "words": out,
-                    "count": len(out),
-                    "can_remove_pending": can_remove,
-                }
-            ), 200
-    except Exception as e:
-        logger.error("列出待复习失败: %s", e)
-        return jsonify({"error": "服务器内部错误"}), 500
 
 
-@app.route('/api/words/pending/remove', methods=['POST'])
-@token_required
-def remove_pending_words_api(username):
-    """从待复习中移除单词（不删除已掌握词）。家长登录可删；学生仅在未开通家长账户时可删。"""
-    if not _rate_allow(f"pending_rm:{_client_ip()}", 120):
-        return jsonify({"error": "请求过于频繁，请稍后再试"}), 429
-    is_parent = getattr(g, "is_parent", False)
-    if not is_parent and student_has_enabled_parent_account(username):
-        return jsonify(
-            {
-                "error": "已开通家长账户，待复习词汇请由家长登录后在配置中管理",
-            }
-        ), 403
-    body = request.get_json(silent=True) or {}
-    raw = body.get("english")
-    if isinstance(raw, str):
-        english_list = [raw]
-    elif isinstance(raw, list):
-        english_list = raw
-    else:
-        return jsonify({"error": "请提供 english 字段（字符串或字符串数组）"}), 400
-    seen = set()
-    keys_ordered: List[str] = []
-    for e in english_list:
-        s = str(e or "").strip()
-        if not s:
-            continue
-        k = s.lower()
-        if k not in seen:
-            seen.add(k)
-            keys_ordered.append(s)
-    if not keys_ordered:
-        return jsonify({"error": "未提供有效单词"}), 400
-    if len(keys_ordered) > 200:
-        return jsonify({"error": "单次最多移除 200 条"}), 400
-
-    try:
-        with user_reciter_session(username) as reciter:
-            result = reciter.remove_pending_words_by_english(keys_ordered)
-            task_bundle = reciter.get_today_learning_plan(
-                listening_available=_reliable_listening_available(),
-            )
-            result['plan'] = task_bundle['plan']
-            reciter.save_learning_data(backup=False)
-        _invalidate_user_reciter_cache(username)
-        logger.info(
-            "用户 %s 待复习移除: removed=%s not_found=%s",
-            username,
-            result.get("removed"),
-            len(result.get("not_found") or []),
-        )
-        return jsonify(result), 200
-    except Exception as e:
-        logger.error("待复习移除失败: %s", e)
-        return jsonify({"error": "服务器内部错误"}), 500
 
 
-@app.route('/api/wordbank/community/import-simple', methods=['POST'])
-@token_required
-def community_import_simple(username):
-    """
-    家长简易导入：单词 + 例句 + 译文 → 写入社区待审区。
-    若英文已出现在正式/旧版系统词库，或已在社区待审区中，则拒绝/跳过并返回明细。
-    可选 also_add_to_queue：同时将新词加入当前用户待复习。
-    """
-    if not _rate_allow(f"comm_import:{_client_ip()}", 40):
-        return jsonify({"error": "导入请求过于频繁，请稍后再试"}), 429
-    body = request.get_json(silent=True) or {}
-    text = str(body.get("text", "")).strip()
-    also_queue = bool(body.get("also_add_to_queue"))
-
-    rows, parse_err = parse_simple_parent_import_text(text)
-    if parse_err:
-        return jsonify({"error": parse_err}), 400
-    if len(rows) > 500:
-        return jsonify({"error": "单次最多导入 500 条"}), 400
-
-    system_keys = load_system_wordbank_english_lower()
-    added_entries: List[dict] = []
-    rejected_in_system: List[str] = []
-    skipped_duplicate_community: List[str] = []
-    skipped_invalid = 0
-
-    with _community_wb_guard():
-        data = _read_community_file_unlocked()
-        words: List[dict] = list(data.get("words") or [])
-        comm_keys = {_community_word_key(w.get("english")) for w in words if w.get("english")}
-
-        for row in rows:
-            en = str(row.get("english", "")).strip()[:500]
-            zh = str(row.get("chinese", "")).strip()[:500]
-            ex_raw = row.get("example")
-            ex = str(ex_raw).strip()[:4000] if ex_raw is not None else ""
-            if not en or not zh:
-                skipped_invalid += 1
-                continue
-            en = _normalize_import_english_surface(en)
-            if len(en) > 500:
-                en = en[:500]
-            key = _community_word_key(en)
-            if key in system_keys:
-                rejected_in_system.append(en)
-                continue
-            if key in comm_keys:
-                skipped_duplicate_community.append(en)
-                continue
-            entry = {
-                "english": en,
-                "chinese": zh,
-                "example": ex or None,
-                "added_by": username,
-                "added_at": china_now_iso(timespec="seconds"),
-                "status": "pending",
-                "promotion_attempts": 0,
-                "last_attempt_at": None,
-                "last_error": None,
-                "promoted_at": None,
-                "promoted_word_key": None,
-            }
-            words.append(entry)
-            comm_keys.add(key)
-            added_entries.append(entry)
-
-        data["words"] = words
-        if added_entries:
-            _write_community_file_atomic(data)
-
-    queue_result: Optional[dict] = None
-    queue_error: Optional[str] = None
-    if also_queue and added_entries:
-        to_queue = [
-            {"english": e["english"], "chinese": e["chinese"], "example": e.get("example")}
-            for e in added_entries
-        ]
-        try:
-            with user_reciter_session(username) as reciter:
-                queue_result = reciter.add_words_from_dicts(to_queue)
-        except Exception as e:
-            logger.error("简易导入后加入待复习失败: %s", e)
-            queue_error = str(e)
-
-    msg_parts = [f"共享词库新增 {len(added_entries)} 个单词"]
-    if rejected_in_system:
-        msg_parts.append(f"{len(rejected_in_system)} 个因已在系统词库中未加入")
-    if skipped_duplicate_community:
-        msg_parts.append(f"{len(skipped_duplicate_community)} 个已在共享词库中")
-    if skipped_invalid:
-        msg_parts.append(f"{skipped_invalid} 条缺少单词或译文已忽略")
-
-    msg = "；".join(msg_parts) + "。"
-    if queue_result:
-        msg += (
-            f" 待复习：新加 {queue_result.get('added', 0)}，"
-            f"跳过重复 {queue_result.get('skipped_duplicate', 0)}。"
-        )
-    if queue_error:
-        msg += " 共享词库已保存，但加入待复习失败，请稍后在共享词库中勾选导入。"
-
-    logger.info(
-        "用户 %s 共享词库简易导入: added=%s sys=%s dup=%s invalid=%s queue=%s",
-        username,
-        len(added_entries),
-        len(rejected_in_system),
-        len(skipped_duplicate_community),
-        skipped_invalid,
-        bool(queue_result),
-    )
-
-    payload: dict = {
-        "message": msg,
-        "added_to_community": len(added_entries),
-        "rejected_in_system": rejected_in_system,
-        "skipped_duplicate_community": skipped_duplicate_community,
-        "skipped_invalid": skipped_invalid,
-    }
-    if queue_result:
-        payload["queue_added"] = queue_result.get("added")
-        payload["queue_skipped_duplicate"] = queue_result.get("skipped_duplicate")
-        payload["queue_skipped_invalid"] = queue_result.get("skipped_invalid")
-    if queue_error:
-        payload["queue_error"] = queue_error
-    return jsonify(payload), 200
 
 
-@app.route('/api/words/mastered', methods=['GET'])
-@token_required
-def get_mastered_words(username):
-    """获取已掌握单词"""
-    try:
-        with user_reciter_session(username) as reciter:
-            words = []
-            for w in reciter.mastered_words:
-                review_state = reciter.get_review_state(w)
-                state_payload = reciter.review_state_payload(w)
-                csv_row = lookup_csv_word(w.english)
-                ex_text = ''
-                if csv_row:
-                    picked = pick_example_for_word(csv_row, w.english)
-                    ex_text = (picked.get('example') or '').strip()
-                if not ex_text and getattr(w, 'example', None):
-                    ex_text = (w.example or '').strip()
-                words.append({
-                    'english': w.english,
-                    'chinese': w.chinese,
-                    'phonetic': csv_row.get('phonetic', '') if csv_row else '',
-                    'example': ex_text,
-                    'review_count': w.review_count,
-                    'mastered_date': review_state.get('mastered_date') or w.next_review_date.isoformat(),
-                    'memory_status': str(review_state.get('memory_status') or 'stable'),
-                    **state_payload,
-                })
-
-            return jsonify({'words': words, 'count': len(words)}), 200
-    except Exception as e:
-        logger.error(f"获取已掌握单词失败: {e}")
-        return jsonify({'error': '服务器内部错误'}), 500
 
 # ==================== 管理员 API ====================
 
@@ -8246,7 +6138,8 @@ def admin_set_user_enabled(username):
                 removed = pname
         return True, '', removed
 
-    ok, err, removed_parent = mutate_users(_set_enabled)
+    pname = parent_login_username_for_child(username)
+    ok, err, removed_parent = mutate_users(_set_enabled, usernames=[username, pname] if pname else [username])
     if not ok:
         if err == '用户不存在':
             return jsonify({'error': err}), 404
@@ -8266,13 +6159,14 @@ def admin_set_user_enabled(username):
 @app.route('/api/admin/users/<username>/parent', methods=['PATCH'])
 @admin_required
 def admin_set_user_parent(username):
-    """为学生开启或关闭家长账户；登录名为 学生名_parent，默认密码见 DEFAULT_PARENT_PASSWORD。"""
+    """为学生开启或关闭家长账户；创建时仅向管理员返回随机初始密码。"""
     if not is_valid_username(username):
         return jsonify({'error': '无效的用户名'}), 400
     data = request.get_json(silent=True) or {}
     if 'enabled' not in data:
         return jsonify({'error': '缺少 enabled 字段'}), 400
     want = bool(data['enabled'])
+    initial_password = secrets.token_urlsafe(12)
 
     pname = parent_login_username_for_child(username)
     if not pname:
@@ -8295,7 +6189,7 @@ def admin_set_user_parent(username):
                 users[pname] = {
                     'role': USER_ROLE_PARENT,
                     'child_username': username,
-                    'password_hash': hash_password(DEFAULT_PARENT_PASSWORD),
+                    'password_hash': hash_password(initial_password),
                     'enabled': True,
                     'created_at': china_now_iso(timespec="seconds"),
                 }
@@ -8305,7 +6199,7 @@ def admin_set_user_parent(username):
                 'parent_login': pname,
             }
             if created_new:
-                body['default_password_hint'] = DEFAULT_PARENT_PASSWORD
+                body['default_password_hint'] = initial_password
             return True, 200, body
 
         if pname in users:
@@ -8315,7 +6209,7 @@ def admin_set_user_parent(username):
             del users[pname]
         return True, 200, {'username': username, 'parent_enabled': False}
 
-    ok, status_code, body = mutate_users(_set_parent)
+    ok, status_code, body = mutate_users(_set_parent, usernames=[username, pname])
     if not ok:
         return jsonify(body), status_code
     if want:
@@ -8352,7 +6246,7 @@ def admin_set_parent_password(username):
         users[pname]['password_hash'] = hash_password(new_password)
         return True, 200, ''
 
-    ok, status_code, err = mutate_users(_set_parent_password)
+    ok, status_code, err = mutate_users(_set_parent_password, usernames=[username, pname] if pname else [username])
     if not ok:
         return jsonify({'error': err}), status_code
     _revoke_user_tokens(pname)
@@ -8383,7 +6277,7 @@ def admin_set_user_password(username):
         users[username]['password_hash'] = hash_password(new_password)
         return True, 200, ''
 
-    ok, status_code, err = mutate_users(_set_user_password)
+    ok, status_code, err = mutate_users(_set_user_password, usernames=[username])
     if not ok:
         return jsonify({'error': err}), status_code
     _revoke_user_tokens(username)
@@ -8426,7 +6320,7 @@ def admin_reset_user_invite_quota(username):
             "message": "邀请次数已重置",
         }
 
-    ok, status_code, body = mutate_users(_reset_quota)
+    ok, status_code, body = mutate_users(_reset_quota, usernames=[username])
     if not ok:
         return jsonify(body), status_code
     logger.info("管理员重置用户邀请次数: %s limit=%s", username, body.get("invite_quota_limit"))
@@ -8860,17 +6754,6 @@ def _chat_extract_mentions(body: str, valid: Set[str]) -> List[str]:
     return out
 
 
-@app.route("/api/chat/stream-token", methods=["POST"])
-@token_required
-def api_chat_stream_token(username):
-    """用登录 token 换取短期 SSE token；SSE URL 不再携带长期 bearer token。"""
-    if not _rate_allow(f"chat_stream_token:{username}", _RATE_MAX_CHAT_STREAM_TOKEN):
-        return jsonify({"error": "聊天连接过于频繁，请稍后再试"}), 429
-    login = getattr(g, "login_username", username)
-    return jsonify({
-        "stream_token": create_chat_stream_token(login),
-        "expires_in": 120,
-    }), 200
 
 
 def _verify_chat_stream_auth() -> Optional[str]:
@@ -8898,85 +6781,14 @@ def _verify_chat_stream_auth() -> Optional[str]:
     return login_username
 
 
-# ==================== 聊天室（JSONL + SSE）====================
-
-@app.route("/api/chat/messages", methods=["GET"])
-@token_required
-def api_chat_messages_get(username):
-    if not _rate_allow(f"chat_get:{username}", _RATE_MAX_CHAT_GET):
-        return jsonify({"error": "聊天拉取过于频繁，请稍后再试"}), 429
-    before_id = (request.args.get("before_id") or "").strip() or None
-    after_id = (request.args.get("after_id") or "").strip() or None
-    try:
-        limit = int(request.args.get("limit") or 50)
-    except ValueError:
-        return jsonify({"error": "参数 limit 无效"}), 400
-    try:
-        msgs = chat_room.get_messages(before_id=before_id, after_id=after_id, limit=limit)
-    except OSError as e:
-        logger.warning("聊天历史读取失败: %s", e)
-        return jsonify({"error": "聊天记录不可用"}), 503
-    except Exception as e:
-        logger.exception("聊天历史读取异常: %s", e)
-        return jsonify({"error": "服务器内部错误"}), 500
-    return jsonify({"messages": msgs}), 200
+# ==================== 聊天室 ====================
 
 
-@app.route("/api/chat/messages", methods=["POST"])
-@token_required
-def api_chat_messages_post(username):
-    if not _rate_allow(f"chat_post:{username}", _RATE_MAX_CHAT_POST):
-        return jsonify({"error": "发送过于频繁，请稍后再试"}), 429
-    data = request.get_json(silent=True) or {}
-    body = _chat_sanitize_body(data.get("body") or "")
-    if not body:
-        return jsonify({"error": "消息不能为空"}), 400
-    valid = _chat_mentionable_usernames()
-    mentions = _chat_extract_mentions(body, valid)
-    try:
-        msg = chat_room.append_message(username, body, mentions)
-    except OSError as e:
-        logger.warning("聊天写入失败: %s", e)
-        return jsonify({"error": "聊天服务不可用"}), 503
-    except Exception as e:
-        logger.exception("聊天写入异常: %s", e)
-        return jsonify({"error": "服务器内部错误"}), 500
-    return jsonify(msg), 201
 
 
-@app.route("/api/chat/users", methods=["GET"])
-@token_required
-def api_chat_users_suggest(username):
-    q = (request.args.get("q") or "").strip().lower()
-    users = load_users()
-    out: List[str] = []
-    for u in sorted(users.keys()):
-        if len(out) >= 20:
-            break
-        row = users.get(u)
-        if not _user_row_is_enabled(row):
-            continue
-        if is_parent_user_record(row):
-            continue
-        if not q or u.lower().startswith(q):
-            out.append(u)
-    return jsonify({"users": out}), 200
 
 
-@app.route("/api/chat/stream")
-def api_chat_stream():
-    if _verify_chat_stream_auth() is None:
-        return jsonify({"error": "需要有效登录"}), 401
 
-    return Response(
-        stream_with_context(chat_room.sse_generator()),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 # ==================== 健康检查 ====================
@@ -8985,6 +6797,18 @@ def api_chat_stream():
 def health():
     """健康检查"""
     return jsonify({'status': 'healthy', 'timestamp': china_now_iso(timespec="seconds")}), 200
+
+from web_auth_routes import register_routes as _register_auth_routes
+globals().update(_register_auth_routes(app, sys.modules[__name__]))
+
+from web_learning_routes import register_routes as _register_learning_routes
+globals().update(_register_learning_routes(app, sys.modules[__name__]))
+
+from web_wordbank_routes import register_routes as _register_wordbank_routes
+globals().update(_register_wordbank_routes(app, sys.modules[__name__]))
+
+from web_chat_routes import register_routes as _register_chat_routes
+globals().update(_register_chat_routes(app, sys.modules[__name__]))
 
 # ==================== 启动配置 ====================
 

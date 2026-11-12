@@ -1,0 +1,39 @@
+{
+  "assets": {
+    "/static/brand/logo-mark.svg": {
+      "bytes": 3771,
+      "sha256": "39d2e72c73f29bc04330eb29c06e750c4a9778e4aed2491d8a781acf84253f17",
+      "url": "/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg"
+    },
+    "/static/css/style.css": {
+      "bytes": 216938,
+      "sha256": "48c99ec23901ab60d7720991472a7b39abd287fb9ab2bffc4967f2100dc3deaf",
+      "url": "/static/assets/css/style.48c99ec23901ab60.css"
+    },
+    "/static/js/admin.js": {
+      "bytes": 40255,
+      "sha256": "ce6f48c3ba42f871065b6a7eb4a72fe897c7d3549c3099864fd83af59a1cee5a",
+      "url": "/static/assets/js/admin.ce6f48c3ba42f871.js"
+    },
+    "/static/js/app.js": {
+      "bytes": 454949,
+      "sha256": "e27c3b850981587f80d62bdc0ecf24a714f9f5ffec58aff306360ddf60368940",
+      "url": "/static/assets/js/app.e27c3b850981587f.js"
+    },
+    "/static/js/chat-sidebar.js": {
+      "bytes": 34598,
+      "sha256": "8edef40ea8fe6819d7de9cd648d1b9be242fe00b8695e73d7b4a2a6ec4c210ef",
+      "url": "/static/assets/js/chat-sidebar.8edef40ea8fe6819.js"
+    },
+    "/static/js/performance.js": {
+      "bytes": 17312,
+      "sha256": "cabc7fdc8aff1192044338e4b49dd5731ea9f42dba029a18269c41bfad4916ca",
+      "url": "/static/assets/js/performance.cabc7fdc8aff1192.js"
+    },
+    "/static/js/textbook.js": {
+      "bytes": 49241,
+      "sha256": "0528bf065ba0644ec7322f7b526d757adafcde8fac362641b5f7c108a32031a0",
+      "url": "/static/assets/js/textbook.0528bf065ba0644e.js"
+    }
+  }
+}

@@ -1,0 +1,436 @@
+{
+  "python": "3.11.6",
+  "platform": "Linux-6.6.117-45.1.oc9.x86_64-x86_64-with-glibc2.38",
+  "scope": "Synthetic sequential warm-cache functions and in-process Flask test-client HTTP routes; real authentication, user locks, persistence and rewards; gzip review responses; no TCP/TLS/network latency or concurrent load. All daily exercises use spelling. Sample p95 is not a production SLO.",
+  "history_events_per_word": 20,
+  "pending_share": 0.5,
+  "mastered_due_after_days": 30,
+  "source_sha256": {
+    "reciter": "a354048af2896263dda144d7215e3f08865a296348203511963025248bd4b525",
+    "learning_sqlite_store": "6e616b1141248b8f41c89fd7d486ccc17b231102d4dbae0b6eae6691048b22ce",
+    "web_learning_routes": "e81fca8a0ef70b7744d6a8e55b7dc11bfb0f576246fa8ca035dd0ef44e0cf3e2",
+    "simple_web_app": "3d065c2ec3aec3e9aa20118238d5efce1bf640e2e0ae788132113ba8c9f0f284"
+  },
+  "results": [
+    {
+      "total_words": 1000,
+      "daily_task_words": 100,
+      "functions": {
+        "first_plan_ms": 62.758,
+        "warm_plan": {
+          "samples": 7,
+          "p50_ms": 1.352,
+          "p95_ms": 1.393,
+          "min_ms": 1.293,
+          "max_ms": 1.393,
+          "samples_ms": [
+            1.356,
+            1.352,
+            1.316,
+            1.296,
+            1.293,
+            1.36,
+            1.393
+          ]
+        },
+        "count_due": {
+          "samples": 7,
+          "p50_ms": 0.796,
+          "p95_ms": 0.806,
+          "min_ms": 0.761,
+          "max_ms": 0.806,
+          "samples_ms": [
+            0.806,
+            0.796,
+            0.785,
+            0.761,
+            0.774,
+            0.806,
+            0.805
+          ]
+        },
+        "unchanged_save": {
+          "samples": 7,
+          "p50_ms": 124.728,
+          "p95_ms": 130.376,
+          "min_ms": 123.558,
+          "max_ms": 130.376,
+          "samples_ms": [
+            123.558,
+            125.134,
+            124.042,
+            130.376,
+            124.728,
+            124.908,
+            123.63
+          ]
+        },
+        "one_word_save": {
+          "samples": 7,
+          "p50_ms": 188.218,
+          "p95_ms": 193.485,
+          "min_ms": 187.545,
+          "max_ms": 193.485,
+          "samples_ms": [
+            193.485,
+            188.172,
+            188.279,
+            189.806,
+            187.545,
+            187.646,
+            188.218
+          ]
+        },
+        "cold_store_load": {
+          "samples": 7,
+          "p50_ms": 95.33,
+          "p95_ms": 124.444,
+          "min_ms": 94.264,
+          "max_ms": 124.444,
+          "samples_ms": [
+            95.33,
+            124.444,
+            96.178,
+            95.01,
+            123.365,
+            94.453,
+            94.264
+          ]
+        }
+      },
+      "http": {
+        "review_get": {
+          "samples": 7,
+          "p50_ms": 138.462,
+          "p95_ms": 140.136,
+          "min_ms": 137.59,
+          "max_ms": 140.136,
+          "samples_ms": [
+            138.245,
+            138.83,
+            138.322,
+            140.136,
+            138.462,
+            138.482,
+            137.59
+          ]
+        },
+        "answer_post": {
+          "samples": 7,
+          "p50_ms": 203.898,
+          "p95_ms": 228.193,
+          "min_ms": 191.573,
+          "max_ms": 228.193,
+          "samples_ms": [
+            203.898,
+            213.853,
+            195.204,
+            207.918,
+            228.193,
+            191.573,
+            193.481
+          ]
+        },
+        "answer_replay_post": {
+          "samples": 7,
+          "p50_ms": 120.797,
+          "p95_ms": 125.514,
+          "min_ms": 118.952,
+          "max_ms": 125.514,
+          "samples_ms": [
+            120.073,
+            119.785,
+            125.514,
+            118.952,
+            120.797,
+            121.547,
+            120.98
+          ]
+        },
+        "review_gzip_bytes": 3041,
+        "durable_answers_verified": 8,
+        "idempotent_replay_verified": true
+      }
+    },
+    {
+      "total_words": 2000,
+      "daily_task_words": 100,
+      "functions": {
+        "first_plan_ms": 107.489,
+        "warm_plan": {
+          "samples": 7,
+          "p50_ms": 2.423,
+          "p95_ms": 28.846,
+          "min_ms": 2.261,
+          "max_ms": 28.846,
+          "samples_ms": [
+            3.56,
+            2.743,
+            28.846,
+            2.423,
+            2.417,
+            2.265,
+            2.261
+          ]
+        },
+        "count_due": {
+          "samples": 7,
+          "p50_ms": 1.557,
+          "p95_ms": 1.711,
+          "min_ms": 1.531,
+          "max_ms": 1.711,
+          "samples_ms": [
+            1.565,
+            1.711,
+            1.605,
+            1.531,
+            1.557,
+            1.546,
+            1.539
+          ]
+        },
+        "unchanged_save": {
+          "samples": 7,
+          "p50_ms": 258.545,
+          "p95_ms": 352.34,
+          "min_ms": 232.028,
+          "max_ms": 352.34,
+          "samples_ms": [
+            232.028,
+            242.647,
+            256.178,
+            258.545,
+            263.929,
+            315.363,
+            352.34
+          ]
+        },
+        "one_word_save": {
+          "samples": 7,
+          "p50_ms": 406.575,
+          "p95_ms": 512.392,
+          "min_ms": 369.417,
+          "max_ms": 512.392,
+          "samples_ms": [
+            491.427,
+            439.268,
+            512.392,
+            406.575,
+            372.697,
+            369.417,
+            373.784
+          ]
+        },
+        "cold_store_load": {
+          "samples": 7,
+          "p50_ms": 211.369,
+          "p95_ms": 239.039,
+          "min_ms": 184.528,
+          "max_ms": 239.039,
+          "samples_ms": [
+            184.528,
+            236.998,
+            199.486,
+            239.039,
+            211.369,
+            237.084,
+            195.416
+          ]
+        }
+      },
+      "http": {
+        "review_get": {
+          "samples": 7,
+          "p50_ms": 256.347,
+          "p95_ms": 265.839,
+          "min_ms": 255.954,
+          "max_ms": 265.839,
+          "samples_ms": [
+            265.839,
+            256.221,
+            258.925,
+            261.476,
+            256.23,
+            256.347,
+            255.954
+          ]
+        },
+        "answer_post": {
+          "samples": 7,
+          "p50_ms": 374.203,
+          "p95_ms": 402.841,
+          "min_ms": 361.248,
+          "max_ms": 402.841,
+          "samples_ms": [
+            382.836,
+            402.841,
+            361.248,
+            366.088,
+            374.203,
+            389.84,
+            362.716
+          ]
+        },
+        "answer_replay_post": {
+          "samples": 7,
+          "p50_ms": 250.509,
+          "p95_ms": 313.208,
+          "min_ms": 234.302,
+          "max_ms": 313.208,
+          "samples_ms": [
+            252.172,
+            264.742,
+            249.346,
+            234.302,
+            250.509,
+            313.208,
+            238.992
+          ]
+        },
+        "review_gzip_bytes": 3047,
+        "durable_answers_verified": 8,
+        "idempotent_replay_verified": true
+      }
+    },
+    {
+      "total_words": 2000,
+      "daily_task_words": 1000,
+      "functions": {
+        "first_plan_ms": 2854.346,
+        "warm_plan": {
+          "samples": 7,
+          "p50_ms": 6.249,
+          "p95_ms": 6.422,
+          "min_ms": 6.085,
+          "max_ms": 6.422,
+          "samples_ms": [
+            6.152,
+            6.355,
+            6.085,
+            6.323,
+            6.208,
+            6.422,
+            6.249
+          ]
+        },
+        "count_due": {
+          "samples": 7,
+          "p50_ms": 1.801,
+          "p95_ms": 1.846,
+          "min_ms": 1.73,
+          "max_ms": 1.846,
+          "samples_ms": [
+            1.819,
+            1.73,
+            1.801,
+            1.755,
+            1.846,
+            1.782,
+            1.833
+          ]
+        },
+        "unchanged_save": {
+          "samples": 7,
+          "p50_ms": 216.426,
+          "p95_ms": 224.451,
+          "min_ms": 214.323,
+          "max_ms": 224.451,
+          "samples_ms": [
+            217.66,
+            218.348,
+            224.451,
+            214.434,
+            214.323,
+            215.981,
+            216.426
+          ]
+        },
+        "one_word_save": {
+          "samples": 7,
+          "p50_ms": 340.441,
+          "p95_ms": 355.156,
+          "min_ms": 317.817,
+          "max_ms": 355.156,
+          "samples_ms": [
+            355.156,
+            340.441,
+            342.397,
+            353.745,
+            317.817,
+            322.977,
+            326.93
+          ]
+        },
+        "cold_store_load": {
+          "samples": 7,
+          "p50_ms": 181.082,
+          "p95_ms": 228.278,
+          "min_ms": 172.975,
+          "max_ms": 228.278,
+          "samples_ms": [
+            172.975,
+            223.636,
+            181.082,
+            228.278,
+            177.729,
+            223.767,
+            179.305
+          ]
+        }
+      },
+      "http": {
+        "review_get": {
+          "samples": 7,
+          "p50_ms": 607.507,
+          "p95_ms": 713.986,
+          "min_ms": 415.195,
+          "max_ms": 713.986,
+          "samples_ms": [
+            436.736,
+            713.986,
+            650.61,
+            629.466,
+            607.507,
+            415.195,
+            425.739
+          ]
+        },
+        "answer_post": {
+          "samples": 7,
+          "p50_ms": 407.772,
+          "p95_ms": 414.275,
+          "min_ms": 392.741,
+          "max_ms": 414.275,
+          "samples_ms": [
+            396.575,
+            407.772,
+            405.232,
+            392.741,
+            414.275,
+            414.177,
+            414.234
+          ]
+        },
+        "answer_replay_post": {
+          "samples": 7,
+          "p50_ms": 273.837,
+          "p95_ms": 286.092,
+          "min_ms": 272.523,
+          "max_ms": 286.092,
+          "samples_ms": [
+            272.619,
+            278.249,
+            273.837,
+            276.736,
+            272.523,
+            273.175,
+            286.092
+          ]
+        },
+        "review_gzip_bytes": 22777,
+        "durable_answers_verified": 8,
+        "idempotent_replay_verified": true
+      }
+    }
+  ]
+}

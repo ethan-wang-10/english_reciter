@@ -47,7 +47,7 @@ const root = __dirname;
   }
 })();
 
-const venvGunicorn = path.join(root, '.venv', 'bin', 'gunicorn');
+const venvGunicorn = path.resolve(root, process.env.VENV_DIR || '.venv', 'bin', 'gunicorn');
 const host = process.env.HOST || '0.0.0.0';
 const port = process.env.PORT || '8000';
 const workers = process.env.WEB_CONCURRENCY || '1';
@@ -65,6 +65,7 @@ module.exports = {
       autorestart: true,
       max_restarts: 15,
       min_uptime: '10s',
+      kill_timeout: 30000,
       env: {
         PYTHONUNBUFFERED: '1',
         FLASK_ENV: 'production',
@@ -76,6 +77,8 @@ module.exports = {
         // 启动前在 shell 中 export SECRET_KEY=...，PM2 会继承 process.env.SECRET_KEY
         SECRET_KEY: process.env.SECRET_KEY || '',
         PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || '',
+        TRUSTED_PROXY_IPS: process.env.TRUSTED_PROXY_IPS || '',
+        CHAT_SSE_ENABLED: process.env.CHAT_SSE_ENABLED || 'false',
         SMTP_HOST: process.env.SMTP_HOST || '',
         SMTP_PORT: process.env.SMTP_PORT || '',
         SMTP_USERNAME: process.env.SMTP_USERNAME || '',

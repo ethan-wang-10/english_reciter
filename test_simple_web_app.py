@@ -375,9 +375,10 @@ def test_forgot_password_applies_ttl_and_cooldown(client, monkeypatch) -> None:
     monkeypatch.setattr(web, "_password_reset_policy", lambda: (30, 60))
     monkeypatch.setattr(
         web,
-        "load_users",
-        lambda: {"alice": {"email": "alice@example.com", "enabled": True}},
+        "get_user",
+        lambda username: {"email": "alice@example.com", "enabled": True} if username == 'alice' else None,
     )
+    monkeypatch.setattr(web, "get_email_owner", lambda email, **kwargs: 'alice')
     claims = []
     monkeypatch.setattr(
         web,
@@ -472,8 +473,9 @@ def test_semantic_choices_expose_keyboard_shortcuts(client) -> None:
     assert "blockGuardedReviewCopy" in javascript
     assert "-webkit-user-select: none" in stylesheet
     assert "#new-word-study-english" in stylesheet
-    assert "/static/css/style.css?v=20260917-copy-guard-v1" in html
-    assert "/static/js/app.js?v=20260918-bonus-practice-v1" in html
+    manifest = json.loads(client.get('/static/asset-manifest.json').get_data(as_text=True))['assets']
+    assert manifest['/static/css/style.css']['url'] in html
+    assert manifest['/static/js/app.js']['url'] in html
     assert ".import-ocr-english-only" in stylesheet
     assert ".semantic-option-shortcut" in stylesheet
     assert ".semantic-option-status" in stylesheet
@@ -634,7 +636,7 @@ def test_logout_waits_for_review_submission_before_revoking_session(client) -> N
     assert "saved = await submitAnswer()" in javascript
     assert "if (!saved || pendingReviewSubmission)" in javascript
     assert javascript.index("saved = await activeReviewSubmissionPromise") < javascript.index(
-        "token = null", javascript.index("async function logout()")
+        "clearAccountSession()", javascript.index("async function logout()")
     )
     assert "if (logoutBtn && token)" not in javascript
     assert "logoutBtn.disabled = false" in javascript
@@ -1212,7 +1214,7 @@ def test_unused_invites_are_owner_scoped_recoverable_and_removed_after_use(
     monkeypatch.setattr(web, "verify_token", lambda token: "alice" if token == "test" else None)
     monkeypatch.setattr(web, "get_user", lambda username: users.get(username))
     monkeypatch.setattr(web, "load_users", lambda: users)
-    monkeypatch.setattr(web, "mutate_users", lambda mutator: mutator(users))
+    monkeypatch.setattr(web, "mutate_users", lambda mutator, **kwargs: mutator(users))
     headers = {"Authorization": "Bearer test"}
 
     created = client.post("/api/user/invites", headers=headers, json={})
@@ -1388,7 +1390,7 @@ def test_purge_user_removes_owned_invites_before_username_can_be_reused(
     monkeypatch.setattr(web, "DATA_DIR", tmp_path)
     monkeypatch.setattr(web, "INVITES_FILE", tmp_path / "invites.json")
     monkeypatch.setattr(web, "INVITES_LOCK_FILE", tmp_path / ".invites.lock")
-    monkeypatch.setattr(web, "mutate_users", lambda mutator: mutator(users))
+    monkeypatch.setattr(web, "mutate_users", lambda mutator, **kwargs: mutator(users))
     monkeypatch.setattr(web, "get_user", lambda username: users.get(username))
     monkeypatch.setattr(web, "_revoke_user_tokens", lambda username: None)
     monkeypatch.setattr(web.challenges_mod, "purge_user_challenges_refs", lambda *args: None)
@@ -1440,7 +1442,7 @@ def test_purge_user_restores_directory_when_user_transaction_fails(
     monkeypatch.setattr(web, "INVITES_LOCK_FILE", tmp_path / ".invites.lock")
     monkeypatch.setattr(web, "get_user", lambda username: user if username == "alice" else None)
 
-    def fail_mutate(_mutator):
+    def fail_mutate(_mutator, **kwargs):
         raise RuntimeError("sqlite failed")
 
     monkeypatch.setattr(web, "mutate_users", fail_mutate)

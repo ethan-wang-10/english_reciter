@@ -22,7 +22,7 @@ class RepairTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.path = self.root / "words_v2.json"
         self.original = [entry(), entry("other", "It is other.", "other")]
-        self.path.write_text(json.dumps(self.original, ensure_ascii=False))
+        self.path.write_text(json.dumps(self.original, ensure_ascii=False), encoding="utf-8")
         self.path.chmod(0o640)
         for target, value in [("WORDS_INTERPROCESS_LOCKFILE", self.root / "word.lock")]:
             p = patch.object(repair.v, target, value)
@@ -40,13 +40,14 @@ class RepairTest(unittest.TestCase):
 
     def test_apply_preserves_records_backup_and_mode(self):
         before = self.path.read_bytes()
+        original_mode = self.path.stat().st_mode & 0o777
         result = repair.apply_plan(self.plan(), self.path)
         expected = copy.deepcopy(self.original)
         expected[0]["senses"][0]["example_form"] = "abated"
         self.assertEqual(json.loads(self.path.read_bytes()), expected)
         self.assertEqual(Path(result["backup"]).read_bytes(), before)
-        self.assertEqual(self.path.stat().st_mode & 0o777, 0o640)
-        self.assertEqual(Path(result["backup"]).stat().st_mode & 0o777, 0o640)
+        self.assertEqual(self.path.stat().st_mode & 0o777, original_mode)
+        self.assertEqual(Path(result["backup"]).stat().st_mode & 0o777, original_mode)
         self.assertEqual(self.path.stat().st_uid, Path(result["backup"]).stat().st_uid)
 
     def test_changed_content_and_path_rejected(self):
@@ -72,7 +73,7 @@ class RepairTest(unittest.TestCase):
 
     def test_published_rechecked_at_apply(self):
         plan = self.plan()
-        repair.q.QUESTION_BANK_FILE.write_text(json.dumps({"questions": {"abate": {}}}))
+        repair.q.QUESTION_BANK_FILE.write_text(json.dumps({"questions": {"abate": {}}}), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "published"):
             repair.apply_plan(plan, self.path)
         self.assertEqual(self.plan()["results"][0]["status"], "published_skipped")
@@ -92,11 +93,11 @@ class RepairTest(unittest.TestCase):
     def test_missing_form_field_preserved_until_explicit_repair(self):
         rows = copy.deepcopy(self.original)
         del rows[0]["senses"][0]["example_form"]
-        self.path.write_text(json.dumps(rows))
+        self.path.write_text(json.dumps(rows), encoding="utf-8")
         plan = self.plan()
         self.assertFalse(plan["changes"][0]["had_field"])
         repair.apply_plan(plan, self.path)
-        self.assertEqual(json.loads(self.path.read_text())[0]["senses"][0]["example_form"], "abated")
+        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))[0]["senses"][0]["example_form"], "abated")
 
     def test_duplicate_and_unselected_changes_rejected(self):
         plan = self.plan()

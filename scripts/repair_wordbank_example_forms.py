@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import argparse
 import copy
+from contextlib import closing
 import hashlib
 import json
 import os
 from pathlib import Path
 import sqlite3
-import stat
 import sys
 import tempfile
 import uuid
@@ -16,6 +16,7 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import gaokao_questions as q
 import wordbank_v2 as v
+from storage_utils import fsync_directory, preserve_file_metadata
 
 POS = {"noun": {"NOUN", "PROPN"}, "n": {"NOUN", "PROPN"},
        "verb": {"VERB", "AUX"}, "v": {"VERB", "AUX"},
@@ -34,7 +35,7 @@ def published_keys():
         keys.update(bank.get("questions", {}))
     db = path.with_suffix(".sqlite3")
     if db.exists():
-        with sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True) as connection:
+        with closing(sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
             keys.update(row[0] for row in connection.execute(
                 "SELECT word_key FROM records WHERE namespace='questions'"))
     return {v.normalize_english_key(key) for key in keys}
@@ -170,16 +171,14 @@ def apply_plan(plan, path=None):
         original_stat = path.stat()
         backup = path.with_name(path.name + ".before-form-repair-" + uuid.uuid4().hex + ".bak")
         with backup.open("xb") as stream:
-            os.fchown(stream.fileno(), original_stat.st_uid, original_stat.st_gid)
-            os.fchmod(stream.fileno(), stat.S_IMODE(original_stat.st_mode))
+            preserve_file_metadata(backup, original_stat, file_descriptor=stream.fileno())
             stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
         fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".form-repair-", suffix=".json")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                os.fchown(stream.fileno(), original_stat.st_uid, original_stat.st_gid)
-                os.fchmod(stream.fileno(), stat.S_IMODE(original_stat.st_mode))
+                preserve_file_metadata(Path(temporary), original_stat, file_descriptor=stream.fileno())
                 json.dump(rows, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
@@ -188,11 +187,7 @@ def apply_plan(plan, path=None):
                 v._words_v2_cache = None
                 v._words_v2_by_key = None
                 v._words_v2_cache_mtime = 0.0
-            directory_fd = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
+            fsync_directory(path.parent)
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
@@ -211,7 +206,7 @@ def main():
     if args.apply:
         if args.keys or args.reviewed or args.output:
             parser.error("--apply cannot be combined with planning arguments")
-        result = apply_plan(json.loads(args.apply.read_text()), args.wordbank)
+        result = apply_plan(json.loads(args.apply.read_text(encoding="utf-8-sig")), args.wordbank)
     else:
         if not args.keys or not args.output:
             parser.error("planning requires --keys and --output")
@@ -220,10 +215,10 @@ def main():
             inputs.append(args.reviewed)
         if args.output.resolve() in {p.resolve() for p in inputs}:
             parser.error("--output must differ from input and question bank files")
-        keys = json.loads(args.keys.read_text())
+        keys = json.loads(args.keys.read_text(encoding="utf-8-sig"))
         if not isinstance(keys, list) or not keys or not all(isinstance(k, str) and k for k in keys):
             parser.error("--keys must contain a nonempty JSON array of strings")
-        reviewed = json.loads(args.reviewed.read_text()) if args.reviewed else {}
+        reviewed = json.loads(args.reviewed.read_text(encoding="utf-8-sig")) if args.reviewed else {}
         if not isinstance(reviewed, dict) or any(not isinstance(val, dict) for val in reviewed.values()):
             parser.error("invalid reviewed mapping")
         try:
@@ -232,7 +227,7 @@ def main():
         except (ImportError, OSError):
             nlp = None
         result = plan_repairs(args.wordbank, {v.normalize_english_key(k) for k in keys}, nlp, reviewed)
-        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         result = {"plan": str(args.output), "changes": len(result["changes"]), "morphology_available": nlp is not None}
     print(json.dumps(result, ensure_ascii=False))
 

@@ -1,0 +1,56 @@
+{
+  "python": "3.12.14",
+  "baseline_commit": "2e75d12c00e142df9a8bd5235e00e0f52ef86f9d",
+  "rounds": 3,
+  "native_osa_available": true,
+  "datasets": {
+    "unrelated": {
+      "count": 300,
+      "exact_order_equal": true,
+      "baseline_ms": [
+        5420.725399977528,
+        5661.500500020338,
+        7678.89589999686
+      ],
+      "current_ms": [
+        327.0181000116281,
+        273.69780000299215,
+        355.06879998138174
+      ],
+      "baseline_median_ms": 5661.500500020338,
+      "current_median_ms": 327.0181000116281
+    },
+    "word_families": {
+      "count": 300,
+      "exact_order_equal": true,
+      "baseline_ms": [
+        2922.353000001749,
+        2884.787499991944,
+        3050.115599995479
+      ],
+      "current_ms": [
+        386.2084999855142,
+        371.36390001978725,
+        363.8599999831058
+      ],
+      "baseline_median_ms": 2922.353000001749,
+      "current_median_ms": 371.36390001978725
+    },
+    "long_phrases": {
+      "count": 300,
+      "exact_order_equal": true,
+      "baseline_ms": [
+        62165.95409999718,
+        61576.40079999692,
+        59726.977700018324
+      ],
+      "current_ms": [
+        194.77629999164492,
+        169.80030000559054,
+        209.6607999992557
+      ],
+      "baseline_median_ms": 61576.40079999692,
+      "current_median_ms": 194.77629999164492
+    }
+  }
+}

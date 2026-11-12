@@ -117,7 +117,7 @@ function renderAdminUsers(users) {
                 <td class="admin-table-nowrap">${en ? '正常' : '已禁用'}</td>
                 <td class="admin-user-col-parent">
                     <div class="admin-user-cell-stack">
-                        <label class="admin-toggle admin-toggle--compact" title="勾选后家长可用「用户名_parent」登录（默认密码见开通提示），仅查看孩子进度与导入等">
+                        <label class="admin-toggle admin-toggle--compact" title="勾选后家长可用「用户名_parent」登录（初始密码见开通提示），仅查看孩子进度与导入等">
                             <input type="checkbox" data-admin-parent="${escapeHtml(u.username)}" ${pchk} ${en ? '' : 'disabled'} />
                             家长登录
                         </label>
@@ -174,7 +174,7 @@ function renderAdminUsers(users) {
                 await loadAdminDashboard();
                 if (want && res.default_password_hint) {
                     showAdminNotice(
-                        `家长账户已创建：登录名 ${un}_parent，默认密码 ${res.default_password_hint}`
+                        `家长账户已创建：登录名 ${un}_parent，初始密码 ${res.default_password_hint}`
                     );
                 } else {
                     showAdminNotice(want ? '家长账户已开启' : '家长账户已关闭');

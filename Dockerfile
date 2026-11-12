@@ -22,9 +22,11 @@ RUN apt-get update && apt-get install -y \
 
 # 复制依赖文件
 COPY requirements-simple.txt .
+COPY requirements-bootstrap.txt .
 
 # 安装 Python 依赖；en_core_web_sm 模型不强制安装，国内/离线环境可降级运行
-RUN pip install --no-cache-dir -r requirements-simple.txt
+RUN pip install --no-cache-dir -r requirements-bootstrap.txt \
+    && pip install --no-cache-dir -r requirements-simple.txt
 
 # 复制应用代码
 COPY reciter.py .
@@ -37,6 +39,28 @@ COPY leaderboard_periods.py .
 COPY challenges.py .
 COPY chat_room.py .
 COPY wordbank_v2.py .
+COPY app_time.py .
+COPY deepseek_policy.py .
+COPY gaokao_backfill.py .
+COPY gaokao_questions.py .
+COPY import_job_store.py .
+COPY learning_sqlite_store.py .
+COPY ocr_import.py .
+COPY performance_store.py .
+COPY question_authoring.py .
+COPY question_authoring_routes.py .
+COPY question_authoring_store.py .
+COPY question_external_audit.py .
+COPY question_sqlite_store.py .
+COPY review_scheduler.py .
+COPY storage_utils.py .
+COPY reward_store.py .
+COPY reward_schema.py .
+COPY rate_limit_store.py .
+COPY web_auth_routes.py .
+COPY web_learning_routes.py .
+COPY web_wordbank_routes.py .
+COPY web_chat_routes.py .
 COPY gunicorn_config.py .
 COPY simple_web_app.py .
 COPY config.example.json .
@@ -47,6 +71,8 @@ RUN mkdir -p static user_data_simple
 
 # 复制静态文件
 COPY static/ ./static/
+COPY scripts/build_assets.py ./scripts/build_assets.py
+RUN python scripts/build_assets.py
 
 # 设置环境变量（生产环境请务必通过 compose / k8s 注入强随机 SECRET_KEY）
 ENV PYTHONUNBUFFERED=1

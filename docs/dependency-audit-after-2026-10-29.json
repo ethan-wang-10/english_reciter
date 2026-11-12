@@ -1,0 +1,183 @@
+{
+  "collected_at_utc": "2026-10-29T04:31:49.710236+00:00",
+  "requirements_sha256": "bbc7677ec40e9f2708ac0fd91ef9933e6ce766d1d8b90200876a5870c543bf8b",
+  "scope": "Direct pins and allowed version floors; not a transitive installed-environment audit",
+  "packages": [
+    {
+      "requirement": "Flask==3.1.3",
+      "name": "Flask",
+      "audited_version": "3.1.3",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/Flask/3.1.3/json",
+      "vulnerabilities": [],
+      "latest_version": "3.1.3",
+      "latest_requires_python": ">=3.9",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "Werkzeug==3.1.9",
+      "name": "Werkzeug",
+      "audited_version": "3.1.9",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/Werkzeug/3.1.9/json",
+      "vulnerabilities": [],
+      "latest_version": "3.1.9",
+      "latest_requires_python": ">=3.9",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "Flask-CORS==6.0.5",
+      "name": "Flask-CORS",
+      "audited_version": "6.0.5",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/Flask-CORS/6.0.5/json",
+      "vulnerabilities": [],
+      "latest_version": "6.0.5",
+      "latest_requires_python": "<4.0,>=3.9",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "gunicorn==23.0.0",
+      "name": "gunicorn",
+      "audited_version": "23.0.0",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/gunicorn/23.0.0/json",
+      "vulnerabilities": [],
+      "latest_version": "26.2.0",
+      "latest_requires_python": ">=3.10",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "certifi>=2026.10.23",
+      "name": "certifi",
+      "audited_version": "2026.10.23",
+      "version_kind": "allowed_floor_not_resolved_install",
+      "source": "https://pypi.org/pypi/certifi/2026.10.23/json",
+      "vulnerabilities": [],
+      "latest_version": "2026.10.23",
+      "latest_requires_python": ">=3.7",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "cryptography>=50.0.2",
+      "name": "cryptography",
+      "audited_version": "50.0.2",
+      "version_kind": "allowed_floor_not_resolved_install",
+      "source": "https://pypi.org/pypi/cryptography/50.0.2/json",
+      "vulnerabilities": [],
+      "latest_version": "50.0.2",
+      "latest_requires_python": "!=3.9.0,!=3.9.1,>=3.9",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "prettytable==3.10.0",
+      "name": "prettytable",
+      "audited_version": "3.10.0",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/prettytable/3.10.0/json",
+      "vulnerabilities": [],
+      "latest_version": "3.18.0",
+      "latest_requires_python": ">=3.10",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "readchar==4.0.6",
+      "name": "readchar",
+      "audited_version": "4.0.6",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/readchar/4.0.6/json",
+      "vulnerabilities": [],
+      "latest_version": "4.2.2",
+      "latest_requires_python": ">=3.8",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "nltk==3.10.4",
+      "name": "nltk",
+      "audited_version": "3.10.4",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/nltk/3.10.4/json",
+      "vulnerabilities": [],
+      "latest_version": "3.10.4",
+      "latest_requires_python": ">=3.10",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "rapidfuzz==3.14.6",
+      "name": "rapidfuzz",
+      "audited_version": "3.14.6",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/rapidfuzz/3.14.6/json",
+      "vulnerabilities": [],
+      "latest_version": "3.14.6",
+      "latest_requires_python": ">=3.11",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "pyspellchecker>=0.8.0",
+      "name": "pyspellchecker",
+      "audited_version": "0.8.0",
+      "version_kind": "allowed_floor_not_resolved_install",
+      "source": "https://pypi.org/pypi/pyspellchecker/0.8.0/json",
+      "vulnerabilities": [],
+      "latest_version": "0.9.1",
+      "latest_requires_python": ">=3.10",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "spacy==3.8.13",
+      "name": "spacy",
+      "audited_version": "3.8.13",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/spacy/3.8.13/json",
+      "vulnerabilities": [],
+      "latest_version": "3.8.18",
+      "latest_requires_python": "<3.16,>=3.10",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "Pillow==13.0.0",
+      "name": "Pillow",
+      "audited_version": "13.0.0",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/Pillow/13.0.0/json",
+      "vulnerabilities": [],
+      "latest_version": "13.0.0",
+      "latest_requires_python": ">=3.11",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "rapidocr==3.9.2",
+      "name": "rapidocr",
+      "audited_version": "3.9.2",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/rapidocr/3.9.2/json",
+      "vulnerabilities": [],
+      "latest_version": "3.10.0",
+      "latest_requires_python": "<4,>=3.8",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "onnxruntime>=1.20,<2",
+      "name": "onnxruntime",
+      "audited_version": "1.20",
+      "version_kind": "allowed_floor_not_resolved_install",
+      "source": "https://pypi.org/pypi/onnxruntime/1.20/json",
+      "vulnerabilities": [],
+      "latest_version": "1.31.1",
+      "latest_requires_python": ">=3.11",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "pytesseract>=0.3.10",
+      "name": "pytesseract",
+      "audited_version": "0.3.10",
+      "version_kind": "allowed_floor_not_resolved_install",
+      "source": "https://pypi.org/pypi/pytesseract/0.3.10/json",
+      "vulnerabilities": [],
+      "latest_version": "0.3.13",
+      "latest_requires_python": ">=3.8",
+      "latest_vulnerabilities": []
+    }
+  ]
+}

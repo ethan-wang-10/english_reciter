@@ -1,12 +1,10 @@
 """
 周榜 / 月榜：按自然周（周一至周日，ISO 周）与自然月汇总 daily_xp；惰性结算上期前三名奖励。
-数据：user_data_simple/_leaderboard/period_rewards.json
+数据：共享 rewards.sqlite3；旧 period_rewards.json 仅作首次迁移源。
 """
 
 from __future__ import annotations
 
-import json
-import threading
 from calendar import monthrange
 from datetime import date, timedelta
 from pathlib import Path
@@ -14,14 +12,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app_time import china_now_iso, china_today
 import gamification as gamification_mod
-from storage_utils import interprocess_file_lock, write_json_atomic
+from storage_utils import read_json_state
+import reward_schema
+import reward_store
 
 # 周榜 / 月榜前三名奖励 XP（第 1～3 名）
 WEEK_REWARD_XP: Tuple[int, int, int] = (180, 110, 70)
 MONTH_REWARD_XP: Tuple[int, int, int] = (540, 330, 220)
-
-_period_lock = threading.RLock()
-
 
 def _leaderboard_dir(data_dir: Path) -> Path:
     p = data_dir / "_leaderboard"
@@ -34,17 +31,16 @@ def _rewards_path(data_dir: Path) -> Path:
 
 
 def _load_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return default
+    if path.parent.name != "_leaderboard":
+        return read_json_state(path, default)
+    return reward_store.load_document(path.parent.parent, path, default, reward_schema.period_rewards)
 
 
 def _save_json(path: Path, data: Any) -> None:
-    write_json_atomic(path, data)
+    data_dir = path.parent.parent
+    with reward_store.transaction(data_dir):
+        reward_store.load_document(data_dir, path, {"weeks": {}, "months": {}}, reward_schema.period_rewards)
+        reward_store.save_document(data_dir, path, data, reward_schema.period_rewards)
 
 
 def iso_week_id(d: date) -> str:
@@ -332,13 +328,12 @@ def _settle_periods_if_needed_unlocked(
 ) -> None:
     """惰性结算：从最近已结束周/月往回，连续未结算的周、月（单次请求有上限）。
 
-    若传入 states（与 usernames 对应的 gamification 快照），则结算与排名计算不再重复读盘。
+    结算在同一事务内重新读取账户，避免使用请求开始时的过期快照。
     """
-    if states is None:
-        states = gamification_mod.load_states_batch(data_dir, usernames)
+    states = gamification_mod.load_states_batch(data_dir, usernames)
     today = china_today()
     path = _rewards_path(data_dir)
-    with _period_lock:
+    with reward_store.transaction(data_dir):
         raw = _load_json(path, {"weeks": {}, "months": {}})
         if not isinstance(raw, dict):
             raw = {"weeks": {}, "months": {}}
@@ -400,7 +395,7 @@ def settle_periods_if_needed(
     usernames: List[str],
     states: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> None:
-    with interprocess_file_lock(_leaderboard_dir(data_dir) / ".period-rewards.lock"):
+    with reward_store.transaction(data_dir):
         _settle_periods_if_needed_unlocked(data_dir, usernames, states)
 
 

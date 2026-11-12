@@ -1,5 +1,7 @@
 import csv
+from contextlib import closing
 import json
+import os
 from pathlib import Path
 import sqlite3
 
@@ -23,15 +25,15 @@ def files(tmp_path):
         if new not in repair.NEW:
             entries.append({"english": new, "senses": [{"id": new + "#s0", "example_en": "KEEP"}], "unknown": [1, 2]})
     (wb / "words_v2.json").write_bytes(repair.dump(entries))
-    with (wb / "words.csv").open("w", newline="") as stream:
+    with (wb / "words.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=["english", "chinese"])
         writer.writeheader()
         writer.writerows([{"english": old, "chinese": "旧词"} for old in repair.MAPPINGS])
-    (data / "_shared" / "wordbank_troubles.json").write_text('{"unknown":42,"mappings":{"past":"previous"}}')
+    (data / "_shared" / "wordbank_troubles.json").write_text('{"unknown":42,"mappings":{"past":"previous"}}', encoding="utf-8")
     user = data / "student"
     user.mkdir()
     db_path = user / "learning.sqlite3"
-    with sqlite3.connect(db_path) as db:
+    with closing(sqlite3.connect(db_path)) as db, db:
         LearningSQLiteStore._create_schema(db)
         db.execute("INSERT INTO metadata VALUES('legacy_migrated','1')")
         payload = {"english": "non", "review_count": 7, "wrong_count": 2, "unknown": {"a": 3}}
@@ -51,6 +53,8 @@ def test_apply_preserves_progress_canonical_entries_and_backups(files, tmp_path)
     data, wb, db_path = files
     (wb / "words_v2.json").chmod(0o640)
     db_path.chmod(0o600)
+    wordbank_mode = (wb / "words_v2.json").stat().st_mode & 0o777
+    database_mode = db_path.stat().st_mode & 0o777
     original_entries = repair.read_json(wb / "words_v2.json")
     before = repair.db_snapshot(db_path)
     plan = repair.make_plan(data, wb)
@@ -82,10 +86,11 @@ def test_apply_preserves_progress_canonical_entries_and_backups(files, tmp_path)
     trouble = repair.read_json(data / "_shared" / "wordbank_troubles.json")
     assert trouble["unknown"] == 42 and trouble["mappings"]["past"] == "previous"
     journal = repair.read_json(Path(result["journal"]))
-    assert Path(result["journal"]).stat().st_mode & 0o777 == 0o600
-    assert (wb / "words_v2.json").stat().st_mode & 0o777 == 0o640
-    assert Path(journal["backups"][str(wb / "words_v2.json")]).stat().st_mode & 0o777 == 0o640
-    assert db_path.stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":
+        assert Path(result["journal"]).stat().st_mode & 0o777 == 0o600
+    assert (wb / "words_v2.json").stat().st_mode & 0o777 == wordbank_mode
+    assert Path(journal["backups"][str(wb / "words_v2.json")]).stat().st_mode & 0o777 == wordbank_mode
+    assert db_path.stat().st_mode & 0o777 == database_mode
     assert repair.db_snapshot(Path(journal["backups"][str(db_path)])) == before
     repair.apply_plan(plan, plan_path)
     assert repair.db_snapshot(db_path) == after
@@ -97,7 +102,7 @@ def test_collision_and_changed_learning_abort_before_source_write(files, tmp_pat
     data, wb, db_path = files
     plan = repair.make_plan(data, wb)
     before = (wb / "words_v2.json").read_bytes()
-    with sqlite3.connect(db_path) as db:
+    with closing(sqlite3.connect(db_path)) as db, db:
         encoded, hashed = _encode({"english": "non-"})
         db.execute("INSERT INTO words VALUES(?,?,?,?,?,?)", ("non-", "non-", "pending", 0, encoded, hashed))
     with pytest.raises(ValueError, match="both old and canonical"):
@@ -110,11 +115,11 @@ def test_collision_and_changed_learning_abort_before_source_write(files, tmp_pat
 def test_source_guard_and_legacy_only_abort(files, tmp_path):
     data, wb, _ = files
     plan = repair.make_plan(data, wb)
-    (wb / "words.csv").write_text("english,chinese\nchanged,改变\n")
+    (wb / "words.csv").write_text("english,chinese\nchanged,改变\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Source file changed"):
         repair.apply_plan(plan, tmp_path / "plan.json")
     (data / "legacy").mkdir()
-    (data / "legacy" / "learning_data.json").write_text('{"all_words":[{"english":"non"}]}')
+    (data / "legacy" / "learning_data.json").write_text('{"all_words":[{"english":"non"}]}', encoding="utf-8")
     with pytest.raises(ValueError, match="legacy-only"):
         repair.make_plan(data, wb)
 
@@ -127,3 +132,37 @@ def test_affix_distractors_are_allowed_only_for_matching_affix_answers():
     assert questions._clean_distinct_list(values, correct_answer="-ity", **kwargs) == ["-ness"]
     assert questions._recognition_core_sense("prefix 表示去除") == "表示去除"
     assert questions._recognition_core_sense("suffix: 某种状态") == "某种状态"
+
+
+def test_atomic_metadata_failure_preserves_source_and_cleans_temporary(tmp_path, monkeypatch):
+    path = tmp_path / "preserved.json"
+    path.write_bytes(b"original")
+
+    def fail_metadata(*args, **kwargs):
+        raise PermissionError("ownership cannot be retained")
+
+    monkeypatch.setattr(repair, "preserve_file_metadata", fail_metadata)
+    with pytest.raises(PermissionError):
+        repair.atomic(path, b"replacement")
+
+    assert path.read_bytes() == b"original"
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_plan_and_apply_close_all_sqlite_connections(files, tmp_path, monkeypatch):
+    data, wb, _ = files
+    original_connect = sqlite3.connect
+    connections = []
+
+    def tracked_connect(*args, **kwargs):
+        connection = original_connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", tracked_connect)
+    repair.apply_plan(repair.make_plan(data, wb), tmp_path / "plan.json")
+
+    assert connections
+    for connection in connections:
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")

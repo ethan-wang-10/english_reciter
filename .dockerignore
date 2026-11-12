@@ -23,3 +23,14 @@ USAGE.md
 test_reciter.py
 test_stats.py
 words.txt
+.nox/
+.cache/
+.test_tmp/
+node_modules/
+user_data_simple/
+.env
+.env.*
+config.json
+learning_data*.json
+test_*.py
+test_*.js

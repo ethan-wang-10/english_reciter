@@ -9,7 +9,8 @@ import platform
 import subprocess
 import tempfile
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
+from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 from datetime import date, timedelta
 from time import perf_counter
@@ -18,6 +19,11 @@ from prettytable import PrettyTable
 import readchar
 import logging
 from logging.handlers import RotatingFileHandler
+
+try:
+    from rapidfuzz.distance.OSA import distance as _spelling_native_distance
+except ImportError:
+    _spelling_native_distance = None
 
 from learning_sqlite_store import LearningSQLiteStore, LearningStoreLoadError
 
@@ -61,57 +67,64 @@ def _spelling_key(value: Any) -> str:
 
 
 def _spelling_edit_distance(left: str, right: str) -> int:
-    distances = [list(range(len(right) + 1))]
-    for left_index in range(1, len(left) + 1):
-        row = [left_index] + [0] * len(right)
-        distances.append(row)
-        for right_index in range(1, len(right) + 1):
-            row[right_index] = min(
-                row[right_index - 1] + 1,
-                distances[left_index - 1][right_index] + 1,
-                distances[left_index - 1][right_index - 1]
-                + (left[left_index - 1] != right[right_index - 1]),
+    if _spelling_native_distance is not None:
+        return _spelling_native_distance(left, right)
+    previous = list(range(len(right) + 1))
+    previous_previous = None
+    for left_index, left_char in enumerate(left, 1):
+        row = [left_index]
+        for right_index, right_char in enumerate(right, 1):
+            distance = min(
+                row[-1] + 1,
+                previous[right_index] + 1,
+                previous[right_index - 1] + (left_char != right_char),
             )
             if (
                 left_index > 1
                 and right_index > 1
-                and left[left_index - 1] == right[right_index - 2]
-                and left[left_index - 2] == right[right_index - 1]
+                and left_char == right[right_index - 2]
+                and left[left_index - 2] == right_char
             ):
-                row[right_index] = min(
-                    row[right_index],
-                    distances[left_index - 2][right_index - 2] + 1,
-                )
-    return distances[-1][-1]
+                distance = min(distance, previous_previous[right_index - 2] + 1)
+            row.append(distance)
+        previous_previous, previous = previous, row
+    return previous[-1]
 
 
-def spelling_similarity(left: Any, right: Any) -> float:
-    """Estimate visual spelling similarity without dictionaries or AI calls."""
-    first = _spelling_key(left)
-    second = _spelling_key(right)
+def _spelling_prepared(value: Any) -> tuple:
+    key = _spelling_key(value)
+    compact = key.replace(" ", "")
+    return key, compact, Counter(compact)
+
+
+def _spelling_prepared_similarity(first_data: tuple, second_data: tuple) -> float:
+    first, compact_first, first_counts = first_data
+    second, compact_second, second_counts = second_data
     if not first or not second or first == second:
         return 0.0
-    compact_first = first.replace(" ", "")
-    compact_second = second.replace(" ", "")
     shortest = min(len(compact_first), len(compact_second))
     longest = max(len(compact_first), len(compact_second))
     if shortest < 3:
         return 0.0
-
+    prefix_score = 0.8 if (
+        longest - shortest <= 5
+        and (compact_first.startswith(compact_second) or compact_second.startswith(compact_first))
+    ) else 0.0
+    max_distance = longest // 3
+    if longest - shortest > max_distance:
+        return prefix_score
+    # Substitution changes one unmatched character; transposition changes no counts.
+    common = sum(min(count, second_counts.get(char, 0)) for char, count in first_counts.items())
+    if longest - common > max_distance:
+        return prefix_score
     distance = _spelling_edit_distance(compact_first, compact_second)
     similarity = 1.0 - (distance / longest)
-    if similarity >= 2 / 3:
-        return similarity
-    if (
-        shortest >= 3
-        and abs(len(compact_first) - len(compact_second)) <= 5
-        and (
-            compact_first.startswith(compact_second)
-            or compact_second.startswith(compact_first)
-        )
-    ):
-        return 0.8
-    return 0.0
+    return similarity if similarity >= 2 / 3 else prefix_score
+
+
+def spelling_similarity(left: Any, right: Any) -> float:
+    """Estimate visual spelling similarity without dictionaries or AI calls."""
+    return _spelling_prepared_similarity(_spelling_prepared(left), _spelling_prepared(right))
 
 
 def order_by_spelling_similarity(rows: List[Any], key_getter) -> List[Any]:
@@ -120,12 +133,16 @@ def order_by_spelling_similarity(rows: List[Any], key_getter) -> List[Any]:
     count = len(source)
     if count < 3:
         return source
-    keys = [_spelling_key(key_getter(row)) for row in source]
+    keys = [_spelling_prepared(key_getter(row)) for row in source]
+    score_cache = {}
     scores = [[0.0] * count for _ in range(count)]
     neighbours = [set() for _ in range(count)]
     for left in range(count):
         for right in range(left + 1, count):
-            score = spelling_similarity(keys[left], keys[right])
+            cache_key = tuple(sorted((keys[left][0], keys[right][0])))
+            if cache_key not in score_cache:
+                score_cache[cache_key] = _spelling_prepared_similarity(keys[left], keys[right])
+            score = score_cache[cache_key]
             scores[left][right] = scores[right][left] = score
             if score >= 2 / 3:
                 neighbours[left].add(right)
@@ -865,6 +882,10 @@ class WordReciter:
 
     def find_word(self, english: str, *, include_mastered: bool = True) -> Optional[Word]:
         key = self.word_state_key(english)
+        lookup = getattr(self, '_review_lookup', None)
+        if lookup is not None:
+            pending, mastered, _mastered_ids = lookup
+            return pending.get(key) or (mastered.get(key) if include_mastered else None)
         for word in self.all_words:
             if self.word_state_key(word) == key:
                 return word
@@ -874,18 +895,59 @@ class WordReciter:
                     return word
         return None
 
+    @contextmanager
+    def _review_read_scope(self):
+        """Index one read operation without caching mutable words across calls."""
+        if getattr(self, '_review_lookup', None) is not None:
+            yield
+            return
+        pending = {}
+        mastered = {}
+        duplicate_keys = set()
+        for word in self.all_words:
+            key = self.word_state_key(word)
+            if key in pending:
+                duplicate_keys.add(key)
+            pending.setdefault(key, word)
+        for word in self.mastered_words:
+            key = self.word_state_key(word)
+            if key in pending or key in mastered:
+                duplicate_keys.add(key)
+            mastered.setdefault(key, word)
+        self._review_lookup = pending, mastered, {id(word) for word in self.mastered_words}
+        self._review_duplicate_keys = duplicate_keys
+        self._normalized_review_states = {}
+        try:
+            yield
+        finally:
+            self._review_lookup = None
+            self._review_duplicate_keys = None
+            self._normalized_review_states = None
+
     def get_review_state(self, word: Word) -> Dict[str, Any]:
         states = self.learning_state_v2.setdefault('review_states', {})
         key = self.word_state_key(word)
+        lookup = getattr(self, '_review_lookup', None)
+        legacy_active = (
+            id(word) in lookup[2] if lookup is not None else word in self.mastered_words
+        )
+        normalized = getattr(self, '_normalized_review_states', None)
+        cache_key = (key, word.success_count, self.config.MAX_SUCCESS_COUNT, legacy_active)
+        if normalized is not None:
+            cached = normalized.get(cache_key)
+            if cached is not None and cached is states.get(key):
+                return cached
         legacy_interval = self._calculate_review_days(max(0, word.success_count))
         state = normalize_review_state(
             states.get(key),
             success_count=word.success_count,
             max_success_count=self.config.MAX_SUCCESS_COUNT,
             legacy_interval_days=legacy_interval,
-            legacy_active=word in self.mastered_words,
+            legacy_active=legacy_active,
         )
         states[key] = state
+        if normalized is not None:
+            normalized[cache_key] = state
         return state
 
     def _needs_legacy_calibration(self, word: Word) -> bool:
@@ -1182,10 +1244,22 @@ class WordReciter:
         return max(0, min(limit, target))
 
     def _is_mastered_maintenance_due(self, word: Word) -> bool:
+        duplicate_keys = getattr(self, '_review_duplicate_keys', None)
+        # Duplicate keys share persisted state, including legacy defaults.
+        if (
+            word.next_review_date > self.today
+            and duplicate_keys is not None
+            and self.word_state_key(word) not in duplicate_keys
+        ):
+            return False
         state = self.get_review_state(word)
         return bool(state['scheduler'].get('active')) and word.next_review_date <= self.today
 
     def count_due_words(self) -> int:
+        with self._review_read_scope():
+            return self._count_due_words()
+
+    def _count_due_words(self) -> int:
         due_keys = {
             self.word_state_key(word)
             for word in self.all_words
@@ -1206,11 +1280,7 @@ class WordReciter:
         due_keys.discard('')
         return len(due_keys)
 
-    def _today_task_candidates(
-        self,
-        *,
-        listening_available: bool = False,
-    ) -> List[Dict[str, Any]]:
+    def _today_task_candidate_rows(self) -> List[Dict[str, Any]]:
         candidates: List[Dict[str, Any]] = []
         for word in self.all_words:
             if word.next_review_date > self.today:
@@ -1230,41 +1300,56 @@ class WordReciter:
         for word in self.mastered_words:
             if self._is_mastered_maintenance_due(word):
                 candidates.append({'word': word, 'maintenance': True})
+        return candidates
 
+    def _today_task_candidates(
+        self,
+        *,
+        listening_available: bool = False,
+    ) -> List[Dict[str, Any]]:
+        candidates = self._today_task_candidate_rows()
         for item in candidates:
-            word = item['word']
-            state = self.get_review_state(word)
-            mastery = mastery_snapshot(state)
-            attempted = sum(
-                int(x.get('attempts') or 0) for x in mastery.get('by_type', {}).values()
+            self._describe_today_task_candidate(
+                item, listening_available=listening_available,
             )
-            if item.get('forced_reason'):
-                reason = str(item['forced_reason'])
-            elif item['maintenance']:
-                state_status = str(state.get('memory_status') or 'stable')
-                reason = 'reinforcement' if state_status == 'reinforcement' else 'maintenance'
-            elif word.success_count <= 0 and attempted == 0 and word.review_count <= 0:
-                reason = 'new'
-            elif word.next_review_date < self.today:
-                reason = 'overdue'
-            elif attempted > 0 and mastery['overall'] < 0.5:
-                reason = 'weak'
-            else:
-                reason = 'due'
-            item.update(
-                {
-                    'reason': reason,
-                    'imported_today': bool(
-                        reason == 'new' and self.word_was_added_today(word)
-                    ),
-                    'exercise_type': choose_exercise_type(
-                        state,
-                        listening_available=listening_available,
-                    ),
-                    'mastery_score': mastery['overall'],
-                }
-            )
+        candidates.sort(key=self._today_task_candidate_sort_key)
+        return candidates
 
+    def _describe_today_task_candidate(
+        self, item: Dict[str, Any], *, listening_available: bool,
+    ) -> None:
+        word = item['word']
+        state = self.get_review_state(word)
+        mastery = mastery_snapshot(state)
+        attempted = sum(
+            int(x.get('attempts') or 0) for x in mastery.get('by_type', {}).values()
+        )
+        if item.get('forced_reason'):
+            reason = str(item['forced_reason'])
+        elif item['maintenance']:
+            state_status = str(state.get('memory_status') or 'stable')
+            reason = 'reinforcement' if state_status == 'reinforcement' else 'maintenance'
+        elif word.success_count <= 0 and attempted == 0 and word.review_count <= 0:
+            reason = 'new'
+        elif word.next_review_date < self.today:
+            reason = 'overdue'
+        elif attempted > 0 and mastery['overall'] < 0.5:
+            reason = 'weak'
+        else:
+            reason = 'due'
+        item.update(
+            {
+                'reason': reason,
+                'imported_today': bool(reason == 'new' and self.word_was_added_today(word)),
+                'exercise_type': choose_exercise_type(
+                    state, listening_available=listening_available,
+                ),
+                'mastery_score': mastery['overall'],
+            }
+        )
+
+    @staticmethod
+    def _today_task_candidate_sort_key(item: Dict[str, Any]):
         rank = {
             'overdue': 0,
             'weak': 1,
@@ -1273,17 +1358,14 @@ class WordReciter:
             'maintenance': 4,
             'new': 5,
         }
-        candidates.sort(
-            key=lambda item: (
-                rank[item['reason']],
-                0 if item.get('imported_today') else 1,
-                item['word'].next_review_date,
-                item['mastery_score'],
-                item['word'].review_count,
-                item['word'].english.casefold(),
-            )
+        return (
+            rank[item['reason']],
+            0 if item.get('imported_today') else 1,
+            item['word'].next_review_date,
+            item['mastery_score'],
+            item['word'].review_count,
+            item['word'].english.casefold(),
         )
-        return candidates
 
     def word_was_added_today(self, word: Word) -> bool:
         added_at = str(getattr(word, 'added_at', '') or '').strip()
@@ -1327,35 +1409,42 @@ class WordReciter:
         items = task.get('items')
         if not isinstance(items, list):
             return 0
-        candidates = self._today_task_candidates(
-            listening_available=listening_available,
-        )
         task_keys = {
             str(item.get('word_key') or '')
             for item in items
             if isinstance(item, dict)
         }
-        available_new_words = [
-            candidate
-            for candidate in candidates
-            if candidate.get('reason') == 'new'
-            and self.word_state_key(candidate['word']) not in task_keys
-        ]
-        available_keys = task_keys | {
-            self.word_state_key(candidate['word']) for candidate in candidates
-        }
-        task['available_at_creation'] = max(len(items), len(available_keys))
-        selected_candidates = (
-            available_new_words
-            if new_words_first
-            else [
-                candidate
-                for candidate in available_new_words
-                if candidate.get('imported_today')
-            ]
+        available_keys = set(task_keys)
+        selected_candidates = []
+        # Backlog needs all eligible keys; only new insertions need full ranking.
+        candidates = (
+            self._today_task_candidates(listening_available=listening_available)
+            if getattr(self, '_review_duplicate_keys', None)
+            else self._today_task_candidate_rows()
         )
+        for candidate in candidates:
+            word = candidate['word']
+            key = self.word_state_key(word)
+            available_keys.add(key)
+            if (
+                key in task_keys
+                or candidate['maintenance']
+                or candidate.get('forced_reason')
+                or word.success_count > 0
+                or word.review_count > 0
+                or (not new_words_first and not self.word_was_added_today(word))
+            ):
+                continue
+            if 'reason' not in candidate:
+                self._describe_today_task_candidate(
+                    candidate, listening_available=listening_available,
+                )
+            if candidate['reason'] == 'new':
+                selected_candidates.append(candidate)
+        task['available_at_creation'] = max(len(items), len(available_keys))
         if not selected_candidates:
             return 0
+        selected_candidates.sort(key=self._today_task_candidate_sort_key)
 
         try:
             new_word_target = max(0, int(task.get('new_word_target') or 0))
@@ -1597,6 +1686,15 @@ class WordReciter:
         new_words_first: bool = False,
     ) -> Dict[str, Any]:
         """Return a persistent, bounded task and its remaining word objects."""
+        with self._review_read_scope():
+            return self._get_today_learning_plan(
+                listening_available=listening_available,
+                new_words_first=new_words_first,
+            )
+
+    def _get_today_learning_plan(
+        self, *, listening_available: bool, new_words_first: bool,
+    ) -> Dict[str, Any]:
         task = self._current_today_task(
             listening_available=listening_available,
             new_words_first=new_words_first,

@@ -1,0 +1,29 @@
+{
+  "collected_at_utc": "2026-10-29T04:35:01.689587+00:00",
+  "requirements_sha256": "868251c25f942001aaed48c2c6d2d470eb9e7299a8e3ab0ab9b1f7346ab3a231",
+  "scope": "Direct pins and allowed version floors; not a transitive installed-environment audit",
+  "packages": [
+    {
+      "requirement": "pip==26.2.2",
+      "name": "pip",
+      "audited_version": "26.2.2",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/pip/26.2.2/json",
+      "vulnerabilities": [],
+      "latest_version": "26.2.2",
+      "latest_requires_python": ">=3.10",
+      "latest_vulnerabilities": []
+    },
+    {
+      "requirement": "setuptools==84.1.0",
+      "name": "setuptools",
+      "audited_version": "84.1.0",
+      "version_kind": "pin",
+      "source": "https://pypi.org/pypi/setuptools/84.1.0/json",
+      "vulnerabilities": [],
+      "latest_version": "84.2.1",
+      "latest_requires_python": ">=3.10",
+      "latest_vulnerabilities": []
+    }
+  ]
+}

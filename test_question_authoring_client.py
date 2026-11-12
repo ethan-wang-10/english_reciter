@@ -51,12 +51,24 @@ def test_empty_default_trust_store_loads_certifi_without_disabling_verification(
     monkeypatch.delenv("SSL_CERT_FILE", raising=False)
     monkeypatch.delenv("SSL_CERT_DIR", raising=False)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    original_stats = context.cert_store_stats
+    original_load = context.load_verify_locations
+    loads = []
+
+    def load_verify_locations(*args, **kwargs):
+        original_load(*args, **kwargs)
+        loads.append((args, kwargs))
+
+    # A managed Python runtime may inject a CA even into a fresh SSLContext.
+    monkeypatch.setattr(context, 'cert_store_stats', lambda: original_stats() if loads else {'x509_ca': 0})
+    monkeypatch.setattr(context, 'load_verify_locations', load_verify_locations)
     assert context.cert_store_stats()["x509_ca"] == 0
     monkeypatch.setattr(client.ssl, "create_default_context", lambda: context)
 
     assert client._ssl_context() is context
 
     assert context.cert_store_stats()["x509_ca"] > 0
+    assert loads == [((), {'cafile': certifi.where()})]
     assert context.verify_mode == ssl.CERT_REQUIRED
     assert context.check_hostname
 
@@ -84,12 +96,15 @@ def test_explicit_ca_configuration_is_preserved_even_when_store_is_empty(monkeyp
     monkeypatch.delenv("SSL_CERT_DIR", raising=False)
     monkeypatch.setenv(variable, value)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    before = context.get_ca_certs(binary_form=True)
+    monkeypatch.setattr(context, 'cert_store_stats', lambda: {'x509_ca': 0})
     monkeypatch.setattr(client.ssl, "create_default_context", lambda: context)
     monkeypatch.setattr(certifi, "where", lambda: pytest.fail("explicit CA configuration must be preserved"))
 
     assert client._ssl_context() is context
 
     assert context.cert_store_stats()["x509_ca"] == 0
+    assert context.get_ca_certs(binary_form=True) == before
     assert context.verify_mode == ssl.CERT_REQUIRED
     assert context.check_hostname
 

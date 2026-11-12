@@ -188,7 +188,7 @@ is_positive_int "$THREADS" || die "--threads/GUNICORN_THREADS must be a positive
 is_positive_int "$HEALTH_TIMEOUT" || die "HEALTH_TIMEOUT must be a positive integer"
 
 # Make values visible to PM2 ecosystem.config.cjs and Docker Compose interpolation.
-export HOST PORT WEB_CONCURRENCY="$WORKERS" GUNICORN_THREADS="$THREADS" TZ="$TZ_VALUE"
+export HOST PORT WEB_CONCURRENCY="$WORKERS" GUNICORN_THREADS="$THREADS" TZ="$TZ_VALUE" VENV_DIR
 
 have() {
   command -v "$1" >/dev/null 2>&1
@@ -197,7 +197,7 @@ have() {
 python_version_ok() {
   "$1" - <<'PY' >/dev/null 2>&1
 import sys
-raise SystemExit(0 if sys.version_info >= (3, 9) else 1)
+raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
 PY
 }
 
@@ -215,12 +215,12 @@ find_python() {
     PYTHON_BIN="$(command -v python)"
   else
     [ "$required" = "optional" ] && { warn "Python not found; skip host Python checks"; return 1; }
-    die "Python 3.9+ is required for $MODE mode"
+    die "Python 3.11+ is required for $MODE mode"
   fi
 
   if ! python_version_ok "$PYTHON_BIN"; then
-    [ "$required" = "optional" ] && { warn "Python 3.9+ not found; skip host Python checks"; PYTHON_BIN=""; return 1; }
-    die "Python 3.9+ is required for $MODE mode"
+    [ "$required" = "optional" ] && { warn "Python 3.11+ not found; skip host Python checks"; PYTHON_BIN=""; return 1; }
+    die "Python 3.11+ is required for $MODE mode"
   fi
 
   log "Python: $("$PYTHON_BIN" --version 2>&1)"
@@ -377,6 +377,7 @@ ensure_venv_and_deps() {
     run "$PYTHON_BIN" -m venv "$VENV_DIR"
   fi
   app_py="$(venv_python_path)"
+  run "$app_py" -m pip install -r requirements-bootstrap.txt
   if [ "$UPGRADE_PIP" = "1" ]; then
     run "$app_py" -m pip install --upgrade pip
   fi
@@ -417,18 +418,24 @@ smoke_check() {
   fi
 
   if [ -n "$py" ]; then
+    if [ "$DRY_RUN" != "1" ] && ! python_version_ok "$py"; then
+      die "Application environment requires Python 3.11+: $py"
+    fi
+    run "$py" scripts/build_assets.py
     run "$py" -m py_compile \
       simple_web_app.py reciter.py user_store.py auth_session_store.py wordbank_v2.py \
       gamification.py challenges.py leaderboard_periods.py chat_room.py performance_store.py \
       app_time.py project_paths.py tts_piper.py learning_sqlite_store.py \
-      question_sqlite_store.py import_job_store.py gaokao_questions.py gaokao_backfill.py
+      question_sqlite_store.py import_job_store.py gaokao_questions.py gaokao_backfill.py \
+      reward_store.py reward_schema.py rate_limit_store.py web_auth_routes.py \
+      web_learning_routes.py web_wordbank_routes.py web_chat_routes.py
     if [ "$MODE" = "pm2" ] || [ "$MODE" = "native" ]; then
       run "$py" -c "import cv2, onnxruntime, rapidocr"
     fi
   elif [ "$MODE" = "docker" ]; then
     warn "Python not available on host; Docker build will validate Python dependencies"
   else
-    die "Python 3.9+ is required for host smoke checks"
+    die "Python 3.11+ is required for host smoke checks"
   fi
 
   if have node; then
@@ -449,9 +456,9 @@ restart_pm2() {
   have pm2 || die "pm2 not found; install PM2 or use --mode native/docker"
   [ -f ecosystem.config.cjs ] || die "ecosystem.config.cjs not found"
   if pm2 describe english-reciter >/dev/null 2>&1; then
-    # Reload from the ecosystem file so script args (including gunicorn -c)
-    # are updated as well as environment variables.
-    run pm2 reload ecosystem.config.cjs --only english-reciter --update-env
+    # Storage migrations must not overlap with old workers.
+    run pm2 stop english-reciter
+    run pm2 restart ecosystem.config.cjs --only english-reciter --update-env
   else
     run pm2 start ecosystem.config.cjs --update-env
   fi
