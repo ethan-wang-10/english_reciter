@@ -1,0 +1,1113 @@
+{
+  "id": "builtin-shanghai-grade5-term1-midterm",
+  "grade": 5,
+  "term": 1,
+  "name": "上海五年级上册英语 · U1-U4 期中自测（含听力）",
+  "scope": "U1-U4",
+  "edition": "上海教育出版社·义务教育教科书（五·四学制）英语五年级上册，2026新版；目录与用户确认单元匹配，未独立核验版权页月次印次。",
+  "description": "40 道固定题：10 道听力选择、12 道语法填空、8 道句型转换、10 道阅读选择，建议 45 分钟完成。",
+  "source_note": "自编复习材料，单元和主题词与公开目录核对；例句、题目、短文及录音稿均为原创。完整词表和校考范围以课本及老师要求为准。",
+  "time_minutes": 45,
+  "source_file": "shanghai-grade5-term1-midterm-review.pdf",
+  "exam_file": "shanghai-grade5-term1-midterm.pdf",
+  "knowledge": {
+    "title": "上海五年级上册英语 U1-U4 期中知识点梳理",
+    "intro": "按五·四学制新版教材 U1-U4 目录的主题、词汇与核心结构整理。先掌握社团计划、游戏指令、植物特点和动物相关表达，再完成原创配套练习。列出的词汇是已核对重点，并非教材完整默写表；本套期中范围为 U1-U4，学校要求不同时以教师通知为准。",
+    "sections": [
+      {
+        "id": "u1",
+        "title": "U1 Clubs in our school · 学校社团",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "gardening 园艺；photography 摄影；art 美术；storytelling 讲故事；pottery 陶艺。",
+              "配套搭配：join the gardening club 加入园艺社团；take photos 拍照；tell stories 讲故事；make a bowl 做一只碗。",
+              "说清社团名称和具体活动：photography 是摄影这项活动，photograph / photo 可指一张照片。"
+            ]
+          },
+          {
+            "title": "目录核心结构：I am going to ...",
+            "items": [
+              "be going to + 动词原形，表达计划或打算。I 用 am，he / she / it 用 is，we / you / they 用 are。",
+              "原创例句：I am going to join the pottery club. We are going to grow flowers.",
+              "基础变式复习：She is not going to take photos. / Is she going to take photos?",
+              "常见缩写：I am = I'm；she is = she's；we are = we're；is not = isn't；are not = aren't。"
+            ]
+          },
+          {
+            "title": "易错点与检查",
+            "items": [
+              "going to 后用动词原形：She is going to tell a story. 不写成 to tells 或 to telling。",
+              "不要漏掉 be：I am going to join ...；不能只写 I going to join ...。",
+              "join 后可接社团名称；不要写 join to the club。"
+            ]
+          },
+          {
+            "title": "原创表达任务：我的社团计划",
+            "items": [
+              "按“喜欢什么 → 想参加哪个社团 → 打算做什么 → 活动时间”组织三到四句。",
+              "原创示例：I like taking photos. I am going to join the photography club. I am going to take photos of plants on Friday.",
+              "读活动表时分清社团、人物、日期和计划；不要把朋友的计划写成自己的计划。"
+            ]
+          },
+          {
+            "title": "目录语音线索：ph",
+            "items": [
+              "ph 在 photography 等词中通常发 /f/，不要拆成 /p/ 和 /h/。",
+              "词的完整读音和重音应跟随本版课本录音；看到相同字母组合时仍需结合具体单词核对。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u2",
+        "title": "U2 Traditional games · 传统游戏",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "traditional 传统的；Chinese yo-yo 空竹；kite-flying 放风筝；dragon dance 舞龙。",
+              "tug of war 拔河；hopscotch 跳房子。结合图片、动作与规则辨认游戏。",
+              "原创配套搭配：fly a kite；do the dragon dance；play with a Chinese yo-yo；play hopscotch。"
+            ]
+          },
+          {
+            "title": "目录核心结构：祈使句 (Do) ...",
+            "items": [
+              "肯定祈使句通常以动词原形开头，用来给指令或提出请求，主语 you 常省略。",
+              "原创例句：Hold the rope. Stand behind the line. Please wait for your turn.",
+              "否定祈使句用 Do not / Don't + 动词原形：Don't run near the road.",
+              "Please 可用于礼貌请求：Please close the gate. 配套复习 Let's + 动词原形：Let's play hopscotch."
+            ]
+          },
+          {
+            "title": "易错点与检查",
+            "items": [
+              "指令开头不用第三人称单数形式：Stand here. 不写 Stands here.。",
+              "Don't 后用动词原形：Don't pull the rope yet. 不写 Don't pulls ...。",
+              "看清肯定与否定指令：Touch ... 与 Do not touch ... 的要求相反，听力中不能漏听 not。"
+            ]
+          },
+          {
+            "title": "原创表达任务：说明一个游戏",
+            "items": [
+              "按“游戏名称 → 准备物品 → 两三条规则 → 安全要求”介绍熟悉的传统游戏。",
+              "原创示例：Let's play tug of war. Take a long rope. Stand on two sides. Wait for the signal. Don't pull too early.",
+              "阅读与听力先找游戏名称，再抓物品、动作和顺序；遵守老师安排与场地规则。"
+            ]
+          },
+          {
+            "title": "目录语音线索：ar",
+            "items": [
+              "ar 在 garden 中的读音可随英美口音略有差别：英音常为 /ɑː/，美音常带 /r/。",
+              "这里用 garden 核对本单元语音线索，不把所有含 ar 的词都套成同一读音。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u3",
+        "title": "U3 Amazing plants · 奇妙的植物",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "stem 茎；soil 土壤；root 根；leaf 叶；water lily 睡莲；pine cone 松果；morning glory 牵牛花。",
+              "配套单复数复习：a leaf / three leaves；a root / many roots；a water lily / water lilies。",
+              "观察植物时区分名称与部位；pine cone 是松果，与种子有关，不是普通可食用水果的统称。"
+            ]
+          },
+          {
+            "title": "目录核心结构：look(s) like ...",
+            "items": [
+              "look like + 名词或名词短语，表示“看起来像……”。主语为第三人称单数时常用 looks like。",
+              "原创例句：This leaf looks like a fan. These leaves look like little fans.",
+              "区分两种结构：The leaf looks green. 用形容词描述外观；The leaf looks like a fan. 用名词说明像什么。",
+              "基础变式复习：This root does not look like a string. does not / doesn't 后用 look 原形。"
+            ]
+          },
+          {
+            "title": "易错点与检查",
+            "items": [
+              "单数主语检查 -s：The leaf looks like a fan.；复数主语用 look：The leaves look like fans.。",
+              "like 后接所比较的事物：looks like a plate；不要写成 looks like green。",
+              "leaf 的复数是 leaves；lily 的复数是 lilies。soil 表示土壤时通常作为不可数名词使用。"
+            ]
+          },
+          {
+            "title": "原创表达任务：植物观察卡",
+            "items": [
+              "按“名称 → 生长环境 → 根茎叶特点 → 像什么”记录，不凭一张图片猜所有植物的生活环境。",
+              "原创示例：This plant has a long stem and green leaves. The leaves look like little fans.",
+              "原创基础例句：The roots take in water from the soil. The water lily grows in water. The morning glory climbs up a fence.",
+              "听介绍时分清 plant、part、place 三类信息；阅读两种植物的比较时分别标记各自特点。"
+            ]
+          },
+          {
+            "title": "目录语音线索：ow / ou",
+            "items": [
+              "ow 在 flower 中、ou 在 out 中都包含 /aʊ/ 这一双元音。",
+              "同一字母组合可能有其他读音，例如 snow 中的 ow 与 flower 不同；不要只看字母组合就机械套读。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u4",
+        "title": "U4 Together with animals · 与动物相处",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "tiger 老虎；lion 狮子；whale 鲸；giraffe 长颈鹿；panda 熊猫；hippo 河马；elephant 大象。",
+              "protect 保护；safari park 野生动物园。结合图片辨认动物，阅读时关注住所、外形与保护要求。",
+              "原创配套表达：protect animals 保护动物；watch animals 观察动物；stay on the bus 留在巴士上。"
+            ]
+          },
+          {
+            "title": "目录核心结构：feel / look / taste + 形容词",
+            "items": [
+              "feel 后接形容词说明感受，look 后接形容词说明外观，taste 后接形容词说明味道。",
+              "原创例句：I feel excited. The giraffe looks tall. The apples taste sweet.",
+              "与上一单元比较：The tiger looks strong. 用形容词；The cloud looks like a tiger. 用 like + 名词。",
+              "基础复习：主语为第三人称单数时留意 feels、looks、tastes；复数主语通常用 feel、look、taste。"
+            ]
+          },
+          {
+            "title": "易错点与检查",
+            "items": [
+              "这些结构中用形容词：feel happy、look strong、taste sweet；不要写 feel happily 或 taste sweetly。",
+              "联系句意选动词：人表达感受用 feel，外观描述可用 look，描述食物味道用 taste。",
+              "用 taste 的原创例句是食物语境；观察动物和植物时不能靠触摸野生动物或品尝不认识的植物来判断。"
+            ]
+          },
+          {
+            "title": "原创表达任务：参观与保护",
+            "items": [
+              "按“看见什么动物 → 外形或动作 → 我的感受 → 怎样保护它们”组织简短介绍。",
+              "原创示例：We watch the giraffes from the bus. They look tall. I feel excited. We follow the park rules and keep the park clean.",
+              "读参观说明时关注 do / don't；听人物感受时，区分 happy、excited、afraid、worried 等词。"
+            ]
+          },
+          {
+            "title": "目录语音线索：ear / ere / air",
+            "items": [
+              "ear 在 wear、ere 在 there、air 在 hair 中可读为相近的音：英音常为 /eə/，美音常带 /r/。",
+              "只用已列示例辨认这组音；hear 的 ear 与 wear 不同，不把所有 ear 都读成同一种音。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "checklist",
+        "title": "U1-U4 综合自查",
+        "blocks": [
+          {
+            "title": "结构与词形清单",
+            "items": [
+              "计划：主语 + am / is / are + going to + 动词原形。",
+              "指令：动词原形开头；否定用 Do not / Don't + 动词原形。",
+              "像什么：look(s) like + 名词；外观、感受、味道：look / feel / taste + 形容词。",
+              "复数与主谓一致：leaf → leaves；lily → lilies；This leaf looks ... / These leaves look ...。"
+            ]
+          },
+          {
+            "title": "做题与表达清单",
+            "items": [
+              "填空只写空缺部分；句型转换写完整句子，保留原句的时间、地点与其他有效信息。",
+              "阅读先找人物、活动、地点、时间和指令；每一题回到短文找证据，不能凭生活印象猜答案。",
+              "我能介绍一个社团计划、说明一个游戏、描述一株植物，并说出参观动物时的感受和规则。",
+              "本套模拟卷不等于学校试卷，也不是课本完整词汇表；错题复习后再回课本核对词形和读音。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "listening",
+        "title": "听力练习与答题方法",
+        "blocks": [
+          {
+            "title": "听前与听中",
+            "items": [
+              "听前读题：先明确要找社团、游戏、植物部位、地点，还是人物感受。",
+              "听中抓人、事、地、时间；特别留意 not、going to 及命令中的动词，避免听反要求。",
+              "同一段可能有两个活动或两个人物，先确认问题问谁，再匹配对应信息。"
+            ]
+          },
+          {
+            "title": "听后与跟读",
+            "items": [
+              "录音用正常语速，每段朗读两遍，中间留 2 秒；可按需要重复播放。",
+              "先独立选答案，再交卷核对解析与录音稿；用自己的话复述关键信息。",
+              "跟读发音时回到本版课本语音栏核对。此套原创听力重点训练信息提取，并不替代完整课文录音。"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "references": [
+    {
+      "label": "五·四学制五年级上册公开教材目录与核心结构（预览第 4-5 页）",
+      "url": "https://www.scribd.com/document/1056608444/沪教版-五年级上册英语教材"
+    },
+    {
+      "label": "上海教育出版社官方教材目录",
+      "url": "https://www.seph.com.cn/textbook"
+    },
+    {
+      "label": "出版社五年级上册新版封面（2024 审核；上传日期不等于出版版次）",
+      "url": "https://3wm.seph.com.cn/Uploads/2026-09-01/7642fcf65fd642e68219d41ad20ba21e.jpg"
+    }
+  ],
+  "reading_passages": [
+    {
+      "id": "reading-a",
+      "title": "A school club afternoon",
+      "text": "On Friday afternoon, Class Five has a club fair. Lily is going to join the gardening club because she likes growing plants. Leo is going to join the photography club. He wants to take photos of the school garden. Nora likes pottery. She is going to make a small bowl.\nBefore the clubs open, a teacher shows the children the hopscotch area. She says, 'Wait behind the white line. Watch the child in front of you. Then take your turn.' The club activities start at one thirty and finish at three o'clock.\nWords: club fair 社团展示活动；area 区域；take your turn 轮到你时再进行。"
+    },
+    {
+      "id": "reading-b",
+      "title": "A visit to the safari park",
+      "text": "Ben and his family visit a safari park on Saturday. They watch animals from a bus. A giraffe looks tall, and a baby giraffe looks small beside it. Ben feels excited. His little sister May feels a little afraid when she sees a tiger. The guide says, 'The bus is a safe place to watch animals. Stay on the bus. Do not feed the animals.'\nAfter the ride, the family visits a garden. The water lily leaves look like round plates. Some morning glories climb up a fence. The family has a picnic in the picnic area. Before they leave, they put their rubbish in a bin.\nWords: guide 导游；safe 安全的；rubbish 垃圾；bin 垃圾箱。"
+    }
+  ],
+  "questions": [
+    {
+      "id": "l01",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Tom 打算参加的社团。",
+      "english": "Listening 1",
+      "chinese": "听录音，选择 Tom 打算参加的社团。",
+      "options": [
+        {
+          "id": "a",
+          "text": "The gardening club."
+        },
+        {
+          "id": "b",
+          "text": "The art club."
+        },
+        {
+          "id": "c",
+          "text": "The pottery club."
+        },
+        {
+          "id": "d",
+          "text": "The photography club."
+        }
+      ],
+      "answer": "c",
+      "listening_text": "Tom likes making things with his hands. He is going to join the pottery club on Tuesday. His sister is going to join the photography club on Thursday.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-01.wav",
+      "explanation": "Tom打算周二参加陶艺社团；周四参加摄影社团的是他的姐姐或妹妹。",
+      "translation": "Tom喜欢动手制作东西。他打算周二参加陶艺社团。他的姐姐或妹妹打算周四参加摄影社团。"
+    },
+    {
+      "id": "l02",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Ella 下周五打算做的事情。",
+      "english": "Listening 2",
+      "chinese": "听录音，选择 Ella 下周五打算做的事情。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Grow flowers."
+        },
+        {
+          "id": "b",
+          "text": "Tell a story."
+        },
+        {
+          "id": "c",
+          "text": "Take photos."
+        },
+        {
+          "id": "d",
+          "text": "Make a bowl."
+        }
+      ],
+      "answer": "a",
+      "listening_text": "Ella is going to the gardening club next Friday. She is going to grow flowers with her friends. The storytelling club meets on Monday, but she is not going there.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-02.wav",
+      "explanation": "Ella打算下周五去园艺社团和朋友种花，不是去周一活动的讲故事社团。",
+      "translation": "Ella打算下周五去园艺社团，和朋友们一起种花。讲故事社团在周一活动，但她不打算参加。"
+    },
+    {
+      "id": "l03",
+      "type": "listening_choice",
+      "prompt": "听录音，选择孩子们接下来要玩的游戏。",
+      "english": "Listening 3",
+      "chinese": "听录音，选择孩子们接下来要玩的游戏。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Kite-flying."
+        },
+        {
+          "id": "b",
+          "text": "A dragon dance."
+        },
+        {
+          "id": "c",
+          "text": "Hopscotch."
+        },
+        {
+          "id": "d",
+          "text": "Tug of war."
+        }
+      ],
+      "answer": "d",
+      "listening_text": "The children have a long rope in the playground. The teacher says, Stand on two sides. Wait for my signal. Do not pull yet. They are ready to play tug of war.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-03.wav",
+      "explanation": "长绳、站在两边、等待信号后拉绳都是拔河的情境；录音也明确说tug of war。",
+      "translation": "孩子们在操场上拿着一根长绳。老师说：站在两边，等我的信号，先不要拉。他们准备玩拔河。"
+    },
+    {
+      "id": "l04",
+      "type": "listening_choice",
+      "prompt": "听录音，选择爷爷正在教孩子玩的东西。",
+      "english": "Listening 4",
+      "chinese": "听录音，选择爷爷正在教孩子玩的东西。",
+      "options": [
+        {
+          "id": "a",
+          "text": "A kite."
+        },
+        {
+          "id": "b",
+          "text": "A Chinese yo-yo."
+        },
+        {
+          "id": "c",
+          "text": "A ball."
+        },
+        {
+          "id": "d",
+          "text": "A long rope."
+        }
+      ],
+      "answer": "b",
+      "listening_text": "Grandpa is teaching Ben to play with a Chinese yo-yo. Hold one stick in each hand, he says. Lift the string slowly. Ben follows the instructions and feels happy.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-04.wav",
+      "explanation": "录音开头明确说爷爷教Ben玩Chinese yo-yo，也就是空竹。",
+      "translation": "爷爷正在教Ben玩空竹。他说：每只手各拿一根棍，慢慢抬起绳子。Ben按照指令做，感到很开心。"
+    },
+    {
+      "id": "l05",
+      "type": "listening_choice",
+      "prompt": "听录音，选择老师要求孩子们做的事情。",
+      "english": "Listening 5",
+      "chinese": "听录音，选择老师要求孩子们做的事情。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Fly kites on the sports field."
+        },
+        {
+          "id": "b",
+          "text": "Fly kites near the road."
+        },
+        {
+          "id": "c",
+          "text": "Run across the road."
+        },
+        {
+          "id": "d",
+          "text": "Stand under a tall tree."
+        }
+      ],
+      "answer": "a",
+      "listening_text": "It is windy today. The children want to fly kites. Their teacher says, Use the open sports field. Do not fly kites near the road. Keep away from the tall trees.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-05.wav",
+      "explanation": "老师要求使用开阔的运动场，且明确说不要在路边放风筝、要远离高树。",
+      "translation": "今天有风，孩子们想放风筝。老师说：使用开阔的运动场，不要在路边放风筝，远离高树。"
+    },
+    {
+      "id": "l06",
+      "type": "listening_choice",
+      "prompt": "听录音，选择睡莲的叶片看起来像什么。",
+      "english": "Listening 6",
+      "chinese": "听录音，选择睡莲的叶片看起来像什么。",
+      "options": [
+        {
+          "id": "a",
+          "text": "A little star."
+        },
+        {
+          "id": "b",
+          "text": "A long rope."
+        },
+        {
+          "id": "c",
+          "text": "A small house."
+        },
+        {
+          "id": "d",
+          "text": "A round plate."
+        }
+      ],
+      "answer": "d",
+      "listening_text": "Look at the water lily in the pond. Its green leaf floats on the water. The leaf looks like a round plate. A pink flower is above the leaf.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-06.wav",
+      "explanation": "录音中The leaf looks like a round plate说明叶片像一个圆盘子。",
+      "translation": "看池塘里的睡莲。它的绿叶漂在水面上，叶片看起来像一个圆盘子。叶片上方有一朵粉红色的花。"
+    },
+    {
+      "id": "l07",
+      "type": "listening_choice",
+      "prompt": "听录音，选择学生们找到松果的地方。",
+      "english": "Listening 7",
+      "chinese": "听录音，选择学生们找到松果的地方。",
+      "options": [
+        {
+          "id": "a",
+          "text": "In a flower pot."
+        },
+        {
+          "id": "b",
+          "text": "Under a pine tree."
+        },
+        {
+          "id": "c",
+          "text": "In the pond."
+        },
+        {
+          "id": "d",
+          "text": "Near the school gate."
+        }
+      ],
+      "answer": "b",
+      "listening_text": "The students visit a garden. They see water lilies in the pond and morning glories near a fence. Then they find some pine cones under a pine tree.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-07.wav",
+      "explanation": "录音最后说under a pine tree；池塘里是睡莲，篱笆旁是牵牛花。",
+      "translation": "学生们参观一个花园，看见池塘里的睡莲和篱笆旁的牵牛花。随后，他们在一棵松树下找到一些松果。"
+    },
+    {
+      "id": "l08",
+      "type": "listening_choice",
+      "prompt": "听录音，选择女孩为什么觉得长颈鹿看起来很高。",
+      "english": "Listening 8",
+      "chinese": "听录音，选择女孩为什么觉得长颈鹿看起来很高。",
+      "options": [
+        {
+          "id": "a",
+          "text": "It has a large mouth."
+        },
+        {
+          "id": "b",
+          "text": "It has a short tail."
+        },
+        {
+          "id": "c",
+          "text": "It has a long neck."
+        },
+        {
+          "id": "d",
+          "text": "It has small ears."
+        }
+      ],
+      "answer": "c",
+      "listening_text": "Maya watches a giraffe from the bus. The giraffe has a long neck, so it looks very tall. It is eating leaves from a tree. Maya does not leave the bus.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-08.wav",
+      "explanation": "录音说明长颈鹿有长脖子，所以看起来很高；其余外形特征并非录音原因。",
+      "translation": "Maya从巴士上观察长颈鹿。它脖子很长，所以看起来很高。它正在吃树上的叶子。Maya没有离开巴士。"
+    },
+    {
+      "id": "l09",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Mia 看完关于鲸的影片后的感受。",
+      "english": "Listening 9",
+      "chinese": "听录音，选择 Mia 看完关于鲸的影片后的感受。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Worried."
+        },
+        {
+          "id": "b",
+          "text": "Hungry."
+        },
+        {
+          "id": "c",
+          "text": "Cold."
+        },
+        {
+          "id": "d",
+          "text": "Sleepy."
+        }
+      ],
+      "answer": "a",
+      "listening_text": "Mia watches a film about whales in class. Some whales swim in dirty sea water. Mia feels worried. She is going to make a poster to ask people to protect the sea.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-09.wav",
+      "explanation": "Mia看到鲸在脏海水里游泳，感到worried，担心；随后打算制作保护海洋的海报。",
+      "translation": "Mia在课堂上观看关于鲸的影片。有些鲸在脏海水里游泳。她感到担心，打算做一张海报，号召大家保护海洋。"
+    },
+    {
+      "id": "l10",
+      "type": "listening_choice",
+      "prompt": "听录音，选择一家人野餐时吃的香蕉味道如何。",
+      "english": "Listening 10",
+      "chinese": "听录音，选择一家人野餐时吃的香蕉味道如何。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Sour."
+        },
+        {
+          "id": "b",
+          "text": "Sweet."
+        },
+        {
+          "id": "c",
+          "text": "Salty."
+        },
+        {
+          "id": "d",
+          "text": "Bitter."
+        }
+      ],
+      "answer": "b",
+      "listening_text": "After visiting the safari park, the family has a picnic. The apples taste sour, but the bananas taste sweet. They keep the food for their family and do not feed the animals.",
+      "audio_file": "shanghai-grade5-term1-midterm-normal/listen-10.wav",
+      "explanation": "录音把苹果和香蕉作对比：苹果酸，香蕉甜；问题问的是香蕉。",
+      "translation": "参观野生动物园后，一家人野餐。苹果吃起来酸，但香蕉吃起来甜。他们把食物留给自己，不喂动物。"
+    },
+    {
+      "id": "q11",
+      "type": "fill_blank",
+      "prompt": "I ________ (am / is / are) going to join the art club.",
+      "english": "Question 11",
+      "chinese": "语法填空",
+      "answer": "am",
+      "accepted_answers": [
+        "am"
+      ],
+      "explanation": "I与am搭配，构成am going to + 动词原形。"
+    },
+    {
+      "id": "q12",
+      "type": "fill_blank",
+      "prompt": "Nina is going to ________ (tell) a story in the club.",
+      "english": "Question 12",
+      "chinese": "语法填空",
+      "answer": "tell",
+      "accepted_answers": [
+        "tell"
+      ],
+      "explanation": "be going to后使用动词原形tell，不能写tells或telling。"
+    },
+    {
+      "id": "q13",
+      "type": "fill_blank",
+      "prompt": "They are ________ (go) to make bowls in the pottery club.",
+      "english": "Question 13",
+      "chinese": "语法填空",
+      "answer": "going",
+      "accepted_answers": [
+        "going"
+      ],
+      "explanation": "本句表达打算，结构为are going to + 动词原形。"
+    },
+    {
+      "id": "q14",
+      "type": "fill_blank",
+      "prompt": "________ (Close / Closes) the gate, please.",
+      "english": "Question 14",
+      "chinese": "语法填空",
+      "answer": "Close",
+      "accepted_answers": [
+        "Close"
+      ],
+      "explanation": "祈使句通常以动词原形开头，这里选Close。"
+    },
+    {
+      "id": "q15",
+      "type": "fill_blank",
+      "prompt": "Please ________ (not run) near the road.",
+      "english": "Question 15",
+      "chinese": "语法填空",
+      "answer": "do not run",
+      "accepted_answers": [
+        "do not run",
+        "don't run"
+      ],
+      "explanation": "否定祈使句用do not / don't + 动词原形；这里空缺包括否定词与run。"
+    },
+    {
+      "id": "q16",
+      "type": "fill_blank",
+      "prompt": "Let's ________ (play) hopscotch.",
+      "english": "Question 16",
+      "chinese": "语法填空",
+      "answer": "play",
+      "accepted_answers": [
+        "play"
+      ],
+      "explanation": "配套基础复习：Let's后使用动词原形play。"
+    },
+    {
+      "id": "q17",
+      "type": "fill_blank",
+      "prompt": "This pine cone ________ (look) like a little tree.",
+      "english": "Question 17",
+      "chinese": "语法填空",
+      "answer": "looks",
+      "accepted_answers": [
+        "looks"
+      ],
+      "explanation": "This pine cone是第三人称单数，通常用looks like表示看起来像。"
+    },
+    {
+      "id": "q18",
+      "type": "fill_blank",
+      "prompt": "These water lily leaves look ________ (like / likes) round plates.",
+      "english": "Question 18",
+      "chinese": "语法填空",
+      "answer": "like",
+      "accepted_answers": [
+        "like"
+      ],
+      "explanation": "look like中的like不随主语变化；leaves为复数，前面的动词用look。"
+    },
+    {
+      "id": "q19",
+      "type": "fill_blank",
+      "prompt": "The plant has three green ________ (leaf).",
+      "english": "Question 19",
+      "chinese": "语法填空",
+      "answer": "leaves",
+      "accepted_answers": [
+        "leaves"
+      ],
+      "explanation": "three后使用复数，leaf的复数为leaves。"
+    },
+    {
+      "id": "q20",
+      "type": "fill_blank",
+      "prompt": "The children feel ________ (happy / happily) when they see the pandas.",
+      "english": "Question 20",
+      "chinese": "语法填空",
+      "answer": "happy",
+      "accepted_answers": [
+        "happy"
+      ],
+      "explanation": "feel后用形容词说明感受，这里用happy，不用副词happily。"
+    },
+    {
+      "id": "q21",
+      "type": "fill_blank",
+      "prompt": "The giraffe ________ (look / looks) tall.",
+      "english": "Question 21",
+      "chinese": "语法填空",
+      "answer": "looks",
+      "accepted_answers": [
+        "looks"
+      ],
+      "explanation": "The giraffe是第三人称单数，动词用looks；tall是描述外观的形容词。"
+    },
+    {
+      "id": "q22",
+      "type": "fill_blank",
+      "prompt": "The apples taste ________ (sweet / sweetly).",
+      "english": "Question 22",
+      "chinese": "语法填空",
+      "answer": "sweet",
+      "accepted_answers": [
+        "sweet"
+      ],
+      "explanation": "taste后用形容词描述味道，这里用sweet。"
+    },
+    {
+      "id": "q23",
+      "type": "rewrite",
+      "prompt": "I am going to join the pottery club.（改为否定句）",
+      "english": "Question 23",
+      "chinese": "句型转换",
+      "answer": "I am not going to join the pottery club.",
+      "accepted_answers": [
+        "I am not going to join the pottery club.",
+        "I'm not going to join the pottery club."
+      ],
+      "explanation": "在be动词am后加not；I am可缩写为I'm，其余有效信息保留。"
+    },
+    {
+      "id": "q24",
+      "type": "rewrite",
+      "prompt": "She is going to take photos.（改为一般疑问句）",
+      "english": "Question 24",
+      "chinese": "句型转换",
+      "answer": "Is she going to take photos?",
+      "accepted_answers": [
+        "Is she going to take photos?"
+      ],
+      "explanation": "把is移到主语she前，going to take photos保持不变。"
+    },
+    {
+      "id": "q25",
+      "type": "rewrite",
+      "prompt": "Run across the road.（改为否定祈使句）",
+      "english": "Question 25",
+      "chinese": "句型转换",
+      "answer": "Do not run across the road.",
+      "accepted_answers": [
+        "Do not run across the road.",
+        "Don't run across the road."
+      ],
+      "explanation": "否定祈使句在动词原形前加Do not或Don't。"
+    },
+    {
+      "id": "q26",
+      "type": "rewrite",
+      "prompt": "Stand behind the line.（用 Please 开头，改为礼貌的祈使句）",
+      "english": "Question 26",
+      "chinese": "句型转换",
+      "answer": "Please stand behind the line.",
+      "accepted_answers": [
+        "Please stand behind the line."
+      ],
+      "explanation": "题目要求以Please开头，后接动词原形stand和原来的地点信息。"
+    },
+    {
+      "id": "q27",
+      "type": "rewrite",
+      "prompt": "This leaf looks like a fan.（把 This leaf 和 a fan 都改为复数，并作相应变化）",
+      "english": "Question 27",
+      "chinese": "句型转换",
+      "answer": "These leaves look like fans.",
+      "accepted_answers": [
+        "These leaves look like fans."
+      ],
+      "explanation": "This leaf变These leaves，a fan变fans；复数主语后looks改为look。"
+    },
+    {
+      "id": "q28",
+      "type": "rewrite",
+      "prompt": "The root looks like a thin string.（改为否定句）",
+      "english": "Question 28",
+      "chinese": "句型转换",
+      "answer": "The root does not look like a thin string.",
+      "accepted_answers": [
+        "The root does not look like a thin string.",
+        "The root doesn't look like a thin string."
+      ],
+      "explanation": "第三人称单数的一般现在时否定句用does not / doesn't，后面的looks还原为look。"
+    },
+    {
+      "id": "q29",
+      "type": "rewrite",
+      "prompt": "These oranges taste sweet.（改为一般疑问句）",
+      "english": "Question 29",
+      "chinese": "句型转换",
+      "answer": "Do these oranges taste sweet?",
+      "accepted_answers": [
+        "Do these oranges taste sweet?"
+      ],
+      "explanation": "配套基础复习：复数主语的一般现在时问句用Do，taste保持原形。"
+    },
+    {
+      "id": "q30",
+      "type": "rewrite",
+      "prompt": "I feel tired.（改为否定句）",
+      "english": "Question 30",
+      "chinese": "句型转换",
+      "answer": "I do not feel tired.",
+      "accepted_answers": [
+        "I do not feel tired.",
+        "I don't feel tired."
+      ],
+      "explanation": "主语 I 的一般现在时否定句用 do not / don't + feel；feel 保持原形。"
+    },
+    {
+      "id": "q31",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA school club afternoon\nOn Friday afternoon, Class Five has a club fair. Lily is going to join the gardening club because she likes growing plants. Leo is going to join the photography club. He wants to take photos of the school garden. Nora likes pottery. She is going to make a small bowl.\nBefore the clubs open, a teacher shows the children the hopscotch area. She says, 'Wait behind the white line. Watch the child in front of you. Then take your turn.' The club activities start at one thirty and finish at three o'clock.\nWords: club fair 社团展示活动；area 区域；take your turn 轮到你时再进行。\n\nWho is going to join the photography club?",
+      "english": "Question 31",
+      "chinese": "Who is going to join the photography club?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Lily."
+        },
+        {
+          "id": "b",
+          "text": "Nora."
+        },
+        {
+          "id": "c",
+          "text": "The teacher."
+        },
+        {
+          "id": "d",
+          "text": "Leo."
+        }
+      ],
+      "answer": "d",
+      "explanation": "短文明确说Leo is going to join the photography club。",
+      "passage_id": "reading-a",
+      "question_text": "Who is going to join the photography club?"
+    },
+    {
+      "id": "q32",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA school club afternoon\nOn Friday afternoon, Class Five has a club fair. Lily is going to join the gardening club because she likes growing plants. Leo is going to join the photography club. He wants to take photos of the school garden. Nora likes pottery. She is going to make a small bowl.\nBefore the clubs open, a teacher shows the children the hopscotch area. She says, 'Wait behind the white line. Watch the child in front of you. Then take your turn.' The club activities start at one thirty and finish at three o'clock.\nWords: club fair 社团展示活动；area 区域；take your turn 轮到你时再进行。\n\nWhat does Lily like doing?",
+      "english": "Question 32",
+      "chinese": "What does Lily like doing?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Making bowls."
+        },
+        {
+          "id": "b",
+          "text": "Taking photos."
+        },
+        {
+          "id": "c",
+          "text": "Growing plants."
+        },
+        {
+          "id": "d",
+          "text": "Doing the dragon dance."
+        }
+      ],
+      "answer": "c",
+      "explanation": "Lily选择园艺社团，是因为she likes growing plants。",
+      "passage_id": "reading-a",
+      "question_text": "What does Lily like doing?"
+    },
+    {
+      "id": "q33",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA school club afternoon\nOn Friday afternoon, Class Five has a club fair. Lily is going to join the gardening club because she likes growing plants. Leo is going to join the photography club. He wants to take photos of the school garden. Nora likes pottery. She is going to make a small bowl.\nBefore the clubs open, a teacher shows the children the hopscotch area. She says, 'Wait behind the white line. Watch the child in front of you. Then take your turn.' The club activities start at one thirty and finish at three o'clock.\nWords: club fair 社团展示活动；area 区域；take your turn 轮到你时再进行。\n\nWhat is Nora going to make?",
+      "english": "Question 33",
+      "chinese": "What is Nora going to make?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A small bowl."
+        },
+        {
+          "id": "b",
+          "text": "A kite."
+        },
+        {
+          "id": "c",
+          "text": "A long rope."
+        },
+        {
+          "id": "d",
+          "text": "A plant card."
+        }
+      ],
+      "answer": "a",
+      "explanation": "Nora喜欢陶艺，打算做a small bowl。",
+      "passage_id": "reading-a",
+      "question_text": "What is Nora going to make?"
+    },
+    {
+      "id": "q34",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA school club afternoon\nOn Friday afternoon, Class Five has a club fair. Lily is going to join the gardening club because she likes growing plants. Leo is going to join the photography club. He wants to take photos of the school garden. Nora likes pottery. She is going to make a small bowl.\nBefore the clubs open, a teacher shows the children the hopscotch area. She says, 'Wait behind the white line. Watch the child in front of you. Then take your turn.' The club activities start at one thirty and finish at three o'clock.\nWords: club fair 社团展示活动；area 区域；take your turn 轮到你时再进行。\n\nWhere should the children wait before playing hopscotch?",
+      "english": "Question 34",
+      "chinese": "Where should the children wait before playing hopscotch?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Inside the gardening club."
+        },
+        {
+          "id": "b",
+          "text": "Behind the white line."
+        },
+        {
+          "id": "c",
+          "text": "Under a tree."
+        },
+        {
+          "id": "d",
+          "text": "Near the school gate."
+        }
+      ],
+      "answer": "b",
+      "explanation": "老师的第一条指令是Wait behind the white line。",
+      "passage_id": "reading-a",
+      "question_text": "Where should the children wait before playing hopscotch?"
+    },
+    {
+      "id": "q35",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA school club afternoon\nOn Friday afternoon, Class Five has a club fair. Lily is going to join the gardening club because she likes growing plants. Leo is going to join the photography club. He wants to take photos of the school garden. Nora likes pottery. She is going to make a small bowl.\nBefore the clubs open, a teacher shows the children the hopscotch area. She says, 'Wait behind the white line. Watch the child in front of you. Then take your turn.' The club activities start at one thirty and finish at three o'clock.\nWords: club fair 社团展示活动；area 区域；take your turn 轮到你时再进行。\n\nWhen do the club activities start?",
+      "english": "Question 35",
+      "chinese": "When do the club activities start?",
+      "options": [
+        {
+          "id": "a",
+          "text": "At twelve o'clock."
+        },
+        {
+          "id": "b",
+          "text": "At one o'clock."
+        },
+        {
+          "id": "c",
+          "text": "At three o'clock."
+        },
+        {
+          "id": "d",
+          "text": "At one thirty."
+        }
+      ],
+      "answer": "d",
+      "explanation": "社团活动在one thirty开始，three o'clock是结束时间。",
+      "passage_id": "reading-a",
+      "question_text": "When do the club activities start?"
+    },
+    {
+      "id": "q36",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA visit to the safari park\nBen and his family visit a safari park on Saturday. They watch animals from a bus. A giraffe looks tall, and a baby giraffe looks small beside it. Ben feels excited. His little sister May feels a little afraid when she sees a tiger. The guide says, 'The bus is a safe place to watch animals. Stay on the bus. Do not feed the animals.'\nAfter the ride, the family visits a garden. The water lily leaves look like round plates. Some morning glories climb up a fence. The family has a picnic in the picnic area. Before they leave, they put their rubbish in a bin.\nWords: guide 导游；safe 安全的；rubbish 垃圾；bin 垃圾箱。\n\nWhere does the family watch the animals from?",
+      "english": "Question 36",
+      "chinese": "Where does the family watch the animals from?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A boat."
+        },
+        {
+          "id": "b",
+          "text": "A tall tree."
+        },
+        {
+          "id": "c",
+          "text": "A bus."
+        },
+        {
+          "id": "d",
+          "text": "A window at home."
+        }
+      ],
+      "answer": "c",
+      "explanation": "短文开头说明They watch animals from a bus。",
+      "passage_id": "reading-b",
+      "question_text": "Where does the family watch the animals from?"
+    },
+    {
+      "id": "q37",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA visit to the safari park\nBen and his family visit a safari park on Saturday. They watch animals from a bus. A giraffe looks tall, and a baby giraffe looks small beside it. Ben feels excited. His little sister May feels a little afraid when she sees a tiger. The guide says, 'The bus is a safe place to watch animals. Stay on the bus. Do not feed the animals.'\nAfter the ride, the family visits a garden. The water lily leaves look like round plates. Some morning glories climb up a fence. The family has a picnic in the picnic area. Before they leave, they put their rubbish in a bin.\nWords: guide 导游；safe 安全的；rubbish 垃圾；bin 垃圾箱。\n\nHow does May feel when she sees a tiger?",
+      "english": "Question 37",
+      "chinese": "How does May feel when she sees a tiger?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Sleepy."
+        },
+        {
+          "id": "b",
+          "text": "A little afraid."
+        },
+        {
+          "id": "c",
+          "text": "Hungry."
+        },
+        {
+          "id": "d",
+          "text": "Very angry."
+        }
+      ],
+      "answer": "b",
+      "explanation": "May看到老虎时feels a little afraid；excited说的是Ben。",
+      "passage_id": "reading-b",
+      "question_text": "How does May feel when she sees a tiger?"
+    },
+    {
+      "id": "q38",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA visit to the safari park\nBen and his family visit a safari park on Saturday. They watch animals from a bus. A giraffe looks tall, and a baby giraffe looks small beside it. Ben feels excited. His little sister May feels a little afraid when she sees a tiger. The guide says, 'The bus is a safe place to watch animals. Stay on the bus. Do not feed the animals.'\nAfter the ride, the family visits a garden. The water lily leaves look like round plates. Some morning glories climb up a fence. The family has a picnic in the picnic area. Before they leave, they put their rubbish in a bin.\nWords: guide 导游；safe 安全的；rubbish 垃圾；bin 垃圾箱。\n\nWhat do the water lily leaves look like?",
+      "english": "Question 38",
+      "chinese": "What do the water lily leaves look like?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Round plates."
+        },
+        {
+          "id": "b",
+          "text": "Long ropes."
+        },
+        {
+          "id": "c",
+          "text": "Little tigers."
+        },
+        {
+          "id": "d",
+          "text": "Small bowls."
+        }
+      ],
+      "answer": "a",
+      "explanation": "短文明确说The water lily leaves look like round plates。",
+      "passage_id": "reading-b",
+      "question_text": "What do the water lily leaves look like?"
+    },
+    {
+      "id": "q39",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA visit to the safari park\nBen and his family visit a safari park on Saturday. They watch animals from a bus. A giraffe looks tall, and a baby giraffe looks small beside it. Ben feels excited. His little sister May feels a little afraid when she sees a tiger. The guide says, 'The bus is a safe place to watch animals. Stay on the bus. Do not feed the animals.'\nAfter the ride, the family visits a garden. The water lily leaves look like round plates. Some morning glories climb up a fence. The family has a picnic in the picnic area. Before they leave, they put their rubbish in a bin.\nWords: guide 导游；safe 安全的；rubbish 垃圾；bin 垃圾箱。\n\nWhy does the guide ask the family to stay on the bus?",
+      "english": "Question 39",
+      "chinese": "Why does the guide ask the family to stay on the bus?",
+      "options": [
+        {
+          "id": "a",
+          "text": "They need to make bowls there."
+        },
+        {
+          "id": "b",
+          "text": "The bus is a place to grow flowers."
+        },
+        {
+          "id": "c",
+          "text": "It is a safe place to watch animals."
+        },
+        {
+          "id": "d",
+          "text": "They can feed the animals there."
+        }
+      ],
+      "answer": "c",
+      "explanation": "导游说明巴士是安全观察动物的地方；同时禁止喂食，因此选安全观察动物。",
+      "passage_id": "reading-b",
+      "question_text": "Why does the guide ask the family to stay on the bus?"
+    },
+    {
+      "id": "q40",
+      "type": "reading_choice",
+      "prompt": "阅读原创短文，选择正确答案。\n\nA visit to the safari park\nBen and his family visit a safari park on Saturday. They watch animals from a bus. A giraffe looks tall, and a baby giraffe looks small beside it. Ben feels excited. His little sister May feels a little afraid when she sees a tiger. The guide says, 'The bus is a safe place to watch animals. Stay on the bus. Do not feed the animals.'\nAfter the ride, the family visits a garden. The water lily leaves look like round plates. Some morning glories climb up a fence. The family has a picnic in the picnic area. Before they leave, they put their rubbish in a bin.\nWords: guide 导游；safe 安全的；rubbish 垃圾；bin 垃圾箱。\n\nWhat does the family do before leaving?",
+      "english": "Question 40",
+      "chinese": "What does the family do before leaving?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Feed fruit to the tiger."
+        },
+        {
+          "id": "b",
+          "text": "Pick all the flowers."
+        },
+        {
+          "id": "c",
+          "text": "Leave rubbish in the garden."
+        },
+        {
+          "id": "d",
+          "text": "Put their rubbish in a bin."
+        }
+      ],
+      "answer": "d",
+      "explanation": "短文最后说明他们离开前把垃圾放进垃圾箱。",
+      "passage_id": "reading-b",
+      "question_text": "What does the family do before leaving?"
+    }
+  ]
+}

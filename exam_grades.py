@@ -45,6 +45,8 @@ def infer_grade(name):
     """Only classify an old title when it identifies one unambiguous grade."""
     found = set()
     title = str(name or '')
+    if re.search(r'初中预备(?:班|年级)|(?:^|[^\u4e00-\u9fff]|上海|和|与|及)(?:预备班|预备年级|预初)', title):
+        found.add(6)
     for match in re.finditer(r'(?<![\d一二三四五六七八九十])([一二三四五六七八九]|十[一二]?|\d+)\s*年级', title):
         token = match.group(1)
         grade = _CHINESE_NUMBERS.get(token) or (int(token) if token.isdigit() else 0)
@@ -56,7 +58,7 @@ def infer_grade(name):
     for stage, token in re.findall(r'(初|高)([一二三123])', title):
         grade = _CHINESE_NUMBERS.get(token) or int(token)
         found.add(grade + (6 if stage == '初' else 9))
-    for token in re.findall(r'(?<![\d一二三四五六七八九十])([一二三四五六1-6])[上下](?:册|学期|期中|期末|英语|复习|考试|$)', title):
+    for token in re.findall(r'(?<![\d一二三四五六七八九十初高])([一二三四五六1-6])[上下](?:册|学期|期中|期末|英语|复习|考试|$)', title):
         found.add(_CHINESE_NUMBERS.get(token) or int(token))
     for token in re.findall(r'\bgrade\s*(1[0-2]|[1-9])\b', title, re.IGNORECASE):
         found.add(int(token))

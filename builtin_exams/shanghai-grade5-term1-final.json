@@ -1,0 +1,1139 @@
+{
+  "id": "builtin-shanghai-grade5-term1-final",
+  "grade": 5,
+  "term": 1,
+  "name": "上海五年级上册英语 · U5-U10 期末模拟卷（含听力）",
+  "edition": "上海教育出版社《英语》五年级上册（五·四学制），2026新版；按与 U2 Traditional games、U3 Amazing plants 对应的公开教材目录核对。",
+  "description": "40 道固定题：10 道听力选择、12 道语法填空、8 道句型转换和 10 道阅读选择，建议 45 分钟完成。",
+  "source_note": "U5-U10 单元主题、重点词和核心结构据公开教材目录核对；例句、阅读短文、试题和听力稿均为原创复习练习。完整词表和学校期末范围以课本及教师要求为准。",
+  "time_minutes": 45,
+  "source_file": "shanghai-grade5-term1-final-review.pdf",
+  "exam_file": "shanghai-grade5-term1-final.pdf",
+  "knowledge": {
+    "title": "上海五年级上册英语 U5-U10 期末知识点梳理",
+    "intro": "对应上海教育出版社五·四学制五年级上册新版 U5-U10。先按单元梳理主题词和核心结构，再练习听取关键信息、完成句型转换和阅读。下列词汇是重点复习项，例句和表达任务为自编，不代替课本完整词表。",
+    "sections": [
+      {
+        "id": "u5",
+        "title": "U5 看医生 · Seeing a doctor",
+        "blocks": [
+          {
+            "title": "重点词汇与搭配",
+            "items": [
+              "doctor 医生；nurse 护士；medicine 药。",
+              "fever 发烧；runny nose 流鼻涕；cough 咳嗽；flu 流感。",
+              "see a doctor 看医生；have a cough 咳嗽；have a runny nose 流鼻涕。"
+            ]
+          },
+          {
+            "title": "核心结构：Don't forget to do",
+            "items": [
+              "Don't forget to + 动词原形，表示“别忘了做某事”。",
+              "自编例句：Don't forget to tell an adult when you feel ill. 身体不舒服时别忘了告诉大人。",
+              "forget 后接 to，再接动词原形：Don't forget to wash your hands.",
+              "一般现在时配套复习：The nurse helps children. / Does she help children?"
+            ]
+          },
+          {
+            "title": "易错提醒",
+            "items": [
+              "不要漏掉 to：Don't forget to take your bag.",
+              "Don't 后的 forget 用原形，不写 forgets；to 后同样使用原形。",
+              "描述身体不舒服时要说清人物和情况；不要仅凭一种症状判断具体疾病。"
+            ]
+          },
+          {
+            "title": "表达任务",
+            "items": [
+              "用两三句说明谁不舒服、哪里不舒服，以及需要告诉谁。",
+              "自编例句：Ben has a cough. He tells his teacher. His father takes him to see a doctor.",
+              "听健康情境对话时区分“症状”和“接下来要做的事”，按题目要求选答案。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u6",
+        "title": "U6 迎接挑战 · Rise to the challenge",
+        "blocks": [
+          {
+            "title": "重点词汇与搭配",
+            "items": [
+              "challenge 挑战；give up 放弃；succeed 成功。",
+              "practice 练习；better 更好；will 意志。",
+              "谈论挑战可按“遇到什么困难 → 怎样练习 → 有什么变化”组织内容。"
+            ]
+          },
+          {
+            "title": "核心结构：was / were",
+            "items": [
+              "was / were 是 be 动词的过去式，描述过去的状态或所在位置。",
+              "I / he / she / it 常与 was 搭配；we / you / they 常与 were 搭配。",
+              "自编例句：The task was difficult yesterday. / We were nervous before the game.",
+              "否定形式：was not = wasn't；were not = weren't。",
+              "一般疑问句把 was / were 放到主语前：Were you in the library yesterday?"
+            ]
+          },
+          {
+            "title": "易错提醒",
+            "items": [
+              "yesterday / last Sunday 提示过去时间，要结合句意检查 was / were。",
+              "They were tired. 的否定句是 They weren't tired.，不能写 They didn't were tired.",
+              "practice 作名词可指“练习”：With practice, I can do better. 不把 will 意志和 will + 动词的用法混为一谈。"
+            ]
+          },
+          {
+            "title": "表达任务",
+            "items": [
+              "记录一次克服困难的经历：I was ... at first. Now I can ... .",
+              "自编例句：I was afraid of the new game. My friends helped me. With practice, I can do better.",
+              "读留言板时，分别圈出过去的状态、采取的办法和现在的变化。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u7",
+        "title": "U7 伟大的科学家 · Great scientists",
+        "blocks": [
+          {
+            "title": "重点词汇与搭配",
+            "items": [
+              "scientist 科学家；explore 探索；discover 发现。",
+              "famous 著名的；hard-working 勤奋的；creative 有创造力的。",
+              "be known as 被称为、以……身份而闻名；介绍人物时注意事实依据。"
+            ]
+          },
+          {
+            "title": "核心结构：This is ... 与 a / the",
+            "items": [
+              "This is ... 可用于介绍一个人物或一件物品：This is a book about a scientist.",
+              "首次提到一个可数名词单数，常用 a / an；an 用在元音音素前：an interesting book。",
+              "再次指向已提过、双方明确的同一对象，常用 the：I have a book. The book is about a scientist.",
+              "自编例句：This is a famous scientist. The scientist is hard-working and creative."
+            ]
+          },
+          {
+            "title": "易错提醒",
+            "items": [
+              "a / an 看后面词的读音：a useful invention，an interesting idea。",
+              "介绍单个普通可数名词时通常需要限定词，不写 This is scientist.",
+              "discover 是动词，描述发现；scientist 是人物身份，不要混用词性。"
+            ]
+          },
+          {
+            "title": "表达任务",
+            "items": [
+              "介绍人物时说清“是谁 → 从事什么 → 有哪些品质”，事实内容要能查证。",
+              "自编句型练习：This is a scientist in the story. The scientist likes exploring new ideas.",
+              "阅读人物短文时把姓名、身份、事迹与品质分开标记，避免把另一人的信息放到同一人身上。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u8",
+        "title": "U8 有用的发明 · Useful inventions",
+        "blocks": [
+          {
+            "title": "重点词汇与搭配",
+            "items": [
+              "invention 发明；problem 问题；useful 有用的。",
+              "wheel 轮子；printing 印刷术；television 电视；light 灯、光。",
+              "robot 机器人；描述发明时关注“能做什么、解决什么问题”。"
+            ]
+          },
+          {
+            "title": "核心结构：It's important to do",
+            "items": [
+              "It is important to + 动词原形，表示“做某事很重要”。",
+              "It's 是 It is 的缩写：It's important to read the instructions.",
+              "可用同一结构说明使用发明时的注意事项：It is important to use the robot carefully.",
+              "自编改写：Reading the instructions is important. = It is important to read the instructions."
+            ]
+          },
+          {
+            "title": "易错提醒",
+            "items": [
+              "to 后用动词原形，不写 It is important to reading ...。",
+              "important 描述事情重要，useful 描述物品有用；根据句意选词。",
+              "不把“发现已有事物”和“创造新的发明”混为一谈；讲真实发明史时核对事实。"
+            ]
+          },
+          {
+            "title": "表达任务",
+            "items": [
+              "给一项自创发明做说明：名称 → 用途 → 使用时要注意什么。",
+              "自编例句：This is a small robot. It puts old paper into a box. It is important to read the instructions first.",
+              "听发明介绍时区分外形、用途和操作步骤，按题目所问选择。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u9",
+        "title": "U9 使用电脑 · Using computers",
+        "blocks": [
+          {
+            "title": "重点词汇与搭配",
+            "items": [
+              "computer 电脑；desktop 台式电脑；laptop 笔记本电脑。",
+              "click 点击；delete 删除；store 存储；password 密码。",
+              "search for information 查找信息；谈论电脑时区分设备、操作和用途。"
+            ]
+          },
+          {
+            "title": "核心结构：as ... as ...",
+            "items": [
+              "as + 形容词原级 + as，表示在某方面“一样……”。",
+              "自编例句：My laptop is as light as yours. 我的笔记本电脑和你的一样轻。",
+              "否定结构：not as + 形容词原级 + as：This computer is not as fast as that one.",
+              "两个 as 之间不用比较级：as fast as，不写 as faster as。"
+            ]
+          },
+          {
+            "title": "易错提醒",
+            "items": [
+              "先明确比较哪两样东西，再明确比较的是轻重、快慢还是其他特点。",
+              "search for information 中 for 不要漏；information 在本套练习中作不可数名词。",
+              "操作电脑前看清对象，区别 click、delete 和 store；密码应妥善保管。"
+            ]
+          },
+          {
+            "title": "表达任务",
+            "items": [
+              "用两三句介绍自己如何使用电脑，并比较两台电脑的一个特点。",
+              "自编例句：I search for information on the computer. My laptop is as fast as my sister's.",
+              "读电脑使用说明时按顺序找动作词，不凭平时习惯替换短文给出的步骤。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u10",
+        "title": "U10 更绿色的生活 · A greener life",
+        "blocks": [
+          {
+            "title": "重点词汇与搭配",
+            "items": [
+              "reduce 减少；reuse 再次使用；recycle 回收利用。",
+              "throw away 扔掉；pick up 捡起；turn off 关掉。",
+              "pollution 污染；用具体行动说明怎样减少浪费和污染。"
+            ]
+          },
+          {
+            "title": "核心结构：It is a good way to do",
+            "items": [
+              "It is a good way to + 动词原形，用来评价一种办法。",
+              "自编问答：We can reuse old paper. Is it helpful? - Yes. It is a good way to reduce waste.",
+              "也可把具体做法放在句首：Reusing paper is a good way to reduce waste.",
+              "描述离开教室前的行动：Turn off the lights before you leave."
+            ]
+          },
+          {
+            "title": "易错提醒",
+            "items": [
+              "to 后用动词原形：a good way to reduce，不写 a good way to reduces。",
+              "reuse 强调再次使用，recycle 强调回收利用，reduce 强调减少，不要只看到环保主题就随意互换。",
+              "turn off 的对象可为灯或不用的设备；pick up 的对象可为地上的垃圾，结合具体语境判断。"
+            ]
+          },
+          {
+            "title": "表达任务",
+            "items": [
+              "制订三项能做到的绿色行动，并解释其中一项有什么用。",
+              "自编例句：We reuse bags. We turn off the lights. Reusing paper is a good way to reduce waste.",
+              "读环保计划时标出人物、时间、地点、行动与目的，再核对题干。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "review-methods",
+        "title": "综合复习与听力方法",
+        "blocks": [
+          {
+            "title": "听力：先看题，再听信息",
+            "items": [
+              "先判断题目问症状、地点、用途、比较结果还是环保行动。",
+              "第一次听抓人物和主要事情，第二次听核对时间、否定词和关键动作。",
+              "遇到 as ... as ... 比较，先确认比较对象，再确认形容词；不要只听见一个电脑名称就作答。",
+              "本卷每段正常语速朗读两遍，中间留有短暂停顿，可重复播放。"
+            ]
+          },
+          {
+            "title": "填空与句型转换",
+            "items": [
+              "填空按提示只写空缺部分；句型转换按要求写完整句子。",
+              "检查 was / were 与主语、过去时间是否对应；to 后是否为动词原形。",
+              "检查 a / an / the 是否符合首次或再次提及的语境，as ... as 中是否用了原级。",
+              "否定句和一般疑问句要保留原来的关键人物、时间和地点。"
+            ]
+          },
+          {
+            "title": "阅读与自查",
+            "items": [
+              "先读问题，再回短文定位依据；不能仅用常识替代文中信息。",
+              "阅读中的原创人物和活动只服务于信息提取练习，不是教材原文背诵范围。",
+              "完成后检查每道选择题是否已选，每道书面题是否符合题目指定结构。"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "references": [
+    {
+      "url": "https://www.scribd.com/document/1056608444/沪教版-五年级上册英语教材",
+      "note": "核对 U5-U10 主题、重点词与目录列出的核心结构；不复制教材故事。",
+      "label": "公开教材预览：上海教育出版社五·四学制五年级上册英语，目录与核心结构"
+    },
+    {
+      "url": "https://3wm.seph.com.cn/Uploads/2026-09-01/7642fcf65fd642e68219d41ad20ba21e.jpg",
+      "note": "核对出版社、学制、年级与册次；未据此声称具体月份的版权版次。",
+      "label": "上海教育出版社五·四学制五年级上册教材封面"
+    }
+  ],
+  "reading_passages": [
+    {
+      "id": "reading-a",
+      "title": "A science day",
+      "text": "It is Wednesday. Class Five has a science day. On Monday, the task was difficult for Ben. He wanted to give up. His friend Amy helped him practise. Now they are ready. Amy introduces a book about a scientist. The scientist in the book is hard-working and creative. Ben shows a small robot. It puts old paper into a box. Ms Lin says, 'It is important to read the instructions before using the robot.' After the show, the children use both sides of old paper to make cards. Ben is happy. With practice and help, he can do better.\nWords: introduces 介绍；instructions 使用说明；both sides 两面。"
+    },
+    {
+      "id": "reading-b",
+      "title": "A greener computer club",
+      "text": "Lily and Sam are in the computer club. Lily uses a blue laptop, and Sam uses a red one. The blue laptop is as fast as the red one, but it is lighter. Today they search for information about a greener life. They do not share their passwords with other students. They make a plan for Saturday. In the morning, they will pick up rubbish in the park with their parents. In the afternoon, they will use old bags again. Before leaving the club, they turn off the computers and the lights. Sam says, 'Reusing bags is a good way to reduce waste.'\nWords: lighter 更轻的；share 分享；rubbish 垃圾；waste 浪费、废弃物。"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q01",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Ben 身体不舒服的情况。",
+      "english": "Question 1",
+      "chinese": "听录音，选择 Ben 身体不舒服的情况。",
+      "options": [
+        {
+          "id": "a",
+          "text": "A fever and a headache."
+        },
+        {
+          "id": "b",
+          "text": "A sore leg."
+        },
+        {
+          "id": "c",
+          "text": "A cough and a runny nose."
+        },
+        {
+          "id": "d",
+          "text": "A toothache."
+        }
+      ],
+      "answer": "c",
+      "explanation": "录音明确说 Ben has a cough and a runny nose，即咳嗽和流鼻涕。",
+      "listening_text": "Ben does not feel well today. He has a cough and a runny nose. He tells his teacher. His father will take him to see a doctor.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-01.wav"
+    },
+    {
+      "id": "q02",
+      "type": "listening_choice",
+      "prompt": "听录音，选择妈妈提醒孩子别忘记做的事。",
+      "english": "Question 2",
+      "chinese": "听录音，选择妈妈提醒孩子别忘记做的事。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Tell an adult if you feel ill."
+        },
+        {
+          "id": "b",
+          "text": "Buy a new school bag."
+        },
+        {
+          "id": "c",
+          "text": "Play a game after school."
+        },
+        {
+          "id": "d",
+          "text": "Go to the park alone."
+        }
+      ],
+      "answer": "a",
+      "explanation": "妈妈用 Do not forget to ... 提醒孩子，在学校不舒服时要告诉大人。",
+      "listening_text": "Mum says, 'Please put your school bag by the door. Do not forget to tell an adult if you feel ill at school.' I nod and say, 'All right.'",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-02.wav"
+    },
+    {
+      "id": "q03",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Mia 怎样应对困难。",
+      "english": "Question 3",
+      "chinese": "听录音，选择 Mia 怎样应对困难。",
+      "options": [
+        {
+          "id": "a",
+          "text": "She gives up at once."
+        },
+        {
+          "id": "b",
+          "text": "She buys another game."
+        },
+        {
+          "id": "c",
+          "text": "She watches television all day."
+        },
+        {
+          "id": "d",
+          "text": "She practises with her friends."
+        }
+      ],
+      "answer": "d",
+      "explanation": "录音说她没有放弃，而是每天与朋友练习：She practises with her friends every day。",
+      "listening_text": "The new game was difficult for Mia yesterday. She did not give up. She practises with her friends every day. Now she can do better.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-03.wav"
+    },
+    {
+      "id": "q04",
+      "type": "listening_choice",
+      "prompt": "听录音，选择孩子们昨天下午所在的地方。",
+      "english": "Question 4",
+      "chinese": "听录音，选择孩子们昨天下午所在的地方。",
+      "options": [
+        {
+          "id": "a",
+          "text": "On the sports field."
+        },
+        {
+          "id": "b",
+          "text": "In the library."
+        },
+        {
+          "id": "c",
+          "text": "In the park."
+        },
+        {
+          "id": "d",
+          "text": "In the computer shop."
+        }
+      ],
+      "answer": "b",
+      "explanation": "先听到 not on the sports field，再听到 were in the library，正确地点为图书馆。",
+      "listening_text": "The children were not on the sports field yesterday afternoon. They were in the library. They read a book about great scientists and talked about new ideas.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-04.wav"
+    },
+    {
+      "id": "q05",
+      "type": "listening_choice",
+      "prompt": "听录音，选择书中科学家的两个特点。",
+      "english": "Question 5",
+      "chinese": "听录音，选择书中科学家的两个特点。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Hard-working and creative."
+        },
+        {
+          "id": "b",
+          "text": "Quiet and sleepy."
+        },
+        {
+          "id": "c",
+          "text": "Funny and careless."
+        },
+        {
+          "id": "d",
+          "text": "Angry and noisy."
+        }
+      ],
+      "answer": "a",
+      "explanation": "录音直接描述科学家为 hard-working and creative，即勤奋且有创造力。",
+      "listening_text": "This is a book about a famous scientist. The scientist is hard-working and creative. Anna likes the book because she enjoys exploring new ideas too.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-05.wav"
+    },
+    {
+      "id": "q06",
+      "type": "listening_choice",
+      "prompt": "听录音，选择小机器人的用途。",
+      "english": "Question 6",
+      "chinese": "听录音，选择小机器人的用途。",
+      "options": [
+        {
+          "id": "a",
+          "text": "It makes breakfast."
+        },
+        {
+          "id": "b",
+          "text": "It waters the garden."
+        },
+        {
+          "id": "c",
+          "text": "It puts old paper into a box."
+        },
+        {
+          "id": "d",
+          "text": "It plays music for animals."
+        }
+      ],
+      "answer": "c",
+      "explanation": "机器人能做的事是 put old paper into a box，把旧纸放进盒子。",
+      "listening_text": "Look at our small robot. It is not a toy car. It can put old paper into a box. It is important to read the instructions before using it.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-06.wav"
+    },
+    {
+      "id": "q07",
+      "type": "listening_choice",
+      "prompt": "听录音，选择两台笔记本电脑在哪方面相同。",
+      "english": "Question 7",
+      "chinese": "听录音，选择两台笔记本电脑在哪方面相同。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Their colours."
+        },
+        {
+          "id": "b",
+          "text": "Their weight."
+        },
+        {
+          "id": "c",
+          "text": "Their passwords."
+        },
+        {
+          "id": "d",
+          "text": "Their prices."
+        }
+      ],
+      "answer": "b",
+      "explanation": "虽然颜色不同，但 as light as 表示一样轻，因此相同之处是轻重。",
+      "listening_text": "My laptop is yellow. My sister's laptop is blue. Our laptops are not the same colour, but mine is as light as hers. We both use them for school work.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-07.wav"
+    },
+    {
+      "id": "q08",
+      "type": "listening_choice",
+      "prompt": "听录音，选择 Sam 使用电脑做什么。",
+      "english": "Question 8",
+      "chinese": "听录音，选择 Sam 使用电脑做什么。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Watch a film."
+        },
+        {
+          "id": "b",
+          "text": "Play computer games."
+        },
+        {
+          "id": "c",
+          "text": "Buy a new robot."
+        },
+        {
+          "id": "d",
+          "text": "Search for information."
+        }
+      ],
+      "answer": "d",
+      "explanation": "录音说 Sam 正在 searching for information about useful inventions，即查找有用发明的信息。",
+      "listening_text": "Sam uses a desktop in the school library. He is searching for information about useful inventions. He is not playing games or watching a film today.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-08.wav"
+    },
+    {
+      "id": "q09",
+      "type": "listening_choice",
+      "prompt": "听录音，选择女孩怎样再次使用旧纸。",
+      "english": "Question 9",
+      "chinese": "听录音，选择女孩怎样再次使用旧纸。",
+      "options": [
+        {
+          "id": "a",
+          "text": "She makes paper boats."
+        },
+        {
+          "id": "b",
+          "text": "She buys more paper."
+        },
+        {
+          "id": "c",
+          "text": "She draws on the other side."
+        },
+        {
+          "id": "d",
+          "text": "She puts it on the floor."
+        }
+      ],
+      "answer": "c",
+      "explanation": "女孩说 I draw on the other side，即在纸的另一面画画。",
+      "listening_text": "I do not throw away paper when only one side is used. I draw on the other side. Reusing paper is a good way to reduce waste.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-09.wav"
+    },
+    {
+      "id": "q10",
+      "type": "listening_choice",
+      "prompt": "听录音，选择一家人星期六上午在公园做什么。",
+      "english": "Question 10",
+      "chinese": "听录音，选择一家人星期六上午在公园做什么。",
+      "options": [
+        {
+          "id": "a",
+          "text": "Pick up rubbish."
+        },
+        {
+          "id": "b",
+          "text": "Buy new laptops."
+        },
+        {
+          "id": "c",
+          "text": "See a doctor."
+        },
+        {
+          "id": "d",
+          "text": "Watch a film."
+        }
+      ],
+      "answer": "a",
+      "explanation": "题目问在公园做什么，录音说 pick up rubbish；turn off the lights 是离家前在家做的事。",
+      "listening_text": "On Saturday morning, my family will go to the park. We will pick up rubbish there. Before leaving home, we will turn off the lights. We want a greener life.",
+      "audio_file": "shanghai-grade5-term1-final-normal/listen-10.wav"
+    },
+    {
+      "id": "q11",
+      "type": "fill_blank",
+      "prompt": "Don't forget ________ (tell) an adult when you feel ill.",
+      "english": "Question 11",
+      "chinese": "语法填空",
+      "answer": "to tell",
+      "accepted_answers": [
+        "to tell"
+      ],
+      "explanation": "Don't forget to + 动词原形表示“别忘了做某事”，空缺为 to tell。"
+    },
+    {
+      "id": "q12",
+      "type": "fill_blank",
+      "prompt": "The nurse ________ (help) sick children every day.",
+      "english": "Question 12",
+      "chinese": "语法填空",
+      "answer": "helps",
+      "accepted_answers": [
+        "helps"
+      ],
+      "explanation": "every day 表示日常活动；The nurse 为第三人称单数，help 变为 helps。"
+    },
+    {
+      "id": "q13",
+      "type": "fill_blank",
+      "prompt": "The task ________ (be) difficult for Ben yesterday.",
+      "english": "Question 13",
+      "chinese": "语法填空",
+      "answer": "was",
+      "accepted_answers": [
+        "was"
+      ],
+      "explanation": "yesterday 表示过去；The task 是单数，用 was。"
+    },
+    {
+      "id": "q14",
+      "type": "fill_blank",
+      "prompt": "We ________ (be) nervous before the game last Sunday.",
+      "english": "Question 14",
+      "chinese": "语法填空",
+      "answer": "were",
+      "accepted_answers": [
+        "were"
+      ],
+      "explanation": "last Sunday 表示过去，We 与 were 搭配。"
+    },
+    {
+      "id": "q15",
+      "type": "fill_blank",
+      "prompt": "This is ________ (a / an) interesting book about a scientist.",
+      "english": "Question 15",
+      "chinese": "语法填空",
+      "answer": "an",
+      "accepted_answers": [
+        "an"
+      ],
+      "explanation": "interesting 以元音音素开头，单数可数名词 book 前用 an。"
+    },
+    {
+      "id": "q16",
+      "type": "fill_blank",
+      "prompt": "I have a book. ________ (A / The) book is about a famous scientist.",
+      "english": "Question 16",
+      "chinese": "语法填空",
+      "answer": "The",
+      "accepted_answers": [
+        "The"
+      ],
+      "explanation": "第二次提到前面的同一本书，使用 The。"
+    },
+    {
+      "id": "q17",
+      "type": "fill_blank",
+      "prompt": "It is important ________ (read) the instructions before using a robot.",
+      "english": "Question 17",
+      "chinese": "语法填空",
+      "answer": "to read",
+      "accepted_answers": [
+        "to read"
+      ],
+      "explanation": "It is important to + 动词原形，填写 to read。"
+    },
+    {
+      "id": "q18",
+      "type": "fill_blank",
+      "prompt": "It is important ________ (use) a new invention carefully.",
+      "english": "Question 18",
+      "chinese": "语法填空",
+      "answer": "to use",
+      "accepted_answers": [
+        "to use"
+      ],
+      "explanation": "表示“认真使用一项新发明很重要”，结构为 It is important to use ...。"
+    },
+    {
+      "id": "q19",
+      "type": "fill_blank",
+      "prompt": "My laptop is as ________ (light) as yours.",
+      "english": "Question 19",
+      "chinese": "语法填空",
+      "answer": "light",
+      "accepted_answers": [
+        "light"
+      ],
+      "explanation": "as ... as 中间使用形容词原级，所以填 light。"
+    },
+    {
+      "id": "q20",
+      "type": "fill_blank",
+      "prompt": "This computer is not as ________ (fast) as that one.",
+      "english": "Question 20",
+      "chinese": "语法填空",
+      "answer": "fast",
+      "accepted_answers": [
+        "fast"
+      ],
+      "explanation": "not as ... as 中间仍然使用形容词原级 fast。"
+    },
+    {
+      "id": "q21",
+      "type": "fill_blank",
+      "prompt": "Reusing paper is a good way ________ (reduce) waste.",
+      "english": "Question 21",
+      "chinese": "语法填空",
+      "answer": "to reduce",
+      "accepted_answers": [
+        "to reduce"
+      ],
+      "explanation": "a good way to + 动词原形表示“做某事的好办法”，填 to reduce。"
+    },
+    {
+      "id": "q22",
+      "type": "fill_blank",
+      "prompt": "Please ________ (turn) off the lights before you leave.",
+      "english": "Question 22",
+      "chinese": "语法填空",
+      "answer": "turn",
+      "accepted_answers": [
+        "turn"
+      ],
+      "explanation": "肯定祈使句中使用动词原形 turn；turn off 表示关掉。"
+    },
+    {
+      "id": "q23",
+      "type": "rewrite",
+      "prompt": "Remember to tell an adult when you feel ill.\n用 Don't forget to 改写，保持原意，填写完整英文句子。",
+      "english": "Question 23",
+      "chinese": "句型转换",
+      "answer": "Don't forget to tell an adult when you feel ill.",
+      "accepted_answers": [
+        "Don't forget to tell an adult when you feel ill.",
+        "Do not forget to tell an adult when you feel ill."
+      ],
+      "explanation": "Remember to do 与 Don't forget to do 在本句中意思相同。"
+    },
+    {
+      "id": "q24",
+      "type": "rewrite",
+      "prompt": "The challenge was easy.\n改为否定句，填写完整英文句子。",
+      "english": "Question 24",
+      "chinese": "句型转换",
+      "answer": "The challenge wasn't easy.",
+      "accepted_answers": [
+        "The challenge wasn't easy.",
+        "The challenge was not easy."
+      ],
+      "explanation": "was 后加 not；was not 可缩写为 wasn't。"
+    },
+    {
+      "id": "q25",
+      "type": "rewrite",
+      "prompt": "The children were in the computer room yesterday.\n改为一般疑问句，保留原来的时间和地点，填写完整英文句子。",
+      "english": "Question 25",
+      "chinese": "句型转换",
+      "answer": "Were the children in the computer room yesterday?",
+      "accepted_answers": [
+        "Were the children in the computer room yesterday?"
+      ],
+      "explanation": "把 were 提到主语 the children 前，其他信息保持不变。"
+    },
+    {
+      "id": "q26",
+      "type": "rewrite",
+      "prompt": "This is a useful invention.\n改为复数句，填写完整英文句子。",
+      "english": "Question 26",
+      "chinese": "句型转换",
+      "answer": "These are useful inventions.",
+      "accepted_answers": [
+        "These are useful inventions."
+      ],
+      "explanation": "This is 变为 These are；a useful invention 变为 useful inventions。"
+    },
+    {
+      "id": "q27",
+      "type": "rewrite",
+      "prompt": "Reading the instructions is important.\n用 It is important to 开头改写，保持原意，填写完整英文句子。",
+      "english": "Question 27",
+      "chinese": "句型转换",
+      "answer": "It is important to read the instructions.",
+      "accepted_answers": [
+        "It is important to read the instructions.",
+        "It's important to read the instructions."
+      ],
+      "explanation": "用 It is important to read ... 表示“阅读使用说明很重要”。"
+    },
+    {
+      "id": "q28",
+      "type": "rewrite",
+      "prompt": "This laptop is as fast as that one.\n改为否定句，保留 This laptop 作主语及 as ... as ... 结构，填写完整英文句子。",
+      "english": "Question 28",
+      "chinese": "句型转换",
+      "answer": "This laptop isn't as fast as that one.",
+      "accepted_answers": [
+        "This laptop isn't as fast as that one.",
+        "This laptop is not as fast as that one."
+      ],
+      "explanation": "在 is 后加 not，as fast as 的比较结构保持不变。"
+    },
+    {
+      "id": "q29",
+      "type": "rewrite",
+      "prompt": "We can reduce waste by reusing paper.\n用 Reusing paper is a good way to 开头改写，保持原意，填写完整英文句子。",
+      "english": "Question 29",
+      "chinese": "句型转换",
+      "answer": "Reusing paper is a good way to reduce waste.",
+      "accepted_answers": [
+        "Reusing paper is a good way to reduce waste."
+      ],
+      "explanation": "把做法 Reusing paper 放在句首，再接 is a good way to reduce waste。"
+    },
+    {
+      "id": "q30",
+      "type": "rewrite",
+      "prompt": "You should turn off the lights before you leave.\n改为肯定祈使句，以 Turn 开头（可加 Please），保留 before you leave，填写完整英文句子。",
+      "english": "Question 30",
+      "chinese": "句型转换",
+      "answer": "Turn off the lights before you leave.",
+      "accepted_answers": [
+        "Turn off the lights before you leave.",
+        "Please turn off the lights before you leave.",
+        "Turn the lights off before you leave.",
+        "Please turn the lights off before you leave."
+      ],
+      "explanation": "肯定祈使句省略主语 You 和 should，直接使用动词原形 Turn 开头；可加 Please。"
+    },
+    {
+      "id": "q31",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA science day\nIt is Wednesday. Class Five has a science day. On Monday, the task was difficult for Ben. He wanted to give up. His friend Amy helped him practise. Now they are ready. Amy introduces a book about a scientist. The scientist in the book is hard-working and creative. Ben shows a small robot. It puts old paper into a box. Ms Lin says, 'It is important to read the instructions before using the robot.' After the show, the children use both sides of old paper to make cards. Ben is happy. With practice and help, he can do better.\nWords: introduces 介绍；instructions 使用说明；both sides 两面。\n\nWhen was the task difficult for Ben?",
+      "english": "Question 31",
+      "chinese": "When was the task difficult for Ben?",
+      "options": [
+        {
+          "id": "a",
+          "text": "On Sunday."
+        },
+        {
+          "id": "b",
+          "text": "On Monday."
+        },
+        {
+          "id": "c",
+          "text": "On Wednesday."
+        },
+        {
+          "id": "d",
+          "text": "On Saturday."
+        }
+      ],
+      "answer": "b",
+      "explanation": "短文明确说 On Monday, the task was difficult for Ben。",
+      "passage_id": "reading-a",
+      "question_text": "When was the task difficult for Ben?"
+    },
+    {
+      "id": "q32",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA science day\nIt is Wednesday. Class Five has a science day. On Monday, the task was difficult for Ben. He wanted to give up. His friend Amy helped him practise. Now they are ready. Amy introduces a book about a scientist. The scientist in the book is hard-working and creative. Ben shows a small robot. It puts old paper into a box. Ms Lin says, 'It is important to read the instructions before using the robot.' After the show, the children use both sides of old paper to make cards. Ben is happy. With practice and help, he can do better.\nWords: introduces 介绍；instructions 使用说明；both sides 两面。\n\nWho helped Ben practise?",
+      "english": "Question 32",
+      "chinese": "Who helped Ben practise?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Ms Lin."
+        },
+        {
+          "id": "b",
+          "text": "His father."
+        },
+        {
+          "id": "c",
+          "text": "His mother."
+        },
+        {
+          "id": "d",
+          "text": "Amy."
+        }
+      ],
+      "answer": "d",
+      "explanation": "短文说 His friend Amy helped him practise，即朋友 Amy 帮助了他。",
+      "passage_id": "reading-a",
+      "question_text": "Who helped Ben practise?"
+    },
+    {
+      "id": "q33",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA science day\nIt is Wednesday. Class Five has a science day. On Monday, the task was difficult for Ben. He wanted to give up. His friend Amy helped him practise. Now they are ready. Amy introduces a book about a scientist. The scientist in the book is hard-working and creative. Ben shows a small robot. It puts old paper into a box. Ms Lin says, 'It is important to read the instructions before using the robot.' After the show, the children use both sides of old paper to make cards. Ben is happy. With practice and help, he can do better.\nWords: introduces 介绍；instructions 使用说明；both sides 两面。\n\nWhat does Amy introduce?",
+      "english": "Question 33",
+      "chinese": "What does Amy introduce?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A book about a scientist."
+        },
+        {
+          "id": "b",
+          "text": "A green bag."
+        },
+        {
+          "id": "c",
+          "text": "A new medicine."
+        },
+        {
+          "id": "d",
+          "text": "A sports game."
+        }
+      ],
+      "answer": "a",
+      "explanation": "短文直接说 Amy introduces a book about a scientist。",
+      "passage_id": "reading-a",
+      "question_text": "What does Amy introduce?"
+    },
+    {
+      "id": "q34",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA science day\nIt is Wednesday. Class Five has a science day. On Monday, the task was difficult for Ben. He wanted to give up. His friend Amy helped him practise. Now they are ready. Amy introduces a book about a scientist. The scientist in the book is hard-working and creative. Ben shows a small robot. It puts old paper into a box. Ms Lin says, 'It is important to read the instructions before using the robot.' After the show, the children use both sides of old paper to make cards. Ben is happy. With practice and help, he can do better.\nWords: introduces 介绍；instructions 使用说明；both sides 两面。\n\nWhat can Ben's small robot do?",
+      "english": "Question 34",
+      "chinese": "What can Ben's small robot do?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Make new laptops."
+        },
+        {
+          "id": "b",
+          "text": "Pick fruit."
+        },
+        {
+          "id": "c",
+          "text": "Put old paper into a box."
+        },
+        {
+          "id": "d",
+          "text": "Turn on the television."
+        }
+      ],
+      "answer": "c",
+      "explanation": "短文说机器人把旧纸放进盒子：It puts old paper into a box。",
+      "passage_id": "reading-a",
+      "question_text": "What can Ben's small robot do?"
+    },
+    {
+      "id": "q35",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA science day\nIt is Wednesday. Class Five has a science day. On Monday, the task was difficult for Ben. He wanted to give up. His friend Amy helped him practise. Now they are ready. Amy introduces a book about a scientist. The scientist in the book is hard-working and creative. Ben shows a small robot. It puts old paper into a box. Ms Lin says, 'It is important to read the instructions before using the robot.' After the show, the children use both sides of old paper to make cards. Ben is happy. With practice and help, he can do better.\nWords: introduces 介绍；instructions 使用说明；both sides 两面。\n\nWhat do the children make with old paper after the show?",
+      "english": "Question 35",
+      "chinese": "What do the children make with old paper after the show?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Books."
+        },
+        {
+          "id": "b",
+          "text": "Cards."
+        },
+        {
+          "id": "c",
+          "text": "Robots."
+        },
+        {
+          "id": "d",
+          "text": "Boxes."
+        }
+      ],
+      "answer": "b",
+      "explanation": "短文说他们用旧纸的两面制作 cards。",
+      "passage_id": "reading-a",
+      "question_text": "What do the children make with old paper after the show?"
+    },
+    {
+      "id": "q36",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA greener computer club\nLily and Sam are in the computer club. Lily uses a blue laptop, and Sam uses a red one. The blue laptop is as fast as the red one, but it is lighter. Today they search for information about a greener life. They do not share their passwords with other students. They make a plan for Saturday. In the morning, they will pick up rubbish in the park with their parents. In the afternoon, they will use old bags again. Before leaving the club, they turn off the computers and the lights. Sam says, 'Reusing bags is a good way to reduce waste.'\nWords: lighter 更轻的；share 分享；rubbish 垃圾；waste 浪费、废弃物。\n\nWhat are the two laptops like?",
+      "english": "Question 36",
+      "chinese": "What are the two laptops like?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The blue one is slower."
+        },
+        {
+          "id": "b",
+          "text": "The red one is lighter."
+        },
+        {
+          "id": "c",
+          "text": "They are the same colour."
+        },
+        {
+          "id": "d",
+          "text": "They are equally fast."
+        }
+      ],
+      "answer": "d",
+      "explanation": "The blue laptop is as fast as the red one 表示两台电脑一样快。",
+      "passage_id": "reading-b",
+      "question_text": "What are the two laptops like?"
+    },
+    {
+      "id": "q37",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA greener computer club\nLily and Sam are in the computer club. Lily uses a blue laptop, and Sam uses a red one. The blue laptop is as fast as the red one, but it is lighter. Today they search for information about a greener life. They do not share their passwords with other students. They make a plan for Saturday. In the morning, they will pick up rubbish in the park with their parents. In the afternoon, they will use old bags again. Before leaving the club, they turn off the computers and the lights. Sam says, 'Reusing bags is a good way to reduce waste.'\nWords: lighter 更轻的；share 分享；rubbish 垃圾；waste 浪费、废弃物。\n\nWhat do Lily and Sam search for today?",
+      "english": "Question 37",
+      "chinese": "What do Lily and Sam search for today?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Information about a greener life."
+        },
+        {
+          "id": "b",
+          "text": "Information about a new game."
+        },
+        {
+          "id": "c",
+          "text": "A doctor's phone number."
+        },
+        {
+          "id": "d",
+          "text": "A science book for Ben."
+        }
+      ],
+      "answer": "a",
+      "explanation": "短文说他们今天查找的是 information about a greener life。",
+      "passage_id": "reading-b",
+      "question_text": "What do Lily and Sam search for today?"
+    },
+    {
+      "id": "q38",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA greener computer club\nLily and Sam are in the computer club. Lily uses a blue laptop, and Sam uses a red one. The blue laptop is as fast as the red one, but it is lighter. Today they search for information about a greener life. They do not share their passwords with other students. They make a plan for Saturday. In the morning, they will pick up rubbish in the park with their parents. In the afternoon, they will use old bags again. Before leaving the club, they turn off the computers and the lights. Sam says, 'Reusing bags is a good way to reduce waste.'\nWords: lighter 更轻的；share 分享；rubbish 垃圾；waste 浪费、废弃物。\n\nWho will go to the park with Lily and Sam?",
+      "english": "Question 38",
+      "chinese": "Who will go to the park with Lily and Sam?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Their teachers."
+        },
+        {
+          "id": "b",
+          "text": "Amy and Ben."
+        },
+        {
+          "id": "c",
+          "text": "Their parents."
+        },
+        {
+          "id": "d",
+          "text": "The school nurse."
+        }
+      ],
+      "answer": "c",
+      "explanation": "星期六上午，他们将和 parents 一起在公园捡垃圾。",
+      "passage_id": "reading-b",
+      "question_text": "Who will go to the park with Lily and Sam?"
+    },
+    {
+      "id": "q39",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA greener computer club\nLily and Sam are in the computer club. Lily uses a blue laptop, and Sam uses a red one. The blue laptop is as fast as the red one, but it is lighter. Today they search for information about a greener life. They do not share their passwords with other students. They make a plan for Saturday. In the morning, they will pick up rubbish in the park with their parents. In the afternoon, they will use old bags again. Before leaving the club, they turn off the computers and the lights. Sam says, 'Reusing bags is a good way to reduce waste.'\nWords: lighter 更轻的；share 分享；rubbish 垃圾；waste 浪费、废弃物。\n\nWhat do they do before leaving the club?",
+      "english": "Question 39",
+      "chinese": "What do they do before leaving the club?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Delete every file."
+        },
+        {
+          "id": "b",
+          "text": "Turn off the computers and the lights."
+        },
+        {
+          "id": "c",
+          "text": "Share their passwords."
+        },
+        {
+          "id": "d",
+          "text": "Buy new bags."
+        }
+      ],
+      "answer": "b",
+      "explanation": "短文说 Before leaving the club, they turn off the computers and the lights。",
+      "passage_id": "reading-b",
+      "question_text": "What do they do before leaving the club?"
+    },
+    {
+      "id": "q40",
+      "type": "reading_choice",
+      "prompt": "阅读短文，选择正确答案。\n\nA greener computer club\nLily and Sam are in the computer club. Lily uses a blue laptop, and Sam uses a red one. The blue laptop is as fast as the red one, but it is lighter. Today they search for information about a greener life. They do not share their passwords with other students. They make a plan for Saturday. In the morning, they will pick up rubbish in the park with their parents. In the afternoon, they will use old bags again. Before leaving the club, they turn off the computers and the lights. Sam says, 'Reusing bags is a good way to reduce waste.'\nWords: lighter 更轻的；share 分享；rubbish 垃圾；waste 浪费、废弃物。\n\nWhy do they use old bags again?",
+      "english": "Question 40",
+      "chinese": "Why do they use old bags again?",
+      "options": [
+        {
+          "id": "a",
+          "text": "To make the laptops faster."
+        },
+        {
+          "id": "b",
+          "text": "To help a sick friend."
+        },
+        {
+          "id": "c",
+          "text": "To learn a new game."
+        },
+        {
+          "id": "d",
+          "text": "To reduce waste."
+        }
+      ],
+      "answer": "d",
+      "explanation": "最后一句说明再次使用袋子是减少浪费的好办法。",
+      "passage_id": "reading-b",
+      "question_text": "Why do they use old bags again?"
+    }
+  ],
+  "scope": "U5-U10"
+}

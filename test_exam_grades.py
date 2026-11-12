@@ -16,6 +16,11 @@ from exam_preparation import ExamPreparationError, ExamPreparationStore
     ('Grade 5 Unit 2', 5), ('Grade12 final', 12), ('十一年级', 11),
     ('期中考试 Unit 1–3', None), ('2026年期末', None), ('13年级', None),
     ('四年级和五年级综合', None), ('初一到初三复习', None),
+    ('预备班英语期中', 6), ('预备年级上册英语', 6), ('初中预备班下册', 6),
+    ('预初英语复习', 6), ('六年级（预备班）英语', 6), ('上海预备班英语', 6),
+    ('预备班与初一综合', None), ('五年级和预备班综合', None),
+    ('考试预备练习', None), ('预备知识训练', None), ('初中预备活动', None),
+    ('学前预备班英语', None), ('高考预备班复习', None),
 ])
 def test_old_paper_titles_only_classify_unambiguous_grades(title, expected):
     assert infer_grade(title) == expected
@@ -30,6 +35,7 @@ def test_invalid_grades_are_rejected(value):
 @pytest.mark.parametrize('title,expected', [
     ('四上期中考试', 1), ('四下期末考试', 2), ('四年级上册英语', 1),
     ('四年级下', 2), ('初一上学期', 1), ('高二下册', 2),
+    ('预备班上册英语', 1), ('预初下学期', 2),
     ('四年级上下册综合', None), ('期末复习', None), ('上海英语卷', None),
 ])
 def test_old_titles_recognize_upper_and_lower_terms_without_guessing(title, expected):
@@ -87,3 +93,14 @@ def test_store_validates_grade_and_keeps_omitted_grade_on_older_updates(tmp_path
         store.update_paper(paper['id'], '无效修改', words, [], grade=True)
     assert store.get_paper(paper['id'])['name'] == '改名的考卷'
     assert store.create_paper('四年级卷', words, grade=None)['grade'] is None
+
+
+def test_preparatory_class_titles_are_classified_as_grade_six_when_creating_papers(tmp_path):
+    store = ExamPreparationStore(tmp_path / 'exam.sqlite3')
+    words = [{'english': 'apple', 'chinese': '苹果'}]
+    paper = store.create_paper('初中预备班下册英语期中', words)
+    assert paper['grade'] == 6
+    assert paper['term'] == 2
+    assert store.get_paper(paper['id'])['grade'] == 6
+    assert store.create_paper('初一上册英语', words)['grade'] == 7
+    assert store.create_paper('预备练习', words)['grade'] is None

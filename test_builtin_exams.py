@@ -146,7 +146,8 @@ def test_grade_api_creates_reclassifies_and_preserves_older_clients(client):
     assert changed.get_json()['paper']['term'] == 2
     listed = client.get(root, headers=headers).get_json()
     assert listed['papers'][0]['grade'] == 6
-    assert all(row['grade'] == 4 for row in listed['builtin_papers'])
+    assert {row['grade'] for row in listed['builtin_papers']} == {4, 5}
+    assert len(listed['builtin_papers']) == 4
     assert all(row['term'] == 1 for row in listed['builtin_papers'])
     assert client.get(root, headers={'Authorization': 'Bearer bob'}).get_json()['papers'] == []
     assert client.put(url, headers={'Authorization': 'Bearer bob'}, json={'name': '越权修改', 'words': 'apple', 'grade': 2}).status_code == 404

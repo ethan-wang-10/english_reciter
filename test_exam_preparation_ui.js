@@ -795,6 +795,32 @@ function addBuiltinFixture(ui) {
     return paper;
 }
 
+test('Shanghai grade selectors keep five primary grades and the preparatory class in middle school', async () => {
+    const ui = examUI();
+    ui.state.list = async () => ({ papers: [
+        ui.state.paper,
+        { ...ui.state.paper, id: 'preparatory', grade: 6, term: 2, name: '预备班英语' },
+    ] });
+    await ui.api.open();
+    for (const id of ['exam-paper-grade', 'exam-grade-filter']) {
+        const groups = ui.field(id).children.filter((child) => child.tagName === 'optgroup');
+        assert.deepEqual(groups.map((group) => group.label), ['小学', '初中', '高中']);
+        assert.deepEqual(groups[0].children.map((option) => option.value), ['1', '2', '3', '4', '5']);
+        assert.deepEqual(groups[1].children.map((option) => option.value), ['6', '7', '8', '9']);
+        assert.match(groups[1].children[0].textContent, /六年级.*预备|预备.*六年级/);
+        assert.match(groups[1].children[1].textContent, /初一/);
+        assert.match(groups[1].children[2].textContent, /初二/);
+        assert.match(groups[1].children[3].textContent, /初三/);
+        assert.deepEqual(groups[2].children.map((option) => option.value), ['10', '11', '12']);
+    }
+    ui.field('exam-grade-filter').value = '6';
+    await ui.field('exam-grade-filter').fire('change');
+    assert.equal(ui.paperRows().length, 1);
+    assert.equal(ui.paperRows()[0].children[0].textContent, '预备班英语');
+    assert.equal(ui.field('exam-paper-grade').value, '6');
+    assert.match(ui.field('exam-grade-summary').textContent, /预备/);
+});
+
 test('papers are grouped into collapsible grade and term collections with counts', async () => {
     const ui = examUI();
     const builtin = addBuiltinFixture(ui);
@@ -805,7 +831,7 @@ test('papers are grouped into collapsible grade and term collections with counts
         { ...ui.state.paper, id: 'unknown', grade: null, term: null, name: '综合训练' },
     ], builtin_papers: [builtin] });
     await ui.api.open();
-    assert.deepEqual(ui.field('exam-paper-list').children.map((group) => group.children[0].textContent), ['四年级上册', '四年级下册', '六年级下册', '未分类']);
+    assert.deepEqual(ui.field('exam-paper-list').children.map((group) => group.children[0].textContent), ['四年级上册', '四年级下册', '预备班（六年级）下册', '未分类']);
     assert.equal(ui.field('exam-paper-list').children[0].children[0].children[0].textContent, '2 份');
     assert.match(ui.field('exam-grade-summary').textContent, /已收录 5 份/);
     const upper = ui.field('exam-paper-list').children[0];

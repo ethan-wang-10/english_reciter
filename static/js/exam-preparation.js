@@ -1,7 +1,7 @@
 (() => {
     const base = '/exam-preparation';
     const typeNames = { spelling: '单词默写', translation: '句子中译英', recognition: '英文识义', context: '语境选词', fill_blank: '语法填空', rewrite: '句型转换', reading_choice: '阅读选择', listening_choice: '听力选择' };
-    const gradeLabels = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '七年级（初一）', '八年级（初二）', '九年级（初三）', '高一', '高二', '高三'];
+    const gradeLabels = ['一年级', '二年级', '三年级', '四年级', '五年级', '预备班（六年级）', '初一（七年级）', '初二（八年级）', '初三（九年级）', '高一', '高二', '高三'];
     let papers = [];
     let selectedPaper = '';
     let gradeFilter = 'all';
@@ -461,7 +461,7 @@
         };
         if (filter) option(select, 'all', `全部年级（${available.length}）`);
         else option(select, '', '未分类');
-        for (const [stage, start, end] of [['小学', 1, 6], ['初中', 7, 9], ['高中', 10, 12]]) {
+        for (const [stage, start, end] of [['小学', 1, 5], ['初中', 6, 9], ['高中', 10, 12]]) {
             const group = document.createElement('optgroup');
             group.label = stage;
             for (let grade = start; grade <= end; grade += 1) {
