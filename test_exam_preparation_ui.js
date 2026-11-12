@@ -837,10 +837,15 @@ test('papers are grouped into collapsible grade and term collections with counts
     const upper = ui.field('exam-paper-list').children[0];
     assert.equal(upper.tagName, 'details');
     assert.equal(upper.children[0].tagName, 'summary');
-    assert.equal(upper.open, true);
-    assert.equal(ui.field('exam-paper-list').children[1].open, false);
-    upper.open = false;
+    assert.equal(ui.field('exam-paper-list').children.every((group) => group.open === false), true);
+    upper.open = true;
     await upper.fire('toggle');
+    ui.field('exam-grade-filter').value = '4';
+    await ui.field('exam-grade-filter').fire('change');
+    assert.equal(ui.field('exam-paper-list').children[0].open, true);
+    const reopened = ui.field('exam-paper-list').children[0];
+    reopened.open = false;
+    await reopened.fire('toggle');
     ui.field('exam-grade-filter').value = '4';
     await ui.field('exam-grade-filter').fire('change');
     assert.equal(ui.field('exam-paper-list').children[0].open, false);

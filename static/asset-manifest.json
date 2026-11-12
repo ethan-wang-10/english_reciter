@@ -31,9 +31,9 @@
       "url": "/static/assets/js/chat-sidebar.8edef40ea8fe6819.js"
     },
     "/static/js/exam-preparation.js": {
-      "bytes": 54528,
-      "sha256": "7e97c0a131bfb2ae156ab474cb0ef0e853bb00f47f10d56b86b06318e4e4d723",
-      "url": "/static/assets/js/exam-preparation.7e97c0a131bfb2ae.js"
+      "bytes": 54418,
+      "sha256": "630db8337157ce1e14fe882736226702e636448bfe03d077670a31b610ed9f5c",
+      "url": "/static/assets/js/exam-preparation.630db8337157ce1e.js"
     },
     "/static/js/performance.js": {
       "bytes": 17312,

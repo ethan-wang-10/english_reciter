@@ -501,12 +501,11 @@
             };
             return rank(left) - rank(right);
         });
-        const selectedKey = collectionKey(visible.find((paper) => paper.id === selectedPaper));
         keys.forEach((key) => {
             const [grade, term] = key.split(':');
             const group = document.createElement('details');
             group.className = 'exam-grade-group';
-            group.open = expandedGroups.get(key) ?? key === selectedKey;
+            group.open = expandedGroups.get(key) ?? false;
             group.addEventListener('toggle', () => expandedGroups.set(key, group.open));
             const heading = document.createElement('summary');
             heading.className = 'exam-grade-heading';
