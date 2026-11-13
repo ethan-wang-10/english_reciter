@@ -640,3 +640,36 @@ test('math keeps its original tabs and does not open the Chinese writing module'
     assert.deepEqual(events, []);
     assert.equal(ui.field('writing-panel').hidden, true);
 });
+
+test('Chinese dictation opens through its own module and stops on navigation and logout', async () => {
+    const ui = subjectUI();
+    const events = [];
+    ui.context.window.subjectDictation = {
+        open: () => events.push('open'),
+        leaveView: () => events.push('leave'),
+        reset: () => events.push('reset'),
+    };
+    await ui.login();
+    assert.equal(ui.field('dictation-tab').hidden, false);
+    await ui.field('dictation-tab').fire('click');
+    assert.equal(ui.field('dictation-panel').hidden, false);
+    assert.equal(ui.field('writing-panel').hidden, true);
+    assert.ok(events.includes('open'));
+    assert.equal(ui.state.calls.some((call) => call.url === '/api/subjects/chinese/dictation'), false);
+    await ui.field('papers-tab').fire('click');
+    assert.equal(ui.field('dictation-panel').hidden, true);
+    assert.ok(events.includes('leave'));
+    await ui.field('subject-logout').fire('click');
+    assert.ok(events.includes('reset'));
+});
+
+test('math does not expose the Chinese dictation workspace', async () => {
+    const ui = subjectUI({ subject: 'math' });
+    const events = [];
+    ui.context.window.subjectDictation = { open: () => events.push('open'), leaveView() {}, reset() {} };
+    await ui.login();
+    assert.equal(ui.field('dictation-tab').hidden, true);
+    await ui.field('knowledge-tab').fire('click');
+    assert.equal(ui.field('dictation-panel').hidden, true);
+    assert.deepEqual(events, []);
+});

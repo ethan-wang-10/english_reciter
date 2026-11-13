@@ -15,7 +15,7 @@
         return;
     }
     if (!config || !['chinese', 'math'].includes(config.id)) return;
-    if (config.id === 'chinese') sections.splice(2, 0, 'writing');
+    if (config.id === 'chinese') sections.splice(2, 0, 'writing', 'dictation');
 
     function readStorage(key) {
         try { return localStorage.getItem(key) || ''; } catch (_) { return ''; }
@@ -78,6 +78,7 @@
     }
 
     function clearSession(message = '', persist = true) {
+        window.subjectDictation?.reset();
         window.subjectPractice?.reset();
         window.subjectWriting?.reset();
         generation += 1;
@@ -347,6 +348,7 @@
         if (!sections.includes(name) || !token || !account) return;
         window.subjectPractice?.leaveView();
         if (name !== 'writing') window.subjectWriting?.leaveView();
+        if (name !== 'dictation') window.subjectDictation?.leaveView();
         activeSection = name;
         sections.forEach((section) => {
             const selected = section === name;
@@ -357,13 +359,14 @@
         });
         if (focus) el(`${name}-tab`).focus({ preventScroll: true });
         if (name === 'writing') void window.subjectWriting?.open();
+        if (name === 'dictation') void window.subjectDictation?.open();
     }
 
     async function refreshSection(name) {
         showSection(name);
         const requestId = ++sectionRequest;
         feedback('portal-status');
-        if (name === 'account' || name === 'writing' || !token || !account) return;
+        if (name === 'account' || name === 'writing' || name === 'dictation' || !token || !account) return;
         const ctx = context();
         feedback('portal-error');
         feedback('portal-status', '正在加载…');
@@ -492,6 +495,7 @@
     function configurePage() {
         document.body.dataset.subject = config.id;
         el('writing-tab').hidden = config.id !== 'chinese';
+        el('dictation-tab').hidden = config.id !== 'chinese';
         document.title = config.title || `${config.name}学习空间`;
         const character = config.id === 'math' ? '数' : '语';
         el('header-subject-name').textContent = config.name;

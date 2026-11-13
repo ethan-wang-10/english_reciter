@@ -8,12 +8,14 @@
     <title>{{ site_config.title }}</title>
     <link rel="stylesheet" href="/static/assets/css/subject-portal.00e1fec53ec371c4.css">
     <link rel="stylesheet" href="/static/assets/css/subject-writing.f3cb781195f61c6c.css">
+    <link rel="stylesheet" href="/static/assets/css/subject-dictation.4e765b39a298fc81.css">
     <script id="subject-site-config" type="application/json">{{ site_config|tojson }}</script>
-    <script src="/static/assets/js/subject-portal.647228da2272222e.js" defer></script>
+    <script src="/static/assets/js/subject-portal.edbc99f1a78d4f08.js" defer></script>
     <script src="/static/assets/js/subject-sso.5564dee98f722338.js" defer></script>
     <link rel="stylesheet" href="/static/assets/css/subject-practice.149960151a563921.css">
     <script src="/static/assets/js/subject-practice.abdc0fa32d4b5ac2.js" defer></script>
     <script src="/static/assets/js/subject-writing.f913135c14cd6eec.js" defer></script>
+    <script src="/static/assets/js/subject-dictation.8e4790b4a5abe787.js" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#portal-main">跳到主要内容</a>
@@ -97,6 +99,7 @@
                     <button id="papers-tab" class="learning-tab active" data-section="papers" role="tab" aria-selected="true" aria-controls="papers-panel" type="button">内置考卷</button>
                     <button id="knowledge-tab" class="learning-tab" data-section="knowledge" role="tab" aria-selected="false" aria-controls="knowledge-panel" tabindex="-1" type="button">知识点梳理</button>
                     <button id="writing-tab" class="learning-tab" data-section="writing" role="tab" aria-selected="false" aria-controls="writing-panel" tabindex="-1" type="button" hidden>作文专项</button>
+                    <button id="dictation-tab" class="learning-tab" data-section="dictation" role="tab" aria-selected="false" aria-controls="dictation-panel" tabindex="-1" type="button" hidden>生词默写</button>
                     <button id="records-tab" class="learning-tab" data-section="records" role="tab" aria-selected="false" aria-controls="records-panel" tabindex="-1" type="button">学习记录</button>
                     <button id="account-tab" class="learning-tab account-tab" data-section="account" role="tab" aria-selected="false" aria-controls="account-panel" tabindex="-1" type="button">我的账号</button>
                 </nav>
@@ -141,6 +144,35 @@
                     </div>
                     <div id="writing-history" class="writing-history-backdrop" role="dialog" aria-modal="true" aria-labelledby="writing-history-title" hidden><section class="writing-history-card"><header><div><span class="eyebrow">每一步都留得下来</span><h3 id="writing-history-title">版本记录</h3></div><button id="writing-history-close" class="writing-button writing-button-light" type="button" aria-label="关闭版本记录">关闭</button></header><label for="writing-version-list">选择一个已保存的版本</label><select id="writing-version-list"></select><div id="writing-version-preview" class="writing-version-preview"></div><button id="writing-version-restore" class="writing-button" type="button" hidden>恢复这一版</button><div id="writing-restore-confirmation" class="writing-local-recovery" hidden><p>恢复后会保留已有版本，并把选中的内容作为新的草稿。</p><button id="writing-version-restore-confirm" class="writing-button" type="button">确认恢复</button><button id="writing-version-restore-cancel" class="writing-button writing-button-light" type="button">暂不恢复</button></div></section></div>
                 </section>
+                <section id="dictation-panel" class="dictation-panel" role="tabpanel" aria-labelledby="dictation-tab" hidden>
+                    <p id="dictation-message" class="feedback" role="status" aria-live="polite" hidden></p>
+                    <div id="dictation-home">
+                        <div class="dictation-heading"><div><span class="eyebrow">生词默写 · 自己掌握节奏</span><h2>听一个，写一个</h2><p>按课文保存词语，写好后按空格继续，家长不用逐词报读。</p></div><span class="dictation-heading-mark" aria-hidden="true">听</span></div>
+                        <div id="dictation-resume-banner" class="dictation-resume" hidden><p id="dictation-resume-label"></p><div><button id="dictation-resume" class="dictation-button" type="button">继续这次默写</button><button id="dictation-end-run" class="dictation-button dictation-button-light" type="button">结束并对照</button></div></div>
+                        <div class="dictation-workspace">
+                            <aside class="dictation-directory"><label for="dictation-book">选择课本</label><select id="dictation-book"></select><p id="dictation-edition" class="dictation-note"></p><div id="dictation-lessons" class="dictation-lessons"></div><details class="dictation-custom"><summary>不在目录里？添加我的课文</summary><label for="dictation-custom-title">课文名称</label><input id="dictation-custom-title" maxlength="80" placeholder="填写老师安排的篇目"><label for="dictation-custom-number">课号（选填）</label><input id="dictation-custom-number" type="number" min="1" max="999" inputmode="numeric"><button id="dictation-add-lesson" class="dictation-button dictation-button-light" type="button">添加到我的目录</button></details></aside>
+                            <div class="dictation-preparation">
+                                <div id="dictation-select-prompt" class="dictation-empty"><span aria-hidden="true">词</span><h3>先选一篇课文</h3><p>家长或学生录入一次词语，之后就能随时开始默写。</p></div>
+                                <div id="dictation-editor" hidden>
+                                    <div class="dictation-editor-heading"><div><span class="dictation-note">本课词表</span><h3 id="dictation-lesson-title"></h3></div><span id="dictation-save-state" role="status" aria-live="polite"></span></div>
+                                    <div id="dictation-conflict" class="dictation-conflict" role="alert" hidden><strong>这课词表有一份更新</strong><p>本机未保存的内容仍保留着。可以先复制自己的这一份，再查看云端词表。</p><div><button id="dictation-copy-local" class="dictation-button dictation-button-light" type="button">复制本机词表</button><button id="dictation-load-cloud" class="dictation-button dictation-button-light" type="button">查看云端词表</button></div><pre id="dictation-cloud-preview" hidden></pre><button id="dictation-keep-cloud" class="dictation-button dictation-button-light" type="button">使用云端这一份</button><div id="dictation-discard-confirm" hidden><p>确认后会放弃本机尚未保存的修改，请先复制需要保留的内容。</p><button id="dictation-confirm-cloud" class="dictation-button" type="button">确认放弃本机修改，使用云端稿</button></div></div>
+                                    <label class="dictation-field-label" for="dictation-words">要默写的词语</label><textarea id="dictation-words" rows="7" maxlength="25000" spellcheck="false" placeholder="例如：潮水 笼罩 薄雾&#10;支持换行、空格、逗号、顿号或分号分隔。"></textarea><p id="dictation-word-count" class="dictation-note" role="status"></p>
+                                    <details class="dictation-spoken-help"><summary>多音词或想加说明？</summary><p>可在单独一行写“词语｜朗读内容”，例如“薄｜单薄的薄”。默写时仍只写左边的词语。其他词语继续用空格或换行分隔。</p><p>保存前可以逐词试听，按课本和老师要求核对读音。</p></details>
+                                    <div id="dictation-word-preview" class="dictation-word-preview"></div>
+                                    <div class="dictation-settings"><div><label for="dictation-voice">普通话语音</label><select id="dictation-voice"></select></div><div><label for="dictation-repetitions">每词读几遍</label><select id="dictation-repetitions"><option value="2">2 遍</option><option value="1">1 遍</option></select></div><label class="dictation-shuffle"><input id="dictation-shuffle" type="checkbox">打乱顺序</label></div>
+                                    <p id="dictation-voice-status" class="dictation-note" role="status"></p><button id="dictation-refresh-voices" class="dictation-text-button" type="button">重新检测普通话语音</button>
+                                    <div class="dictation-editor-actions"><button id="dictation-save" class="dictation-button dictation-button-light" type="button">保存词表</button><button id="dictation-start" class="dictation-button" type="button">保存并开始默写</button></div><p class="dictation-note">词语会保存在当前学生的课文目录里。开始后会隐藏词表，请在纸上书写。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="dictation-player" class="dictation-player" hidden>
+                        <div class="dictation-player-heading"><div><span class="eyebrow">纸上默写</span><h2 id="dictation-player-title"></h2></div><button id="dictation-player-exit" class="dictation-text-button" type="button">暂时退出</button></div>
+                        <progress id="dictation-progress" max="1" value="0" aria-label="默写词语进度"></progress><div class="dictation-player-card"><p id="dictation-position" class="dictation-position"></p><span class="dictation-sound-mark" aria-hidden="true">听</span><h3 id="dictation-play-status" role="status" aria-live="polite">准备好后，点播放</h3><p id="dictation-player-instruction">在纸上写好后，按空格或点“下一个”。</p><p id="dictation-player-settings" class="dictation-note"></p><div class="dictation-player-actions"><button id="dictation-play" class="dictation-button dictation-play" type="button">播放本词</button><button id="dictation-next" class="dictation-button dictation-next" type="button">下一个</button></div><p class="dictation-key-hint"><kbd>空格</kbd> 播放本词／继续下一个 · 读完后会等你写好</p></div>
+                    </div>
+                    <div id="dictation-finish" class="dictation-finish" hidden><span class="eyebrow">对照与再练</span><h2>这一轮读完了</h2><p id="dictation-finish-label"></p><p>拿出纸上的默写，逐个对照。勾选还想再练的词语，再听一轮。</p><div id="dictation-review-list" class="dictation-review-list"></div><div class="dictation-finish-actions"><button id="dictation-retry-selected" class="dictation-button" type="button" disabled>再练选中的词语</button><button id="dictation-retry-all" class="dictation-button dictation-button-light" type="button">整份再来一遍</button><button id="dictation-finish-back" class="dictation-text-button" type="button">返回课文目录</button></div></div>
+                </section>
+
                 <section id="papers-panel" class="content-panel" role="tabpanel" aria-labelledby="papers-tab">
                     <div class="panel-heading"><div><h2>选择一张考卷</h2><p>找到对应年级与学期，循序复习。</p></div><span id="papers-result-count" class="count-label">共 0 份</span></div>
                     <div class="filters"><div><label for="paper-grade-filter">年级</label><select id="paper-grade-filter"><option value="">全部年级</option></select></div><div><label for="paper-term-filter">学期</label><select id="paper-term-filter"><option value="">全部学期</option><option value="1">上册</option><option value="2">下册</option></select></div><div><label for="paper-phase-filter">考试类型</label><select id="paper-phase-filter"><option value="">全部类型</option><option value="midterm">期中</option><option value="final">期末</option></select></div></div>

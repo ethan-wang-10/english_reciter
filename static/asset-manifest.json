@@ -15,6 +15,11 @@
       "sha256": "5a475613d811f533ea635bca3db25ccfe30f3046978b9c531e821afcc4c39410",
       "url": "/static/assets/css/style.5a475613d811f533.css"
     },
+    "/static/css/subject-dictation.css": {
+      "bytes": 10607,
+      "sha256": "4e765b39a298fc81a4b5e01a3e0cae497b795a010e508a8631d31297d211899e",
+      "url": "/static/assets/css/subject-dictation.4e765b39a298fc81.css"
+    },
     "/static/css/subject-portal.css": {
       "bytes": 16977,
       "sha256": "00e1fec53ec371c411ff90454628df293de3e9b11c5017ba8088ae4494bd8b1a",
@@ -60,10 +65,15 @@
       "sha256": "cabc7fdc8aff1192044338e4b49dd5731ea9f42dba029a18269c41bfad4916ca",
       "url": "/static/assets/js/performance.cabc7fdc8aff1192.js"
     },
+    "/static/js/subject-dictation.js": {
+      "bytes": 37492,
+      "sha256": "8e4790b4a5abe787f8189496f345aaf05f29f9fe6a2e4c1876e252fcab58a985",
+      "url": "/static/assets/js/subject-dictation.8e4790b4a5abe787.js"
+    },
     "/static/js/subject-portal.js": {
-      "bytes": 30771,
-      "sha256": "647228da2272222e618de60344ecddba0d1dea81321265a91e7489bce2ff36c2",
-      "url": "/static/assets/js/subject-portal.647228da2272222e.js"
+      "bytes": 31056,
+      "sha256": "edbc99f1a78d4f08f6808197a2e3bea19e56307c61b2a96c1a15e6cb79d5c818",
+      "url": "/static/assets/js/subject-portal.edbc99f1a78d4f08.js"
     },
     "/static/js/subject-practice.js": {
       "bytes": 22024,

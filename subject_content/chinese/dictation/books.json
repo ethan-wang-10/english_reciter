@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "books": [
+    {
+      "id": "shanghai-chinese-grade4-term1-2026",
+      "title": "语文四年级上册",
+      "grade": 4,
+      "term": 1,
+      "edition": "上海在用2026新版",
+      "description": "按课文保存自己的词语，写在纸上，听完一个再继续下一个。",
+      "source_note": "课文目录据2026秋同步资料核对，起始两课与用户确认的《观潮》《繁星》一致；词语由用户自行录入。",
+      "catalog_note": "仅提供课文目录；老师另有篇目时可以添加自己的课文。",
+      "references": [
+        {
+          "label": "2026秋四年级上册课文同步朗读目录",
+          "url": "https://www.bilibili.com/video/BV1EE8d6YEWZ/"
+        },
+        {
+          "label": "2026新改版四年级语文上册起始课文交叉核对",
+          "url": "https://www.bilibili.com/video/BV12FNg6DEiC/"
+        }
+      ],
+      "lessons": [
+        {
+          "id": "lesson-01",
+          "number": 1,
+          "title": "观潮",
+          "unit": "第1单元"
+        },
+        {
+          "id": "lesson-02",
+          "number": 2,
+          "title": "繁星",
+          "unit": "第1单元"
+        },
+        {
+          "id": "lesson-03",
+          "number": 3,
+          "title": "现代诗二首",
+          "unit": "第1单元"
+        },
+        {
+          "id": "lesson-04",
+          "number": 4,
+          "title": "一个豆荚里的五粒豆",
+          "unit": "第2单元"
+        },
+        {
+          "id": "lesson-05",
+          "number": 5,
+          "title": "夜间飞行的秘密",
+          "unit": "第2单元"
+        },
+        {
+          "id": "lesson-06",
+          "number": 6,
+          "title": "方帽子店",
+          "unit": "第2单元"
+        },
+        {
+          "id": "lesson-07",
+          "number": 7,
+          "title": "田忌赛马",
+          "unit": "第2单元"
+        },
+        {
+          "id": "lesson-08",
+          "number": 8,
+          "title": "古诗三首",
+          "unit": "第3单元"
+        },
+        {
+          "id": "lesson-09",
+          "number": 9,
+          "title": "爬山虎的脚",
+          "unit": "第3单元"
+        },
+        {
+          "id": "lesson-10",
+          "number": 10,
+          "title": "蟋蟀的住宅",
+          "unit": "第3单元"
+        },
+        {
+          "id": "lesson-11",
+          "number": 11,
+          "title": "盘古开天地",
+          "unit": "第4单元"
+        },
+        {
+          "id": "lesson-12",
+          "number": 12,
+          "title": "精卫填海",
+          "unit": "第4单元"
+        },
+        {
+          "id": "lesson-13",
+          "number": 13,
+          "title": "普罗米修斯",
+          "unit": "第4单元"
+        },
+        {
+          "id": "lesson-14",
+          "number": 14,
+          "title": "女娲补天",
+          "unit": "第4单元"
+        },
+        {
+          "id": "lesson-15",
+          "number": 15,
+          "title": "麻雀",
+          "unit": "第5单元"
+        },
+        {
+          "id": "lesson-16",
+          "number": 16,
+          "title": "爬天都峰",
+          "unit": "第5单元"
+        },
+        {
+          "id": "lesson-17",
+          "number": 17,
+          "title": "长城",
+          "unit": "第6单元"
+        },
+        {
+          "id": "lesson-18",
+          "number": 18,
+          "title": "颐和园",
+          "unit": "第6单元"
+        },
+        {
+          "id": "lesson-19",
+          "number": 19,
+          "title": "秦兵马俑",
+          "unit": "第6单元"
+        },
+        {
+          "id": "lesson-20",
+          "number": 20,
+          "title": "牛和鹅",
+          "unit": "第7单元"
+        },
+        {
+          "id": "lesson-21",
+          "number": 21,
+          "title": "一只窝囊的大老虎",
+          "unit": "第7单元"
+        },
+        {
+          "id": "lesson-22",
+          "number": 22,
+          "title": "陀螺",
+          "unit": "第7单元"
+        },
+        {
+          "id": "lesson-23",
+          "number": 23,
+          "title": "王戎不取道旁李",
+          "unit": "第7单元"
+        },
+        {
+          "id": "lesson-24",
+          "number": 24,
+          "title": "我将无我，不负人民",
+          "unit": "第8单元"
+        },
+        {
+          "id": "lesson-25",
+          "number": 25,
+          "title": "为中华之崛起而读书",
+          "unit": "第8单元"
+        },
+        {
+          "id": "lesson-26",
+          "number": 26,
+          "title": "延安，我把你追寻",
+          "unit": "第8单元"
+        },
+        {
+          "id": "lesson-27",
+          "number": 27,
+          "title": "古诗三首",
+          "unit": "第8单元"
+        }
+      ]
+    }
+  ]
+}
