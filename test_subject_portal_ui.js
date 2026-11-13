@@ -397,3 +397,37 @@ test('a token change from another tab restores that account without writing the 
     assert.equal(ui.field('learning-view').hidden, true);
     assert.equal(ui.api.getSession().token, '');
 });
+
+
+test('the Chinese writing workspace opens independently and resets with the account', async () => {
+    const ui = subjectUI();
+    const events = [];
+    ui.context.window.subjectWriting = {
+        open: () => events.push('open'),
+        leaveView: () => events.push('leave'),
+        reset: () => events.push('reset'),
+    };
+    await ui.login();
+    assert.equal(ui.field('writing-tab').hidden, false);
+    await ui.field('writing-tab').fire('click');
+    assert.equal(ui.field('writing-panel').hidden, false);
+    assert.equal(ui.field('papers-panel').hidden, true);
+    assert.ok(events.includes('open'));
+    assert.equal(ui.state.calls.some((call) => call.url === '/api/subjects/chinese/writing'), false);
+    await ui.field('papers-tab').fire('click');
+    assert.equal(ui.field('writing-panel').hidden, true);
+    assert.ok(events.includes('leave'));
+    await ui.field('subject-logout').fire('click');
+    assert.ok(events.includes('reset'));
+});
+
+test('math keeps its original tabs and does not open the Chinese writing module', async () => {
+    const ui = subjectUI({ subject: 'math' });
+    const events = [];
+    ui.context.window.subjectWriting = { open: () => events.push('open'), leaveView() {}, reset() {} };
+    await ui.login();
+    assert.equal(ui.field('writing-tab').hidden, true);
+    await ui.field('knowledge-tab').fire('click');
+    assert.deepEqual(events, []);
+    assert.equal(ui.field('writing-panel').hidden, true);
+});

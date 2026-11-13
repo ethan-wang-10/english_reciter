@@ -15,6 +15,7 @@
         return;
     }
     if (!config || !['chinese', 'math'].includes(config.id)) return;
+    if (config.id === 'chinese') sections.splice(2, 0, 'writing');
 
     function readStorage(key) {
         try { return localStorage.getItem(key) || ''; } catch (_) { return ''; }
@@ -77,6 +78,7 @@
     }
 
     function clearSession(message = '', persist = true) {
+        window.subjectWriting?.reset();
         generation += 1;
         bootstrapRequest += 1;
         sectionRequest += 1;
@@ -118,6 +120,8 @@
             if (response.status === 401 && authenticated && ctx.token) clearSession('登录已过期，请重新登录。');
             const error = new Error(data.error || data.detail || `请求失败（${response.status}），请稍后重试。`);
             error.status = response.status;
+            error.code = data.code;
+            error.current_revision = data.current_revision;
             throw error;
         }
         return data;
@@ -245,7 +249,7 @@
             const heading = document.createElement('h3');
             heading.textContent = String(item.name || item.title || item.paper_title || (name === 'records' ? '学习记录' : '学习材料'));
             content.appendChild(heading);
-            const description = item.description || (name === 'records' ? item.submitted_at : '');
+            const description = item.description || (name === 'records' ? String(item.submitted_at || '').replace('T', ' ').slice(0, 16) : '');
             if (description) {
                 const text = document.createElement('p');
                 text.textContent = String(description);
@@ -278,6 +282,17 @@
                 }
                 content.appendChild(details);
             }
+            if (name === 'records' && item.kind === 'writing' && /^writing_[a-f0-9]{32}$/.test(item.id || '')) {
+                const review = document.createElement('button');
+                review.type = 'button';
+                review.className = 'text-button';
+                review.textContent = '查看作文与修改';
+                review.addEventListener('click', () => {
+                    showSection('writing');
+                    void window.subjectWriting?.openAttempt(item.id);
+                });
+                content.appendChild(review);
+            }
             card.appendChild(content);
             if (name === 'records' && typeof item.score === 'number' && Number.isFinite(item.score)) {
                 const score = document.createElement('span');
@@ -291,6 +306,7 @@
 
     function showSection(name, focus = false) {
         if (!sections.includes(name) || !token || !account) return;
+        if (name !== 'writing') window.subjectWriting?.leaveView();
         activeSection = name;
         sections.forEach((section) => {
             const selected = section === name;
@@ -300,13 +316,14 @@
             el(`${section}-tab`).tabIndex = selected ? 0 : -1;
         });
         if (focus) el(`${name}-tab`).focus({ preventScroll: true });
+        if (name === 'writing') void window.subjectWriting?.open();
     }
 
     async function refreshSection(name) {
         showSection(name);
         const requestId = ++sectionRequest;
         feedback('portal-status');
-        if (name === 'account' || !token || !account) return;
+        if (name === 'account' || name === 'writing' || !token || !account) return;
         const ctx = context();
         feedback('portal-error');
         feedback('portal-status', '正在加载…');
@@ -320,6 +337,20 @@
             if (current(ctx) && requestId === sectionRequest) feedback('portal-error', error.message || '内容加载失败，请稍后重试。');
         } finally {
             if (current(ctx) && requestId === sectionRequest) feedback('portal-status');
+        }
+    }
+
+    async function refreshRecords() {
+        if (!token || !account) return;
+        const ctx = context();
+        try {
+            const result = await apiRequest(`/subjects/${config.id}/records`);
+            if (!current(ctx)) return;
+            resources.records = Array.isArray(result.items) ? result.items : [];
+            renderResources('records');
+            updateSummary();
+        } catch (error) {
+            if (current(ctx)) feedback('portal-error', '作品已保存，学习记录暂未刷新，可稍后重新打开查看。');
         }
     }
 
@@ -419,6 +450,7 @@
 
     function configurePage() {
         document.body.dataset.subject = config.id;
+        el('writing-tab').hidden = config.id !== 'chinese';
         document.title = config.title || `${config.name}学习空间`;
         const character = config.id === 'math' ? '数' : '语';
         el('header-subject-name').textContent = config.name;
@@ -544,7 +576,7 @@
     });
 
     window.subjectPortal = {
-        apiRequest, acceptSession, switchSubject,
+        apiRequest, acceptSession, switchSubject, showSection, refreshSection, refreshRecords,
         getSession: () => ({ token, username, account, subject: config.id }),
         refresh: bootstrap,
     };
