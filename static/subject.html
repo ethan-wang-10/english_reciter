@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#e96b50">
+    <meta name="description" content="学科学习，按年级整理内置考卷、知识点和学习记录。">
+    <title>{{ site_config.title }}</title>
+    <link rel="stylesheet" href="/static/assets/css/subject-portal.00e1fec53ec371c4.css">
+    <script id="subject-site-config" type="application/json">{{ site_config|tojson }}</script>
+    <script src="/static/assets/js/subject-portal.dd6562c0afcd0c3b.js" defer></script>
+    <script src="/static/assets/js/subject-sso.5564dee98f722338.js" defer></script>
+</head>
+<body>
+    <a class="skip-link" href="#portal-main">跳到主要内容</a>
+    <div class="site-shell">
+        <header class="site-header">
+            <a class="brand" href="/" aria-label="学科学习首页">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 40 40" fill="none"><path d="M12 13c-2-3-6-3-7-1-1 2 1 5 4 6m19-5c2-3 6-3 7-1 1 2-1 5-4 6M12 28c-2 3-6 3-7 1-1-2 1-5 4-6m19 5c2 3 6 3 7 1 1-2-1-5-4-6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/><path d="M19 7c0-3 2-5 4-4s3 4 1 6" fill="currentColor"/><ellipse cx="20" cy="20" rx="12" ry="13" fill="currentColor"/><path d="m20 11 7 5v8l-7 5-7-5v-8l7-5Z" stroke="white" stroke-width="1.8"/><path d="M13 16 9 14m18 2 4-2M13 24l-4 2m18-2 4 2M20 29v4m0-22V7" stroke="white" stroke-width="1.6"/></svg>
+                </span>
+                <span><strong>学科学习</strong><span id="header-subject-name" class="brand-subject">学科练习</span></span>
+            </a>
+            <div class="header-actions">
+                <nav id="header-subjects" class="subject-links" aria-label="切换学科"></nav>
+                <div id="signed-in-actions" class="signed-in-actions" hidden>
+                    <button id="header-account" class="account-button" type="button" aria-label="我的账号"><span id="header-avatar" aria-hidden="true">同</span><span id="header-username"></span></button>
+                    <button id="subject-logout" class="text-button" type="button">退出</button>
+                </div>
+            </div>
+        </header>
+
+        <main id="portal-main" tabindex="-1">
+            <section id="auth-view" class="auth-layout" aria-label="账号登录">
+                <div class="auth-introduction">
+                    <span id="auth-subject-badge" class="eyebrow">学科练习</span>
+                    <h1 id="auth-heading">把知识学明白，<br>把练习做扎实。</h1>
+                    <p id="auth-description" class="auth-description">从知识点梳理到内置考卷，找到适合自己的学习节奏。</p>
+                    <div class="subject-illustration" aria-hidden="true">
+                        <span class="illustration-orbit orbit-one"></span><span class="illustration-orbit orbit-two"></span>
+                        <span class="illustration-small small-one">学</span><span class="illustration-small small-two">习</span>
+                        <div class="illustration-book"><span id="illustration-character">语</span><span class="book-line"></span><span class="book-line short"></span><span class="book-corner"></span></div>
+                        <span class="illustration-tag">每天，一点新收获</span>
+                    </div>
+                    <div class="shared-account-note"><span aria-hidden="true">✓</span><p>英语、语文、数学共用一套账号。<br>已有英语账号，可直接登录。</p></div>
+                </div>
+                <div class="auth-card">
+                    <div id="auth-tabs" class="auth-tabs" role="tablist" aria-label="登录或注册">
+                        <button id="login-tab" class="auth-tab active" role="tab" aria-selected="true" aria-controls="login-form" type="button">登录</button>
+                        <button id="register-tab" class="auth-tab" role="tab" aria-selected="false" aria-controls="register-form" tabindex="-1" type="button">注册</button>
+                    </div>
+                    <p id="session-loading" class="auth-loading" role="status" hidden>正在检查登录状态…</p>
+                    <form id="login-form" class="auth-form">
+                        <h2>欢迎回来</h2><p class="form-intro">使用已有账号，继续学习。</p>
+                        <label for="login-username">用户名</label><input id="login-username" name="username" autocomplete="username" required maxlength="32">
+                        <label for="login-password">密码</label><input id="login-password" name="password" type="password" autocomplete="current-password" required>
+                        <div class="form-meta"><span>与英语站账号一致</span><button id="forgot-open" class="text-button" type="button">忘记密码？</button></div>
+                        <button class="primary-button auth-submit" type="submit">登录，开始学习 <span aria-hidden="true">→</span></button>
+                    </form>
+                    <form id="register-form" class="auth-form" hidden>
+                        <h2>创建学习账号</h2><p class="form-intro">注册一次，三个学科都能使用。</p>
+                        <label for="register-username">用户名</label><input id="register-username" name="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[a-zA-Z0-9_]{3,32}" aria-describedby="username-hint"><p id="username-hint" class="field-hint">3–32 位字母、数字或下划线。</p>
+                        <label for="register-email">邮箱 <span class="optional">选填</span></label><input id="register-email" name="email" type="email" autocomplete="email">
+                        <div class="two-fields"><div><label for="register-password">密码</label><input id="register-password" name="password" type="password" autocomplete="new-password" required minlength="6"></div><div><label for="register-password-confirm">确认密码</label><input id="register-password-confirm" name="password_confirm" type="password" autocomplete="new-password" required minlength="6"></div></div>
+                        <label for="register-invite">邀请码</label><input id="register-invite" name="invite_code" autocomplete="off" required placeholder="填写用户或管理员提供的邀请码">
+                        <button class="primary-button auth-submit" type="submit">注册并登录 <span aria-hidden="true">→</span></button>
+                    </form>
+                    <form id="forgot-form" class="auth-form" hidden>
+                        <button class="text-button back-to-login" type="button">← 返回登录</button><h2>找回密码</h2><p class="form-intro">填写账号绑定的邮箱，我们会发送密码重置链接。</p>
+                        <label for="forgot-email">绑定邮箱</label><input id="forgot-email" name="email" type="email" autocomplete="email" required>
+                        <button class="primary-button auth-submit" type="submit">发送重置邮件</button>
+                    </form>
+                    <form id="reset-form" class="auth-form" hidden>
+                        <h2>设置新密码</h2><p class="form-intro">新密码将同时用于英语、语文和数学站。</p>
+                        <label for="reset-password">新密码</label><input id="reset-password" name="password" type="password" autocomplete="new-password" required minlength="6">
+                        <label for="reset-password-confirm">确认新密码</label><input id="reset-password-confirm" name="password_confirm" type="password" autocomplete="new-password" required minlength="6">
+                        <button class="primary-button auth-submit" type="submit">保存新密码</button><button class="text-button back-to-login" type="button">返回登录</button>
+                    </form>
+                    <p id="auth-error" class="feedback feedback-error" role="alert" hidden></p>
+                    <p id="auth-status" class="feedback feedback-status" role="status" aria-live="polite" hidden></p>
+                    <p class="auth-footer">同一个账号，陪伴每一次进步。</p>
+                </div>
+            </section>
+
+            <section id="learning-view" class="learning-layout" aria-label="学科学习空间" hidden>
+                <div class="welcome-row"><div><span id="dashboard-subject-badge" class="eyebrow">学科学习空间</span><h1 id="dashboard-heading">从一张好考卷开始</h1><p id="dashboard-description" class="section-description">按年级整理学习内容，复习和练习都更有方向。</p></div><span class="welcome-decoration" id="dashboard-character" aria-hidden="true">语</span></div>
+                <div class="summary-grid" aria-label="学科内容概览">
+                    <button class="summary-card" type="button" data-section="papers"><span class="summary-icon" aria-hidden="true">卷</span><span><strong id="paper-count">0</strong><span>内置考卷</span></span><span class="summary-arrow" aria-hidden="true">↗</span></button>
+                    <button class="summary-card" type="button" data-section="knowledge"><span class="summary-icon" aria-hidden="true">知</span><span><strong id="knowledge-count">0</strong><span>知识点梳理</span></span><span class="summary-arrow" aria-hidden="true">↗</span></button>
+                    <button class="summary-card" type="button" data-section="records"><span class="summary-icon" aria-hidden="true">迹</span><span><strong id="record-count">0</strong><span>学习记录</span></span><span class="summary-arrow" aria-hidden="true">↗</span></button>
+                </div>
+                <nav id="learning-tabs" class="learning-tabs" role="tablist" aria-label="学习内容">
+                    <button id="papers-tab" class="learning-tab active" data-section="papers" role="tab" aria-selected="true" aria-controls="papers-panel" type="button">内置考卷</button>
+                    <button id="knowledge-tab" class="learning-tab" data-section="knowledge" role="tab" aria-selected="false" aria-controls="knowledge-panel" tabindex="-1" type="button">知识点梳理</button>
+                    <button id="records-tab" class="learning-tab" data-section="records" role="tab" aria-selected="false" aria-controls="records-panel" tabindex="-1" type="button">学习记录</button>
+                    <button id="account-tab" class="learning-tab account-tab" data-section="account" role="tab" aria-selected="false" aria-controls="account-panel" tabindex="-1" type="button">我的账号</button>
+                </nav>
+                <p id="portal-error" class="feedback feedback-error" role="alert" hidden></p>
+                <p id="portal-status" class="portal-status" role="status" aria-live="polite" hidden></p>
+                <section id="papers-panel" class="content-panel" role="tabpanel" aria-labelledby="papers-tab">
+                    <div class="panel-heading"><div><h2>选择一张考卷</h2><p>找到对应年级与学期，循序复习。</p></div><span id="papers-result-count" class="count-label">共 0 份</span></div>
+                    <div class="filters"><div><label for="paper-grade-filter">年级</label><select id="paper-grade-filter"><option value="">全部年级</option></select></div><div><label for="paper-term-filter">学期</label><select id="paper-term-filter"><option value="">全部学期</option><option value="1">上册</option><option value="2">下册</option></select></div><div><label for="paper-phase-filter">考试类型</label><select id="paper-phase-filter"><option value="">全部类型</option><option value="midterm">期中</option><option value="final">期末</option></select></div></div>
+                    <div id="papers-list" class="resource-grid"></div>
+                    <div id="papers-empty" class="empty-state"><span class="empty-symbol" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><rect x="16" y="10" width="33" height="44" rx="6" stroke="currentColor" stroke-width="2"/><path d="M24 23h17M24 31h17M24 39h10M10 19v29a10 10 0 0 0 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><h3 id="papers-empty-title">内置考卷正在准备中</h3><p id="papers-empty-description">考卷上线后，会按年级和学期收录在这里。<br>下次来，继续发现新的学习内容。</p></div>
+                </section>
+                <section id="knowledge-panel" class="content-panel" role="tabpanel" aria-labelledby="knowledge-tab" hidden><div class="panel-heading"><div><h2>把知识点串起来</h2><p>梳理重点与易错点，让复习更清楚。</p></div><span id="knowledge-result-count" class="count-label">共 0 份</span></div><div id="knowledge-list" class="resource-grid"></div><div id="knowledge-empty" class="empty-state"><span class="empty-symbol" aria-hidden="true">知</span><h3>知识点梳理正在准备中</h3><p>后续将逐步补充单元知识、复习重点和学习方法。</p></div></section>
+                <section id="records-panel" class="content-panel" role="tabpanel" aria-labelledby="records-tab" hidden><div class="panel-heading"><div><h2>看见每一步进步</h2><p id="records-description">完成考卷后，可以在这里回顾学习情况。</p></div><span id="records-result-count" class="count-label">共 0 条</span></div><div id="records-list" class="records-list"></div><div id="records-empty" class="empty-state"><span class="empty-symbol" aria-hidden="true">迹</span><h3>还没有学习记录</h3><p>完成本学科的考卷后，成绩和练习记录会显示在这里。</p></div></section>
+                <section id="account-panel" class="content-panel" role="tabpanel" aria-labelledby="account-tab" hidden><div class="panel-heading"><div><h2>我的学习账号</h2><p>英语、语文和数学使用同一套账号。</p></div><span class="account-status"><span></span>已登录</span></div><dl class="account-details"><div><dt>用户名</dt><dd id="account-username">—</dd></div><div><dt>绑定邮箱</dt><dd id="account-email">—</dd></div><div><dt>账号身份</dt><dd id="account-role">—</dd></div><div id="account-child-row" hidden><dt>关联学生</dt><dd id="account-child">—</dd></div></dl><div class="account-help"><h3>一个账号，连接三个学科</h3><p>账号与密码在各学科通用。若需要找回密码，请使用登录页的“忘记密码”。</p><nav id="account-subjects" class="account-subject-links" aria-label="进入其他学科"></nav></div></section>
+            </section>
+        </main>
+        <footer class="site-footer"><span>学科学习 · 稳稳前进，每天一点收获</span><span id="footer-subject"></span></footer>
+    </div>
+</body>
+</html>

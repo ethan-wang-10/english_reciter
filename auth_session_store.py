@@ -93,8 +93,8 @@ def _cleanup_expired_unlocked(conn: sqlite3.Connection) -> None:
 
 
 def _stored_token(token: str, kind: str) -> str:
-    """密码重置令牌落库前哈希，避免数据库泄露后可直接使用重置链接。"""
-    if kind == SESSION_KIND_PASSWORD_RESET:
+    """一次性重置与学科切换码落库前哈希，避免直接复用数据库中的码。"""
+    if kind in (SESSION_KIND_PASSWORD_RESET, 'subject_sso_code'):
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
     return token
 

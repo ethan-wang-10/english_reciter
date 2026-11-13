@@ -15,6 +15,16 @@
       "sha256": "5a475613d811f533ea635bca3db25ccfe30f3046978b9c531e821afcc4c39410",
       "url": "/static/assets/css/style.5a475613d811f533.css"
     },
+    "/static/css/subject-portal.css": {
+      "bytes": 16977,
+      "sha256": "00e1fec53ec371c411ff90454628df293de3e9b11c5017ba8088ae4494bd8b1a",
+      "url": "/static/assets/css/subject-portal.00e1fec53ec371c4.css"
+    },
+    "/static/css/subject-switch.css": {
+      "bytes": 443,
+      "sha256": "4a8cdd20b9fb56be7b62e893a1b7411ba1a61ea826cea9b43f93470ac077846d",
+      "url": "/static/assets/css/subject-switch.4a8cdd20b9fb56be.css"
+    },
     "/static/js/admin.js": {
       "bytes": 40255,
       "sha256": "ce6f48c3ba42f871065b6a7eb4a72fe897c7d3549c3099864fd83af59a1cee5a",
@@ -39,6 +49,16 @@
       "bytes": 17312,
       "sha256": "cabc7fdc8aff1192044338e4b49dd5731ea9f42dba029a18269c41bfad4916ca",
       "url": "/static/assets/js/performance.cabc7fdc8aff1192.js"
+    },
+    "/static/js/subject-portal.js": {
+      "bytes": 26822,
+      "sha256": "dd6562c0afcd0c3bef186f0385b9cac77845d2c5690cd3f761a542bc27583403",
+      "url": "/static/assets/js/subject-portal.dd6562c0afcd0c3b.js"
+    },
+    "/static/js/subject-sso.js": {
+      "bytes": 6872,
+      "sha256": "5564dee98f72233893d272ca9b91f0306af794e3cdbfeba606d8b6eb68a61d7e",
+      "url": "/static/assets/js/subject-sso.5564dee98f722338.js"
     },
     "/static/js/textbook.js": {
       "bytes": 49241,

@@ -1,0 +1,12 @@
+.subject-switch-link {
+    display: block;
+    padding: 11px 16px;
+    color: var(--text-primary, #234034);
+    font: inherit;
+    font-weight: 650;
+    text-decoration: none;
+    border-radius: 12px;
+}
+.subject-switch-link:hover { background: #eff8e9; }
+.subject-switch-link:focus-visible { outline: 3px solid #58cc02; outline-offset: 2px; }
+.mobile-more-panel .subject-switch-link { margin: 5px 0; padding: 14px 16px; background: #f2f8ed; }

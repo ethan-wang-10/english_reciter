@@ -100,17 +100,22 @@ class AssetHtml(HTMLParser):
 def expected_outputs(root):
     root = Path(root).resolve()
     bundle = application_bundle(root)
-    source = (root / "static" / "index.html").read_text(encoding="utf-8")
-    parser = AssetHtml(root, source, bundle)
-    parser.feed(source)
-    parser.close()
-    manifest = json.dumps({"assets": parser.assets}, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
-    return {
-        **parser.fingerprinted,
-        root / "static" / "js" / "app.js": bundle,
-        root / "static" / "asset-manifest.json": manifest.encode("utf-8"),
-        root / "static" / "index.html": parser.render().encode("utf-8"),
-    }
+    outputs = {root / "static" / "js" / "app.js": bundle}
+    assets = {}
+    for name in ("index.html", "subject.html"):
+        path = root / "static" / name
+        if name != "index.html" and not path.exists():
+            continue
+        source = path.read_text(encoding="utf-8")
+        parser = AssetHtml(root, source, bundle)
+        parser.feed(source)
+        parser.close()
+        assets.update(parser.assets)
+        outputs.update(parser.fingerprinted)
+        outputs[path] = parser.render().encode("utf-8")
+    manifest = json.dumps({"assets": assets}, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
+    outputs[root / "static" / "asset-manifest.json"] = manifest.encode("utf-8")
+    return outputs
 
 
 def build(root=ROOT, check=False):

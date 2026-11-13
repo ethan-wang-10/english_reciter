@@ -62,7 +62,10 @@ COPY exam_grades.py .
 COPY exam_mistakes.py .
 COPY exam_preparation.py .
 COPY exam_preparation_routes.py .
+COPY subject_portal.py .
+COPY subject_sso.py .
 COPY builtin_exams/ ./builtin_exams/
+COPY subject_content/ ./subject_content/
 COPY web_auth_routes.py .
 COPY web_learning_routes.py .
 COPY web_wordbank_routes.py .

@@ -3745,6 +3745,10 @@ def sanitize_tts_text(text: str, max_len: int = 500) -> str:
 @app.route('/')
 def index():
     """主页"""
+    from subject_portal import render_subject_home, subject_for_host
+    subject = subject_for_host(app, request.host)
+    if subject:
+        return render_subject_home(app, subject)
     return send_file(Path(app.root_path) / 'static' / 'index.html')
 
 @app.route('/static/<path:path>')
@@ -6833,6 +6837,12 @@ globals().update(_register_wordbank_routes(app, sys.modules[__name__]))
 
 from web_chat_routes import register_routes as _register_chat_routes
 globals().update(_register_chat_routes(app, sys.modules[__name__]))
+
+from subject_portal import configured_sites, register_subject_portal_routes
+register_subject_portal_routes(app, sys.modules[__name__])
+
+from subject_sso import register_subject_sso_routes
+register_subject_sso_routes(app, sys.modules[__name__], lambda: configured_sites(app))
 
 # ==================== 启动配置 ====================
 

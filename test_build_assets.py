@@ -74,6 +74,27 @@ def test_css_change_updates_its_own_content_address(asset_root):
     assert before["/static/js/app.js"] == after["/static/js/app.js"]
 
 
+def test_subject_entry_keeps_its_template_and_only_invalidates_its_own_assets(asset_root):
+    script = asset_root / 'static/js/subject-portal.js'
+    script.write_text('window.portalReady = true;\n')
+    portal = asset_root / 'static/subject.html'
+    template = '<script type="application/json">{{ site_config|tojson }}</script>'
+    portal.write_text(template + '<script src="/static/js/subject-portal.js" defer></script>')
+    build_assets.build(asset_root)
+    previous = manifest(asset_root)
+    english = (asset_root / 'static/index.html').read_bytes()
+    assert template in portal.read_text()
+    assert previous['/static/js/subject-portal.js']['url'] in portal.read_text()
+    script.write_text('window.portalReady = false;\n')
+    build_assets.build(asset_root)
+    updated = manifest(asset_root)
+    assert previous['/static/js/subject-portal.js'] != updated['/static/js/subject-portal.js']
+    assert previous['/static/js/app.js'] == updated['/static/js/app.js']
+    assert (asset_root / 'static/index.html').read_bytes() == english
+    assert template in portal.read_text()
+    assert not build_assets.build(asset_root, check=True)
+
+
 def test_text_asset_hashes_are_independent_of_checkout_line_endings(asset_root):
     css = asset_root / "static" / "css" / "style.css"
     css.write_bytes(b"body { color: black; }\r\n")
