@@ -77,6 +77,7 @@
     }
 
     function clearSession(message = '', persist = true) {
+        window.subjectPractice?.reset();
         generation += 1;
         bootstrapRequest += 1;
         sectionRequest += 1;
@@ -245,7 +246,13 @@
             const heading = document.createElement('h3');
             heading.textContent = String(item.name || item.title || item.paper_title || (name === 'records' ? '学习记录' : '学习材料'));
             content.appendChild(heading);
-            const description = item.description || (name === 'records' ? item.submitted_at : '');
+            if (item.scope) {
+                const scope = document.createElement('p');
+                scope.className = 'resource-meta';
+                scope.textContent = `范围：${item.scope}`;
+                content.appendChild(scope);
+            }
+            const description = item.description || (name === 'records' ? String(item.submitted_at || '').replace('T', ' ').slice(0, 16) : '');
             if (description) {
                 const text = document.createElement('p');
                 text.textContent = String(description);
@@ -258,7 +265,39 @@
                 link.textContent = name === 'papers' ? '查看考卷 →' : '打开阅读 →';
                 content.appendChild(link);
             }
+            if (name === 'papers' && item.interactive) {
+                const start = document.createElement('button');
+                start.type = 'button';
+                start.className = 'primary-button resource-start';
+                start.textContent = account?.is_parent ? '请使用学生账号练习' : '开始练习';
+                start.disabled = !!account?.is_parent;
+                start.addEventListener('click', () => void window.subjectPractice?.start(item.id));
+                content.appendChild(start);
+            }
+            if (name === 'papers' && item.knowledge_id) {
+                const knowledge = document.createElement('button');
+                knowledge.type = 'button';
+                knowledge.className = 'text-button resource-knowledge';
+                knowledge.textContent = '知识点梳理';
+                knowledge.addEventListener('click', () => {
+                    showSection('knowledge');
+                    const target = el('knowledge-list').querySelector(`[data-knowledge-id="${item.knowledge_id}"]`);
+                    const details = target?.querySelector('details');
+                    if (details) details.open = true;
+                    target?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                });
+                content.appendChild(knowledge);
+            }
+            if (name === 'records' && /^[a-f0-9]{32}$/.test(item.id || '')) {
+                const review = document.createElement('button');
+                review.type = 'button';
+                review.className = 'text-button';
+                review.textContent = '查看答卷与解析';
+                review.addEventListener('click', () => void window.subjectPractice?.showResult(item.id));
+                content.appendChild(review);
+            }
             if (name === 'knowledge' && Array.isArray(item.sections) && item.sections.length) {
+                card.setAttribute('data-knowledge-id', item.id);
                 const details = document.createElement('details');
                 details.className = 'knowledge-details';
                 const summary = document.createElement('summary');
@@ -291,6 +330,7 @@
 
     function showSection(name, focus = false) {
         if (!sections.includes(name) || !token || !account) return;
+        window.subjectPractice?.leaveView();
         activeSection = name;
         sections.forEach((section) => {
             const selected = section === name;
@@ -349,6 +389,7 @@
             el('session-loading').hidden = true;
             feedback('portal-error');
             showSection(activeSection);
+            void window.subjectPractice?.refreshActive();
         } catch (error) {
             if (current(ctx) && requestId === bootstrapRequest) {
                 showAuth('login', false);
@@ -544,7 +585,7 @@
     });
 
     window.subjectPortal = {
-        apiRequest, acceptSession, switchSubject,
+        apiRequest, acceptSession, switchSubject, showSection, refreshSection,
         getSession: () => ({ token, username, account, subject: config.id }),
         refresh: bootstrap,
     };

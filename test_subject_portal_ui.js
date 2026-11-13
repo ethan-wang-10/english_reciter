@@ -54,16 +54,22 @@ function subjectUI({ subject = 'chinese', storage = new Map(), href } = {}) {
         replaceChildren(...children) { this.children = []; this.ownText = ''; children.forEach((child) => this.appendChild(child)); }
         setAttribute(name, value) { this.attributes[name] = String(value); }
         getAttribute(name) { return this.attributes[name] ?? null; }
+        removeAttribute(name) { delete this.attributes[name]; if (name === 'src') this.src = ''; }
         addEventListener(name, callback) { this.listeners[name] = callback; }
         querySelectorAll(selector) {
             const tests = selector.split(',').map((value) => value.trim());
             const matches = (node) => tests.some((query) => {
                 if (query.startsWith('.')) return (node.attributes.class || '').split(/\s+/).includes(query.slice(1));
-                if (query.startsWith('[')) return Object.hasOwn(node.attributes, query.slice(1, -1));
+                if (query.startsWith('[')) {
+                    const attribute = query.match(/^\[([^=\]]+)(?:="([^"]*)")?\]$/);
+                    return !!attribute && Object.hasOwn(node.attributes, attribute[1])
+                        && (attribute[2] === undefined || node.attributes[attribute[1]] === attribute[2]);
+                }
                 return node.tagName === query;
             });
             return this.children.flatMap((child) => [...(matches(child) ? [child] : []), ...child.querySelectorAll(selector)]);
         }
+        querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
         focus() { state.focused = this; }
         reset() { this.querySelectorAll('input').forEach((node) => { node.value = ''; }); }
         async fire(name, extra = {}) {
@@ -119,6 +125,11 @@ function subjectUI({ subject = 'chinese', storage = new Map(), href } = {}) {
     state.bootstrapPayload = bootstrapPayload;
     const context = vm.createContext({
         window, URL, location,
+        setTimeout, clearTimeout,
+        sessionStorage: (() => {
+            const values = new Map();
+            return { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
+        })(),
         history: { replaceState(_state, _unused, value) { location.href = new URL(value, origin).href; state.replacedUrl = value; } },
         document: {
             body: state.body, title: '',
@@ -396,4 +407,203 @@ test('a token change from another tab restores that account without writing the 
     ui.state.windowListeners.storage({ key: null });
     assert.equal(ui.field('learning-view').hidden, true);
     assert.equal(ui.api.getSession().token, '');
+});
+
+const practiceSource = fs.readFileSync(path.join(__dirname, 'static/js/subject-practice.js'), 'utf8');
+const mathCatalog = JSON.parse(fs.readFileSync(path.join(__dirname, 'subject_content/math/catalog.json'), 'utf8'));
+const mathPaper = JSON.parse(fs.readFileSync(path.join(__dirname, `subject_content/math/papers/${mathCatalog.papers[0].id}.json`), 'utf8'));
+const copy = (value) => JSON.parse(JSON.stringify(value));
+
+function practiceUI({ pending = false, parent = false } = {}) {
+    const ui = subjectUI({ subject: 'math' });
+    ui.state.account.is_parent = parent;
+    ui.state.account.child_username = parent ? 'child' : '';
+    ui.state.resources.papers = copy(mathCatalog.papers);
+    ui.state.resources.knowledge = copy(mathCatalog.knowledge);
+    const questions = mathPaper.questions.map((question) => {
+        const publicQuestion = {};
+        for (const key of ['id', 'type', 'prompt', 'points', 'options', 'diagram_url', 'diagram_alt', 'difficulty', 'hints']) {
+            if (Object.hasOwn(question, key)) publicQuestion[key] = copy(question[key]);
+        }
+        if (question.fields) publicQuestion.fields = question.fields.map((field) => {
+            const result = {};
+            for (const key of ['id', 'label', 'format', 'unit', 'hint', 'points']) if (Object.hasOwn(field, key)) result[key] = field[key];
+            return result;
+        });
+        return publicQuestion;
+    });
+    const initial = { id: 'a'.repeat(32), paper_id: mathPaper.id, paper_title: mathPaper.title,
+        status: 'in_progress', questions, answers: {}, workings: {}, index: 0, revision: 0,
+        started_at: '2026-11-13T12:00:00+08:00', time_minutes: 45, scope: mathPaper.scope, grading_note: mathPaper.grading_note };
+    ui.state.activeAttempt = pending ? { ...copy(initial), answers: { q09: { answer: '724' } }, index: 8, revision: 1 } : null;
+    ui.state.resultPayload = {
+        id: initial.id, paper_id: mathPaper.id, paper_title: mathPaper.title, score: 100, max_score: 100,
+        base_score: 90, base_max_score: 90, challenge_score: 10, challenge_max_score: 10,
+        total: 32, correct_count: 32, partial_count: 0, submitted_at: '2026-11-13T13:00:00+08:00',
+        grading_note: mathPaper.grading_note, status: 'submitted',
+        questions: mathPaper.questions.map((question) => ({
+            ...questions.find((q) => q.id === question.id), correct: true, earned_points: question.points,
+            user_answer: question.type === 'choice' ? question.options.find((option) => option.id === question.answer).text : '',
+            correct_answer: question.type === 'choice' ? question.options.find((option) => option.id === question.answer).text : '',
+            fields: (question.fields || []).map((field) => ({ ...field, user_answer: field.answer, correct_answer: field.answer, correct: true, earned_points: field.points })),
+            explanation: question.explanation, working: '',
+        })),
+    };
+    const endpoint = `/api/subjects/math/attempts/${initial.id}`;
+    ui.state.routes['/api/subjects/math/attempts/current'] = () => ({ data: { attempt: copy(ui.state.activeAttempt) } });
+    ui.state.routes[`/api/subjects/math/papers/${mathPaper.id}/attempts`] = () => {
+        if (ui.state.startReply) return ui.state.startReply();
+        ui.state.activeAttempt ||= copy(initial);
+        return { data: { attempt: copy(ui.state.activeAttempt) } };
+    };
+    ui.state.routes[endpoint] = (call) => {
+        if (call.method === 'GET') return { data: { attempt: copy(ui.state.activeAttempt) } };
+        if (ui.state.saveReply) return ui.state.saveReply(call);
+        if (!ui.state.activeAttempt) return { status: 409, data: { error: '这份练习已结束' } };
+        Object.assign(ui.state.activeAttempt, copy(call.body));
+        return { data: { revision: call.body.revision } };
+    };
+    ui.state.routes[endpoint + '/abandon'] = () => {
+        ui.state.activeAttempt = null;
+        return { data: { ok: true } };
+    };
+    ui.state.routes[endpoint + '/submit'] = (call) => {
+        if (ui.state.submitReply) return ui.state.submitReply(call);
+        ui.state.activeAttempt = null;
+        ui.state.resources.records = [{ id: initial.id, paper_title: mathPaper.title, score: 100, submitted_at: '2026-11-13', status: 'submitted' }];
+        return { data: { result: copy(ui.state.resultPayload) } };
+    };
+    ui.state.routes[`/api/subjects/math/records/${initial.id}`] = () => ({ data: { result: copy(ui.state.resultPayload) } });
+    vm.runInContext(practiceSource, ui.context);
+    ui.practice = ui.context.window.subjectPractice;
+    ui.inputs = () => ui.field('practice-answer-fields').querySelectorAll('input');
+    ui.jump = (number) => ui.field('practice-question-grid').children[number - 1].fire('click');
+    ui.start = () => ui.practice.start(mathPaper.id);
+    void ui.api.acceptSession({ access_token: 'alice-token', username: 'alice' });
+    return ui;
+}
+
+test('unfinished math practice is offered on the list without forcing the user into the old question', async () => {
+    const ui = practiceUI({ pending: true });
+    await ui.flush();
+    assert.equal(ui.field('papers-panel').hidden, false);
+    assert.equal(ui.field('subject-practice-view').hidden, true);
+    assert.equal(ui.field('practice-resume-banner').hidden, false);
+    await ui.field('practice-resume').fire('click');
+    assert.equal(ui.field('subject-practice-view').hidden, false);
+    assert.match(ui.field('practice-question-position').textContent, /9 \/ 32/);
+    assert.equal(ui.inputs()[0].value, '724');
+});
+
+test('math card starts online practice and preserves typed answers across navigation and server save', async () => {
+    const ui = practiceUI();
+    await ui.flush();
+    const card = ui.field('papers-list').children[0];
+    await card.querySelectorAll('button').find((button) => button.textContent === '开始练习').fire('click');
+    assert.equal(ui.field('practice-question-prompt').textContent, mathPaper.questions[0].prompt);
+    await ui.field('practice-choice-options').children[1].fire('click');
+    await ui.jump(9);
+    ui.inputs()[0].value = '724';
+    await ui.inputs()[0].fire('input');
+    await ui.practice.flush();
+    assert.deepEqual(ui.state.activeAttempt.answers, { q01: 'b', q09: { answer: '724' } });
+    await ui.jump(10);
+    await ui.jump(9);
+    assert.equal(ui.inputs()[0].value, '724');
+    await ui.practice.flush();
+});
+
+test('challenge questions keep optional hints closed and save both answer fields independently', async () => {
+    const ui = practiceUI();await ui.flush();await ui.start();await ui.jump(31);
+    assert.match(ui.field('practice-question-position').textContent, /思维拓展/);
+    assert.equal(ui.field('practice-hints').hidden, false);
+    assert.equal(ui.field('practice-hints').open, false);
+    assert.equal(ui.field('practice-hint-items').children.length, 2);
+    const inputs = ui.inputs();
+    inputs[0].value = '12';await inputs[0].fire('input');
+    inputs[1].value = '11';await inputs[1].fire('input');
+    await ui.practice.flush();
+    assert.deepEqual(ui.state.activeAttempt.answers.q31, { divisor: '12', remainder: '11' });
+    assert.match(ui.field('practice-answer-fields').children[0].textContent, /3 分/);
+    assert.equal(ui.field('practice-result').hidden, true);
+});
+
+test('failed autosave retains browser recovery and a retry persists it', async () => {
+    const ui = practiceUI();await ui.flush();await ui.start();await ui.jump(9);
+    ui.state.saveReply = () => ({ status: 503, data: { error: '网络暂时中断' } });
+    ui.inputs()[0].value = '724';await ui.inputs()[0].fire('input');await ui.practice.flush();
+    assert.equal(ui.field('practice-retry-save').hidden, false);
+    assert.match(ui.context.sessionStorage.getItem('itorange-practice:math:alice'), /724/);
+    ui.state.saveReply = null;
+    await ui.field('practice-retry-save').fire('click');await ui.practice.flush();
+    assert.equal(ui.state.activeAttempt.answers.q09.answer, '724');
+});
+
+test('submit failure retains answers and retry shows separate basic and challenge scores plus a saved record', async () => {
+    const ui = practiceUI();await ui.flush();await ui.start();
+    await ui.field('practice-choice-options').children[1].fire('click');
+    ui.state.submitReply = () => ({ status: 503, data: { error: '交卷网络中断' } });
+    await ui.field('practice-submit').fire('click');
+    assert.match(ui.field('practice-submit-warning').textContent, /31/);
+    await ui.field('practice-submit-confirm').fire('click');
+    assert.equal(ui.field('practice-attempt').hidden, false);
+    assert.equal(ui.field('practice-submit').disabled, false);
+    const first = ui.state.calls.find((call) => call.url.endsWith('/submit')).body;
+    ui.state.submitReply = null;
+    await ui.field('practice-submit-confirm').fire('click');
+    const second = ui.state.calls.filter((call) => call.url.endsWith('/submit'))[1].body;
+    assert.deepEqual(first, second);
+    assert.equal(ui.field('practice-result').hidden, false);
+    assert.match(ui.field('practice-result-summary').textContent, /基础 90 \/ 90.*拓展 10 \/ 10/);
+    assert.equal(ui.context.sessionStorage.getItem('itorange-practice:math:alice'), null);
+    await ui.field('practice-back').fire('click');
+    assert.equal(ui.field('record-count').textContent, '1');
+});
+
+test('cancelling abandonment from the recovery banner restores the existing answer instead of blanking it', async () => {
+    const ui = practiceUI({ pending: true });await ui.flush();
+    await ui.field('practice-resume-abandon').fire('click');
+    assert.equal(ui.field('practice-abandon-confirmation').hidden, false);
+    await ui.field('practice-abandon-cancel').fire('click');
+    assert.equal(ui.inputs()[0].value, '724');
+    assert.equal(ui.field('practice-abandon-confirmation').hidden, true);
+});
+
+test('abandonment clears recovery without grading and late draft responses cannot reopen it', async () => {
+    const ui = practiceUI();await ui.flush();await ui.start();
+    const pending = deferred();ui.state.saveReply = () => pending.promise;
+    await ui.field('practice-choice-options').children[0].fire('click');
+    const saving = ui.practice.flush();await settle();
+    await ui.field('practice-abandon').fire('click');
+    await ui.field('practice-abandon-confirm').fire('click');
+    pending.resolve({ data: { revision: 1 } });await saving;await ui.flush();
+    assert.equal(ui.field('subject-practice-view').hidden, true);
+    assert.equal(ui.field('papers-panel').hidden, false);
+    assert.equal(ui.field('practice-resume-banner').hidden, true);
+    assert.equal(ui.context.sessionStorage.getItem('itorange-practice:math:alice'), null);
+    assert.equal(ui.state.calls.some((call) => call.url.endsWith('/submit')), false);
+});
+
+test('logout while starting an online paper ignores late questions and clears private UI', async () => {
+    const ui = practiceUI();await ui.flush();const pending = deferred();
+    ui.state.startReply = () => pending.promise;
+    const starting = ui.start();await settle();
+    await ui.field('subject-logout').fire('click');
+    pending.resolve({ data: { attempt: { id: 'a'.repeat(32), paper_title: 'Private late paper', questions: [] } } });
+    await starting;
+    assert.equal(ui.field('learning-view').hidden, true);
+    assert.equal(ui.field('subject-practice-view').hidden, true);
+    assert.equal(ui.field('practice-question-prompt').textContent, '');
+});
+
+test('parents can read submitted answers while start controls stay disabled', async () => {
+    const ui = practiceUI({ parent: true });await ui.flush();
+    const card = ui.field('papers-list').children[0];
+    const start = card.querySelectorAll('button').find((button) => button.textContent.includes('学生账号'));
+    assert.equal(start.disabled, true);
+    await ui.start();
+    assert.equal(ui.state.calls.some((call) => call.url.endsWith('/attempts')), false);
+    await ui.practice.showResult('a'.repeat(32));
+    assert.equal(ui.field('practice-result').hidden, false);
+    assert.match(ui.field('practice-result-score').textContent, /100/);
 });

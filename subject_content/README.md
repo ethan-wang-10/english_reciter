@@ -1,6 +1,6 @@
 # 学科内容目录
 
-每个学科有独立的 `catalog.json`，当前均为空。语文和数学内容不写入英语的 `builtin_exams/`。
+每个学科有独立的 `catalog.json`。语文和数学内容不写入英语的 `builtin_exams/`；数学已加入上海2026秋新版四上练习，语文目录暂为空。
 
 ```json
 {
@@ -17,4 +17,4 @@ PDF 地址为 `/static/subject-content/<学科>/<文件名>.pdf`，文件名用�
 
 每条 `knowledge` 支持 `id`、`title`、`description`、`grade`、`term` 和 `sections`。每个 section 包含 `title` 和文本列表 `items`，页面会安全渲染为可展开的知识点。
 
-题目、标准答案和判分规则不属于公开元数据。当前阶段提供页面、账号和目录接口；后续交互作答、阅卷需要增加私有题目及尝试记录接口。
+题目、标准答案和判分规则不属于公开元数据。可在线作答的考卷设置 `interactive: true`，私有内容位于 `subject_content/<学科>/papers/<考卷id>.json`。该文件由服务端读取，不放进静态目录。当前题型支持选择、填空、计算和应用；数值、分数及短文本采用明确参考答案评分，多栏题可部分得分。详细格式与权限见 `subject_practice.py` 和四上数学材料说明。

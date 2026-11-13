@@ -8,8 +8,10 @@
     <title>{{ site_config.title }}</title>
     <link rel="stylesheet" href="/static/assets/css/subject-portal.00e1fec53ec371c4.css">
     <script id="subject-site-config" type="application/json">{{ site_config|tojson }}</script>
-    <script src="/static/assets/js/subject-portal.dd6562c0afcd0c3b.js" defer></script>
+    <script src="/static/assets/js/subject-portal.71b85abf57ae4015.js" defer></script>
     <script src="/static/assets/js/subject-sso.5564dee98f722338.js" defer></script>
+    <link rel="stylesheet" href="/static/assets/css/subject-practice.149960151a563921.css">
+    <script src="/static/assets/js/subject-practice.abdc0fa32d4b5ac2.js" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#portal-main">跳到主要内容</a>
@@ -97,9 +99,31 @@
                 </nav>
                 <p id="portal-error" class="feedback feedback-error" role="alert" hidden></p>
                 <p id="portal-status" class="portal-status" role="status" aria-live="polite" hidden></p>
+                <section id="subject-practice-view" class="content-panel practice-panel" aria-labelledby="practice-title" hidden>
+                    <div class="practice-heading"><div><span id="practice-kind" class="eyebrow">在线练习</span><h2 id="practice-title" tabindex="-1"></h2><p id="practice-scope" class="section-description"></p></div><button id="practice-back" class="text-button" type="button">返回列表</button></div>
+                    <p id="practice-message" class="feedback" role="status" aria-live="polite" hidden></p>
+                    <div id="practice-abandon-confirmation" class="practice-confirmation" role="group" aria-label="确认放弃练习" hidden><strong>确认放弃本次练习？</strong><p>本次答案将清除并返回考卷列表，不生成成绩。</p><button id="practice-abandon-cancel" class="text-button" type="button">继续答题</button><button id="practice-abandon-confirm" class="practice-danger" type="button">确认放弃</button></div>
+                    <div id="practice-attempt">
+                        <div class="practice-progress"><progress id="practice-progress" max="1" value="0" aria-label="已完成题数"></progress><span id="practice-progress-text"></span></div>
+                        <details class="practice-navigation"><summary>题号导航</summary><div id="practice-question-grid" class="practice-question-grid"></div></details>
+                        <div class="practice-question-meta"><span id="practice-question-position"></span><span id="practice-question-points"></span></div>
+                        <p id="practice-question-prompt" class="practice-prompt"></p>
+                        <details id="practice-hints" class="practice-hints" hidden><summary>思路提示（按需展开，不扣分）</summary><ol id="practice-hint-items"></ol></details>
+                        <img id="practice-diagram" class="practice-diagram" alt="" hidden>
+                        <div id="practice-choice-options" class="practice-choices" role="group" aria-labelledby="practice-question-prompt"></div>
+                        <div id="practice-answer-fields" class="practice-fields"></div>
+                        <div id="practice-working-wrap" class="practice-working" hidden><label for="practice-working">解题过程（选填，不计入自动评分）</label><textarea id="practice-working" maxlength="2000" rows="3" placeholder="可以先在纸上计算，也可以在这里记录思路。"></textarea></div>
+                        <p id="practice-save-state" class="practice-hint" role="status" aria-live="polite"></p><button id="practice-retry-save" class="text-button" type="button" hidden>重试保存</button>
+                        <div class="practice-actions"><div><button id="practice-previous" class="text-button" type="button">上一题</button><button id="practice-next" class="text-button" type="button">下一题</button></div><button id="practice-submit" class="primary-button" type="button">交卷查看结果</button></div>
+                        <p id="practice-grading-note" class="practice-hint"></p><button id="practice-abandon" class="text-button practice-abandon" type="button">放弃本次练习</button>
+                        <div id="practice-submit-confirmation" class="practice-confirmation" role="group" aria-label="确认交卷" hidden><p id="practice-submit-warning"></p><button id="practice-submit-cancel" class="text-button" type="button">继续检查</button><button id="practice-submit-confirm" class="primary-button" type="button">确认交卷</button></div>
+                    </div>
+                    <div id="practice-result" hidden><p id="practice-result-score" class="practice-result-score"></p><p id="practice-result-summary"></p><p id="practice-result-note" class="practice-hint"></p><h3 class="practice-review-heading">答案与解析</h3><div id="practice-result-questions" class="practice-result-questions"></div></div>
+                </section>
                 <section id="papers-panel" class="content-panel" role="tabpanel" aria-labelledby="papers-tab">
                     <div class="panel-heading"><div><h2>选择一张考卷</h2><p>找到对应年级与学期，循序复习。</p></div><span id="papers-result-count" class="count-label">共 0 份</span></div>
                     <div class="filters"><div><label for="paper-grade-filter">年级</label><select id="paper-grade-filter"><option value="">全部年级</option></select></div><div><label for="paper-term-filter">学期</label><select id="paper-term-filter"><option value="">全部学期</option><option value="1">上册</option><option value="2">下册</option></select></div><div><label for="paper-phase-filter">考试类型</label><select id="paper-phase-filter"><option value="">全部类型</option><option value="midterm">期中</option><option value="final">期末</option></select></div></div>
+                    <div id="practice-resume-banner" class="practice-resume" hidden><p id="practice-resume-label"></p><button id="practice-resume" class="text-button" type="button">继续练习</button><button id="practice-resume-abandon" class="text-button" type="button">放弃这份练习</button></div>
                     <div id="papers-list" class="resource-grid"></div>
                     <div id="papers-empty" class="empty-state"><span class="empty-symbol" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><rect x="16" y="10" width="33" height="44" rx="6" stroke="currentColor" stroke-width="2"/><path d="M24 23h17M24 31h17M24 39h10M10 19v29a10 10 0 0 0 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><h3 id="papers-empty-title">内置考卷正在准备中</h3><p id="papers-empty-description">考卷上线后，会按年级和学期收录在这里。<br>下次来，继续发现新的学习内容。</p></div>
                 </section>

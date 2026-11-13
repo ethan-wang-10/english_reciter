@@ -115,11 +115,23 @@ def _catalog(subject: str) -> dict:
                 public = {'id': content_id, 'title': _text(item.get('title'), required=True, maximum=200),
                           'description': _text(item.get('description', '')),
                           'grade': normalize_grade(item.get('grade')), 'term': normalize_term(item.get('term'))}
+                for label in ('scope', 'edition'):
+                    if item.get(label):
+                        public[label] = _text(item[label], maximum=500)
+                if item.get('pdf_url'):
+                    url = item['pdf_url']
+                    if (not isinstance(url, str) or not url.startswith(f'/static/subject-content/{subject}/')
+                            or not re.fullmatch(r'/static/subject-content/[a-z]+/[a-z0-9_-]+\.pdf', url)):
+                        raise SubjectContentError('Invalid subject PDF URL')
+                    public['pdf_url'] = url
                 if kind == 'papers':
                     phase = item.get('exam_kind', 'practice')
                     if phase not in ('midterm', 'final', 'practice'):
                         raise SubjectContentError('Invalid exam kind')
                     public['exam_kind'] = phase
+                    if type(item.get('interactive', False)) is not bool:
+                        raise SubjectContentError('Invalid interactive paper flag')
+                    public['interactive'] = item.get('interactive', False)
                     for name in ('question_count', 'time_minutes'):
                         value = item.get(name, 0)
                         if type(value) is not int or not 0 <= value <= 10000:
@@ -127,12 +139,6 @@ def _catalog(subject: str) -> dict:
                         public[name] = value
                     if item.get('knowledge_id'):
                         public['knowledge_id'] = _identifier(item['knowledge_id'])
-                    if item.get('pdf_url'):
-                        url = item['pdf_url']
-                        if (not isinstance(url, str) or not url.startswith(f'/static/subject-content/{subject}/')
-                                or not re.fullmatch(r'/static/subject-content/[a-z]+/[a-z0-9_-]+\.pdf', url)):
-                            raise SubjectContentError('Invalid subject PDF URL')
-                        public['pdf_url'] = url
                 else:
                     sections = item.get('sections', [])
                     if not isinstance(sections, list):
@@ -152,17 +158,23 @@ def _catalog(subject: str) -> dict:
 
 
 def _records(services, username: str, subject: str) -> list:
+    from subject_practice import PracticeError, SubjectPracticeStore
+    try:
+        practice = SubjectPracticeStore(services.DATA_DIR / username / 'subjects' / subject / 'practice.sqlite3').records()
+    except PracticeError as error:
+        raise SubjectContentError(str(error)) from error
     path = services.DATA_DIR / username / 'subjects' / subject / 'records.json'
     try:
         raw = json.loads(path.read_text(encoding='utf-8'))
     except FileNotFoundError:
-        return []
+        return practice
     except (OSError, ValueError) as error:
         raise SubjectContentError('Subject records are unavailable') from error
     if not isinstance(raw, list) or any(not isinstance(row, dict) for row in raw):
         raise SubjectContentError('Invalid subject records')
     # Only the record summary belongs on the portal; grading keys remain private.
-    return [{key: deepcopy(row[key]) for key in RECORD_FIELDS if key in row} for row in raw[-200:]][::-1]
+    legacy = [{key: deepcopy(row[key]) for key in RECORD_FIELDS if key in row} for row in raw[-200:]]
+    return sorted([*legacy, *practice], key=lambda row: row.get('submitted_at', ''), reverse=True)[:200]
 
 
 def register_subject_portal_routes(app, services):
@@ -224,3 +236,5 @@ def register_subject_portal_routes(app, services):
         return jsonify({'items': items, 'count': len(items)})
 
     app.register_blueprint(routes)
+    from subject_practice import register_subject_practice_routes
+    register_subject_practice_routes(app, services, lambda subject: checked(subject)['papers'])

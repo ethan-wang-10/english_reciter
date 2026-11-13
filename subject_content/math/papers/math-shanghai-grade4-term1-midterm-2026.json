@@ -1,0 +1,879 @@
+{
+  "schema_version": 1,
+  "subject": "math",
+  "id": "math-shanghai-grade4-term1-midterm-2026",
+  "title": "上海四年级上册数学 · 2026新版期中练习（第1–4单元）",
+  "grade": 4,
+  "term": 1,
+  "scope": "第1–4单元",
+  "edition": "2026秋沪教版数学四年级上册（五·四学制，2024年审核通过的新版）",
+  "time_minutes": 45,
+  "grading_note": "前30题为基础练习90分，最后2题为思维拓展10分，合计100分，可分层完成。按各答题栏的最终答案自动计分，分栏小题可分别得分；解题过程供订正参考，不计入自动评分。展开思路提示不扣分。",
+  "references": [
+    {
+      "label": "上海教育出版社五四学制数学四上新版封面",
+      "url": "https://3wm.seph.com.cn/Uploads/2026-09-01/854353a7e9304748be5cd9e44bb627cb.jpg"
+    },
+    {
+      "label": "2026秋沪教五四四上数学公开目录",
+      "url": "http://www.dzkbw.com/books/hjb/shuxue/wsz4s_2026/"
+    },
+    {
+      "label": "新版章节目录交叉核对",
+      "url": "https://guchenlong.github.io/"
+    }
+  ],
+  "questions": [
+    {
+      "type": "choice",
+      "prompt": "(25+37)+63=25+(37+63)，这里运用的是哪条运算律？",
+      "options": [
+        {
+          "id": "a",
+          "text": "加法交换律"
+        },
+        {
+          "id": "b",
+          "text": "加法结合律"
+        },
+        {
+          "id": "c",
+          "text": "乘法结合律"
+        },
+        {
+          "id": "d",
+          "text": "乘法交换律"
+        }
+      ],
+      "answer": "b",
+      "points": 2,
+      "explanation": "只改变三个加数的组合方式，没有交换加数位置，运用加法结合律。",
+      "unit": 1,
+      "id": "q01"
+    },
+    {
+      "type": "choice",
+      "prompt": "下面哪个算式与48×25相等？",
+      "options": [
+        {
+          "id": "a",
+          "text": "48×(20+5)"
+        },
+        {
+          "id": "b",
+          "text": "48×20+5"
+        },
+        {
+          "id": "c",
+          "text": "40×25+8"
+        },
+        {
+          "id": "d",
+          "text": "48+25"
+        }
+      ],
+      "answer": "a",
+      "points": 2,
+      "explanation": "25=20+5，因此48×25=48×(20+5)。展开时20和5都要分别乘48。",
+      "unit": 1,
+      "id": "q02"
+    },
+    {
+      "type": "choice",
+      "prompt": "如图，从图书馆看，学校在图书馆的哪个方向？",
+      "options": [
+        {
+          "id": "a",
+          "text": "东北"
+        },
+        {
+          "id": "b",
+          "text": "西北"
+        },
+        {
+          "id": "c",
+          "text": "东南"
+        },
+        {
+          "id": "d",
+          "text": "西南"
+        }
+      ],
+      "answer": "d",
+      "points": 2,
+      "explanation": "图书馆在学校东北，换到图书馆观察，学校就在相反的西南方向。",
+      "unit": 2,
+      "diagram_url": "/static/subject-content/math/math-g4-midterm-map.svg",
+      "diagram_alt": "示意图上北下南，学校在中央，图书馆在学校东北，公园在学校正南，书店在学校正东。",
+      "id": "q03"
+    },
+    {
+      "type": "choice",
+      "prompt": "小明原来面向东，向左转后面向北。这时他的后方是哪个方向？",
+      "options": [
+        {
+          "id": "a",
+          "text": "东"
+        },
+        {
+          "id": "b",
+          "text": "西"
+        },
+        {
+          "id": "c",
+          "text": "南"
+        },
+        {
+          "id": "d",
+          "text": "北"
+        }
+      ],
+      "answer": "c",
+      "points": 2,
+      "explanation": "转后面向北，后方与北相反，是南。",
+      "unit": 2,
+      "id": "q04"
+    },
+    {
+      "type": "choice",
+      "prompt": "420÷35×2的正确结果是多少？",
+      "options": [
+        {
+          "id": "a",
+          "text": "6"
+        },
+        {
+          "id": "b",
+          "text": "12"
+        },
+        {
+          "id": "c",
+          "text": "24"
+        },
+        {
+          "id": "d",
+          "text": "420"
+        }
+      ],
+      "answer": "c",
+      "points": 2,
+      "explanation": "除法和乘法是同级运算，从左往右：420÷35=12，12×2=24。",
+      "unit": 3,
+      "id": "q05"
+    },
+    {
+      "type": "choice",
+      "prompt": "总价不变，商品单价由8元降为4元，能买到的数量怎样变化？",
+      "options": [
+        {
+          "id": "a",
+          "text": "保持不变"
+        },
+        {
+          "id": "b",
+          "text": "变为原来的一半"
+        },
+        {
+          "id": "c",
+          "text": "比原来多4件"
+        },
+        {
+          "id": "d",
+          "text": "变为原来的2倍"
+        }
+      ],
+      "answer": "d",
+      "points": 2,
+      "explanation": "单价变为原来的一半，总价不变，数量变为原来的2倍。",
+      "unit": 3,
+      "id": "q06"
+    },
+    {
+      "type": "choice",
+      "prompt": "7305040中的数字3在哪个数位上？",
+      "options": [
+        {
+          "id": "a",
+          "text": "十万位"
+        },
+        {
+          "id": "b",
+          "text": "万位"
+        },
+        {
+          "id": "c",
+          "text": "百万位"
+        },
+        {
+          "id": "d",
+          "text": "千位"
+        }
+      ],
+      "answer": "a",
+      "points": 2,
+      "explanation": "从右往左数，第六位是十万位。3表示3个十万，即300000。",
+      "unit": 4,
+      "id": "q07"
+    },
+    {
+      "type": "choice",
+      "prompt": "495600四舍五入到万位，约是多少万？",
+      "options": [
+        {
+          "id": "a",
+          "text": "49万"
+        },
+        {
+          "id": "b",
+          "text": "50万"
+        },
+        {
+          "id": "c",
+          "text": "496万"
+        },
+        {
+          "id": "d",
+          "text": "500万"
+        }
+      ],
+      "answer": "b",
+      "points": 2,
+      "explanation": "495600的千位是5，万位上的9要进1，并向十万位继续进位，得到50万。",
+      "unit": 4,
+      "id": "q08"
+    },
+    {
+      "type": "fill",
+      "prompt": "□+276=1000，□里应填多少？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "724",
+          "accepted_answers": [
+            "724"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "1000−276=724，代回检验：724+276=1000。",
+      "unit": 1,
+      "id": "q09"
+    },
+    {
+      "type": "fill",
+      "prompt": "□÷16=25，□里应填多少？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "400",
+          "accepted_answers": [
+            "400"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "被除数=商×除数，25×16=400。",
+      "unit": 1,
+      "id": "q10"
+    },
+    {
+      "type": "fill",
+      "prompt": "125×8×37=________。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "37000",
+          "accepted_answers": [
+            "37000"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "先算125×8=1000，再算1000×37=37000。",
+      "unit": 1,
+      "id": "q11"
+    },
+    {
+      "type": "fill",
+      "prompt": "如图，站在学校面向公园时，左手指向哪个方向？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "左手方向",
+          "points": 2,
+          "unit": "",
+          "format": "text",
+          "answer": "东",
+          "accepted_answers": [
+            "东",
+            "东方",
+            "东面",
+            "正东"
+          ],
+          "unit_aliases": [],
+          "hint": "填写方向或题目要求的文字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "面向公园就是面向南；面向南时左手指向东。",
+      "unit": 2,
+      "diagram_url": "/static/subject-content/math/math-g4-midterm-map.svg",
+      "diagram_alt": "示意图上北下南，学校在中央，图书馆在学校东北，公园在学校正南，书店在学校正东。",
+      "id": "q12"
+    },
+    {
+      "type": "fill",
+      "prompt": "一个数由36个万和508个一组成，这个数是多少？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "360508",
+          "accepted_answers": [
+            "360508"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "36个万是360000，再加508，得到360508。",
+      "unit": 4,
+      "id": "q13"
+    },
+    {
+      "type": "fill",
+      "prompt": "80004006是几位数？它最高位的计数单位是什么？",
+      "fields": [
+        {
+          "id": "digits",
+          "label": "位数",
+          "points": 1,
+          "unit": "",
+          "format": "integer",
+          "answer": "8",
+          "accepted_answers": [
+            "8"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "counting_unit",
+          "label": "最高位的计数单位",
+          "points": 1,
+          "unit": "",
+          "format": "text",
+          "answer": "千万",
+          "accepted_answers": [
+            "千万"
+          ],
+          "unit_aliases": [],
+          "hint": "填写方向或题目要求的文字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "从最高位数到个位，共8个数位；最高位是千万位，对应的计数单位是千万。“千万位”是数位名称，不是计数单位。",
+      "unit": 4,
+      "id": "q14"
+    },
+    {
+      "type": "fill",
+      "prompt": "46000000=________万。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "万",
+          "format": "integer",
+          "answer": "4600",
+          "accepted_answers": [
+            "4600"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "整万数改写：46000000÷10000=4600，所以等于4600万。",
+      "unit": 4,
+      "id": "q15"
+    },
+    {
+      "type": "fill",
+      "prompt": "700000000=________亿。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "亿",
+          "format": "integer",
+          "answer": "7",
+          "accepted_answers": [
+            "7"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "700000000含有7个亿，改写成7亿，数的大小不变。",
+      "unit": 4,
+      "id": "q16"
+    },
+    {
+      "type": "fill",
+      "prompt": "39995000四舍五入到万位，约是________万。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "万",
+          "format": "integer",
+          "answer": "4000",
+          "accepted_answers": [
+            "4000"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "千位为5，向万位进1，连续进位得到40000000，即4000万。",
+      "unit": 4,
+      "id": "q17"
+    },
+    {
+      "type": "fill",
+      "prompt": "一台机器每分钟加工18个零件，5分钟加工多少个？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "零件数",
+          "points": 2,
+          "unit": "个",
+          "format": "integer",
+          "answer": "90",
+          "accepted_answers": [
+            "90"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "工作量=工作效率×时间，18×5=90（个）。",
+      "unit": 3,
+      "id": "q18"
+    },
+    {
+      "type": "fill",
+      "prompt": "540本图书，每箱装18本，需要多少箱？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "箱",
+          "format": "integer",
+          "answer": "30",
+          "accepted_answers": [
+            "30"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "总本数÷每箱本数=箱数，540÷18=30（箱）。",
+      "unit": 3,
+      "id": "q19"
+    },
+    {
+      "type": "fill",
+      "prompt": "81×(40+2)=81×40+81×□，□里应填多少？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "2",
+          "accepted_answers": [
+            "2"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "运用乘法分配律，括号里的40和2都分别乘81。",
+      "unit": 1,
+      "id": "q20"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：4800−(1680+920)。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "2200",
+          "accepted_answers": [
+            "2200"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "先算括号：1680+920=2600；再算4800−2600=2200。",
+      "unit": 3,
+      "id": "q21"
+    },
+    {
+      "type": "calculation",
+      "prompt": "用合适的方法计算：625×16。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "10000",
+          "accepted_answers": [
+            "10000"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "可把16分成8×2：625×8×2=5000×2=10000。",
+      "unit": 1,
+      "id": "q22"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：3600÷(25×8)。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "18",
+          "accepted_answers": [
+            "18"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "先算25×8=200，再算3600÷200=18。",
+      "unit": 3,
+      "id": "q23"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：(720−480)×35。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "8400",
+          "accepted_answers": [
+            "8400"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "720−480=240，240×35=8400。",
+      "unit": 3,
+      "id": "q24"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算987÷24，分别填写商和余数。",
+      "fields": [
+        {
+          "id": "quotient",
+          "label": "商",
+          "points": 3,
+          "unit": "",
+          "format": "integer",
+          "answer": "41",
+          "accepted_answers": [
+            "41"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "remainder",
+          "label": "余数",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "3",
+          "accepted_answers": [
+            "3"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "24×41=984，987−984=3，商41余3；3小于24。",
+      "unit": 3,
+      "id": "q25"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：704÷32。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "22",
+          "accepted_answers": [
+            "22"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "32×22=704，因此704÷32=22。可用乘法检验。",
+      "unit": 3,
+      "id": "q26"
+    },
+    {
+      "type": "calculation",
+      "prompt": "用简便方法计算：36×99+36。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "3600",
+          "accepted_answers": [
+            "3600"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "把36看作36×1，36×99+36×1=36×(99+1)=3600。",
+      "unit": 1,
+      "id": "q27"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：684÷(57−19)。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "18",
+          "accepted_answers": [
+            "18"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "先算括号57−19=38，再算684÷38=18。",
+      "unit": 3,
+      "id": "q28"
+    },
+    {
+      "type": "application",
+      "prompt": "每本练习本8元，购买24本，付给营业员200元。总价是多少元？应找回多少元？",
+      "fields": [
+        {
+          "id": "total",
+          "label": "总价",
+          "points": 2,
+          "unit": "元",
+          "format": "integer",
+          "answer": "192",
+          "accepted_answers": [
+            "192"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "change",
+          "label": "找回的钱",
+          "points": 3,
+          "unit": "元",
+          "format": "integer",
+          "answer": "8",
+          "accepted_answers": [
+            "8"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "先求总价：8×24=192（元）；再求找零：200−192=8（元）。",
+      "unit": 3,
+      "id": "q29"
+    },
+    {
+      "type": "application",
+      "prompt": "3台相同的机器同时工作，每台每小时加工18个零件。4小时一共加工多少个零件？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "加工总数",
+          "points": 5,
+          "unit": "个",
+          "format": "integer",
+          "answer": "216",
+          "accepted_answers": [
+            "216"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "每小时总效率为18×3=54（个）；4小时共54×4=216（个）。",
+      "unit": 3,
+      "id": "q30"
+    },
+    {
+      "type": "application",
+      "prompt": "思维拓展①：一个有余数的除法，误把被除数527写成587，得到的商比正确的商大5，余数恰好相同。原来的除数和余数分别是多少？",
+      "fields": [
+        {
+          "id": "divisor",
+          "label": "除数",
+          "points": 3,
+          "unit": "",
+          "format": "integer",
+          "answer": "12",
+          "accepted_answers": [
+            "12"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "remainder",
+          "label": "余数",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "11",
+          "accepted_answers": [
+            "11"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "两个被除数相差587−527=60，商多5而余数相同，说明多出了5个除数；除数为60÷5=12。527÷12=43……11，所以原余数是11。检验：587=12×48+11，且11<12。",
+      "unit": 3,
+      "difficulty": "challenge",
+      "hints": [
+        "先看被除数相差多少，以及商相差多少。两个余数相同，差量来自几个完整的除数。",
+        "用被除数的差除以商的差，求出除数，再代回原来的被除数求余数；最后检验余数小于除数。"
+      ],
+      "id": "q31"
+    },
+    {
+      "type": "application",
+      "prompt": "思维拓展②：420位同学全部只在A、B两组中选择一组。A组人数先除以2，再乘3，最后加36，得到420。A组原来有多少人？现在从A组改选B组，要使A组人数少于B组，至少需要多少人改选？",
+      "fields": [
+        {
+          "id": "original_a",
+          "label": "A组原来人数",
+          "points": 2,
+          "unit": "人",
+          "format": "integer",
+          "answer": "256",
+          "accepted_answers": [
+            "256"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "transfer",
+          "label": "至少改选人数",
+          "points": 3,
+          "unit": "人",
+          "format": "integer",
+          "answer": "47",
+          "accepted_answers": [
+            "47"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "逆推：(420−36)÷3×2=256（人），B组为420−256=164（人）。原来相差92人，每改选1人，两组差减少2。改选46人后两组都是210人，还没有“少于”；改选47人后A组209人、B组211人，因此至少47人。",
+      "unit": 3,
+      "difficulty": "challenge",
+      "hints": [
+        "从最后一步开始，按相反的运算顺序倒着推回原来的人数。",
+        "先求另一组人数。每有1人从一组转到另一组，两组的人数差会减少2人。",
+        "找出两组人数相等的情况，再判断是否满足“少于”；相等还不符合要求。"
+      ],
+      "id": "q32"
+    }
+  ]
+}

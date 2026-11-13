@@ -1,0 +1,906 @@
+{
+  "schema_version": 1,
+  "subject": "math",
+  "id": "math-shanghai-grade4-term1-final-2026",
+  "title": "上海四年级上册数学 · 2026新版期末综合练习（全册）",
+  "grade": 4,
+  "term": 1,
+  "scope": "全册第1–9单元",
+  "edition": "2026秋沪教版数学四年级上册（五·四学制，2024年审核通过的新版）",
+  "time_minutes": 60,
+  "grading_note": "前30题为基础练习90分，最后2题为思维拓展10分，合计100分，可分层完成。按各答题栏的最终答案自动计分，分栏小题可分别得分；解题过程供订正参考，不计入自动评分。展开思路提示不扣分。",
+  "references": [
+    {
+      "label": "上海教育出版社五四学制数学四上新版封面",
+      "url": "https://3wm.seph.com.cn/Uploads/2026-09-01/854353a7e9304748be5cd9e44bb627cb.jpg"
+    },
+    {
+      "label": "2026秋沪教五四四上数学公开目录",
+      "url": "http://www.dzkbw.com/books/hjb/shuxue/wsz4s_2026/"
+    },
+    {
+      "label": "新版章节目录交叉核对",
+      "url": "https://guchenlong.github.io/"
+    }
+  ],
+  "questions": [
+    {
+      "type": "choice",
+      "prompt": "计算125×32时，把32写成8×4，再先算125×8，主要运用了哪条运算律？",
+      "options": [
+        {
+          "id": "a",
+          "text": "乘法交换律"
+        },
+        {
+          "id": "b",
+          "text": "加法结合律"
+        },
+        {
+          "id": "c",
+          "text": "乘法分配律"
+        },
+        {
+          "id": "d",
+          "text": "乘法结合律"
+        }
+      ],
+      "answer": "d",
+      "points": 2,
+      "explanation": "把125×(8×4)改为(125×8)×4，改变的是因数的组合方式，运用乘法结合律。",
+      "unit": 1,
+      "id": "q01"
+    },
+    {
+      "type": "choice",
+      "prompt": "如图，从校门看操场，操场在校门的哪个方向？",
+      "options": [
+        {
+          "id": "a",
+          "text": "东南"
+        },
+        {
+          "id": "b",
+          "text": "东北"
+        },
+        {
+          "id": "c",
+          "text": "西南"
+        },
+        {
+          "id": "d",
+          "text": "西北"
+        }
+      ],
+      "answer": "a",
+      "points": 2,
+      "explanation": "校门在操场西北，从校门观察操场，方向相反，是东南。",
+      "unit": 2,
+      "diagram_url": "/static/subject-content/math/math-g4-final-map.svg",
+      "diagram_alt": "示意图上北下南，校门在操场的西北。",
+      "id": "q02"
+    },
+    {
+      "type": "choice",
+      "prompt": "30506000四舍五入到万位，正确结果是哪个？",
+      "options": [
+        {
+          "id": "a",
+          "text": "3050万"
+        },
+        {
+          "id": "b",
+          "text": "305060万"
+        },
+        {
+          "id": "c",
+          "text": "3051万"
+        },
+        {
+          "id": "d",
+          "text": "3060万"
+        }
+      ],
+      "answer": "c",
+      "points": 2,
+      "explanation": "千位为6，向万位进1，30506000≈30510000=3051万。",
+      "unit": 4,
+      "id": "q03"
+    },
+    {
+      "type": "choice",
+      "prompt": "表示一杯橙汁的容量，下面哪个单位最合适？",
+      "options": [
+        {
+          "id": "a",
+          "text": "吨"
+        },
+        {
+          "id": "b",
+          "text": "毫升"
+        },
+        {
+          "id": "c",
+          "text": "千米"
+        },
+        {
+          "id": "d",
+          "text": "克"
+        }
+      ],
+      "answer": "b",
+      "points": 2,
+      "explanation": "容量要用容量单位，一杯橙汁通常用毫升表示。吨、克是质量单位，千米是长度单位。",
+      "unit": 5,
+      "id": "q04"
+    },
+    {
+      "type": "choice",
+      "prompt": "3/8+2/8的结果是多少？",
+      "options": [
+        {
+          "id": "a",
+          "text": "5/16"
+        },
+        {
+          "id": "b",
+          "text": "5/8"
+        },
+        {
+          "id": "c",
+          "text": "1"
+        },
+        {
+          "id": "d",
+          "text": "1/8"
+        }
+      ],
+      "answer": "b",
+      "points": 2,
+      "explanation": "同分母分数相加，分母8不变，分子3+2=5，结果是5/8。",
+      "unit": 6,
+      "id": "q05"
+    },
+    {
+      "type": "choice",
+      "prompt": "一个角是75°，再增加多少度就成为平角？",
+      "options": [
+        {
+          "id": "a",
+          "text": "15°"
+        },
+        {
+          "id": "b",
+          "text": "75°"
+        },
+        {
+          "id": "c",
+          "text": "105°"
+        },
+        {
+          "id": "d",
+          "text": "285°"
+        }
+      ],
+      "answer": "c",
+      "points": 2,
+      "explanation": "平角为180°，180°−75°=105°。",
+      "unit": 7,
+      "id": "q06"
+    },
+    {
+      "type": "choice",
+      "prompt": "只有一个端点，并能向一端无限延伸的是哪个？",
+      "options": [
+        {
+          "id": "a",
+          "text": "射线"
+        },
+        {
+          "id": "b",
+          "text": "线段"
+        },
+        {
+          "id": "c",
+          "text": "直线"
+        },
+        {
+          "id": "d",
+          "text": "角"
+        }
+      ],
+      "answer": "a",
+      "points": 2,
+      "explanation": "射线有一个端点，能向一端无限延伸；线段有两个端点，直线没有端点。",
+      "unit": 7,
+      "id": "q07"
+    },
+    {
+      "type": "choice",
+      "prompt": "把498看作500、21看作20来估算498×21，估算结果是多少？",
+      "options": [
+        {
+          "id": "a",
+          "text": "1000"
+        },
+        {
+          "id": "b",
+          "text": "5000"
+        },
+        {
+          "id": "c",
+          "text": "2000"
+        },
+        {
+          "id": "d",
+          "text": "10000"
+        }
+      ],
+      "answer": "d",
+      "points": 2,
+      "explanation": "500×20=10000。估算得到大约10000，不能把估算值当作准确积。",
+      "unit": 9,
+      "id": "q08"
+    },
+    {
+      "type": "fill",
+      "prompt": "□−385=615，□里应填多少？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "1000",
+          "accepted_answers": [
+            "1000"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "被减数=差+减数，615+385=1000。",
+      "unit": 1,
+      "id": "q09"
+    },
+    {
+      "type": "fill",
+      "prompt": "864÷(9×8)=________。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "12",
+          "accepted_answers": [
+            "12"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "先算9×8=72，再算864÷72=12。",
+      "unit": 3,
+      "id": "q10"
+    },
+    {
+      "type": "fill",
+      "prompt": "65070803中的数字7在哪个数位上？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "数位",
+          "points": 2,
+          "unit": "",
+          "format": "text",
+          "answer": "万",
+          "accepted_answers": [
+            "万",
+            "万位"
+          ],
+          "unit_aliases": [],
+          "hint": "填写方向或题目要求的文字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "从右向左分级为6507万0803，7在万位，表示7个万。",
+      "unit": 4,
+      "id": "q11"
+    },
+    {
+      "type": "fill",
+      "prompt": "409050000=________万。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "万",
+          "format": "integer",
+          "answer": "40905",
+          "accepted_answers": [
+            "40905"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "409050000÷10000=40905，所以等于40905万。",
+      "unit": 4,
+      "id": "q12"
+    },
+    {
+      "type": "fill",
+      "prompt": "80996000四舍五入到万位，约是________万。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "万",
+          "format": "integer",
+          "answer": "8100",
+          "accepted_answers": [
+            "8100"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "千位是6，要向万位进1，并连续进位，得到81000000，即8100万。",
+      "unit": 4,
+      "id": "q13"
+    },
+    {
+      "type": "fill",
+      "prompt": "4吨35千克=________千克。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "千克",
+          "format": "integer",
+          "answer": "4035",
+          "accepted_answers": [
+            "4035"
+          ],
+          "unit_aliases": [
+            "kg"
+          ],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "4吨=4000千克，再加35千克，得到4035千克。",
+      "unit": 5,
+      "id": "q14"
+    },
+    {
+      "type": "fill",
+      "prompt": "3050毫升=________升________毫升。",
+      "fields": [
+        {
+          "id": "litres",
+          "label": "升数",
+          "points": 1,
+          "unit": "升",
+          "format": "integer",
+          "answer": "3",
+          "accepted_answers": [
+            "3"
+          ],
+          "unit_aliases": [
+            "L",
+            "l"
+          ],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "millilitres",
+          "label": "余下的毫升数",
+          "points": 1,
+          "unit": "毫升",
+          "format": "integer",
+          "answer": "50",
+          "accepted_answers": [
+            "50"
+          ],
+          "unit_aliases": [
+            "mL",
+            "ml"
+          ],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "1升=1000毫升，3050毫升=3000毫升+50毫升=3升50毫升。",
+      "unit": 5,
+      "id": "q15"
+    },
+    {
+      "type": "fill",
+      "prompt": "7千米80米=________米。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "米",
+          "format": "integer",
+          "answer": "7080",
+          "accepted_answers": [
+            "7080"
+          ],
+          "unit_aliases": [
+            "m"
+          ],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "7千米=7000米，再加80米，得到7080米。",
+      "unit": 5,
+      "id": "q16"
+    },
+    {
+      "type": "fill",
+      "prompt": "8个1/10合起来是多少？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "fraction",
+          "answer": "8/10",
+          "accepted_answers": [
+            "8/10"
+          ],
+          "unit_aliases": [],
+          "hint": "用a/b输入分数，可不约分。"
+        }
+      ],
+      "points": 2,
+      "explanation": "分数单位是1/10，8个这样的单位合起来是8/10；等值分数也正确。",
+      "unit": 6,
+      "id": "q17"
+    },
+    {
+      "type": "fill",
+      "prompt": "7/9−2/9=________。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "",
+          "format": "fraction",
+          "answer": "5/9",
+          "accepted_answers": [
+            "5/9"
+          ],
+          "unit_aliases": [],
+          "hint": "用a/b输入分数，可不约分。"
+        }
+      ],
+      "points": 2,
+      "explanation": "同分母分数相减，分母9不变，分子7−2=5，结果为5/9。",
+      "unit": 6,
+      "id": "q18"
+    },
+    {
+      "type": "fill",
+      "prompt": "一周角是多少度？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "度",
+          "format": "integer",
+          "answer": "360",
+          "accepted_answers": [
+            "360"
+          ],
+          "unit_aliases": [
+            "°"
+          ],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "围绕顶点完整转一周形成周角，为360°。",
+      "unit": 7,
+      "id": "q19"
+    },
+    {
+      "type": "fill",
+      "prompt": "如图，A、O、B在同一直线上，∠COB=68°。∠AOC是多少度？",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 2,
+          "unit": "度",
+          "format": "integer",
+          "answer": "112",
+          "accepted_answers": [
+            "112"
+          ],
+          "unit_aliases": [
+            "°"
+          ],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 2,
+      "explanation": "∠AOC与∠COB合起来是平角180°，所以∠AOC=180°−68°=112°。",
+      "unit": 7,
+      "diagram_url": "/static/subject-content/math/math-g4-straight-angle.svg",
+      "diagram_alt": "A、O、B在同一直线上，射线OC在直线上方，角COB为68度，角AOC待求。",
+      "id": "q20"
+    },
+    {
+      "type": "calculation",
+      "prompt": "用合适的方法计算：408×25。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "10200",
+          "accepted_answers": [
+            "10200"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "(400+8)×25=400×25+8×25=10000+200=10200。",
+      "unit": 1,
+      "id": "q21"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：7200÷(24×5)。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "60",
+          "accepted_answers": [
+            "60"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "24×5=120，7200÷120=60。",
+      "unit": 3,
+      "id": "q22"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：5632÷64。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "88",
+          "accepted_answers": [
+            "88"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "64×88=5632，所以5632÷64=88。",
+      "unit": 3,
+      "id": "q23"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：1025−(375+248)。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "402",
+          "accepted_answers": [
+            "402"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "先算括号375+248=623，再算1025−623=402。",
+      "unit": 3,
+      "id": "q24"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算900÷28，分别填写商和余数。",
+      "fields": [
+        {
+          "id": "quotient",
+          "label": "商",
+          "points": 3,
+          "unit": "",
+          "format": "integer",
+          "answer": "32",
+          "accepted_answers": [
+            "32"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "remainder",
+          "label": "余数",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "4",
+          "accepted_answers": [
+            "4"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "28×32=896，900−896=4；商32余4，余数4小于28。",
+      "unit": 3,
+      "id": "q25"
+    },
+    {
+      "type": "calculation",
+      "prompt": "用简便方法计算：37×102−37×2。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "integer",
+          "answer": "3700",
+          "accepted_answers": [
+            "3700"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "提取共同因数37：37×(102−2)=37×100=3700。",
+      "unit": 1,
+      "id": "q26"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：5/12+4/12−2/12。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "",
+          "format": "fraction",
+          "answer": "7/12",
+          "accepted_answers": [
+            "7/12"
+          ],
+          "unit_aliases": [],
+          "hint": "用a/b输入分数，可不约分。"
+        }
+      ],
+      "points": 5,
+      "explanation": "同分母分数加减，分母12不变，分子5+4−2=7，得到7/12。",
+      "unit": 6,
+      "id": "q27"
+    },
+    {
+      "type": "calculation",
+      "prompt": "计算：180°−(35°+48°)。",
+      "fields": [
+        {
+          "id": "answer",
+          "label": "答案",
+          "points": 5,
+          "unit": "度",
+          "format": "integer",
+          "answer": "97",
+          "accepted_answers": [
+            "97"
+          ],
+          "unit_aliases": [
+            "°"
+          ],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "先算35°+48°=83°，再算180°−83°=97°。",
+      "unit": 7,
+      "id": "q28"
+    },
+    {
+      "type": "application",
+      "prompt": "48人平均分成4组开展活动。每组购买3袋材料，每袋25元。每组有多少人？四组材料总共需要多少元？",
+      "fields": [
+        {
+          "id": "people",
+          "label": "每组人数",
+          "points": 2,
+          "unit": "人",
+          "format": "integer",
+          "answer": "12",
+          "accepted_answers": [
+            "12"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "cost",
+          "label": "材料总价",
+          "points": 3,
+          "unit": "元",
+          "format": "integer",
+          "answer": "300",
+          "accepted_answers": [
+            "300"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "每组48÷4=12（人）。总材料费按4组计算：25×3×4=300（元），不再乘48。",
+      "unit": 3,
+      "id": "q29"
+    },
+    {
+      "type": "application",
+      "prompt": "有5升果汁，每瓶装250毫升，恰好装完。能装满多少瓶？把这些瓶子平均装入4盒，每盒多少瓶？",
+      "fields": [
+        {
+          "id": "bottles",
+          "label": "总瓶数",
+          "points": 2,
+          "unit": "瓶",
+          "format": "integer",
+          "answer": "20",
+          "accepted_answers": [
+            "20"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "per_box",
+          "label": "每盒瓶数",
+          "points": 3,
+          "unit": "瓶",
+          "format": "integer",
+          "answer": "5",
+          "accepted_answers": [
+            "5"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "5升=5000毫升；5000÷250=20（瓶）；20÷4=5（瓶）。",
+      "unit": 5,
+      "id": "q30"
+    },
+    {
+      "type": "application",
+      "prompt": "思维拓展①：小林计算有余数的除法时，把被除数873误写成789，得到的商比正确的商小6，余数相同。正确的除数和余数分别是多少？",
+      "fields": [
+        {
+          "id": "divisor",
+          "label": "除数",
+          "points": 3,
+          "unit": "",
+          "format": "integer",
+          "answer": "14",
+          "accepted_answers": [
+            "14"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "remainder",
+          "label": "余数",
+          "points": 2,
+          "unit": "",
+          "format": "integer",
+          "answer": "5",
+          "accepted_answers": [
+            "5"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "被除数减少873−789=84，商减少6而余数相同，说明减少了6个除数；除数是84÷6=14。873÷14=62……5，所以余数是5。检验：789=14×56+5，且5<14。",
+      "unit": 3,
+      "difficulty": "challenge",
+      "hints": [
+        "先看被除数相差多少，以及商相差多少。两个余数相同，差量来自几个完整的除数。",
+        "用被除数的差除以商的差，求出除数，再代回原来的被除数求余数；最后检验余数小于除数。"
+      ],
+      "id": "q31"
+    },
+    {
+      "type": "application",
+      "prompt": "思维拓展②：科技社和阅读社共有504人，每人只参加一个社团。科技社人数先除以3，再加24，最后乘2，得到272。科技社原来有多少人？若只从科技社转入阅读社，要使科技社人数少于阅读社，至少转入多少人？",
+      "fields": [
+        {
+          "id": "original_a",
+          "label": "科技社原来人数",
+          "points": 2,
+          "unit": "人",
+          "format": "integer",
+          "answer": "336",
+          "accepted_answers": [
+            "336"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        },
+        {
+          "id": "transfer",
+          "label": "至少转入人数",
+          "points": 3,
+          "unit": "人",
+          "format": "integer",
+          "answer": "85",
+          "accepted_answers": [
+            "85"
+          ],
+          "unit_aliases": [],
+          "hint": "按上面的单位填写数字。"
+        }
+      ],
+      "points": 5,
+      "explanation": "先逆推：(272÷2−24)×3=336（人），阅读社为504−336=168（人）。原来相差168人，转入84人后两社都是252人，还不符合“少于”。转入85人后科技社251人、阅读社253人，所以至少转入85人。",
+      "unit": 8,
+      "difficulty": "challenge",
+      "hints": [
+        "从最后一步开始，按相反的运算顺序倒着推回原来的人数。",
+        "先求另一组人数。每有1人从一组转到另一组，两组的人数差会减少2人。",
+        "找出两组人数相等的情况，再判断是否满足“少于”；相等还不符合要求。"
+      ],
+      "id": "q32"
+    }
+  ]
+}
