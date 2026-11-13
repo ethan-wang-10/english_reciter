@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import datetime
 import json
 from pathlib import Path
 import re
@@ -27,6 +28,8 @@ ROOT = Path(__file__).resolve().parent
 IDENTIFIER = re.compile(r'[a-z0-9][a-z0-9_-]{0,95}')
 MAX_REVISION = 9_007_199_254_740_991
 MAX_REQUEST_BYTES = 256_000
+MAX_MISTAKE_REQUEST_BYTES = 1_500_000
+MAX_MISTAKES_PER_LESSON = 1000
 
 
 class DictationError(ValueError):
@@ -59,26 +62,81 @@ def _revision(value):
     return value
 
 
+def _word(value):
+    if not isinstance(value, dict) or set(value) not in ({'text'}, {'text', 'spoken_text'}):
+        raise DictationError('每个词语只接受文字和可选的朗读提示。')
+    text = _text(value['text'], 40)
+    if not any(unicodedata.category(character).startswith(('L', 'N')) for character in text):
+        raise DictationError('词语中至少需要一个汉字、字母或数字。')
+    return {'text': text, 'spoken_text': _text(value.get('spoken_text', ''), 100, empty=True) or text}
+
+
 def validate_words(value):
     """Normalize exact spellings while preserving first-entry order and aliases."""
     if not isinstance(value, list) or len(value) > 500:
         raise DictationError('请提交词语列表，一次最多输入500项。')
     result, seen, duplicates = [], set(), 0
     for item in value:
-        if not isinstance(item, dict) or set(item) not in ({'text'}, {'text', 'spoken_text'}):
-            raise DictationError('每个词语只接受文字和可选的朗读提示。')
-        text = _text(item['text'], 40)
-        if not any(unicodedata.category(character).startswith(('L', 'N')) for character in text):
-            raise DictationError('词语中至少需要一个汉字、字母或数字。')
-        spoken = _text(item.get('spoken_text', ''), 100, empty=True) or text
-        if text in seen:
+        word = _word(item)
+        if word['text'] in seen:
             duplicates += 1
             continue
-        seen.add(text)
-        result.append({'text': text, 'spoken_text': spoken})
+        seen.add(word['text'])
+        result.append(word)
     if len(result) > 200:
         raise DictationError('每篇课文最多保存200个不同的词语。')
     return result, duplicates
+
+
+def validate_mistake_items(value):
+    """Bound one atomic merge while retaining lesson boundaries and exact text."""
+    if not isinstance(value, list) or len(value) > 100:
+        raise DictationError('一次最多加入100组课文错词。')
+    groups, total = {}, 0
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {'book_id', 'lesson_id', 'words'}:
+            raise DictationError('每组错词只接受课本、课文和词语列表。')
+        book_id, lesson_id = _id(item['book_id']), _id(item['lesson_id'])
+        words = item['words']
+        if not isinstance(words, list) or len(words) > 1000:
+            raise DictationError('每组一次最多加入1000个错词。')
+        total += len(words)
+        if total > 2000:
+            raise DictationError('一次最多加入2000个错词，请分次加入。')
+        group = groups.setdefault((book_id, lesson_id), {})
+        for entry in words:
+            word = _word(entry)
+            # The most recently supplied hint is the one just checked on paper.
+            group[word['text']] = word
+        if len(group) > 1000:
+            raise DictationError('同一课文最多保存1000个不同的错词。')
+    return [{'book_id': book_id, 'lesson_id': lesson_id, 'words': list(words.values())}
+            for (book_id, lesson_id), words in groups.items()]
+
+
+def validate_mistake_deletions(value):
+    if not isinstance(value, list) or len(value) > 1000:
+        raise DictationError('一次最多移除1000个错词。')
+    return list(dict.fromkeys(_word({'text': text})['text'] for text in value))
+
+
+def _lesson_snapshot(value, book_id, lesson_id):
+    allowed = {'id', 'title', 'number', 'custom', 'unit', 'book_id', 'created_at', 'created_by'}
+    if (not isinstance(value, dict) or set(value) - allowed
+            or not {'id', 'title', 'number', 'custom'} <= set(value)
+            or value['id'] != lesson_id or type(value['custom']) is not bool):
+        raise ValueError('Invalid mistake lesson snapshot')
+    _id(value['id']); _number(value['number'])
+    if _text(value['title'], 80) != value['title']:
+        raise ValueError('Invalid mistake lesson title')
+    if value['custom'] != bool(re.fullmatch(r'custom_[a-f0-9]{32}', lesson_id)):
+        raise ValueError('Invalid mistake lesson identity')
+    for key, maximum in (('unit', 100), ('created_at', 100), ('created_by', 64)):
+        if key in value and _text(value[key], maximum) != value[key]:
+            raise ValueError('Invalid mistake lesson metadata')
+    if 'book_id' in value and value['book_id'] != book_id:
+        raise ValueError('Invalid mistake lesson book')
+    return deepcopy(value)
 
 
 def _number(value):
@@ -165,7 +223,37 @@ CREATE TABLE IF NOT EXISTS dictation_wordlists (
     revision INTEGER NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL,
     PRIMARY KEY(book_id, lesson_id)
 );
+CREATE TABLE IF NOT EXISTS dictation_mistake_groups (
+    book_id TEXT NOT NULL, lesson_id TEXT NOT NULL, lesson_json TEXT NOT NULL,
+    PRIMARY KEY(book_id, lesson_id)
+);
+CREATE TABLE IF NOT EXISTS dictation_mistakes (
+    book_id TEXT NOT NULL, lesson_id TEXT NOT NULL, text TEXT NOT NULL,
+    spoken_text TEXT NOT NULL, added_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL, PRIMARY KEY(book_id, lesson_id, text)
+);
 '''
+
+TABLE_COLUMNS = {
+    'dictation_lessons': {'id', 'book_id', 'title', 'number', 'created_at', 'created_by'},
+    'dictation_wordlists': {'book_id', 'lesson_id', 'words_json', 'revision', 'updated_at', 'updated_by'},
+    'dictation_mistake_groups': {'book_id', 'lesson_id', 'lesson_json'},
+    'dictation_mistakes': {'book_id', 'lesson_id', 'text', 'spoken_text', 'added_at', 'updated_at', 'updated_by'},
+}
+
+
+def _schema(connection):
+    """Recognize an intact old schema without repairing a partially lost one."""
+    tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    required = {'dictation_lessons', 'dictation_wordlists'}
+    optional = {'dictation_mistake_groups', 'dictation_mistakes'}
+    if not required <= tables or tables & optional not in (set(), optional):
+        raise DictationError('已保存的默写数据结构异常，原有内容已保留，请联系管理员。', 503)
+    for name in required | (tables & optional):
+        columns = {row[1] for row in connection.execute('PRAGMA table_info(' + name + ')')}
+        if not TABLE_COLUMNS[name] <= columns:
+            raise DictationError('已保存的默写数据结构异常，原有内容已保留，请联系管理员。', 503)
+    return optional <= tables
 
 
 class DictationStore:
@@ -182,12 +270,18 @@ class DictationStore:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 # The short schema lock also protects simultaneous first saves.
                 with interprocess_file_lock(self.path.with_suffix('.schema.lock')):
+                    existed = self.path.is_file()
                     connection = sqlite3.connect(self.path, timeout=20)
+                    if existed:
+                        _schema(connection)
                     connection.execute('PRAGMA journal_mode=WAL')
-                    connection.executescript(SCHEMA)
+                    # Readers see either the complete legacy schema or both new
+                    # tables. A failed migration leaves neither table behind.
+                    connection.executescript('BEGIN IMMEDIATE;\n' + SCHEMA + '\nCOMMIT;')
                 connection.execute('BEGIN IMMEDIATE')
             else:
                 connection = sqlite3.connect(self.path.resolve().as_uri() + '?mode=ro', uri=True, timeout=20)
+                _schema(connection)
             connection.row_factory = sqlite3.Row
             yield connection
             if write:
@@ -297,6 +391,111 @@ class DictationStore:
             row = connection.execute('SELECT * FROM dictation_lessons WHERE id=?', (identifier,)).fetchone()
             return self._public_lesson(row), True
 
+    @staticmethod
+    def _mistake_groups(connection, book_id):
+        if not _schema(connection):
+            return []
+        try:
+            groups = {}
+            rows = connection.execute('SELECT * FROM dictation_mistake_groups WHERE book_id=? ORDER BY lesson_id', (book_id,)).fetchall()
+            for row in rows:
+                _id(row['book_id']); _id(row['lesson_id'])
+                snapshot = _lesson_snapshot(json.loads(row['lesson_json']), row['book_id'], row['lesson_id'])
+                groups[row['lesson_id']] = {'book_id': row['book_id'], 'lesson_id': row['lesson_id'],
+                                            'lesson': snapshot, 'words': [], 'word_count': 0}
+            rows = connection.execute('SELECT * FROM dictation_mistakes WHERE book_id=? ORDER BY lesson_id,added_at,text', (book_id,)).fetchall()
+            for row in rows:
+                word = _word({'text': row['text'], 'spoken_text': row['spoken_text']})
+                if (row['lesson_id'] not in groups or word['text'] != row['text']
+                        or word['spoken_text'] != row['spoken_text']
+                        or _text(row['updated_by'], 64) != row['updated_by']):
+                    raise ValueError('Invalid mistake word snapshot')
+                for key in ('added_at', 'updated_at'):
+                    if _text(row[key], 100) != row[key]:
+                        raise ValueError('Invalid mistake timestamp')
+                    datetime.fromisoformat(row[key])
+                group = groups[row['lesson_id']]
+                group['words'].append({**word, **{key: row[key] for key in ('added_at', 'updated_at', 'updated_by')}})
+                group['word_count'] += 1
+            for group in groups.values():
+                if (not 1 <= group['word_count'] <= MAX_MISTAKES_PER_LESSON
+                        or len({word['text'] for word in group['words']}) != group['word_count']):
+                    raise ValueError('Invalid mistake group size')
+            return list(groups.values())
+        except (ValueError, TypeError, KeyError) as error:
+            raise DictationError('已保存的错词本暂时无法读取，原有内容已保留，请联系管理员。', 503) from error
+
+    def list_mistakes(self, book_id):
+        _id(book_id)
+        if not self.path.is_file():
+            return []
+        with self._connection() as connection:
+            return self._mistake_groups(connection, book_id)
+
+    def merge_mistakes(self, items, updated_by):
+        """Merge resolved lesson snapshots atomically; never alter source wordlists."""
+        if not isinstance(items, list) or any(not isinstance(item, dict) or set(item) != {
+                'book_id', 'lesson_id', 'lesson', 'words'} for item in items):
+            raise DictationError('请提交有效的课文错词。')
+        normalized = validate_mistake_items([{key: item[key] for key in ('book_id', 'lesson_id', 'words')} for item in items])
+        snapshots = {}
+        for item in items:
+            try:
+                snapshots[item['book_id'], item['lesson_id']] = _lesson_snapshot(item['lesson'], item['book_id'], item['lesson_id'])
+            except (ValueError, TypeError, KeyError) as error:
+                raise DictationError('课文信息无效，请重新打开课文后重试。') from error
+        normalized = [item for item in normalized if item['words']]
+        actor = _text(updated_by, 64)
+        if not normalized:
+            return {'added_count': 0, 'existing_count': 0}
+        with self._connection(write=True) as connection:
+            saved = {}
+            for book_id in {item['book_id'] for item in normalized}:
+                saved.update({(book_id, group['lesson_id']): group for group in self._mistake_groups(connection, book_id)})
+            # Check every group's resulting size before inserting any one group.
+            for item in normalized:
+                group = saved.get((item['book_id'], item['lesson_id']))
+                old_words = {word['text'] for word in group['words']} if group else set()
+                if len(old_words | {word['text'] for word in item['words']}) > MAX_MISTAKES_PER_LESSON:
+                    raise DictationError('这篇课文的错词已达到1000个，请先移除掌握的词语再加入。')
+            now, added, existing = china_now_iso(timespec='microseconds'), 0, 0
+            for item in normalized:
+                key = item['book_id'], item['lesson_id']
+                group = saved.get(key)
+                old_words = {word['text'] for word in group['words']} if group else set()
+                if group is None:
+                    connection.execute('INSERT INTO dictation_mistake_groups(book_id,lesson_id,lesson_json) VALUES(?,?,?)',
+                                       (*key, _encode(snapshots[key])))
+                for word in item['words']:
+                    if word['text'] in old_words:
+                        existing += 1
+                    else:
+                        added += 1
+                    connection.execute('INSERT INTO dictation_mistakes(book_id,lesson_id,text,spoken_text,added_at,updated_at,updated_by) '
+                                       'VALUES(?,?,?,?,?,?,?) ON CONFLICT(book_id,lesson_id,text) DO UPDATE SET '
+                                       'spoken_text=excluded.spoken_text,updated_at=excluded.updated_at,updated_by=excluded.updated_by',
+                                       (*key, word['text'], word['spoken_text'], now, now, actor))
+            return {'added_count': added, 'existing_count': existing}
+
+    def remove_mistakes(self, book_id, lesson_id, words):
+        _id(book_id); _id(lesson_id)
+        texts = validate_mistake_deletions(words)
+        if not texts or not self.path.is_file():
+            return {'removed_count': 0}
+        # A delete against an intact legacy database is also a read-only no-op.
+        if not any(group['lesson_id'] == lesson_id for group in self.list_mistakes(book_id)):
+            return {'removed_count': 0}
+        with self._connection(write=True) as connection:
+            groups = {group['lesson_id']: group for group in self._mistake_groups(connection, book_id)}
+            group = groups.get(lesson_id)
+            selected = set(texts)
+            count = sum(word['text'] in selected for word in group['words']) if group else 0
+            connection.executemany('DELETE FROM dictation_mistakes WHERE book_id=? AND lesson_id=? AND text=?',
+                                   [(book_id, lesson_id, text) for text in texts])
+            if not connection.execute('SELECT 1 FROM dictation_mistakes WHERE book_id=? AND lesson_id=? LIMIT 1', (book_id, lesson_id)).fetchone():
+                connection.execute('DELETE FROM dictation_mistake_groups WHERE book_id=? AND lesson_id=?', (book_id, lesson_id))
+            return {'removed_count': count}
+
 
 def register_subject_dictation_routes(app, services):
     routes = Blueprint('subject_dictation', __name__, url_prefix='/api/subjects/chinese/dictation')
@@ -335,8 +534,8 @@ def register_subject_dictation_routes(app, services):
             raise DictationError('课文不存在，请重新选择。', 404)
         return found
 
-    def body(required, optional=()):
-        if request.content_length is not None and request.content_length > MAX_REQUEST_BYTES:
+    def body(required, optional=(), *, maximum=MAX_REQUEST_BYTES):
+        if request.content_length is not None and request.content_length > maximum:
             raise DictationError('本次输入内容过长，请分课录入。')
         value = request.get_json(silent=True)
         if not isinstance(value, dict) or not set(required) <= set(value) or set(value) - set(required) - set(optional):
@@ -385,5 +584,46 @@ def register_subject_dictation_routes(app, services):
         lesson(username, selected, lesson_id)
         data = body(('base_revision', 'words'))
         return jsonify(store(username).save_wordlist(book_id, lesson_id, data['base_revision'], data['words'], getattr(g, 'login_username', username)))
+
+    @routes.get('/mistakes')
+    @services.token_required
+    def list_mistakes(username):
+        selected = book(request.args.get('book_id'))
+        current_lessons = {entry['id']: entry for entry in merged_lessons(username, selected)}
+        items = store(username).list_mistakes(selected['id'])
+        for item in items:
+            item['lesson'] = current_lessons.get(item['lesson_id'], item['lesson'])
+        items.sort(key=lambda item: (item['lesson']['number'] is None, item['lesson']['number'] or 10000,
+                                     item['lesson']['custom'], item['lesson_id']))
+        return jsonify({'items': items, 'count': len(items), 'word_count': sum(item['word_count'] for item in items)})
+
+    @routes.post('/mistakes')
+    @services.token_required
+    def add_mistakes(username):
+        data = body(('items',), maximum=MAX_MISTAKE_REQUEST_BYTES)
+        items = validate_mistake_items(data['items'])
+        selected_books, lessons_by_book = {}, {}
+        for item in items:
+            book_id = item['book_id']
+            if book_id not in selected_books:
+                selected_books[book_id] = book(book_id)
+                lessons_by_book[book_id] = {entry['id']: entry for entry in merged_lessons(username, selected_books[book_id])}
+            entry = lessons_by_book[book_id].get(item['lesson_id'])
+            if entry is None:
+                raise DictationError('课文不存在，请重新选择。', 404)
+            item['lesson'] = entry
+        return jsonify(store(username).merge_mistakes(items, getattr(g, 'login_username', username)))
+
+    @routes.delete('/mistakes/<book_id>/<lesson_id>')
+    @services.token_required
+    def remove_mistakes(username, book_id, lesson_id):
+        selected = book(book_id)
+        _id(lesson_id)
+        current_lessons = {entry['id'] for entry in merged_lessons(username, selected)}
+        if (lesson_id not in current_lessons
+                and not any(group['lesson_id'] == lesson_id for group in store(username).list_mistakes(book_id))):
+            raise DictationError('课文不存在，请重新选择。', 404)
+        data = body(('words',))
+        return jsonify(store(username).remove_mistakes(book_id, lesson_id, data['words']))
 
     app.register_blueprint(routes)

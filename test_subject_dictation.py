@@ -339,3 +339,286 @@ def test_normalization_keeps_case_and_spacing_order():
     result, count = validate_words([{'text': '  AB  CD  ', 'spoken_text': ''}, {'text': 'ab cd'}, {'text': 'AB CD'}])
     assert result == [{'text': 'AB CD', 'spoken_text': 'AB CD'}, {'text': 'ab cd', 'spoken_text': 'ab cd'}]
     assert count == 1
+
+
+def mistake_item(texts=('潮水',), lesson_id=LESSON, book_id=BOOK_ID):
+    return {'book_id': book_id, 'lesson_id': lesson_id,
+            'words': [({'text': value} if isinstance(value, str) else value) for value in texts]}
+
+
+def add_mistakes(browser, items=None, headers=None):
+    return browser.client.post(PREFIX + '/mistakes', headers=headers or browser.headers,
+                               json={'items': [mistake_item()] if items is None else items})
+
+
+def get_mistakes(browser, headers=None, book_id=BOOK_ID):
+    return browser.client.get(PREFIX + '/mistakes?book_id=' + book_id, headers=headers or browser.headers)
+
+
+def remove_mistakes(browser, texts, lesson_id=LESSON, headers=None):
+    return browser.client.delete(PREFIX + '/mistakes/' + BOOK_ID + '/' + lesson_id,
+                                 headers=headers or browser.headers, json={'words': texts})
+
+
+def test_mistake_routes_require_authentication_and_empty_reads_create_nothing(browser):
+    assert get_mistakes(browser).json == {'items': [], 'count': 0, 'word_count': 0}
+    assert 'no-store' in get_mistakes(browser).headers['Cache-Control']
+    assert add_mistakes(browser, []).json == {'added_count': 0, 'existing_count': 0}
+    assert add_mistakes(browser, [mistake_item([])]).json == {'added_count': 0, 'existing_count': 0}
+    assert remove_mistakes(browser, []).json == {'removed_count': 0}
+    assert remove_mistakes(browser, ['潮水']).json == {'removed_count': 0}
+    for method, endpoint, payload in (
+        ('get', '/mistakes?book_id=' + BOOK_ID, None),
+        ('post', '/mistakes', {'items': [mistake_item()]}),
+        ('delete', '/mistakes/' + BOOK_ID + '/' + LESSON, {'words': ['潮水']}),
+    ):
+        assert getattr(browser.client, method)(PREFIX + endpoint, json=payload).status_code == 401
+    assert not browser.data_dir.exists()
+
+
+def test_mistakes_share_with_linked_parent_and_preserve_independent_word_snapshots(browser):
+    assert save(browser, words('潮水', '笼罩')).status_code == 200
+    original = browser.client.get(uri(), headers=browser.headers).json['wordlist']
+    marked = add_mistakes(browser, [mistake_item([{'text': '薄', 'spoken_text': '单薄的薄'}, '潮水'])], browser.parent_headers)
+    assert marked.status_code == 200 and marked.json == {'added_count': 2, 'existing_count': 0}
+    result = get_mistakes(browser).json
+    assert (result['count'], result['word_count']) == (1, 2)
+    group = result['items'][0]
+    assert (group['book_id'], group['lesson_id'], group['lesson']['title'], group['word_count']) == (BOOK_ID, LESSON, '观潮', 2)
+    assert all(word['added_at'] and word['updated_at'] and word['updated_by'] == 'alice_parent' for word in group['words'])
+    assert get_mistakes(browser, browser.parent_headers).json == result
+    assert get_mistakes(browser, browser.bob_headers).json['items'] == []
+    assert not database(browser, 'alice_parent').exists() and not database(browser, 'bob').exists()
+    assert browser.client.get(uri(), headers=browser.headers).json['wordlist'] == original
+    assert save(browser, [], revision=1).status_code == 200
+    assert get_mistakes(browser).json == result
+    assert not (browser.data_dir / 'alice/learning.sqlite3').exists()
+    assert not (browser.data_dir / 'alice/exam_preparation.sqlite3').exists()
+    assert not (browser.data_dir / 'alice/subjects/math').exists()
+
+
+def test_repeat_mistake_updates_the_reading_hint_but_keeps_the_first_added_time(browser):
+    assert add_mistakes(browser, [mistake_item([{'text': '薄', 'spoken_text': '单薄的薄'}])]).status_code == 200
+    before = get_mistakes(browser).json['items'][0]['words'][0]
+    response = add_mistakes(browser, [mistake_item([{'text': '薄', 'spoken_text': '薄雾的薄'}])], browser.parent_headers)
+    assert response.json == {'added_count': 0, 'existing_count': 1}
+    after = get_mistakes(browser).json['items'][0]['words'][0]
+    assert after['added_at'] == before['added_at']
+    assert after['spoken_text'] == '薄雾的薄' and after['updated_by'] == 'alice_parent'
+    assert after['updated_at'] >= before['updated_at']
+
+
+def test_multiple_lessons_and_repeated_input_groups_keep_their_source_boundaries(browser):
+    items = [mistake_item(['潮水', '繁星', '潮水']), mistake_item(['潮水', '星光'], 'lesson-02'),
+             mistake_item([{'text': '潮水', 'spoken_text': '海边的潮水'}])]
+    assert add_mistakes(browser, items).json == {'added_count': 4, 'existing_count': 0}
+    assert add_mistakes(browser, items).json == {'added_count': 0, 'existing_count': 4}
+    payload = get_mistakes(browser).json
+    assert (payload['count'], payload['word_count']) == (2, 4)
+    first, second = payload['items']
+    assert (first['lesson']['title'], second['lesson']['title']) == ('观潮', '繁星')
+    assert next(word['spoken_text'] for word in first['words'] if word['text'] == '潮水') == '海边的潮水'
+    assert next(word['spoken_text'] for word in second['words'] if word['text'] == '潮水') == '潮水'
+    assert remove_mistakes(browser, ['潮水']).json == {'removed_count': 1}
+    assert any(word['text'] == '潮水' for word in get_mistakes(browser).json['items'][1]['words'])
+
+
+def test_cross_book_batches_do_not_collapse_identical_lesson_ids(browser):
+    catalog_data = catalog()
+    second = deepcopy(catalog_data['books'][0]); second.update(id='grade4-term2', title='四年级下册', term=2)
+    catalog_data['books'].append(second)
+    browser.catalog_path.write_text(json.dumps(catalog_data, ensure_ascii=False))
+    response = add_mistakes(browser, [mistake_item(['潮水']), mistake_item(['潮水'], book_id=second['id'])])
+    assert response.json == {'added_count': 2, 'existing_count': 0}
+    assert get_mistakes(browser).json['word_count'] == 1
+    assert get_mistakes(browser, book_id=second['id']).json['word_count'] == 1
+
+
+def test_custom_lesson_mistakes_are_private_and_can_be_prepared_by_parents(browser):
+    custom = browser.client.post(PREFIX + '/lessons', headers=browser.parent_headers,
+                                json={'book_id': BOOK_ID, 'title': '老师补充', 'number': 3}).json['lesson']
+    assert add_mistakes(browser, [mistake_item(['星光'], custom['id'])], browser.parent_headers).json['added_count'] == 1
+    assert get_mistakes(browser).json['items'][0]['lesson']['title'] == '老师补充'
+    assert add_mistakes(browser, [mistake_item(['星光'], custom['id'])], browser.bob_headers).status_code == 404
+    assert remove_mistakes(browser, ['星光'], custom['id'], browser.bob_headers).status_code == 404
+    assert remove_mistakes(browser, ['星光'], custom['id'], browser.parent_headers).json == {'removed_count': 1}
+    assert get_mistakes(browser).json['items'] == []
+
+
+def test_mistake_removal_is_exact_idempotent_and_leaves_the_source_wordlist(browser):
+    assert save(browser, words('AB', 'ab', '潮水')).status_code == 200
+    source = browser.client.get(uri(), headers=browser.headers).json['wordlist']
+    assert add_mistakes(browser, [mistake_item(['AB', 'ab', '潮水'])]).status_code == 200
+    assert remove_mistakes(browser, ['A', '潮']).json == {'removed_count': 0}
+    assert remove_mistakes(browser, ['AB', 'AB', '不存在'], headers=browser.parent_headers).json == {'removed_count': 1}
+    assert remove_mistakes(browser, ['AB']).json == {'removed_count': 0}
+    assert {word['text'] for word in get_mistakes(browser).json['items'][0]['words']} == {'ab', '潮水'}
+    assert browser.client.get(uri(), headers=browser.headers).json['wordlist'] == source
+    assert remove_mistakes(browser, ['ab', '潮水']).json == {'removed_count': 2}
+    assert get_mistakes(browser).json == {'items': [], 'count': 0, 'word_count': 0}
+    with sqlite3.connect(database(browser)) as connection:
+        assert connection.execute('SELECT COUNT(*) FROM dictation_mistake_groups').fetchone()[0] == 0
+
+
+def test_mistakes_survive_source_catalog_changes_and_use_current_names_when_available(browser):
+    assert add_mistakes(browser).status_code == 200
+    current = catalog(); current['books'][0]['lessons'][0]['title'] = '观潮（老师整理）'
+    browser.catalog_path.write_text(json.dumps(current, ensure_ascii=False))
+    assert get_mistakes(browser).json['items'][0]['lesson']['title'] == '观潮（老师整理）'
+    current['books'][0]['lessons'].pop(0)
+    browser.catalog_path.write_text(json.dumps(current, ensure_ascii=False))
+    assert get_mistakes(browser).json['items'][0]['lesson']['title'] == '观潮'
+    assert remove_mistakes(browser, ['潮水']).json == {'removed_count': 1}
+
+
+def test_mistake_lists_can_accumulate_and_readd_a_full_thousand_words(browser):
+    first = ['词' + str(index) for index in range(500)]
+    second = ['词' + str(index) for index in range(500, 1000)]
+    assert add_mistakes(browser, [mistake_item(first)]).json['added_count'] == 500
+    assert add_mistakes(browser, [mistake_item(second)]).json['added_count'] == 500
+    assert get_mistakes(browser).json['items'][0]['word_count'] == 1000
+    assert add_mistakes(browser, [mistake_item(first + second)]).json == {'added_count': 0, 'existing_count': 1000}
+    assert remove_mistakes(browser, first + second).json == {'removed_count': 1000}
+
+
+def test_an_overflowing_group_rejects_the_entire_multi_lesson_merge(browser):
+    assert add_mistakes(browser, [mistake_item(['词' + str(index) for index in range(1000)])]).status_code == 200
+    before = get_mistakes(browser).json
+    response = add_mistakes(browser, [mistake_item(['另课不应插入'], 'lesson-02'), mistake_item(['超过上限'])])
+    assert response.status_code == 400
+    assert get_mistakes(browser).json == before
+
+
+def test_concurrent_mistake_merges_do_not_lose_either_list(browser):
+    def merge(text):
+        with browser.app.test_client() as client:
+            response = client.post(PREFIX + '/mistakes', headers=browser.headers,
+                                   json={'items': [mistake_item(['共同词语', text])]})
+            return response.status_code, response.json
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(merge, ['潮水', '星光']))
+    assert [status for status, _ in results] == [200, 200]
+    assert sum(result['added_count'] for _, result in results) == 3
+    assert sum(result['existing_count'] for _, result in results) == 1
+    assert {word['text'] for word in get_mistakes(browser).json['items'][0]['words']} == {'共同词语', '潮水', '星光'}
+
+
+def test_concurrent_additions_cannot_exceed_the_persisted_lesson_limit(browser):
+    assert add_mistakes(browser, [mistake_item(['词' + str(index) for index in range(999)])]).status_code == 200
+    def merge(text):
+        with browser.app.test_client() as client:
+            return client.post(PREFIX + '/mistakes', headers=browser.headers,
+                               json={'items': [mistake_item([text])]}).status_code
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        statuses = list(pool.map(merge, ['最后一词', '另一个词']))
+    assert sorted(statuses) == [200, 400]
+    assert get_mistakes(browser).json['word_count'] == 1000
+
+
+@pytest.mark.parametrize('payload', [
+    None, {}, {'items': None}, {'items': {}}, {'items': [], 'student': 'bob'},
+    {'items': [mistake_item()] * 101},
+    {'items': [{'book_id': BOOK_ID, 'lesson_id': LESSON, 'words': ['潮水']}]},
+    {'items': [{**mistake_item(), 'student': 'bob'}]},
+    {'items': [mistake_item([{'text': '潮水', 'answer': 'payload'}])]},
+    {'items': [mistake_item(['词'] * 1001)]},
+    {'items': [mistake_item(['词'] * 1000), mistake_item(['词'] * 1000), mistake_item(['词'])]},
+    {'items': [mistake_item(['词' + str(i) for i in range(600)]), mistake_item(['词' + str(i) for i in range(600, 1200)])]},
+])
+def test_invalid_mistake_batches_are_rejected_without_creating_student_data(browser, payload):
+    assert browser.client.post(PREFIX + '/mistakes', headers=browser.headers, json=payload).status_code == 400
+    assert not browser.data_dir.exists()
+
+
+@pytest.mark.parametrize('payload', [
+    None, {}, {'words': None}, {'words': {}}, {'words': [], 'student': 'bob'},
+    {'words': ['词'] * 1001}, {'words': [None]}, {'words': [{'text': '潮水'}]},
+    {'words': ['潮\n水']}, {'words': ['！']},
+])
+def test_invalid_mistake_removals_do_not_create_files(browser, payload):
+    assert browser.client.delete(PREFIX + '/mistakes/' + BOOK_ID + '/' + LESSON,
+                                 headers=browser.headers, json=payload).status_code == 400
+    assert not browser.data_dir.exists()
+
+
+def test_unknown_mistake_sources_reject_the_whole_batch_before_any_write(browser):
+    for bad in (mistake_item(['词'], 'unknown'), mistake_item(['词'], book_id='unknown'),
+                mistake_item(['词'], 'custom_' + 'a' * 32), mistake_item(['词'], '../escape')):
+        assert add_mistakes(browser, [mistake_item(), bad]).status_code == 404
+    assert get_mistakes(browser, book_id='unknown').status_code == 404
+    assert remove_mistakes(browser, ['词'], 'unknown').status_code == 404
+    assert not browser.data_dir.exists()
+
+
+def test_legacy_database_mistake_reads_and_noop_deletes_do_not_migrate_the_schema(browser):
+    assert save(browser).status_code == 200
+    source = browser.client.get(uri(), headers=browser.headers).json['wordlist']
+    with sqlite3.connect(database(browser)) as connection:
+        connection.execute('DROP TABLE dictation_mistakes')
+        connection.execute('DROP TABLE dictation_mistake_groups')
+    before = database(browser).read_bytes()
+    assert get_mistakes(browser).json == {'items': [], 'count': 0, 'word_count': 0}
+    assert remove_mistakes(browser, ['潮水']).json == {'removed_count': 0}
+    assert database(browser).read_bytes() == before
+    with sqlite3.connect(database(browser)) as connection:
+        assert not connection.execute("SELECT name FROM sqlite_master WHERE name LIKE 'dictation_mistake%'").fetchall()
+    assert add_mistakes(browser).status_code == 200
+    assert get_mistakes(browser).json['word_count'] == 1
+    assert browser.client.get(uri(), headers=browser.headers).json['wordlist'] == source
+
+
+def test_failed_schema_migration_rolls_back_both_new_tables_and_keeps_legacy_words(browser, monkeypatch):
+    import subject_dictation
+    assert save(browser).status_code == 200
+    source = browser.client.get(uri(), headers=browser.headers).json['wordlist']
+    with sqlite3.connect(database(browser)) as connection:
+        connection.execute('DROP TABLE dictation_mistakes')
+        connection.execute('DROP TABLE dictation_mistake_groups')
+    failing_schema = subject_dictation.SCHEMA.replace('CREATE TABLE IF NOT EXISTS dictation_mistakes (',
+                                                     'INVALID_MIGRATION_STATEMENT;\nCREATE TABLE IF NOT EXISTS dictation_mistakes (')
+    monkeypatch.setattr(subject_dictation, 'SCHEMA', failing_schema)
+    assert add_mistakes(browser).status_code == 503
+    with sqlite3.connect(database(browser)) as connection:
+        assert not connection.execute("SELECT name FROM sqlite_master WHERE name LIKE 'dictation_mistake%'").fetchall()
+    assert get_mistakes(browser).json == {'items': [], 'count': 0, 'word_count': 0}
+    assert browser.client.get(uri(), headers=browser.headers).json['wordlist'] == source
+
+
+@pytest.mark.parametrize('statement', [
+    'DROP TABLE dictation_mistakes',
+    'DROP TABLE dictation_lessons',
+    "UPDATE dictation_mistake_groups SET lesson_json='not-json'",
+    "UPDATE dictation_mistakes SET spoken_text=''",
+    "UPDATE dictation_mistakes SET updated_at='not-a-date'",
+    "UPDATE dictation_mistakes SET updated_by=''",
+    'DELETE FROM dictation_mistake_groups',
+])
+def test_corrupted_mistake_content_is_not_hidden_or_overwritten(browser, statement):
+    assert add_mistakes(browser).status_code == 200
+    with sqlite3.connect(database(browser)) as connection:
+        connection.execute(statement)
+    before = database(browser).read_bytes()
+    assert get_mistakes(browser).status_code == 503
+    assert add_mistakes(browser, [mistake_item(['不可覆盖'])]).status_code == 503
+    assert remove_mistakes(browser, ['潮水']).status_code == 503
+    assert database(browser).read_bytes() == before
+
+
+def test_malformed_existing_sqlite_file_is_not_reinitialized_as_an_empty_mistake_book(browser):
+    path = database(browser)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b'broken-sqlite-file')
+    assert get_mistakes(browser).status_code == 503
+    assert add_mistakes(browser).status_code == 503
+    assert path.read_bytes() == b'broken-sqlite-file'
+
+
+def test_mistake_storage_failure_preserves_the_existing_snapshot(browser, monkeypatch):
+    assert add_mistakes(browser).status_code == 200
+    before = get_mistakes(browser).json
+    def unavailable_lock(_):
+        raise PermissionError('read-only volume')
+    monkeypatch.setattr('subject_dictation.interprocess_file_lock', unavailable_lock)
+    assert add_mistakes(browser, [mistake_item(['新词'])]).status_code == 503
+    assert remove_mistakes(browser, ['潮水']).status_code == 503
+    assert get_mistakes(browser).json == before

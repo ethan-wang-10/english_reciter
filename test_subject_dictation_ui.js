@@ -32,7 +32,7 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
-function dictationUI({ storage = new Map(), isParent = false, voices, words = ['潮水', '繁星'], revision = 1 } = {}) {
+function dictationUI({ storage = new Map(), isParent = false, voices, words = ['潮水', '繁星'], revision = 1, mistakes = [], mistakeStore = new Map() } = {}) {
     const html = fs.readFileSync(path.join(__dirname, 'static/subject.html'), 'utf8');
     const source = fs.readFileSync(path.join(__dirname, 'static/js/subject-dictation.js'), 'utf8');
     const elements = new Map(), timers = new Map();
@@ -46,13 +46,29 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
             { id: 'lesson-02', title: '繁星', number: 2, unit: '第一单元', custom: false },
             { id: 'lesson-03', title: '现代诗二首', number: 3, unit: '第一单元', custom: false },
         ] };
+    state.books = [state.book];
     state.wordlists = new Map();
-    function wordlist(lesson, entries = [], base = 0) {
-        return { book_id: bookId, lesson_id: lesson, words: entries.map((item) => typeof item === 'string' ? { text: item, spoken_text: item } : clone(item)),
+    state.wordlistsByBook = new Map([[bookId, state.wordlists]]);
+    function wordlist(lesson, entries = [], base = 0, selectedBook = bookId) {
+        return { book_id: selectedBook, lesson_id: lesson, words: entries.map((item) => typeof item === 'string' ? { text: item, spoken_text: item } : clone(item)),
             word_count: entries.length, revision: base, updated_at: base ? '2026-11-13T12:00:00+08:00' : null, updated_by: base ? 'alice' : null };
     }
     state.wordlists.set('lesson-01', wordlist('lesson-01', words, revision));
     state.wordlists.set('lesson-02', wordlist('lesson-02'));
+    state.mistakes = mistakeStore;
+    const mistakeKey = (student, selectedBook, lesson) => `${student}/${selectedBook}/${lesson}`;
+    state.seedMistakes = (groups, student = 'alice') => {
+        for (const group of groups) {
+            const selectedBook = group.book_id || bookId;
+            const entries = group.words.map((word) => ({ ...(typeof word === 'string' ? { text: word, spoken_text: word } : clone(word)),
+                added_at: '2026-11-13T13:00:00+08:00', updated_at: '2026-11-13T13:00:00+08:00', updated_by: student }));
+            state.mistakes.set(mistakeKey(student, selectedBook, group.lesson_id), { book_id: selectedBook, lesson_id: group.lesson_id, words: entries });
+        }
+    };
+    state.seedMistakes(mistakes);
+    state.mistakeGroups = (selectedBook = bookId, student = 'alice') => [...state.mistakes.entries()]
+        .filter(([key, group]) => key.startsWith(student + '/') && group.book_id === selectedBook && group.words.length)
+        .map(([, group]) => ({ ...clone(group), lesson: clone(state.books.find((item) => item.id === selectedBook)?.lessons.find((item) => item.id === group.lesson_id)), word_count: group.words.length }));
     state.voices = voices ?? [
         { name: 'English', lang: 'en-US', voiceURI: 'english', default: true },
         { name: 'Cantonese', lang: 'zh-HK', voiceURI: 'cantonese' },
@@ -64,7 +80,10 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
         constructor(tag = 'div', attributes = {}) {
             this.tagName = tag.toUpperCase(); this.attributes = { ...attributes }; this.children = []; this.parentElement = null;
             this.value = attributes.value || ''; this.hidden = Object.hasOwn(attributes, 'hidden'); this.disabled = Object.hasOwn(attributes, 'disabled');
-            this.checked = Object.hasOwn(attributes, 'checked'); this.open = Object.hasOwn(attributes, 'open'); this.listeners = {}; this.ownText = ''; this.dataset = {};
+            this.checked = Object.hasOwn(attributes, 'checked'); this.open = Object.hasOwn(attributes, 'open'); this.listeners = {}; this.ownText = '';
+            this.dataset = new Proxy({}, { set: (target, name, value) => {
+                target[name] = String(value); this.attributes['data-' + String(name).replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase())] = String(value); return true;
+            } });
             this._classes = new Set((attributes.class || '').split(/\s+/).filter(Boolean));
             this.classList = { contains: (name) => this._classes.has(name),
                 add: (...names) => { names.forEach((name) => this._classes.add(name)); this.syncClasses(); },
@@ -79,6 +98,8 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
         get className() { return this.attributes.class || ''; }
         set id(value) { this.attributes.id = String(value); elements.set(String(value), this); }
         get id() { return this.attributes.id || ''; }
+        set type(value) { this.attributes.type = String(value); }
+        get type() { return this.attributes.type || ''; }
         set textContent(value) { this.ownText = String(value); this.children.forEach((child) => { child.parentElement = null; }); this.children = []; }
         get textContent() { return this.ownText + this.children.map((child) => child.textContent).join(''); }
         get innerText() { return this.textContent; }
@@ -150,19 +171,51 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
         body: root.querySelector('body'), hidden: false, visibilityState: 'visible' };
 
     state.defaultReply = (call) => {
-        if (call.url === prefix + '/books') return { items: [clone(state.book)], count: 1 };
-        if (call.url === prefix + '/lessons?book_id=' + bookId) return { items: clone(state.book.lessons), count: state.book.lessons.length };
-        if (call.url === prefix + '/wordlists?book_id=' + bookId) return { items: [...state.wordlists.values()].map(clone), count: state.wordlists.size };
-        const match = call.url.match(new RegExp(`^${prefix}/wordlists/${bookId}/([^/?]+)$`));
+        if (call.url === prefix + '/books') return { items: clone(state.books), count: state.books.length };
+        const query = call.url.match(new RegExp(`^${prefix}/(lessons|wordlists|mistakes)\\?book_id=([^&]+)$`));
+        if (query) {
+            const selectedBook = decodeURIComponent(query[2]), book = state.books.find((item) => item.id === selectedBook);
+            assert.ok(book, 'Unknown book: ' + selectedBook);
+            const lists = state.wordlistsByBook.get(selectedBook) || new Map();
+            if (query[1] === 'lessons') return { items: clone(book.lessons), count: book.lessons.length };
+            if (query[1] === 'wordlists') return { items: [...lists.values()].map(clone), count: lists.size };
+            const items = state.mistakeGroups(selectedBook, call.student);
+            return { items, count: items.length, word_count: items.reduce((total, group) => total + group.words.length, 0) };
+        }
+        if (call.url === prefix + '/mistakes' && call.method === 'POST') {
+            let added = 0, existing = 0;
+            for (const item of call.body.items) {
+                const key = mistakeKey(call.student, item.book_id, item.lesson_id);
+                const group = state.mistakes.get(key) || { book_id: item.book_id, lesson_id: item.lesson_id, words: [] };
+                for (const word of item.words) {
+                    const previous = group.words.find((saved) => saved.text === word.text);
+                    if (previous) { previous.spoken_text = word.spoken_text || word.text; previous.updated_by = call.username; existing += 1; continue; }
+                    group.words.push({ ...clone(word), spoken_text: word.spoken_text || word.text, added_at: '2026-11-13T13:00:00+08:00', updated_at: '2026-11-13T13:00:00+08:00', updated_by: call.username });
+                    added += 1;
+                }
+                state.mistakes.set(key, group);
+            }
+            return { added_count: added, existing_count: existing };
+        }
+        const deletion = call.url.match(new RegExp(`^${prefix}/mistakes/([^/?]+)/([^/?]+)$`));
+        if (deletion && call.method === 'DELETE') {
+            const key = mistakeKey(call.student, decodeURIComponent(deletion[1]), decodeURIComponent(deletion[2]));
+            const group = state.mistakes.get(key);
+            const before = group?.words.length || 0;
+            if (group) group.words = group.words.filter((word) => !call.body.words.includes(word.text));
+            return { removed_count: before - (group?.words.length || 0) };
+        }
+        const match = call.url.match(new RegExp(`^${prefix}/wordlists/([^/?]+)/([^/?]+)$`));
         assert.ok(match, 'Unexpected dictation request: ' + call.url);
-        const lesson = match[1];
-        const current = state.wordlists.get(lesson) || wordlist(lesson);
-        if (call.method === 'GET') return { wordlist: clone(current), lesson: clone(state.book.lessons.find((item) => item.id === lesson)) };
+        const selectedBook = decodeURIComponent(match[1]), lesson = decodeURIComponent(match[2]);
+        const lists = state.wordlistsByBook.get(selectedBook) || new Map();
+        const current = lists.get(lesson) || wordlist(lesson, [], 0, selectedBook);
+        if (call.method === 'GET') return { wordlist: clone(current), lesson: clone(state.books.find((item) => item.id === selectedBook)?.lessons.find((item) => item.id === lesson)) };
         assert.equal(call.method, 'PUT');
         assert.equal(call.body.base_revision, current.revision, 'Saves must use the current server revision');
         const entries = call.body.words.filter((word, index, list) => list.findIndex((other) => other.text === word.text) === index);
-        const saved = wordlist(lesson, entries, current.revision + 1);
-        state.wordlists.set(lesson, saved);
+        const saved = wordlist(lesson, entries, current.revision + 1, selectedBook);
+        lists.set(lesson, saved); state.wordlistsByBook.set(selectedBook, lists);
         return { wordlist: clone(saved), duplicates_removed: call.body.words.length - entries.length };
     };
     const speechSynthesis = {
@@ -185,7 +238,8 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
         getSession: () => clone(state.session), showSection: (section) => { state.section = section; },
         async apiRequest(url, options = {}) {
             url = url.replace(/^\/api/, '');
-            const call = { url, method: options.method || 'GET', body: typeof options.body === 'string' ? JSON.parse(options.body) : clone(options.body), username: state.session.username };
+            const call = { url, method: options.method || 'GET', body: typeof options.body === 'string' ? JSON.parse(options.body) : clone(options.body), username: state.session.username,
+                student: state.session.account?.is_parent ? state.session.account.child_username : state.session.account?.username || state.session.username };
             state.calls.push(call);
             return clone(state.routes[url] ? await state.routes[url](call) : state.defaultReply(call));
         },
@@ -217,6 +271,27 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
         },
         async openLesson(number = 1) { await window.subjectDictation.open(); await this.chooseLesson(number); },
         async start() { await field('dictation-start').fire('click'); },
+        async finishRun(count) {
+            await field('dictation-play').fire('click');
+            for (let index = 0; index < count; index += 1) {
+                await this.finishSpeech();
+                await field('dictation-next').fire('click');
+            }
+            assert.equal(field('dictation-finish').hidden, false);
+        },
+        async openMistakes() { await field('dictation-mode-mistakes').fire('click'); },
+        async chooseMistakeLessons(ids) {
+            for (const input of field('dictation-mistakes-groups').querySelectorAll('input')) {
+                input.checked = ids.includes(input.value); await input.fire('change');
+            }
+        },
+        async markReviewWords(words) {
+            const labels = field('dictation-review-list').querySelectorAll('label');
+            for (const label of labels) {
+                const input = label.querySelector('input');
+                input.checked = words.some((word) => label.textContent.includes(word)); await input.fire('change');
+            }
+        },
         async finishSpeech() { const utterance = state.currentUtterance; assert.ok(utterance, 'No speech to finish'); speechSynthesis.speaking = false; state.currentUtterance = null; utterance.emit('end', { utterance }); await settle(); await settle(); return utterance; },
         async failSpeech(error = 'synthesis-failed') { const utterance = state.currentUtterance; assert.ok(utterance, 'No speech to fail'); speechSynthesis.speaking = false; state.currentUtterance = null; utterance.emit('error', { error, utterance }); await settle(); await settle(); return utterance; },
         async voicesChanged(next) { state.voices = next; for (const callback of state.speechListeners.voiceschanged || []) callback(); speechSynthesis.onvoiceschanged?.(); await settle(); await settle(); },
@@ -484,4 +559,179 @@ test('a running practice uses its snapshot even when the cloud wordlist changes'
     await ui.field('dictation-resume').fire('click');
     await ui.field('dictation-next').fire('click');
     assert.equal(ui.state.spoken.at(-1).text, '繁星');
+});
+
+test('selected incorrect words are saved only on explicit action and remain available on a fresh page', async () => {
+    const store = new Map();
+    const ui = dictationUI({ mistakeStore: store });
+    await ui.openLesson(); await ui.type('dictation-repetitions', '1', 'change'); await ui.start(); await ui.finishRun(2);
+    await ui.markReviewWords(['繁星']);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'POST' && call.url === prefix + '/mistakes').length, 0);
+    assert.equal(ui.state.mistakeGroups().length, 0, 'Checking a word alone must not persist it');
+    await ui.field('dictation-save-mistakes').fire('click');
+    assert.deepEqual(ui.state.mistakeGroups().map((group) => [group.lesson_id, group.words.map((word) => word.text)]), [['lesson-01', ['繁星']]]);
+    const fresh = dictationUI({ mistakeStore: store });
+    await fresh.api.open(); await fresh.openMistakes();
+    assert.match(fresh.field('dictation-mistakes-groups').textContent, /观潮/);
+    assert.match(fresh.field('dictation-mistakes-groups').textContent, /繁星/);
+    assert.equal(fresh.field('dictation-mistakes-count').textContent.includes('1'), true);
+});
+
+test('ending before all repetitions finish cannot turn an unheard word into a saved mistake', async () => {
+    const ui = dictationUI();
+    await ui.openLesson(); await ui.start(); await ui.field('dictation-play').fire('click');
+    await ui.finishSpeech(); // The default second reading has not happened yet.
+    await ui.field('dictation-player-exit').fire('click'); await ui.field('dictation-end-run').fire('click');
+    const checks = ui.field('dictation-review-list').querySelectorAll('input');
+    assert.ok(checks.every((input) => input.disabled));
+    checks[0].checked = true; await checks[0].fire('change');
+    await ui.field('dictation-save-mistakes').fire('click');
+    assert.equal(ui.field('dictation-save-mistakes').disabled, true);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'POST' && call.url === prefix + '/mistakes').length, 0);
+});
+
+test('early completion can save a fully heard word while leaving later unheard words unavailable', async () => {
+    const ui = dictationUI();
+    await ui.openLesson(); await ui.start(); await ui.field('dictation-play').fire('click');
+    await ui.finishSpeech(); await ui.tick(700); await ui.finishSpeech();
+    await ui.field('dictation-player-exit').fire('click'); await ui.field('dictation-end-run').fire('click');
+    const checks = ui.field('dictation-review-list').querySelectorAll('input');
+    assert.equal(checks[0].disabled, false); assert.equal(checks[1].disabled, true);
+    checks[0].checked = true; await checks[0].fire('change');
+    checks[1].checked = true; await checks[1].fire('change');
+    await ui.field('dictation-save-mistakes').fire('click');
+    assert.deepEqual(ui.state.mistakeGroups()[0].words.map((word) => word.text), ['潮水']);
+});
+
+test('a failed mistake save preserves the checked words and allows retry without changing the original wordlist', async () => {
+    const ui = dictationUI(); const original = clone(ui.state.wordlists.get('lesson-01'));
+    await ui.openLesson(); await ui.type('dictation-repetitions', '1', 'change'); await ui.start(); await ui.finishRun(2);
+    await ui.markReviewWords(['潮水']);
+    ui.state.routes[prefix + '/mistakes'] = () => { throw new Error('保存错题网络失败'); };
+    await ui.field('dictation-save-mistakes').fire('click');
+    assert.equal(ui.field('dictation-review-list').querySelectorAll('input').filter((input) => input.checked).length, 1);
+    assert.equal(ui.field('dictation-save-mistakes').disabled, false);
+    assert.match(ui.field('dictation-mistakes-save-state').textContent + ui.field('dictation-message').textContent, /保存错题网络失败|失败|重试/);
+    delete ui.state.routes[prefix + '/mistakes'];
+    await ui.field('dictation-save-mistakes').fire('click');
+    assert.deepEqual(ui.state.mistakeGroups()[0].words.map((word) => word.text), ['潮水']);
+    assert.deepEqual(ui.state.wordlists.get('lesson-01'), original);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 0);
+});
+
+test('repeated clicks while a mistake save is pending send one request', async () => {
+    const ui = dictationUI();
+    await ui.openLesson(); await ui.type('dictation-repetitions', '1', 'change'); await ui.start(); await ui.finishRun(2);
+    await ui.markReviewWords(['潮水']);
+    const gate = deferred(); let pendingCall;
+    ui.state.routes[prefix + '/mistakes'] = (call) => { pendingCall = call; return gate.promise; };
+    const first = ui.field('dictation-save-mistakes').fire('click'); await ui.flush();
+    await ui.field('dictation-save-mistakes').fire('click');
+    assert.equal(ui.field('dictation-save-mistakes').disabled, true);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'POST' && call.url === prefix + '/mistakes').length, 1);
+    gate.resolve(ui.state.defaultReply(pendingCall)); await first; await ui.flush();
+    assert.equal(ui.state.mistakeGroups()[0].words.length, 1);
+});
+
+test('the mistake notebook groups lessons and disables review until at least one lesson is selected', async () => {
+    const ui = dictationUI({ mistakes: [{ lesson_id: 'lesson-01', words: ['潮水'] }, { lesson_id: 'lesson-02', words: ['星星'] }] });
+    await ui.api.open(); await ui.openMistakes();
+    const groups = ui.field('dictation-mistakes-groups').querySelectorAll('details');
+    assert.equal(groups.length, 2); assert.ok(groups.every((group) => !group.open));
+    assert.match(ui.field('dictation-mistakes-groups').textContent, /观潮/);
+    assert.match(ui.field('dictation-mistakes-groups').textContent, /繁星/);
+    assert.equal(ui.field('dictation-mistakes-start').disabled, true);
+    await ui.field('dictation-mistakes-select-all').fire('click');
+    assert.equal(ui.field('dictation-mistakes-start').disabled, false);
+    await ui.field('dictation-mistakes-clear-selection').fire('click');
+    assert.equal(ui.field('dictation-mistakes-start').disabled, true);
+    await ui.field('dictation-mistakes-start').fire('click');
+    assert.equal(ui.field('dictation-player').hidden, true);
+});
+
+test('multi-lesson review reads a shared word once, keeps all sources, and saves selected mistakes back to each source', async () => {
+    const ui = dictationUI({ mistakes: [
+        { lesson_id: 'lesson-01', words: ['潮水', '繁星'] },
+        { lesson_id: 'lesson-02', words: ['潮水', '星星'] },
+    ] });
+    await ui.openLesson(); await ui.type('dictation-repetitions', '1', 'change'); await ui.openMistakes();
+    await ui.chooseMistakeLessons(['lesson-01', 'lesson-02']);
+    await ui.field('dictation-mistakes-start').fire('click');
+    assert.equal(ui.state.spoken.length, 0, 'Combined review still waits for manual first play');
+    await ui.finishRun(3);
+    assert.deepEqual(ui.state.spoken.map((utterance) => utterance.text).sort(), ['潮水', '繁星', '星星'].sort());
+    const shared = ui.field('dictation-review-list').querySelectorAll('label').find((label) => label.textContent.includes('潮水'));
+    assert.match(shared.textContent, /观潮/); assert.match(shared.textContent, /繁星/);
+    await ui.markReviewWords(['潮水']);
+    await ui.field('dictation-save-mistakes').fire('click');
+    const saved = ui.state.calls.findLast((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.deepEqual(saved.body.items.map((item) => [item.book_id, item.lesson_id, item.words.map((word) => word.text)]).sort((a, b) => a[1].localeCompare(b[1])), [
+        [bookId, 'lesson-01', ['潮水']], [bookId, 'lesson-02', ['潮水']],
+    ]);
+    await ui.field('dictation-retry-selected').fire('click'); await ui.finishRun(1);
+    const retried = ui.field('dictation-review-list').querySelector('label');
+    assert.match(retried.textContent, /观潮/); assert.match(retried.textContent, /繁星/);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'DELETE').length, 0, 'Reading a word correctly must not remove notebook entries');
+});
+
+test('deleting a notebook word removes only that lesson entry and leaves the original wordlist intact', async () => {
+    const ui = dictationUI({ mistakes: [{ lesson_id: 'lesson-01', words: ['潮水', '繁星'] }, { lesson_id: 'lesson-02', words: ['潮水'] }] });
+    const original = clone(ui.state.wordlists.get('lesson-01'));
+    await ui.api.open(); await ui.openMistakes();
+    const remove = ui.field('dictation-mistakes-groups').querySelectorAll('button').find((button) => button.getAttribute('aria-label')?.includes('第1课') && button.getAttribute('aria-label')?.endsWith('潮水'));
+    assert.ok(remove, 'Each notebook word needs an accessible delete action');
+    await remove.fire('click');
+    assert.deepEqual(ui.state.mistakeGroups().map((group) => [group.lesson_id, group.words.map((word) => word.text)]), [['lesson-01', ['繁星']], ['lesson-02', ['潮水']]]);
+    assert.deepEqual(ui.state.wordlists.get('lesson-01'), original);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 0);
+});
+
+test('a normal run saves mistakes to its frozen textbook and lesson after the preparation selection changes', async () => {
+    const ui = dictationUI();
+    const otherBook = { id: 'another-textbook', title: '另一册课本', grade: 4, term: 2, edition: '目录测试', lessons: [{ id: 'lesson-99', number: 99, title: '另一篇课文', unit: '补充', custom: false }] };
+    ui.state.books.push(otherBook);
+    await ui.openLesson(); await ui.type('dictation-repetitions', '1', 'change'); await ui.start();
+    await ui.field('dictation-player-exit').fire('click');
+    await ui.chooseLesson(2); await ui.type('dictation-book', otherBook.id, 'change');
+    await ui.field('dictation-resume').fire('click'); await ui.finishRun(2);
+    await ui.markReviewWords(['潮水']); await ui.field('dictation-save-mistakes').fire('click');
+    const saved = ui.state.calls.findLast((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.deepEqual(saved.body.items.map((item) => [item.book_id, item.lesson_id]), [[bookId, 'lesson-01']]);
+    assert.deepEqual(ui.state.mistakeGroups().map((group) => group.words.map((word) => word.text)), [['潮水']]);
+    assert.equal(ui.state.mistakeGroups(otherBook.id).length, 0);
+});
+
+test('a late notebook read after switching accounts cannot replace the new student notebook', async () => {
+    const ui = dictationUI();
+    await ui.api.open(); await ui.openMistakes();
+    const gate = deferred(), notebookPath = prefix + '/mistakes?book_id=' + bookId;
+    ui.state.routes[notebookPath] = () => gate.promise;
+    const pending = ui.field('dictation-mistakes-refresh').fire('click'); await ui.flush();
+    assert.equal(ui.state.calls.findLast((call) => call.url === notebookPath).student, 'alice');
+    ui.api.reset();
+    ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    ui.state.seedMistakes([{ lesson_id: 'lesson-02', words: ['小明自己的错词'] }], 'bob');
+    delete ui.state.routes[notebookPath];
+    await ui.api.open(); await ui.openMistakes();
+    gate.resolve({ items: [{ book_id: bookId, lesson_id: 'lesson-01', lesson: ui.state.book.lessons[0], words: [{ text: '前个学生私有错词', spoken_text: '前个学生私有错词' }], word_count: 1 }], count: 1, word_count: 1 });
+    await pending; await ui.flush();
+    assert.match(ui.field('dictation-mistakes-groups').textContent, /小明自己的错词/);
+    assert.doesNotMatch(ui.field('dictation-mistakes-groups').textContent, /前个学生/);
+});
+
+test('a pending mistake save may finish for the old student without updating the next student page', async () => {
+    const ui = dictationUI();
+    await ui.openLesson(); await ui.type('dictation-repetitions', '1', 'change'); await ui.start(); await ui.finishRun(2);
+    await ui.markReviewWords(['潮水']);
+    const gate = deferred(); let oldCall;
+    ui.state.routes[prefix + '/mistakes'] = (call) => { oldCall = call; return gate.promise; };
+    const pending = ui.field('dictation-save-mistakes').fire('click'); await ui.flush();
+    ui.api.reset();
+    ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    await ui.api.open(); await ui.openMistakes();
+    gate.resolve(ui.state.defaultReply(oldCall)); await pending; await ui.flush();
+    assert.equal(ui.state.mistakeGroups(bookId, 'alice')[0].words[0].text, '潮水');
+    assert.equal(ui.state.mistakeGroups(bookId, 'bob').length, 0);
+    assert.doesNotMatch(ui.field('dictation-mistakes-groups').textContent, /潮水/);
+    assert.equal(ui.field('dictation-finish').hidden, true);
 });
