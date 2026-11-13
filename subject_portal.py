@@ -163,18 +163,20 @@ def _records(services, username: str, subject: str) -> list:
         practice = SubjectPracticeStore(services.DATA_DIR / username / 'subjects' / subject / 'practice.sqlite3').records()
     except PracticeError as error:
         raise SubjectContentError(str(error)) from error
+    from subject_writing import WritingStore
+    writing = WritingStore(services.DATA_DIR / username / 'subjects' / 'chinese' / 'writing.sqlite3').records() if subject == 'chinese' else []
     path = services.DATA_DIR / username / 'subjects' / subject / 'records.json'
     try:
         raw = json.loads(path.read_text(encoding='utf-8'))
     except FileNotFoundError:
-        return practice
+        return sorted([*practice, *writing], key=lambda row: row.get('submitted_at', ''), reverse=True)[:200]
     except (OSError, ValueError) as error:
         raise SubjectContentError('Subject records are unavailable') from error
     if not isinstance(raw, list) or any(not isinstance(row, dict) for row in raw):
         raise SubjectContentError('Invalid subject records')
     # Only the record summary belongs on the portal; grading keys remain private.
     legacy = [{key: deepcopy(row[key]) for key in RECORD_FIELDS if key in row} for row in raw[-200:]]
-    return sorted([*legacy, *practice], key=lambda row: row.get('submitted_at', ''), reverse=True)[:200]
+    return sorted([*legacy, *practice, *writing], key=lambda row: row.get('submitted_at', ''), reverse=True)[:200]
 
 
 def register_subject_portal_routes(app, services):

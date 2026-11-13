@@ -7,11 +7,13 @@
     <meta name="description" content="学科学习，按年级整理内置考卷、知识点和学习记录。">
     <title>{{ site_config.title }}</title>
     <link rel="stylesheet" href="/static/assets/css/subject-portal.00e1fec53ec371c4.css">
+    <link rel="stylesheet" href="/static/assets/css/subject-writing.f3cb781195f61c6c.css">
     <script id="subject-site-config" type="application/json">{{ site_config|tojson }}</script>
-    <script src="/static/assets/js/subject-portal.71b85abf57ae4015.js" defer></script>
+    <script src="/static/assets/js/subject-portal.647228da2272222e.js" defer></script>
     <script src="/static/assets/js/subject-sso.5564dee98f722338.js" defer></script>
     <link rel="stylesheet" href="/static/assets/css/subject-practice.149960151a563921.css">
     <script src="/static/assets/js/subject-practice.abdc0fa32d4b5ac2.js" defer></script>
+    <script src="/static/assets/js/subject-writing.f913135c14cd6eec.js" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#portal-main">跳到主要内容</a>
@@ -94,6 +96,7 @@
                 <nav id="learning-tabs" class="learning-tabs" role="tablist" aria-label="学习内容">
                     <button id="papers-tab" class="learning-tab active" data-section="papers" role="tab" aria-selected="true" aria-controls="papers-panel" type="button">内置考卷</button>
                     <button id="knowledge-tab" class="learning-tab" data-section="knowledge" role="tab" aria-selected="false" aria-controls="knowledge-panel" tabindex="-1" type="button">知识点梳理</button>
+                    <button id="writing-tab" class="learning-tab" data-section="writing" role="tab" aria-selected="false" aria-controls="writing-panel" tabindex="-1" type="button" hidden>作文专项</button>
                     <button id="records-tab" class="learning-tab" data-section="records" role="tab" aria-selected="false" aria-controls="records-panel" tabindex="-1" type="button">学习记录</button>
                     <button id="account-tab" class="learning-tab account-tab" data-section="account" role="tab" aria-selected="false" aria-controls="account-panel" tabindex="-1" type="button">我的账号</button>
                 </nav>
@@ -119,6 +122,24 @@
                         <div id="practice-submit-confirmation" class="practice-confirmation" role="group" aria-label="确认交卷" hidden><p id="practice-submit-warning"></p><button id="practice-submit-cancel" class="text-button" type="button">继续检查</button><button id="practice-submit-confirm" class="primary-button" type="button">确认交卷</button></div>
                     </div>
                     <div id="practice-result" hidden><p id="practice-result-score" class="practice-result-score"></p><p id="practice-result-summary"></p><p id="practice-result-note" class="practice-hint"></p><h3 class="practice-review-heading">答案与解析</h3><div id="practice-result-questions" class="practice-result-questions"></div></div>
+                </section>
+                <section id="writing-panel" class="writing-panel" role="tabpanel" aria-labelledby="writing-tab" hidden>
+                    <p id="writing-message" class="feedback" role="status" aria-live="polite" hidden></p>
+                    <div id="writing-home">
+                        <div class="writing-intro"><div><span class="eyebrow">作文专项 · 四年级</span><h2>先想清楚，再写具体</h2><p>把自己的想法搭成提纲，写出重点，再一步步修改。</p></div><span class="writing-pencil" aria-hidden="true">写</span></div>
+                        <div id="writing-lessons" class="writing-lessons"></div>
+                        <div class="writing-section-heading"><h3>我的练习</h3><span>随时保存，也可以从同一题重新开始</span></div>
+                        <div id="writing-attempt-list" class="writing-attempt-list"></div>
+                    </div>
+                    <div id="writing-editor" hidden>
+                        <header class="writing-editor-heading"><div><span class="eyebrow">我的作文练习</span><h2 id="writing-title" tabindex="-1"></h2><p id="writing-read-only" class="writing-read-only" hidden></p></div><div class="writing-header-actions"><span id="writing-save-state" role="status" aria-live="polite"></span><button id="writing-history-open" class="writing-button writing-button-light" type="button">版本记录</button></div></header>
+                        <nav id="writing-steps" class="writing-steps" aria-label="作文练习步骤"></nav>
+                        <div id="writing-conflict" class="writing-conflict" role="alert" hidden><strong>这份练习在另一页面有了更新</strong><p>你当前输入的内容已留在本机。先复制自己的这一份，再载入最新稿进行对照。</p><div><button id="writing-copy-draft" class="writing-button writing-button-light" type="button">复制本机这一份</button><button id="writing-conflict-load" class="writing-button" type="button">载入最新稿</button></div></div>
+                        <div id="writing-local-recovery" class="writing-local-recovery" hidden><p>这台设备上还有一份未同步的内容。</p><button id="writing-recover-local" class="writing-button" type="button">继续本机草稿</button><button id="writing-keep-server" class="writing-button writing-button-light" type="button">使用云端这一份</button></div>
+                        <div class="writing-workspace"><div class="writing-main"><div class="writing-stage-heading"><span id="writing-stage-number" class="writing-stage-number"></span><h3 id="writing-stage-title"></h3><p id="writing-stage-goal"></p></div><div id="writing-stage-content"></div></div><aside class="writing-help"><h3>需要一点帮助吗？</h3><p class="writing-help-intro">先写关键词也可以。提示按需要打开，不用照抄。</p><div id="writing-hints"></div></aside></div>
+                        <footer class="writing-editor-actions"><button id="writing-prev" class="writing-button writing-button-light" type="button">上一步</button><div><button id="writing-save-exit" class="writing-button writing-button-light" type="button">保存并退出</button><button id="writing-next" class="writing-button" type="button">完成本步，继续</button><button id="writing-complete" class="writing-button" type="button" hidden>保存作品，完成练习</button></div></footer>
+                    </div>
+                    <div id="writing-history" class="writing-history-backdrop" role="dialog" aria-modal="true" aria-labelledby="writing-history-title" hidden><section class="writing-history-card"><header><div><span class="eyebrow">每一步都留得下来</span><h3 id="writing-history-title">版本记录</h3></div><button id="writing-history-close" class="writing-button writing-button-light" type="button" aria-label="关闭版本记录">关闭</button></header><label for="writing-version-list">选择一个已保存的版本</label><select id="writing-version-list"></select><div id="writing-version-preview" class="writing-version-preview"></div><button id="writing-version-restore" class="writing-button" type="button" hidden>恢复这一版</button><div id="writing-restore-confirmation" class="writing-local-recovery" hidden><p>恢复后会保留已有版本，并把选中的内容作为新的草稿。</p><button id="writing-version-restore-confirm" class="writing-button" type="button">确认恢复</button><button id="writing-version-restore-cancel" class="writing-button writing-button-light" type="button">暂不恢复</button></div></section></div>
                 </section>
                 <section id="papers-panel" class="content-panel" role="tabpanel" aria-labelledby="papers-tab">
                     <div class="panel-heading"><div><h2>选择一张考卷</h2><p>找到对应年级与学期，循序复习。</p></div><span id="papers-result-count" class="count-label">共 0 份</span></div>

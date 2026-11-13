@@ -6844,6 +6844,9 @@ register_subject_portal_routes(app, sys.modules[__name__])
 from subject_sso import register_subject_sso_routes
 register_subject_sso_routes(app, sys.modules[__name__], lambda: configured_sites(app))
 
+from subject_writing import register_subject_writing_routes
+register_subject_writing_routes(app, sys.modules[__name__])
+
 # ==================== 启动配置 ====================
 
 if __name__ == '__main__':
