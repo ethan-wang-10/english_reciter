@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/static/assets/css/style.5a475613d811f533.css">
     <link rel="stylesheet" href="/static/assets/css/exam-preparation.1b272a86e5061bea.css">
     <link rel="stylesheet" href="/static/assets/css/subject-switch.4a8cdd20b9fb56be.css">
+    <link rel="stylesheet" href="/static/assets/css/english-dictation.53ea6464421ade42.css">
 </head>
 <body>
     <div id="app">
@@ -138,6 +139,7 @@
                 <div class="nav-menu nav-menu-desktop">
                     <button class="nav-item active" data-page="review">今日复习</button>
                     <button class="nav-item" data-page="exam-preparation">考前准备</button>
+                    <button class="nav-item" data-page="english-dictation">生词默写</button>
                     <button class="nav-item" data-page="import">导入单词</button>
                     <button class="nav-item" data-page="leaderboard">排行榜</button>
                     <div id="desktop-more-wrap" class="desktop-more-wrap">
@@ -222,6 +224,7 @@
                     <button type="button" class="mobile-more-link" data-page="discover">单词学习</button>
                     <button type="button" class="mobile-more-link" data-page="textbook">课文学习</button>
                     <button type="button" class="mobile-more-link" data-page="exam-preparation">考前准备</button>
+                    <button type="button" class="mobile-more-link" data-page="english-dictation">生词默写</button>
                     <button type="button" class="mobile-more-link" data-page="progress">学习进度</button>
                     <button type="button" class="mobile-more-link" data-page="mastered">已掌握</button>
                     <button type="button" class="mobile-more-link js-invite-create" id="mobile-open-invite">邀请好友</button>
@@ -448,6 +451,40 @@
             </div>
             
             <!-- 考前准备页面 -->
+            <div id="english-dictation-section" class="section">
+    <div class="container">
+                <div id="english-dictation-panel" class="english-dictation-panel">
+                    <p id="english-dictation-message" class="english-dictation-feedback" role="status" aria-live="polite" hidden></p>
+                    <div id="english-dictation-home">
+                        <div class="english-dictation-heading"><div><span class="english-dictation-eyebrow">英语默写 · 单词与句子</span><h2>听一条，写一条</h2><p>按清单保存条目，写好后按空格继续，家长不用逐项报读。</p></div><span class="english-dictation-heading-mark" aria-hidden="true">听</span></div>
+                        <div id="english-dictation-resume-banner" class="english-dictation-resume" hidden><p id="english-dictation-resume-label"></p><div><button id="english-dictation-resume" class="english-dictation-button" type="button">继续这次默写</button><button id="english-dictation-end-run" class="english-dictation-button english-dictation-button-light" type="button">结束并对照</button></div></div>
+                        <div class="english-dictation-home-toolbar"><div><label for="english-dictation-book">默写文件夹</label><select id="english-dictation-book"></select></div><div class="english-dictation-modes" role="group" aria-label="默写方式"><button id="english-dictation-mode-lessons" type="button" aria-pressed="true">按清单默写</button><button id="english-dictation-mode-mistakes" type="button" aria-pressed="false">错题本 <span id="english-dictation-mistakes-count"></span></button></div></div><p id="english-dictation-edition" class="english-dictation-note"></p>
+                        <div class="english-dictation-shared-settings"><div class="english-dictation-settings"><div><label for="english-dictation-voice">备用英语语音</label><select id="english-dictation-voice"></select></div><div><label for="english-dictation-repetitions">每项读几遍</label><select id="english-dictation-repetitions"><option value="2">2 遍</option><option value="1">1 遍</option></select></div><label class="english-dictation-shuffle"><input id="english-dictation-shuffle" type="checkbox">打乱顺序</label></div><p id="english-dictation-voice-status" class="english-dictation-note" role="status"></p><button id="english-dictation-refresh-voices" class="english-dictation-text-button" type="button">重新检测备用英语语音</button></div>
+                        <div id="english-dictation-lesson-workspace" class="english-dictation-workspace">
+                            <aside class="english-dictation-directory"><h3 class="english-dictation-directory-title">清单目录</h3><div id="english-dictation-lessons" class="english-dictation-lessons"></div><details class="english-dictation-custom"><summary>添加新的默写清单</summary><label for="english-dictation-custom-title">清单名称</label><input id="english-dictation-custom-title" maxlength="80" placeholder="例如：Unit 2 重点句子"><label for="english-dictation-custom-number">序号（选填）</label><input id="english-dictation-custom-number" type="number" min="1" max="999" inputmode="numeric"><button id="english-dictation-add-lesson" class="english-dictation-button english-dictation-button-light" type="button">创建清单</button></details></aside>
+                            <div class="english-dictation-preparation">
+                                <div id="english-dictation-select-prompt" class="english-dictation-empty"><span aria-hidden="true">词</span><h3>先选一份清单</h3><p>家长或学生录入一次条目，之后就能随时开始默写。</p></div>
+                                <div id="english-dictation-editor" hidden>
+                                    <div class="english-dictation-editor-heading"><div><span class="english-dictation-note">本清单内容</span><h3 id="english-dictation-lesson-title"></h3></div><span id="english-dictation-save-state" role="status" aria-live="polite"></span></div>
+                                    <div id="english-dictation-conflict" class="english-dictation-conflict" role="alert" hidden><strong>这份清单已有更新</strong><p>本机未保存的内容仍保留着。可以先复制自己的这一份，再查看云端清单内容。</p><div><button id="english-dictation-copy-local" class="english-dictation-button english-dictation-button-light" type="button">复制本机清单内容</button><button id="english-dictation-load-cloud" class="english-dictation-button english-dictation-button-light" type="button">查看云端清单内容</button></div><pre id="english-dictation-cloud-preview" hidden></pre><button id="english-dictation-keep-cloud" class="english-dictation-button english-dictation-button-light" type="button">使用云端这一份</button><div id="english-dictation-discard-confirm" hidden><p>确认后会放弃本机尚未保存的修改，请先复制需要保留的内容。</p><button id="english-dictation-confirm-cloud" class="english-dictation-button" type="button">确认放弃本机修改，使用云端稿</button></div></div>
+                                    <label class="english-dictation-field-label" for="english-dictation-words">要默写的单词或句子</label><textarea id="english-dictation-words" rows="7" maxlength="120000" spellcheck="false" placeholder="apple&#10;beautiful&#10;Where is my schoolbag?"></textarea><p id="english-dictation-word-count" class="english-dictation-note" role="status"></p>
+                                    <p class="english-dictation-note">每行一条，可混合单词、短语和完整句子。空格、逗号、句号和竖线都保留在本条中；请保留句子的大小写和标点。每条最多 500 个字符，每份清单最多 200 条。</p>
+                                    <div id="english-dictation-word-preview" class="english-dictation-word-preview"></div>
+                                    <div class="english-dictation-editor-actions"><button id="english-dictation-save" class="english-dictation-button english-dictation-button-light" type="button">保存清单内容</button><button id="english-dictation-start" class="english-dictation-button" type="button">保存并开始默写</button></div><p class="english-dictation-note">条目会保存在当前学生的清单目录里。开始后会隐藏清单内容，请在纸上书写。</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="english-dictation-mistakes-home" class="english-dictation-mistakes-home" hidden><div class="english-dictation-editor-heading"><div><span class="english-dictation-eyebrow">只练还不熟的内容</span><h3>我的错题本</h3></div><button id="english-dictation-mistakes-refresh" class="english-dictation-text-button" type="button">刷新错题本</button></div><p class="english-dictation-note">勾选一份或多份清单一起默写。练对后不会自动删除，熟练了可以点条目旁的 × 移除。</p><p id="english-dictation-mistakes-status" class="english-dictation-note" role="status" aria-live="polite"></p><div id="english-dictation-mistakes-empty" class="english-dictation-empty" hidden><span aria-hidden="true">练</span><h3>这个文件夹还没有错题</h3><p>完成默写后，勾选写错的条目，点“加入错题本”就能收集在这里。</p></div><div id="english-dictation-mistakes-groups" class="english-dictation-mistakes-groups"></div><div class="english-dictation-mistakes-selection-actions"><button id="english-dictation-mistakes-select-all" class="english-dictation-text-button" type="button">全选清单</button><button id="english-dictation-mistakes-clear-selection" class="english-dictation-text-button" type="button">清空选择</button><span id="english-dictation-mistakes-selection" class="english-dictation-note" role="status"></span></div><div class="english-dictation-editor-actions"><button id="english-dictation-mistakes-start" class="english-dictation-button" type="button" disabled>开始错题复习</button></div></div>
+                    </div>
+                    <div id="english-dictation-player" class="english-dictation-player" hidden>
+                        <div class="english-dictation-player-heading"><div><span class="english-dictation-eyebrow">纸上默写</span><h2 id="english-dictation-player-title"></h2></div><button id="english-dictation-player-exit" class="english-dictation-text-button" type="button">暂时退出</button></div>
+                        <progress id="english-dictation-progress" max="1" value="0" aria-label="默写条目进度"></progress><div class="english-dictation-player-card"><p id="english-dictation-position" class="english-dictation-position"></p><span class="english-dictation-sound-mark" aria-hidden="true">听</span><h3 id="english-dictation-play-status" role="status" aria-live="polite">准备好后，点播放</h3><p id="english-dictation-player-instruction">在纸上写好后，按空格或点“下一条”。</p><p id="english-dictation-player-settings" class="english-dictation-note"></p><div class="english-dictation-player-actions"><button id="english-dictation-play" class="english-dictation-button english-dictation-play" type="button">播放本项</button><button id="english-dictation-next" class="english-dictation-button english-dictation-next" type="button">下一条</button></div><p class="english-dictation-key-hint"><kbd>空格</kbd> 播放本项／继续下一条 · 读完后会等你写好</p></div>
+                    </div>
+                    <div id="english-dictation-finish" class="english-dictation-finish" hidden><span class="english-dictation-eyebrow">对照与再练</span><h2>这一轮读完了</h2><p id="english-dictation-finish-label"></p><p>拿出纸上的默写，逐条对照。勾选本次写错的条目，再点“加入错题本”保存，也可以马上重练。只有点击保存后才会加入错题本。</p><div id="english-dictation-review-list" class="english-dictation-review-list"></div><div class="english-dictation-mistakes-save"><button id="english-dictation-save-mistakes" class="english-dictation-button" type="button" disabled>加入错题本</button><p id="english-dictation-mistakes-save-state" class="english-dictation-note" role="status" aria-live="polite">尚未选择错题</p></div><div class="english-dictation-finish-actions"><button id="english-dictation-retry-selected" class="english-dictation-button english-dictation-button-light" type="button" disabled>再练选中的条目</button><button id="english-dictation-retry-all" class="english-dictation-button english-dictation-button-light" type="button">整份再来一遍</button><button id="english-dictation-finish-back" class="english-dictation-text-button" type="button">返回我的清单</button></div></div>
+                </div>
+    </div>
+</div>
+
             <div id="exam-preparation-section" class="section">
                 <div class="container exam-container">
                     <h2>考前准备</h2>
@@ -1539,7 +1576,9 @@
     </div>
     
     <script src="/static/assets/js/performance.cabc7fdc8aff1192.js" defer></script>
-    <script src="/static/assets/js/app.9ace853950a53182.js" defer></script>
+    <script src="/static/assets/js/app.d154ed24acc99bf2.js" defer></script>
+    <script src="/static/assets/js/english-dictation-host.10c6b22669f3fff1.js" defer></script>
+    <script src="/static/assets/js/english-dictation.71128dd92c06d2d9.js" defer></script>
     <script src="/static/assets/js/exam-preparation.630db8337157ce1e.js" defer></script>
     <script src="/static/assets/js/chat-sidebar.8edef40ea8fe6819.js" defer></script>
     <script src="/static/assets/js/textbook.0528bf065ba0644e.js" defer></script>

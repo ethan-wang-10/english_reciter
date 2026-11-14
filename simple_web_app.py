@@ -6850,6 +6850,9 @@ register_subject_writing_routes(app, sys.modules[__name__])
 from subject_dictation import register_subject_dictation_routes
 register_subject_dictation_routes(app, sys.modules[__name__])
 
+from english_dictation import register_english_dictation_routes
+register_english_dictation_routes(app, sys.modules[__name__])
+
 # ==================== 启动配置 ====================
 
 if __name__ == '__main__':

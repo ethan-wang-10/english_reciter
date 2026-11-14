@@ -5,6 +5,11 @@
       "sha256": "39d2e72c73f29bc04330eb29c06e750c4a9778e4aed2491d8a781acf84253f17",
       "url": "/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg"
     },
+    "/static/css/english-dictation.css": {
+      "bytes": 27197,
+      "sha256": "53ea6464421ade425a135cddc8a58c74c40eeafac22cdf97bb4dba2fe8a4c58a",
+      "url": "/static/assets/css/english-dictation.53ea6464421ade42.css"
+    },
     "/static/css/exam-preparation.css": {
       "bytes": 12558,
       "sha256": "1b272a86e5061beaf6f8308d1b2e1b772c36bfa09909350299a474560040192c",
@@ -46,14 +51,24 @@
       "url": "/static/assets/js/admin.ce6f48c3ba42f871.js"
     },
     "/static/js/app.js": {
-      "bytes": 459464,
-      "sha256": "9ace853950a5318226793ff91a0e879565f5cb11e79a3b6209c94a42ef3cddbc",
-      "url": "/static/assets/js/app.9ace853950a53182.js"
+      "bytes": 459718,
+      "sha256": "d154ed24acc99bf2111d97a24cac1b12cddb682061115c7eac40711ccad7c452",
+      "url": "/static/assets/js/app.d154ed24acc99bf2.js"
     },
     "/static/js/chat-sidebar.js": {
       "bytes": 34598,
       "sha256": "8edef40ea8fe6819d7de9cd648d1b9be242fe00b8695e73d7b4a2a6ec4c210ef",
       "url": "/static/assets/js/chat-sidebar.8edef40ea8fe6819.js"
+    },
+    "/static/js/english-dictation-host.js": {
+      "bytes": 1535,
+      "sha256": "10c6b22669f3fff17278a863e6097682c9680a7862d275c22e50f5764bbcb6de",
+      "url": "/static/assets/js/english-dictation-host.10c6b22669f3fff1.js"
+    },
+    "/static/js/english-dictation.js": {
+      "bytes": 63744,
+      "sha256": "71128dd92c06d2d94e605cc410a2be7b6f303abf935a940dcd94e723d1280641",
+      "url": "/static/assets/js/english-dictation.71128dd92c06d2d9.js"
     },
     "/static/js/exam-preparation.js": {
       "bytes": 54418,

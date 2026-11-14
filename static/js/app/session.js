@@ -158,6 +158,7 @@ function resetAccountSessionView() {
     closeDesktopMoreMenu();
     resetInviteCardState();
     window.examPreparation?.reset();
+    window.englishDictation?.reset();
     preloadedReviewData = null;
     reviewDataStaleAfterImport = false;
     resetActiveReviewSession();
@@ -513,6 +514,7 @@ function syncReviewSectionChromeClass() {
 }
 
 function showSection(sectionId) {
+    if (sectionId !== 'english-dictation') window.englishDictation?.leaveView();
     closeDailySummaryPopover();
     closeDesktopMoreMenu(true);
 
@@ -534,7 +536,7 @@ function showSection(sectionId) {
     syncDesktopMoreActive(sectionId);
 
     const moreBtn = document.getElementById('mobile-more-btn');
-    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook' || sectionId === 'exam-preparation')) {
+    if (moreBtn && (sectionId === 'progress' || sectionId === 'mastered' || sectionId === 'discover' || sectionId === 'textbook' || sectionId === 'exam-preparation' || sectionId === 'english-dictation')) {
         moreBtn.classList.add('active');
     }
 
@@ -553,6 +555,8 @@ function showSection(sectionId) {
         loadTextbookSection();
     } else if (sectionId === 'exam-preparation') {
         void window.examPreparation?.open();
+    } else if (sectionId === 'english-dictation') {
+        void window.englishDictation?.open();
     } else if (sectionId === 'progress') {
         if (_isSectionFresh('progress')) { _restoreScrollPos('progress'); return; }
         loadProgress();
