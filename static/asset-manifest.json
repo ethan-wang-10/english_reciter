@@ -6,9 +6,9 @@
       "url": "/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg"
     },
     "/static/css/english-dictation.css": {
-      "bytes": 28183,
-      "sha256": "bfbe372356a73c754a642889f6fa5169b5e768e9f0b7d1fab4cd83c5d5798ee8",
-      "url": "/static/assets/css/english-dictation.bfbe372356a73c75.css"
+      "bytes": 30320,
+      "sha256": "52a5fee1c510a494f83d67eb1d3aa1a66040d06e45058f8836391a2bca1005f3",
+      "url": "/static/assets/css/english-dictation.52a5fee1c510a494.css"
     },
     "/static/css/exam-preparation.css": {
       "bytes": 12558,
@@ -66,9 +66,9 @@
       "url": "/static/assets/js/english-dictation-host.10c6b22669f3fff1.js"
     },
     "/static/js/english-dictation.js": {
-      "bytes": 65068,
-      "sha256": "a5bcab173b1d5a564c97a1f1727f6cc64b17256968870ca70d274d5aed051f14",
-      "url": "/static/assets/js/english-dictation.a5bcab173b1d5a56.js"
+      "bytes": 71586,
+      "sha256": "40f1d905e152e74d43e3987fe43b59aea2ff566390d4d56b83316d2a9c05b2db",
+      "url": "/static/assets/js/english-dictation.40f1d905e152e74d.js"
     },
     "/static/js/exam-preparation.js": {
       "bytes": 54418,

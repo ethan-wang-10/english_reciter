@@ -71,7 +71,7 @@ def _word(value, *, max_text=40, max_spoken=100):
     return {'text': text, 'spoken_text': _text(value.get('spoken_text', ''), max_spoken, empty=True) or text}
 
 
-def validate_words(value, *, max_text=40, max_spoken=100):
+def validate_words(value, *, max_text=40, max_spoken=100, max_words=200):
     """Normalize exact spellings while preserving first-entry order and aliases."""
     if not isinstance(value, list) or len(value) > 500:
         raise DictationError('请提交词语列表，一次最多输入500项。')
@@ -83,12 +83,12 @@ def validate_words(value, *, max_text=40, max_spoken=100):
             continue
         seen.add(word['text'])
         result.append(word)
-    if len(result) > 200:
-        raise DictationError('每篇课文最多保存200个不同的词语。')
+    if len(result) > max_words:
+        raise DictationError(f'每篇课文最多保存{max_words}个不同的词语。')
     return result, duplicates
 
 
-def validate_mistake_items(value, *, max_text=40, max_spoken=100):
+def validate_mistake_items(value, *, max_text=40, max_spoken=100, max_mistakes=1000):
     """Bound one atomic merge while retaining lesson boundaries and exact text."""
     if not isinstance(value, list) or len(value) > 100:
         raise DictationError('一次最多加入100组课文错词。')
@@ -98,8 +98,8 @@ def validate_mistake_items(value, *, max_text=40, max_spoken=100):
             raise DictationError('每组错词只接受课本、课文和词语列表。')
         book_id, lesson_id = _id(item['book_id']), _id(item['lesson_id'])
         words = item['words']
-        if not isinstance(words, list) or len(words) > 1000:
-            raise DictationError('每组一次最多加入1000个错词。')
+        if not isinstance(words, list) or len(words) > max_mistakes:
+            raise DictationError(f'每组一次最多加入{max_mistakes}个错词。')
         total += len(words)
         if total > 2000:
             raise DictationError('一次最多加入2000个错词，请分次加入。')
@@ -108,15 +108,15 @@ def validate_mistake_items(value, *, max_text=40, max_spoken=100):
             word = _word(entry, max_text=max_text, max_spoken=max_spoken)
             # The most recently supplied hint is the one just checked on paper.
             group[word['text']] = word
-        if len(group) > 1000:
-            raise DictationError('同一课文最多保存1000个不同的错词。')
+        if len(group) > max_mistakes:
+            raise DictationError(f'同一课文最多保存{max_mistakes}个不同的错词。')
     return [{'book_id': book_id, 'lesson_id': lesson_id, 'words': list(words.values())}
             for (book_id, lesson_id), words in groups.items()]
 
 
-def validate_mistake_deletions(value, *, max_text=40):
-    if not isinstance(value, list) or len(value) > 1000:
-        raise DictationError('一次最多移除1000个错词。')
+def validate_mistake_deletions(value, *, max_text=40, max_mistakes=1000):
+    if not isinstance(value, list) or len(value) > max_mistakes:
+        raise DictationError(f'一次最多移除{max_mistakes}个错词。')
     return list(dict.fromkeys(_word({'text': text}, max_text=max_text, max_spoken=max_text)['text'] for text in value))
 
 
@@ -257,11 +257,14 @@ def _schema(connection):
 
 
 class DictationStore:
-    def __init__(self, path, *, max_text=40, max_spoken=100):
+    def __init__(self, path, *, max_text=40, max_spoken=100, max_words=200, max_mistakes=1000):
         if any(type(limit) is not int or not 1 <= limit <= 500 for limit in (max_text, max_spoken)):
             raise ValueError('Dictation text limits must be integers between 1 and 500')
+        if type(max_words) is not int or not 1 <= max_words <= 500 or type(max_mistakes) is not int or not 1 <= max_mistakes <= 2000:
+            raise ValueError('Dictation item limits are out of bounds')
         self.path = Path(path)
         self.max_text, self.max_spoken = max_text, max_spoken
+        self.max_words, self.max_mistakes = max_words, max_mistakes
 
     @contextmanager
     def _connection(self, *, write=False):
@@ -313,7 +316,7 @@ class DictationStore:
     def _public_wordlist(self, row):
         try:
             raw = json.loads(row['words_json'])
-            words, duplicates = validate_words(raw, max_text=self.max_text, max_spoken=self.max_spoken)
+            words, duplicates = validate_words(raw, max_text=self.max_text, max_spoken=self.max_spoken, max_words=self.max_words)
             if (duplicates or words != raw or type(row['revision']) is not int
                     or not 1 <= row['revision'] <= MAX_REVISION):
                 raise ValueError('Invalid saved wordlist')
@@ -353,7 +356,7 @@ class DictationStore:
     def save_wordlist(self, book_id, lesson_id, base_revision, words, updated_by):
         _id(book_id); _id(lesson_id)
         _revision(base_revision)
-        normalized, duplicates = validate_words(words, max_text=self.max_text, max_spoken=self.max_spoken)
+        normalized, duplicates = validate_words(words, max_text=self.max_text, max_spoken=self.max_spoken, max_words=self.max_words)
         actor = _text(updated_by, 64)
         if not self.path.is_file() and base_revision != 0:
             raise DictationError('词表已有更新，请先保留本机内容再载入最新词表。', 409, code='conflict', current_revision=0)
@@ -424,7 +427,7 @@ class DictationStore:
                 group['words'].append({**word, **{key: row[key] for key in ('added_at', 'updated_at', 'updated_by')}})
                 group['word_count'] += 1
             for group in groups.values():
-                if (not 1 <= group['word_count'] <= MAX_MISTAKES_PER_LESSON
+                if (not 1 <= group['word_count'] <= self.max_mistakes
                         or len({word['text'] for word in group['words']}) != group['word_count']):
                     raise ValueError('Invalid mistake group size')
             return list(groups.values())
@@ -444,7 +447,7 @@ class DictationStore:
                 'book_id', 'lesson_id', 'lesson', 'words'} for item in items):
             raise DictationError('请提交有效的课文错词。')
         normalized = validate_mistake_items([{key: item[key] for key in ('book_id', 'lesson_id', 'words')} for item in items],
-                                            max_text=self.max_text, max_spoken=self.max_spoken)
+                                            max_text=self.max_text, max_spoken=self.max_spoken, max_mistakes=self.max_mistakes)
         snapshots = {}
         for item in items:
             try:
@@ -463,8 +466,8 @@ class DictationStore:
             for item in normalized:
                 group = saved.get((item['book_id'], item['lesson_id']))
                 old_words = {word['text'] for word in group['words']} if group else set()
-                if len(old_words | {word['text'] for word in item['words']}) > MAX_MISTAKES_PER_LESSON:
-                    raise DictationError('这篇课文的错词已达到1000个，请先移除掌握的词语再加入。')
+                if len(old_words | {word['text'] for word in item['words']}) > self.max_mistakes:
+                    raise DictationError(f'这篇课文的错词已达到{self.max_mistakes}个，请先移除掌握的词语再加入。')
             now, added, existing = china_now_iso(timespec='microseconds'), 0, 0
             for item in normalized:
                 key = item['book_id'], item['lesson_id']
@@ -486,7 +489,7 @@ class DictationStore:
 
     def remove_mistakes(self, book_id, lesson_id, words):
         _id(book_id); _id(lesson_id)
-        texts = validate_mistake_deletions(words, max_text=self.max_text)
+        texts = validate_mistake_deletions(words, max_text=self.max_text, max_mistakes=self.max_mistakes)
         if not texts or not self.path.is_file():
             return {'removed_count': 0}
         # A delete against an intact legacy database is also a read-only no-op.

@@ -32,6 +32,7 @@
 
     function sourceName(source) {
         const title = `${source.number ? `${source.number}. ` : ''}${source.title || '我的清单'}`;
+        if (source.unit && source.title === '默写内容') return source.unit;
         return source.unit ? `${source.unit} · ${title}` : title;
     }
     function sourceKey(source, word) { return JSON.stringify([source.book_id, source.lesson_id, word.text, word.spoken_text || word.text]); }
@@ -99,7 +100,7 @@
         return words.map((word) => word.text).join('\n');
     }
     function parseWords(value) {
-        if (value.length > 120000) throw new Error('清单内容过长，请控制在 120000 个字符以内。');
+        if (value.length > 440000) throw new Error('清单内容过长，请控制在 440000 个字符以内。');
         const entries = [], seen = new Set();
         const aliases = new Map((wordlist?.words || []).map((word) => [word.text, word.spoken_text || word.text]));
         let duplicates = 0;
@@ -113,7 +114,7 @@
             seen.add(text);
             entries.push({ text, spoken_text: aliases.get(text) || text });
         }
-        if (entries.length > 200) throw new Error('每份清单最多保存 200 条，请分组整理。');
+        if (entries.length > 400) throw new Error('每份清单最多保存 400 条，请分组整理。');
         return { words: entries, duplicates };
     }
     function unchanged(words) {
@@ -138,7 +139,7 @@
         try {
             const draft = JSON.parse(localStorage.getItem(backupKey()) || 'null');
             if (!draft || draft.student !== boundStudent || draft.book_id !== bookId || draft.lesson_id !== lesson.id
-                || typeof draft.raw !== 'string' || draft.raw.length > 120000 || !Number.isSafeInteger(draft.base_revision)
+                || typeof draft.raw !== 'string' || draft.raw.length > 440000 || !Number.isSafeInteger(draft.base_revision)
                 || draft.base_revision < 0) return;
             if (draft.raw === formatWords(wordlist.words || [])) { removeBackup(); return; }
             raw = draft.raw;
@@ -151,6 +152,60 @@
                 message('已恢复本机尚未保存的条目，确认后点击保存。');
             }
         } catch (_) { /* A corrupt optional backup must never replace the cloud list. */ }
+    }
+    function renderLegacyDrafts() {
+        let panel = el('english-dictation-legacy-drafts');
+        if (!panel) {
+            panel = node('section', '', 'english-dictation-legacy-drafts');
+            panel.id = 'english-dictation-legacy-drafts'; panel.hidden = true;
+            panel.setAttribute('aria-labelledby', 'english-dictation-legacy-title');
+            const anchor = el('english-dictation-conflict');
+            if (typeof anchor.after === 'function') anchor.after(panel);
+            else el('english-dictation-editor').appendChild(panel);
+        }
+        panel.replaceChildren(); panel.hidden = true;
+        if (!wordlist || !lesson || lesson.custom || bookId !== 'shanghai-english-grade4-term1-2026' || !/^unit-\d{2}$/u.test(lesson.id)
+                || !current(capture(true))) return;
+        const drafts = [];
+        for (const [kind, label] of [['words', '旧单词与短语草稿'], ['sentences', '旧句子草稿']]) {
+            const oldId = `${lesson.id}-${kind}`;
+            try {
+                const encoded = localStorage.getItem(backupKey(boundStudent, bookId, oldId));
+                if (!encoded || encoded.length > 2700000) continue;
+                const draft = JSON.parse(encoded);
+                if (!draft || draft.student !== boundStudent || draft.book_id !== bookId || draft.lesson_id !== oldId
+                        || typeof draft.raw !== 'string' || draft.raw.length > 440000 || !Number.isSafeInteger(draft.base_revision) || draft.base_revision < 0) continue;
+                drafts.push({ oldId, label, raw: draft.raw, kind });
+            } catch (_) { /* Leave malformed or unavailable legacy storage untouched. */ }
+        }
+        if (!drafts.length) return;
+        const heading = node('h4', '发现旧版未保存草稿'); heading.id = 'english-dictation-legacy-title'; panel.appendChild(heading);
+        panel.appendChild(node('p', '这个 Unit 已把单词和句子合为一份。以前保存到云端的内容已合并；下面是本机尚未保存的旧草稿，请先复制，再按需要补入当前清单。复制和保存新清单都不会自动删除旧草稿。'));
+        for (const draft of drafts) {
+            const ctx = capture(true), row = node('div', '', 'english-dictation-legacy-row');
+            row.dataset.legacyLesson = draft.oldId;
+            const label = node('label', draft.label); label.setAttribute('for', `english-dictation-legacy-${draft.kind}`);
+            const text = node('textarea'); text.id = `english-dictation-legacy-${draft.kind}`;
+            text.readOnly = true; text.setAttribute('readonly', ''); text.value = draft.raw; text.rows = 4;
+            text.dataset.legacyLesson = draft.oldId;
+            const copy = node('button', `复制${draft.label}`, 'english-dictation-button english-dictation-button-light');
+            copy.type = 'button'; copy.dataset.legacyLesson = draft.oldId;
+            copy.addEventListener('click', async () => {
+                if (!current(ctx) || !panel.contains(row)) return;
+                try {
+                    await navigator.clipboard.writeText(draft.raw);
+                    if (current(ctx) && panel.contains(row)) message('旧草稿已复制，可按需要粘贴到当前清单；原草稿仍保留在本机。');
+                } catch (_) {
+                    if (!current(ctx) || !panel.contains(row)) return;
+                    text.focus(); text.select();
+                    message('浏览器未允许自动复制，已选中旧草稿，请手动复制。原内容仍保留着。', true);
+                }
+            });
+            row.append(label, text, copy);
+            if (!draft.raw) row.appendChild(node('p', '这份旧草稿为空，可能记录了尚未保存的清空操作。请与当前内容自行核对。'));
+            panel.appendChild(row);
+        }
+        panel.hidden = false;
     }
     function renderResume() {
         el('english-dictation-resume-banner').hidden = !run;
@@ -180,6 +235,25 @@
         el('english-dictation-conflict').hidden = !conflict;
         el('english-dictation-keep-cloud').disabled = saving || loading;
         el('english-dictation-confirm-cloud').disabled = saving || loading;
+        const catalogUpdated = !!conflict?.catalogUpdated;
+        el('english-dictation-load-cloud').hidden = catalogUpdated;
+        el('english-dictation-keep-cloud').hidden = catalogUpdated;
+        if (catalogUpdated) el('english-dictation-discard-confirm').hidden = true;
+        let refreshCatalog = el('english-dictation-refresh-catalog');
+        if (!refreshCatalog) {
+            refreshCatalog = node('button', '刷新教材目录（保留本机草稿）', 'english-dictation-button english-dictation-button-light');
+            refreshCatalog.id = 'english-dictation-refresh-catalog'; refreshCatalog.type = 'button';
+            refreshCatalog.addEventListener('click', () => {
+                if (!conflict?.catalogUpdated || loading || saving || !current(capture(true))) return;
+                if (preserveDraft() === false) {
+                    message('本机空间不足，无法为旧稿留存备份。请先复制到笔记中保留，再手动刷新页面。', true);
+                    return;
+                }
+                return loadBook(bookId);
+            });
+            el('english-dictation-conflict').appendChild(refreshCatalog);
+        }
+        refreshCatalog.hidden = !catalogUpdated; refreshCatalog.disabled = blocked;
         renderMistakeControls();
     }
     function renderWords() {
@@ -187,7 +261,7 @@
         container.replaceChildren();
         try {
             const result = parseWords(raw);
-            el('english-dictation-word-count').textContent = `${result.words.length} 条不同内容${result.duplicates ? `，已合并 ${result.duplicates} 个重复项` : ''} · 每份清单最多 200 条`;
+            el('english-dictation-word-count').textContent = `${result.words.length} 条不同内容${result.duplicates ? `，已合并 ${result.duplicates} 个重复项` : ''} · 每份清单最多 400 条`;
             for (const word of result.words) {
                 const chip = node('div', '', 'english-dictation-word-chip');
                 const label = node('span', word.text);
@@ -204,6 +278,15 @@
             }
         } catch (error) { el('english-dictation-word-count').textContent = error.message; }
     }
+    function unitLabel(unit) {
+        const label = node('span', '', 'english-dictation-unit-label');
+        const parts = /^(Unit\s+\d+)\s*(?:[·:：–—-]\s*)?(.*)$/iu.exec(unit);
+        if (parts) {
+            label.appendChild(node('strong', parts[1], 'english-dictation-unit-number'));
+            if (parts[2]) label.appendChild(node('small', parts[2], 'english-dictation-unit-topic'));
+        } else label.textContent = unit;
+        return label;
+    }
     function renderDirectory() {
         const container = el('english-dictation-lessons');
         for (const details of container.querySelectorAll('details')) {
@@ -213,6 +296,17 @@
         container.replaceChildren();
         const groups = new Map();
         for (const item of lessons) {
+            if (!item.custom && /^unit-\d{2}$/u.test(item.id) && item.unit) {
+                const button = node('button', '', 'english-dictation-unit-button');
+                button.type = 'button'; button.dataset.lessonId = item.id;
+                button.setAttribute('aria-label', `选择 ${sourceName(item)}`);
+                button.setAttribute('aria-pressed', String(lesson?.id === item.id));
+                const count = summaries.get(item.id)?.word_count || 0;
+                button.append(unitLabel(item.unit), node('small', count ? `${count} 条` : '待录入', 'english-dictation-unit-count'));
+                button.addEventListener('click', () => selectLesson(item));
+                container.appendChild(button);
+                continue;
+            }
             const group = item.custom ? '我的其他清单' : item.unit || '清单目录';
             if (!groups.has(group)) groups.set(group, []);
             groups.get(group).push(item);
@@ -228,13 +322,7 @@
                 if (details.open) expandedUnits.add(unitKey); else expandedUnits.delete(unitKey);
             });
             const summary = node('summary');
-            const unitLabel = node('span', '', 'english-dictation-unit-label');
-            const unitParts = /^(Unit\s+\d+)\s*(?:[·:：–—-]\s*)?(.*)$/iu.exec(unit);
-            if (unitParts) {
-                unitLabel.appendChild(node('strong', unitParts[1], 'english-dictation-unit-number'));
-                if (unitParts[2]) unitLabel.appendChild(node('small', unitParts[2], 'english-dictation-unit-topic'));
-            } else unitLabel.textContent = unit;
-            summary.append(unitLabel, node('span', `${items.length} 份`, 'english-dictation-unit-count'));
+            summary.append(unitLabel(unit), node('span', `${items.length} 份`, 'english-dictation-unit-count'));
             details.appendChild(summary);
             for (const item of items) {
                 const button = node('button', '', 'english-dictation-lesson');
@@ -261,6 +349,7 @@
         el('english-dictation-cloud-preview').hidden = true;
         el('english-dictation-cloud-preview').textContent = '';
         el('english-dictation-discard-confirm').hidden = true;
+        renderLegacyDrafts();
         renderWords();
         renderControls();
     }
@@ -478,9 +567,11 @@
         } catch (error) {
             if (!current(ctx)) return false;
             if (error.status === 409) {
-                conflict = { localRaw: raw, baseRevision: wordlist.revision, cloud: null };
-                stateLabel('本机内容已保留，等待对照');
-                message('另一页面已经更新这份清单内容。你的输入已留在本机，请先复制并对照云端清单内容。', true);
+                conflict = { localRaw: raw, baseRevision: wordlist.revision, cloud: null, catalogUpdated: error.code === 'catalog_updated' };
+                stateLabel(conflict.catalogUpdated ? '目录已更新，本机草稿已保留' : '本机内容已保留，等待对照');
+                message(conflict.catalogUpdated
+                    ? '教材已改为每个 Unit 一份清单。当前输入已保留，请先复制需要的内容，再刷新教材目录；进入对应 Unit 后也可查看旧版草稿恢复区。'
+                    : '另一页面已经更新这份清单内容。你的输入已留在本机，请先复制并对照云端清单内容。', true);
             } else {
                 stateLabel('本机待保存');
                 message(error.message || '暂时未能保存，请保留本页并重试。', true);
@@ -492,7 +583,7 @@
         }
     }
     async function inspectCloud() {
-        if (!conflict || loading || saving) return null;
+        if (!conflict || conflict.catalogUpdated || loading || saving) return null;
         const ctx = capture(true), original = conflict;
         loading = true; renderControls();
         try {
@@ -521,7 +612,7 @@
         }
     }
     async function acceptCloud() {
-        if (!conflict || loading || saving) return;
+        if (!conflict || conflict.catalogUpdated || loading || saving) return;
         const ctx = capture(true), original = conflict;
         // Re-read immediately before accepting so the editor receives the latest revision.
         const latest = await inspectCloud();
@@ -825,8 +916,8 @@
         const selected = selectedReviewWords(), items = pendingMistakeGroups();
         if (!selected.length || !items.length) return;
         const total = items.reduce((sum, item) => sum + item.words.length, 0);
-        if (total > 2000 || items.length > 100 || items.some((item) => item.words.length > 1000)) {
-            run.saveError = true; run.saveMessage = '一次最多保存 2000 条清单错题、100 份清单，每份清单最多 1000 条。勾选已保留，请减少本次选择后分批保存。'; renderFinishControls(); return;
+        if (total > 2000 || items.length > 100 || items.some((item) => item.words.length > 2000)) {
+            run.saveError = true; run.saveMessage = '一次最多保存 2000 条清单错题、100 份清单，每份清单最多 2000 条。勾选已保留，请减少本次选择后分批保存。'; renderFinishControls(); return;
         }
         if (selected.some((word) => !word.sources?.length)) {
             run.saveError = true; run.saveMessage = '部分条目缺少清单来源，尚未保存。请返回对应清单重新默写。'; renderFinishControls(); return;
@@ -899,6 +990,7 @@
         finally { if (current(ctx)) { loading = false; renderControls(); } }
     }
 
+    el('english-dictation-words').maxLength = 440000;
     el('english-dictation-book').addEventListener('change', () => { if (!loading && !saving && !mistakeLoading && !mistakeDeleting) return loadBook(el('english-dictation-book').value); });
     el('english-dictation-mode-lessons').addEventListener('click', () => setMode('lessons'));
     el('english-dictation-mode-mistakes').addEventListener('click', () => setMode('mistakes'));

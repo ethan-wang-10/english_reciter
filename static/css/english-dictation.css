@@ -45,6 +45,18 @@
 #english-dictation-section .english-dictation-unit-number { display: block; font: inherit; }
 #english-dictation-section .english-dictation-unit-topic { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 650; line-height: 1.65; }
 #english-dictation-section .english-dictation-unit-count { align-self: start; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 650; white-space: nowrap; }
+#english-dictation-section .english-dictation-unit-button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; min-width: 0; width: 100%; padding: 12px 11px; border: 2px solid var(--line); border-radius: 15px; background: #fafbfc; color: var(--ink); box-shadow: 0 3px 0 var(--line); text-align: left; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; transition: transform .12s, box-shadow .12s, border-color .15s; }
+#english-dictation-section .english-dictation-unit-button:hover:not(:disabled) { border-color: var(--accent-line); background: white; }
+#english-dictation-section .english-dictation-unit-button[aria-pressed=true] { background: var(--accent-pale); border-color: var(--accent); color: var(--accent-dark); box-shadow: 0 3px 0 var(--accent-line); }
+#english-dictation-section .english-dictation-unit-button:active:not(:disabled) { transform: translateY(3px); box-shadow: none; }
+#english-dictation-section .english-dictation-unit-button:disabled { cursor: default; opacity: .55; }
+#english-dictation-section .english-dictation-legacy-drafts { padding: 17px; margin-bottom: 20px; border: 2px solid #f7e6a2; border-radius: 18px; background: #fff8e0; }
+#english-dictation-section .english-dictation-legacy-drafts h4 { margin: 0 0 8px; font-size: 14px; color: #987b24; }
+#english-dictation-section .english-dictation-legacy-drafts p { color: var(--muted); font-size: 12px; line-height: 1.9; }
+#english-dictation-section .english-dictation-legacy-row { margin-top: 17px; padding-top: 15px; border-top: 1px solid #edda9b; }
+#english-dictation-section .english-dictation-legacy-row label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 800; }
+#english-dictation-section .english-dictation-legacy-row textarea { display: block; margin-bottom: 11px; font-size: 13px; background: white; }
+#english-dictation-section .english-dictation-legacy-row > p { margin-top: 10px; }
 #english-dictation-section .english-dictation-lesson { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 10px 7px; margin-bottom: 7px; border: 2px solid transparent; border-radius: 11px; background: transparent; color: var(--ink); text-align: left; font: inherit; font-size: 12px; line-height: 1.7; font-weight: 700; }
 #english-dictation-section .english-dictation-lesson:hover { background: white; }
 #english-dictation-section .english-dictation-lesson[aria-pressed=true] { background: var(--accent-pale); border-color: var(--accent-line); color: var(--accent-dark); font-weight: 800; }
@@ -166,6 +178,8 @@
 #english-dictation-section .english-dictation-unit > summary { font-size: 11px; padding: 11px 0 11px 12px; gap: 6px; }
 #english-dictation-section .english-dictation-unit-topic { font-size: 10px; }
 #english-dictation-section .english-dictation-unit-count { font-size: 9px; }
+#english-dictation-section .english-dictation-unit-button { padding: 12px 9px; gap: 6px; font-size: 11px; }
+#english-dictation-section .english-dictation-legacy-drafts { padding: 15px; }
 #english-dictation-section .english-dictation-lesson small { font-size: 9px; }
 #english-dictation-section .english-dictation-editor-heading h3 { font-size: 20px; }
 #english-dictation-section .english-dictation-editor-heading > span { font-size: 10px; }
