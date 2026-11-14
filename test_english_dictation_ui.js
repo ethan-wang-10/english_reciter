@@ -885,3 +885,144 @@ test('a consolidated unit can retain and review all 2000 existing mistakes witho
     assert.deepEqual(save.body.items[0].words.map((word) => word.text), ['old mistake 0']);
     assert.equal(ui.state.mistakeGroups(textbookId)[0].words.length, 2000);
 });
+
+
+const englishVoiceKey = 'itorange-english-dictation-voice';
+
+async function editEnglishPronunciation(ui, text, lessonId = null) {
+    const container = ui.field(lessonId ? 'english-dictation-mistakes-groups' : 'english-dictation-word-preview');
+    const button = container.querySelectorAll('button').find((item) => item.dataset.action === 'edit-spoken' && item.dataset.word === text
+        && (!lessonId || item.dataset.lesson === lessonId));
+    assert.ok(button, `Missing pronunciation editor for ${lessonId || 'wordlist'}/${text}`);
+    await button.fire('click');
+    const form = container.querySelector('.english-dictation-spoken-editor');
+    assert.ok(form, 'Opening pronunciation correction exposes an inline form');
+    return { form, input: form.querySelector('[data-action="spoken-input"]'),
+        button: (action) => { const control = form.querySelector(`[data-action="${action}-spoken"]`); assert.ok(control, 'Missing correction action ' + action); return control; } };
+}
+
+test('English device voice preference survives late voices, URI changes and account reset while each started round keeps its voice', async () => {
+    const chinesePreference = { voiceURI: 'cn', name: 'Mandarin', lang: 'zh-CN' };
+    const saved = { voiceURI: 'old-uri', name: 'My English', lang: 'en-GB' };
+    const storage = new Map([[englishVoiceKey, JSON.stringify(saved)], ['itorange-chinese-dictation-voice', JSON.stringify(chinesePreference)]]);
+    const basic = { name: 'English basic', lang: 'en-US', voiceURI: 'basic' };
+    const preferred = { name: saved.name, lang: 'en_GB', voiceURI: 'new-uri' };
+    const natural = { name: 'Samantha Premium', lang: 'en-US', voiceURI: 'natural' };
+    const ui = englishDictationUI({ storage, voices: [] }); await ui.api.open();
+    assert.equal(ui.field('english-dictation-voice').disabled, true);
+    assert.deepEqual(JSON.parse(storage.get(englishVoiceKey)), saved);
+    await ui.voicesChanged([basic]); assert.deepEqual(JSON.parse(storage.get(englishVoiceKey)), saved);
+    await ui.voicesChanged([basic, preferred, natural]);
+    assert.equal(ui.field('english-dictation-voice').value, preferred.voiceURI);
+    await ui.type('english-dictation-voice', basic.voiceURI, 'change');
+    assert.deepEqual(JSON.parse(storage.get(englishVoiceKey)), { voiceURI: basic.voiceURI, name: basic.name, lang: basic.lang });
+    ui.state.audioStatus = 503; await ui.type('english-dictation-repetitions', '1', 'change'); await ui.start();
+    await ui.voicesChanged([natural]); await ui.field('english-dictation-play').fire('click');
+    assert.strictEqual(ui.state.spoken[0].voice, basic);
+    assert.equal(ui.state.spoken[0].rate, 1);
+    ui.api.reset(); await ui.api.open(); await ui.voicesChanged([{ ...basic, voiceURI: 'basic-after-reset' }, natural]);
+    assert.equal(ui.field('english-dictation-voice').value, 'basic-after-reset');
+    assert.deepEqual(JSON.parse(storage.get('itorange-chinese-dictation-voice')), chinesePreference);
+    const automatic = englishDictationUI({ voices: [basic] }); await automatic.api.open();
+    await automatic.voicesChanged([basic, natural]); assert.equal(automatic.field('english-dictation-voice').value, natural.voiceURI);
+});
+
+test('English inline correction previews authenticated draft audio, cancels safely and saves or restores pronunciation without changing raw rows', async () => {
+    const ui = englishDictationUI({ words: ['one | two', 'Read the book.'] }); await ui.api.open();
+    const raw = 'one | two\nRead the book.\nnew phrase'; await ui.type('english-dictation-words', raw);
+    let editor = await editEnglishPronunciation(ui, 'one | two');
+    assert.equal(editor.input.maxLength, 1000, 'The browser allows UTF-16 pairs while validation enforces 500 Unicode characters');
+    editor.input.value = 'one or two'; await editor.input.fire('input'); await editor.button('preview').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'one or two' });
+    assert.equal(ui.state.audioRequests.at(-1).headers.Authorization, 'Bearer alice-token');
+    assert.equal(ui.field('english-dictation-words').value, raw);
+    await editor.button('cancel').fire('click');
+    assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+    assert.equal(ui.field('english-dictation-words').value, raw);
+    editor = await editEnglishPronunciation(ui, 'one | two');
+    assert.match(editor.form.textContent, /整份|全部|整个|当前.*清单/);
+    editor.input.value = 'one or two'; await editor.input.fire('input'); await editor.button('save').fire('click');
+    assert.deepEqual(ui.state.calls.findLast((call) => call.method === 'PUT').body.words, [
+        { text: 'one | two', spoken_text: 'one or two' }, { text: 'Read the book.', spoken_text: 'Read the book.' }, { text: 'new phrase', spoken_text: 'new phrase' },
+    ]);
+    assert.equal(ui.field('english-dictation-words').value, raw, 'A literal separator remains written text, never an alias encoding');
+    editor = await editEnglishPronunciation(ui, 'one | two'); await editor.button('restore').fire('click');
+    assert.equal(ui.state.wordlists.get('default-list').words[0].spoken_text, 'one | two');
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 2);
+});
+
+test('failed English pronunciation saves and 409 reloads retain private spoken overrides until an explicit cloud choice', async () => {
+    const storage = new Map(); const ui = englishDictationUI({ storage, words: ['read', 'one | two'] }); await ui.api.open();
+    ui.state.routes[wordPath()] = (call) => { if (call.method === 'PUT') throw new Error('读音保存网络失败'); return ui.state.defaultReply(call); };
+    let editor = await editEnglishPronunciation(ui, 'read');
+    for (const invalid of ['re\nad', 're\u200bad', 'a'.repeat(501)]) {
+        editor.input.value = invalid; await editor.input.fire('input'); await editor.button('save').fire('click');
+        assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+    }
+    editor.input.value = 'red'; await editor.input.fire('input'); await editor.button('save').fire('click');
+    assert.equal(ui.root.querySelector('[data-action="spoken-input"]').value, 'red');
+    const key = `itorange-english-dictation-draft:alice:${bookId}:default-list`;
+    const draft = JSON.parse(storage.get(key));
+    assert.equal(draft.raw, 'read\none | two'); assert.deepEqual(draft.spoken_overrides, [{ text: 'read', spoken_text: 'red' }]);
+    const restored = englishDictationUI({ storage, words: ['read', 'one | two'] }); await restored.api.open();
+    editor = await editEnglishPronunciation(restored, 'read'); assert.equal(editor.input.value, 'red');
+    restored.state.wordlists.get('default-list').revision = 2;
+    restored.state.wordlists.get('default-list').words[0].spoken_text = 'reed';
+    restored.state.routes[wordPath()] = (call) => { if (call.method === 'PUT') throw Object.assign(new Error('版本冲突'), { status: 409 }); return restored.state.defaultReply(call); };
+    await editor.button('save').fire('click');
+    assert.equal(restored.field('english-dictation-conflict').hidden, false);
+    assert.equal(JSON.parse(storage.get(key)).base_revision, 1);
+    assert.deepEqual(JSON.parse(storage.get(key)).spoken_overrides, [{ text: 'read', spoken_text: 'red' }]);
+    const refreshed = englishDictationUI({ storage, revision: 2, words: [{ text: 'read', spoken_text: 'reed' }, 'one | two'] }); await refreshed.api.open();
+    assert.equal(refreshed.field('english-dictation-conflict').hidden, false);
+    assert.match(refreshed.field('english-dictation-word-preview').textContent, /red/);
+    await refreshed.field('english-dictation-keep-cloud').fire('click'); assert.ok(storage.has(key));
+    await refreshed.field('english-dictation-confirm-cloud').fire('click'); assert.equal(storage.has(key), false);
+    editor = await editEnglishPronunciation(refreshed, 'read'); assert.equal(editor.input.value, 'reed');
+    assert.equal(refreshed.field('english-dictation-words').value, 'read\none | two');
+});
+
+test('pending English pronunciation saves and previews cannot change a switched account or start late audio', async () => {
+    const ui = englishDictationUI({ words: ['read'] }); await ui.api.open();
+    let editor = await editEnglishPronunciation(ui, 'read'); editor.input.value = 'red'; await editor.input.fire('input');
+    const previewGate = deferred(); ui.state.audioFetch = () => previewGate.promise;
+    const preview = editor.button('preview').fire('click'); await ui.flush();
+    const previewCall = ui.state.audioRequests.at(-1);
+    const saveGate = deferred(); let savedCall;
+    ui.state.routes[wordPath()] = (call) => { if (call.method === 'PUT') { savedCall = call; return saveGate.promise; } return ui.state.defaultReply(call); };
+    const saving = editor.button('save').fire('click'); await ui.flush();
+    assert.ok(savedCall);
+    await editor.button('save').fire('click');
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 1, 'Repeated save while busy sends one write');
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', student: 'bob', isParent: false, generation: 2 };
+    delete ui.state.routes[wordPath()]; await ui.api.open();
+    assert.equal(previewCall.signal.aborted, true); assert.equal(savedCall.signal.aborted, true);
+    previewGate.resolve(ui.state.audioResponse()); saveGate.resolve(ui.state.defaultReply(savedCall));
+    await preview; await saving; await ui.flush();
+    assert.equal(ui.state.audioPlayed.length, 0);
+    assert.equal(ui.field('english-dictation-words').value, '');
+    assert.equal(ui.root.querySelector('.english-dictation-spoken-editor'), null);
+    assert.equal(ui.state.wordlistsByStudent.get('bob').get(bookId).get('default-list')?.words.length || 0, 0);
+    assert.equal(ui.state.wordlists.get('default-list').words[0].spoken_text, 'red', 'The already authorized write stays scoped to the old learner');
+    assert.equal([...ui.storage.keys()].some((key) => key.includes(':bob:')), false);
+});
+
+test('editing one English mistake pronunciation updates only its source and preserves the original lists and frozen review round', async () => {
+    const ui = englishDictationUI({ words: ['read'], mistakes: [
+        { lesson_id: 'default-list', words: ['read'] }, { lesson_id: 'custom-2', words: ['read'] },
+    ] });
+    const originalList = clone(ui.state.wordlists.get('default-list')); const originalGroups = ui.state.mistakeGroups();
+    await ui.api.open(); await ui.type('english-dictation-repetitions', '1', 'change'); await ui.openMistakes();
+    await ui.chooseMistakeLessons(['default-list', 'custom-2']); await ui.field('english-dictation-mistakes-start').fire('click');
+    await ui.field('english-dictation-player-exit').fire('click');
+    const editor = await editEnglishPronunciation(ui, 'read', 'default-list');
+    editor.input.value = 'red'; await editor.input.fire('input'); await editor.button('save').fire('click');
+    const saved = ui.state.calls.findLast((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.deepEqual(saved.body.items, [{ book_id: bookId, lesson_id: 'default-list', words: [{ text: 'read', spoken_text: 'red' }] }]);
+    const groups = ui.state.mistakeGroups();
+    assert.equal(groups[0].words[0].spoken_text, 'red'); assert.equal(groups[0].words[0].added_at, originalGroups[0].words[0].added_at);
+    assert.deepEqual(groups[1], originalGroups[1]); assert.deepEqual(ui.state.wordlists.get('default-list'), originalList);
+    assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+    await ui.field('english-dictation-resume').fire('click'); await finishRound(ui, 1);
+    assert.deepEqual(ui.state.audioRequests.map((call) => call.body.text), ['read']);
+});

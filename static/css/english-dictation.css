@@ -92,6 +92,15 @@
 #english-dictation-section .english-dictation-word-chip > span { overflow-wrap: anywhere; }
 #english-dictation-section .english-dictation-word-chip button { flex-shrink: 0; border: 0; background: none; padding: 3px; color: var(--accent-dark); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 #english-dictation-section .english-dictation-word-chip small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 500; }
+#english-dictation-section .english-dictation-word-chip { flex-wrap: wrap; }
+#english-dictation-section .english-dictation-word-chip > span { flex: 1 1 140px; min-width: 0; }
+#english-dictation-section .english-dictation-word-chip .english-dictation-spoken-toggle { min-height: 32px; padding: 4px 6px; }
+#english-dictation-section .english-dictation-spoken-editor { flex: 1 0 100%; min-width: 0; padding-top: 10px; border-top: 1px solid var(--line); }
+#english-dictation-section .english-dictation-spoken-editor > label { display: block; color: var(--ink); font-size: 11px; font-weight: 700; line-height: 1.6; }
+#english-dictation-section .english-dictation-spoken-editor input { display: block; box-sizing: border-box; width: 100%; min-width: 0; margin: 6px 0 8px; padding: 9px 10px; border: 2px solid var(--line); border-radius: 10px; background: white; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.5; }
+#english-dictation-section .english-dictation-spoken-actions { display: flex; flex-wrap: wrap; gap: 7px 12px; margin-top: 8px; }
+#english-dictation-section .english-dictation-spoken-actions > button { min-height: 34px; padding: 6px 8px; border-radius: 8px; background: var(--accent-pale); }
+#english-dictation-section .english-dictation-spoken-actions > button:disabled { opacity: .5; cursor: default; }
 #english-dictation-section .english-dictation-resume { display: flex; justify-content: space-between; align-items: center; gap: 17px; flex-wrap: wrap; padding: 18px 20px; margin-bottom: 23px; border: 2px solid var(--accent-line); border-radius: 21px; background: var(--accent-pale); }
 #english-dictation-section .english-dictation-resume p { font-size: 13px; font-weight: 700; }
 #english-dictation-section .english-dictation-resume > div { display: flex; gap: 12px; flex-wrap: wrap; }

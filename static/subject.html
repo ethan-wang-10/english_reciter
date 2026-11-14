@@ -9,14 +9,14 @@
     <link rel="icon" type="image/svg+xml" href="/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg">
     <link rel="stylesheet" href="/static/assets/css/subject-portal.0e178cea6f0b2b09.css">
     <link rel="stylesheet" href="/static/assets/css/subject-writing.56b79c2cce008378.css">
-    <link rel="stylesheet" href="/static/assets/css/subject-dictation.c81fff2bc3fe1163.css">
+    <link rel="stylesheet" href="/static/assets/css/subject-dictation.0233f21b59dc85db.css">
     <script id="subject-site-config" type="application/json">{{ site_config|tojson }}</script>
     <script src="/static/assets/js/subject-portal.3ed39a7a8136755c.js" defer></script>
     <script src="/static/assets/js/subject-sso.5564dee98f722338.js" defer></script>
     <link rel="stylesheet" href="/static/assets/css/subject-practice.f0ee91842dda5926.css">
     <script src="/static/assets/js/subject-practice.abdc0fa32d4b5ac2.js" defer></script>
     <script src="/static/assets/js/subject-writing.7ca7fc2722466e3b.js" defer></script>
-    <script src="/static/assets/js/subject-dictation.1a839704939c09f2.js" defer></script>
+    <script src="/static/assets/js/subject-dictation.b6338d2c1bc6f72f.js" defer></script>
 </head>
 <body data-view="auth">
     <a class="skip-link" href="#portal-main">跳到主要内容</a>
@@ -164,7 +164,7 @@
                                     <div class="dictation-editor-heading"><div><span class="dictation-note">本课词表</span><h3 id="dictation-lesson-title"></h3></div><span id="dictation-save-state" role="status" aria-live="polite"></span></div>
                                     <div id="dictation-conflict" class="dictation-conflict" role="alert" hidden><strong>这课词表有一份更新</strong><p>本机未保存的内容仍保留着。可以先复制自己的这一份，再查看云端词表。</p><div><button id="dictation-copy-local" class="dictation-button dictation-button-light" type="button">复制本机词表</button><button id="dictation-load-cloud" class="dictation-button dictation-button-light" type="button">查看云端词表</button></div><pre id="dictation-cloud-preview" hidden></pre><button id="dictation-keep-cloud" class="dictation-button dictation-button-light" type="button">使用云端这一份</button><div id="dictation-discard-confirm" hidden><p>确认后会放弃本机尚未保存的修改，请先复制需要保留的内容。</p><button id="dictation-confirm-cloud" class="dictation-button" type="button">确认放弃本机修改，使用云端稿</button></div></div>
                                     <label class="dictation-field-label" for="dictation-words">要默写的词语</label><textarea id="dictation-words" rows="7" maxlength="25000" spellcheck="false" placeholder="例如：潮水 笼罩 薄雾&#10;支持换行、空格、逗号、顿号或分号分隔。"></textarea><p id="dictation-word-count" class="dictation-note" role="status"></p>
-                                    <details class="dictation-spoken-help"><summary>多音词或想加说明？</summary><p>可在单独一行写“词语｜朗读内容”，例如“薄｜单薄的薄”。默写时仍只写左边的词语。其他词语继续用空格或换行分隔。</p><p>保存前可以逐词试听，按课本和老师要求核对读音。</p></details>
+                                    <details class="dictation-spoken-help"><summary>多音词或想加说明？</summary><p>可在单独一行写“词语｜朗读内容”，例如“薄｜单薄的薄”。默写时仍只写左边的词语。其他词语继续用空格或换行分隔。</p><p>也可点词语旁的“修正读音”，试听后保存。默写原词不变；保存读音会同时保存当前词表。错题本里的读音可单独修正。</p></details>
                                     <div id="dictation-word-preview" class="dictation-word-preview"></div>
                                     <div class="dictation-editor-actions"><button id="dictation-save" class="dictation-button dictation-button-light" type="button">保存词表</button><button id="dictation-start" class="dictation-button" type="button">保存并开始默写</button></div><p class="dictation-note">词语会保存在当前学生的课文目录里。开始后会隐藏词表，请在纸上书写。</p>
                                 </div>

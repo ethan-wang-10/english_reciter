@@ -100,6 +100,8 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
         get id() { return this.attributes.id || ''; }
         set type(value) { this.attributes.type = String(value); }
         get type() { return this.attributes.type || ''; }
+        set maxLength(value) { this.attributes.maxlength = String(value); }
+        get maxLength() { return Number(this.attributes.maxlength || -1); }
         set textContent(value) { this.ownText = String(value); this.children.forEach((child) => { child.parentElement = null; }); this.children = []; }
         get textContent() { return this.ownText + this.children.map((child) => child.textContent).join(''); }
         get innerText() { return this.textContent; }
@@ -734,4 +736,137 @@ test('a pending mistake save may finish for the old student without updating the
     assert.equal(ui.state.mistakeGroups(bookId, 'bob').length, 0);
     assert.doesNotMatch(ui.field('dictation-mistakes-groups').textContent, /潮水/);
     assert.equal(ui.field('dictation-finish').hidden, true);
+});
+
+
+const chineseVoiceKey = 'itorange-chinese-dictation-voice';
+
+async function editChinesePronunciation(ui, text, lessonId = null) {
+    const container = ui.field(lessonId ? 'dictation-mistakes-groups' : 'dictation-word-preview');
+    const button = container.querySelectorAll('button').find((item) => item.dataset.word === text
+        && (item.getAttribute('aria-label') || '').startsWith('修正')
+        && (!lessonId || item.dataset.lessonId === lessonId));
+    assert.ok(button, `Missing pronunciation editor for ${lessonId || 'wordlist'}/${text}`);
+    await button.fire('click');
+    const form = container.querySelector('.dictation-pronunciation-editor');
+    assert.ok(form, 'Opening pronunciation correction exposes an inline form');
+    return { form, input: form.querySelector('.dictation-pronunciation-input'),
+        button: (action) => { const control = form.querySelector(`[data-action="${action}"]`); assert.ok(control, 'Missing correction action ' + action); return control; } };
+}
+
+test('Mandarin voice selection prioritizes Mainland pronunciation and then natural voice quality', async () => {
+    const basic = { name: 'Mandarin basic', lang: 'zh-CN', voiceURI: 'cn-basic', default: true };
+    const mainland = { name: 'Xiaoxiao Natural', lang: 'zh-CN', voiceURI: 'cn-natural' };
+    const regional = { name: 'Taiwan Premium Natural', lang: 'zh-TW', voiceURI: 'tw-premium', default: true };
+    const rejected = { name: 'Cantonese Enhanced', lang: 'zh-HK', voiceURI: 'hk-enhanced' };
+    const ui = dictationUI({ voices: [regional, rejected, basic] }); await ui.openLesson();
+    assert.equal(ui.field('dictation-voice').value, basic.voiceURI, 'Mainland Mandarin outranks a more natural regional voice');
+    await ui.voicesChanged([regional, rejected, basic, mainland]);
+    assert.equal(ui.field('dictation-voice').value, mainland.voiceURI, 'A newly loaded natural Mainland voice upgrades the default');
+    assert.equal(ui.field('dictation-voice').options.some((option) => option.value === rejected.voiceURI), false);
+    await ui.start(); await ui.field('dictation-play').fire('click');
+    assert.strictEqual(ui.state.spoken[0].voice, mainland);
+    assert.equal(ui.state.spoken[0].rate, 1);
+});
+
+test('the remembered Mandarin voice survives delayed loading, URI changes, resets and an active run', async () => {
+    const saved = { voiceURI: 'old-uri', name: 'My Mandarin', lang: 'zh-CN' };
+    const storage = new Map([[chineseVoiceKey, JSON.stringify(saved)]]);
+    const basic = { name: 'Mainland basic', lang: 'zh-CN', voiceURI: 'basic' };
+    const preferred = { name: saved.name, lang: 'zh_CN', voiceURI: 'new-uri' };
+    const natural = { name: 'Xiaoxiao Natural', lang: 'zh-CN', voiceURI: 'best' };
+    const ui = dictationUI({ storage, voices: [] }); await ui.openLesson();
+    assert.equal(ui.field('dictation-voice').disabled, true);
+    assert.deepEqual(JSON.parse(storage.get(chineseVoiceKey)), saved);
+    await ui.voicesChanged([basic]);
+    assert.equal(ui.field('dictation-voice').value, basic.voiceURI);
+    assert.deepEqual(JSON.parse(storage.get(chineseVoiceKey)), saved, 'Missing saved voices must remain remembered');
+    await ui.voicesChanged([basic, preferred, natural]);
+    assert.equal(ui.field('dictation-voice').value, preferred.voiceURI, 'Name and normalized language recover a changed voice URI');
+    await ui.type('dictation-voice', basic.voiceURI, 'change');
+    assert.deepEqual(JSON.parse(storage.get(chineseVoiceKey)), { voiceURI: basic.voiceURI, name: basic.name, lang: basic.lang });
+    await ui.type('dictation-repetitions', '1', 'change'); await ui.start();
+    await ui.voicesChanged([natural]); await ui.field('dictation-play').fire('click');
+    assert.strictEqual(ui.state.spoken[0].voice, basic, 'The started round keeps its selected voice even if the device list changes');
+    ui.api.reset(); await ui.openLesson();
+    assert.deepEqual(JSON.parse(storage.get(chineseVoiceKey)), { voiceURI: basic.voiceURI, name: basic.name, lang: basic.lang });
+    await ui.voicesChanged([{ ...basic, voiceURI: 'basic-after-restart' }, natural]);
+    assert.equal(ui.field('dictation-voice').value, 'basic-after-restart');
+    assert.equal([...storage.keys()].some((key) => key === 'itorange-english-dictation-voice'), false);
+});
+
+test('inline Mandarin correction previews drafts, cancels safely and explicitly saves the full list or restores the original pronunciation', async () => {
+    const ui = dictationUI({ words: ['重庆', '繁星'] }); await ui.openLesson();
+    const raw = '重庆\n繁星\n潮水'; await ui.type('dictation-words', raw);
+    let editor = await editChinesePronunciation(ui, '重庆');
+    assert.equal(editor.input.maxLength, 200, 'The browser allows UTF-16 pairs while validation enforces 100 Unicode characters');
+    editor.input.value = '重 庆, city'; await editor.input.fire('input');
+    await editor.button('preview').fire('click');
+    assert.equal(ui.state.spoken.at(-1).text, '重 庆, city');
+    assert.equal(ui.field('dictation-words').value, raw, 'Unsaved pronunciation preview must not replace written text');
+    await editor.button('cancel').fire('click');
+    assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+    assert.equal(ui.field('dictation-words').value, raw);
+    editor = await editChinesePronunciation(ui, '重庆');
+    assert.match(editor.form.textContent, /整份|全部|整个|当前.*词表/);
+    editor.input.value = 'chóng qìng'; await editor.input.fire('input'); await editor.button('save').fire('click');
+    assert.deepEqual(ui.state.calls.findLast((call) => call.method === 'PUT').body.words, [
+        { text: '重庆', spoken_text: 'chóng qìng' }, { text: '繁星', spoken_text: '繁星' }, { text: '潮水', spoken_text: '潮水' },
+    ]);
+    assert.match(ui.field('dictation-words').value, /重庆｜chóng qìng/);
+    assert.deepEqual(ui.state.wordlists.get('lesson-01').words.map((word) => word.text), ['重庆', '繁星', '潮水']);
+    editor = await editChinesePronunciation(ui, '重庆'); await editor.button('reset').fire('click');
+    assert.equal(ui.state.wordlists.get('lesson-01').words[0].spoken_text, '重庆');
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 2);
+});
+
+test('Mandarin pronunciation validation and failed or conflicted saves retain a scoped recoverable correction draft', async () => {
+    const storage = new Map(); const ui = dictationUI({ storage, words: ['重庆'] }); await ui.openLesson();
+    let editor = await editChinesePronunciation(ui, '重庆');
+    for (const value of ['甲|乙', '甲｜乙', '甲\n乙', '甲\u200b乙', '甲'.repeat(101)]) {
+        editor.input.value = value; await editor.input.fire('input'); await editor.button('save').fire('click');
+        assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false, 'Invalid hints cannot be sent');
+        assert.equal(ui.field('dictation-words').value, '重庆');
+    }
+    ui.state.routes[wordPath()] = (call) => { if (call.method === 'PUT') throw new Error('读音保存网络失败'); return ui.state.defaultReply(call); };
+    editor.input.value = 'chóng qìng'; await editor.input.fire('input'); await editor.button('save').fire('click');
+    assert.equal(ui.root.querySelector('.dictation-pronunciation-input').value, 'chóng qìng');
+    const key = `itorange-dictation-draft:alice:${bookId}:lesson-01`;
+    assert.match(JSON.parse(storage.get(key)).raw, /重庆｜chóng qìng/);
+    const restored = dictationUI({ storage, words: ['重庆'] }); await restored.openLesson();
+    assert.match(restored.field('dictation-words').value, /重庆｜chóng qìng/);
+    restored.state.wordlists.get('lesson-01').revision = 2;
+    restored.state.routes[wordPath()] = (call) => { if (call.method === 'PUT') throw Object.assign(new Error('新版冲突'), { status: 409 }); return restored.state.defaultReply(call); };
+    editor = await editChinesePronunciation(restored, '重庆'); await editor.button('save').fire('click');
+    assert.equal(restored.field('dictation-conflict').hidden, false);
+    assert.match(restored.field('dictation-words').value, /重庆｜chóng qìng/);
+    assert.equal(JSON.parse(storage.get(key)).base_revision, 1);
+    restored.api.reset(); restored.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    await restored.openLesson();
+    assert.equal(restored.field('dictation-words').value, '重庆', 'Another learner does not inherit the private correction');
+    assert.equal(restored.root.querySelector('.dictation-pronunciation-editor'), null);
+    assert.match(JSON.parse(storage.get(key)).raw, /chóng qìng/);
+});
+
+test('correcting one Mandarin mistake source preserves other sources, original lists, timestamps and an existing round snapshot', async () => {
+    const ui = dictationUI({ words: ['重庆'], mistakes: [
+        { lesson_id: 'lesson-01', words: ['重庆'] }, { lesson_id: 'lesson-02', words: ['重庆'] },
+    ] });
+    const originalList = clone(ui.state.wordlists.get('lesson-01'));
+    const originalGroups = ui.state.mistakeGroups();
+    await ui.openLesson(); await ui.type('dictation-repetitions', '1', 'change'); await ui.openMistakes();
+    await ui.chooseMistakeLessons(['lesson-01', 'lesson-02']); await ui.field('dictation-mistakes-start').fire('click');
+    await ui.field('dictation-player-exit').fire('click');
+    const editor = await editChinesePronunciation(ui, '重庆', 'lesson-01');
+    editor.input.value = 'chóng qìng'; await editor.input.fire('input'); await editor.button('save').fire('click');
+    const saved = ui.state.calls.findLast((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.deepEqual(saved.body.items, [{ book_id: bookId, lesson_id: 'lesson-01', words: [{ text: '重庆', spoken_text: 'chóng qìng' }] }]);
+    const groups = ui.state.mistakeGroups();
+    assert.equal(groups[0].words[0].spoken_text, 'chóng qìng');
+    assert.equal(groups[0].words[0].added_at, originalGroups[0].words[0].added_at);
+    assert.deepEqual(groups[1], originalGroups[1]);
+    assert.deepEqual(ui.state.wordlists.get('lesson-01'), originalList);
+    assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+    await ui.field('dictation-resume').fire('click'); await ui.finishRun(1);
+    assert.deepEqual(ui.state.spoken.map((utterance) => utterance.text), ['重庆'], 'A resumed round keeps the pronunciation and merged sources from its start');
 });

@@ -4,6 +4,7 @@
     const el = (id) => document.getElementById(id);
     if (!el('dictation-panel')) return;
     const PREFIX = '/subjects/chinese/dictation';
+    const VOICE_KEY = 'itorange-chinese-dictation-voice';
     const portal = () => window.subjectPortal;
     const session = () => portal()?.getSession() || {};
     const learner = () => {
@@ -24,6 +25,7 @@
     let homeMode = 'lessons', mistakeItems = [], mistakeSelections = new Set(), mistakeExpanded = new Set();
     let mistakeLoading = false, mistakeLoaded = false, mistakeDeleting = false, mistakeSequence = 0;
     let mistakeStatus = '', mistakeStatusError = false;
+    let voicePreference = null, voiceStorageReady = true, pronunciationEdit = null, pronunciationDrafts = new Map();
 
     function sourceName(source) { return `${source.number ? `第${source.number}课 ` : ''}${source.title || '我的课文'}`; }
     function sourceKey(source, word) { return JSON.stringify([source.book_id, source.lesson_id, word.text, word.spoken_text || word.text]); }
@@ -87,8 +89,8 @@
     }
     function normalized(text) { return String(text).normalize('NFC').trim().replace(/\s+/gu, ' '); }
     function formatWords(words) {
-        return words.map((word) => word.spoken_text && word.spoken_text !== word.text
-            ? `${word.text}｜${word.spoken_text}` : word.text).join('\n');
+        return words.map((word) => word.spoken_text && word.spoken_text !== word.text || /[\s,，、;；]/u.test(word.text)
+            ? `${word.text}｜${word.spoken_text || word.text}` : word.text).join('\n');
     }
     function parseWords(value) {
         if (value.length > 25000) throw new Error('词表内容过长，请控制在 25000 个字符以内。');
@@ -164,7 +166,7 @@
         if (name === 'home') renderResume();
     }
     function renderControls() {
-        const blocked = loading || saving;
+        const blocked = loading || saving || mistakeDeleting;
         el('dictation-book').disabled = blocked || mistakeLoading || mistakeDeleting;
         el('dictation-mode-lessons').disabled = blocked;
         el('dictation-mode-mistakes').disabled = blocked;
@@ -178,13 +180,128 @@
         el('dictation-conflict').hidden = !conflict;
         el('dictation-keep-cloud').disabled = saving || loading;
         el('dictation-confirm-cloud').disabled = saving || loading;
+        for (const control of el('dictation-panel').querySelectorAll('[data-pronunciation-control]')) control.disabled = blocked || !!conflict;
         renderMistakeControls();
+    }
+    function editKey(edit) { return JSON.stringify([edit.kind, edit.book, edit.lessonId, edit.text]); }
+    function editCurrent(edit) { return pronunciationEdit === edit && current(edit.ctx) && edit.book === bookId; }
+    function pronunciationValue(value) {
+        if (typeof value !== 'string' || /[|｜\r\n\u2028\u2029\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) throw new Error('朗读内容不能包含换行、竖线或隐藏控制字符。');
+        const result = normalized(value);
+        if (!result || Array.from(result).length > 100) throw new Error('朗读内容须为 1～100 个字符。');
+        return result;
+    }
+    function beginPronunciation(word, kind, source = null) {
+        if (!active || loading || saving || mistakeDeleting || conflict || !current(capture())) return;
+        const edit = { kind, text: word.text, value: word.spoken_text || word.text, book: bookId,
+            lessonId: kind === 'wordlist' ? lesson?.id : source.lesson_id, ctx: capture(kind === 'wordlist'), status: '', error: false, rawApplied: false };
+        edit.value = pronunciationDrafts.get(editKey(edit)) ?? edit.value;
+        pronunciationEdit = edit;
+        renderWords(); renderMistakes(); renderControls();
+        el('dictation-pronunciation-input')?.focus();
+    }
+    function pronunciationButton(word, kind, source = null) {
+        const button = node('button', '修正读音'); button.type = 'button';
+        button.setAttribute('aria-label', `修正“${word.text}”的读音`);
+        button.setAttribute('data-pronunciation-control', '');
+        button.disabled = loading || saving || mistakeDeleting || !!conflict;
+        button.dataset.pronunciationKind = kind; button.dataset.word = word.text;
+        button.dataset.lessonId = kind === 'wordlist' ? lesson?.id || '' : source.lesson_id;
+        button.addEventListener('click', () => beginPronunciation(word, kind, source));
+        return button;
+    }
+    function pronunciationForm(word, kind, source = null) {
+        const edit = pronunciationEdit;
+        if (!edit || edit.kind !== kind || edit.text !== word.text || !editCurrent(edit)
+                || edit.lessonId !== (kind === 'wordlist' ? lesson?.id : source.lesson_id)) return null;
+        const form = node('div', '', 'dictation-pronunciation-editor');
+        form.setAttribute('role', 'group'); form.setAttribute('aria-label', `修正“${word.text}”的朗读内容`);
+        form.dataset.pronunciationKind = kind; form.dataset.word = word.text; form.dataset.lessonId = edit.lessonId;
+        form.appendChild(node('p', `默写原词：${word.text}（保持不变）`, 'dictation-pronunciation-original'));
+        form.appendChild(node('p', kind === 'wordlist' ? '保存读音会同时保存当前整份可解析词表。' : '只修改本课错题的读音，原词表和其他课不变。', 'dictation-note'));
+        const label = node('label', '朗读内容（最多 100 字）'); label.setAttribute('for', 'dictation-pronunciation-input');
+        const input = node('input', '', 'dictation-pronunciation-input'); input.type = 'text'; input.id = 'dictation-pronunciation-input';
+        input.maxLength = 200; input.value = edit.value; input.setAttribute('data-pronunciation-control', '');
+        input.disabled = loading || saving || mistakeDeleting || !!conflict;
+        const feedback = node('p', edit.status, 'dictation-pronunciation-feedback'); feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite');
+        feedback.classList.toggle('dictation-status-error', edit.error);
+        function attached() { return editCurrent(edit) && el('dictation-panel').contains(form); }
+        function report(text, error = false) {
+            edit.status = text; edit.error = error; feedback.textContent = text; feedback.classList.toggle('dictation-status-error', error);
+        }
+        input.addEventListener('input', () => {
+            if (!attached() || loading || saving || mistakeDeleting || conflict) return;
+            edit.value = input.value; pronunciationDrafts.set(editKey(edit), edit.value); report('');
+        });
+        input.addEventListener('paste', (event) => {
+            const pasted = event.clipboardData?.getData('text') || '';
+            if (/[|｜\r\n\u2028\u2029\p{Cc}\p{Cf}\p{Cs}]/u.test(pasted)) { event.preventDefault(); report('请使用单行朗读内容，不含竖线或隐藏控制字符。', true); }
+        });
+        const actions = node('div', '', 'dictation-pronunciation-actions');
+        for (const [action, text] of [['preview', '试听当前读音'], ['save', edit.error ? '重试保存读音' : '保存读音'], ['reset', '恢复原文'], ['cancel', '取消']]) {
+            const button = node('button', text, 'dictation-button' + (action === 'save' ? '' : ' dictation-button-light'));
+            button.type = 'button'; button.dataset.action = action; button.setAttribute('data-pronunciation-control', '');
+            button.disabled = loading || saving || mistakeDeleting || !!conflict;
+            button.addEventListener('click', () => {
+                if (!attached() || loading || saving || mistakeDeleting || conflict) return;
+                if (action === 'cancel') {
+                    pronunciationDrafts.delete(editKey(edit)); pronunciationEdit = null; stopSpeech(); renderWords(); renderMistakes(); renderControls();
+                    if (edit.rawApplied) message('读音草稿仍保留在词表中，可点击“保存词表”继续保存。');
+                    else message();
+                    return;
+                }
+                try {
+                    const value = pronunciationValue(action === 'reset' ? word.text : input.value);
+                    edit.value = value; pronunciationDrafts.set(editKey(edit), value);
+                    if (action === 'preview') { speakWords({ text: word.text, spoken_text: value }, 1, 'preview'); return; }
+                    return commitPronunciation(edit, value);
+                } catch (error) { report(error.message, true); }
+            });
+            actions.appendChild(button);
+        }
+        form.append(label, input, feedback, actions); return form;
+    }
+    async function commitPronunciation(edit, spoken) {
+        if (!editCurrent(edit) || loading || saving || mistakeDeleting || conflict) return;
+        stopSpeech(); edit.value = spoken; edit.status = '正在保存读音…'; edit.error = false;
+        if (edit.kind === 'wordlist') {
+            try {
+                const words = parseWords(raw).words;
+                if (!words.some((word) => word.text === edit.text)) throw new Error('这个词已不在当前词表中，请重新选择。');
+                const next = words.map((word) => word.text === edit.text ? { ...word, spoken_text: spoken } : word);
+                const savedAliases = new Map((wordlist?.words || []).map((word) => [word.text, word.spoken_text || word.text]));
+                const encoded = next.map((word) => word.text === edit.text || (savedAliases.get(word.text) || word.text) !== word.spoken_text
+                    ? `${word.text}｜${word.spoken_text}` : formatWords([word])).join('\n');
+                if (JSON.stringify(parseWords(encoded).words) !== JSON.stringify(next)) throw new Error('这份内容无法安全保存为词表格式，请先检查分隔符。');
+                raw = encoded; edit.rawApplied = true; el('dictation-words').value = raw; preserveDraft(); renderWords();
+                const saved = await save();
+                if (!editCurrent(edit)) return;
+                if (saved) { pronunciationDrafts.delete(editKey(edit)); pronunciationEdit = null; }
+                else { edit.error = true; edit.status = conflict ? '词表已有更新，修正稿已保留。请先复制本机词表，再对照云端。' : '未能保存读音，修正稿已保留，请重试。'; }
+            } catch (error) { if (editCurrent(edit)) { edit.error = true; edit.status = error.message; } }
+            if (current(edit.ctx)) { renderWords(); renderControls(); }
+            return;
+        }
+        mistakeDeleting = true; renderMistakes(); renderControls();
+        try {
+            const result = await request('/mistakes', { method: 'POST', body: { items: [{ book_id: edit.book, lesson_id: edit.lessonId,
+                words: [{ text: edit.text, spoken_text: spoken }] }] } });
+            if (!editCurrent(edit)) return;
+            if (!Number.isInteger(result.added_count) || !Number.isInteger(result.existing_count) || result.added_count < 0 || result.existing_count < 0
+                    || result.added_count + result.existing_count !== 1) throw new Error('保存结果未确认，请重试。');
+            mistakeItems = mistakeItems.map((group) => group.lesson_id === edit.lessonId ? { ...group, words: group.words.map((word) =>
+                word.text === edit.text ? { ...word, spoken_text: spoken } : word) } : group);
+            pronunciationDrafts.delete(editKey(edit)); pronunciationEdit = null;
+            message('本课错题的读音已保存。原词表和已经开始的默写保持各自的读音。');
+        } catch (error) { if (editCurrent(edit)) { edit.error = true; edit.status = `${error.message || '未能保存读音。'} 当前修正内容仍保留在这里，请重试。`; } }
+        finally { if (current(edit.ctx) && bookId === edit.book) { mistakeDeleting = false; renderMistakes(); renderControls(); } }
     }
     function renderWords() {
         const container = el('dictation-word-preview');
         container.replaceChildren();
         try {
             const result = parseWords(raw);
+            if (pronunciationEdit?.kind === 'wordlist' && (!editCurrent(pronunciationEdit) || !result.words.some((word) => word.text === pronunciationEdit.text))) pronunciationEdit = null;
             el('dictation-word-count').textContent = `${result.words.length} 个不同词语${result.duplicates ? `，已合并 ${result.duplicates} 个重复项` : ''} · 每课最多 200 个`;
             for (const word of result.words) {
                 const chip = node('div', '', 'dictation-word-chip');
@@ -197,7 +314,9 @@
                     if (!active || loading || saving || !signedIn()) return;
                     speakWords(word, 1, 'preview');
                 });
-                chip.append(label, play);
+                chip.append(label, play, pronunciationButton(word, 'wordlist'));
+                const form = pronunciationForm(word, 'wordlist');
+                if (form) { chip.classList.add('dictation-word-chip-editing'); chip.appendChild(form); }
                 container.appendChild(chip);
             }
         } catch (error) { el('dictation-word-count').textContent = error.message; }
@@ -259,11 +378,13 @@
         el('dictation-mistakes-clear-selection').disabled = blocked || !selected.length;
         el('dictation-mistakes-start').disabled = blocked || !mistakeLoaded || !count;
         el('dictation-mistakes-selection').textContent = `已选 ${selected.length} 篇课文，共 ${count} 个朗读词语（相同词语与读法合并）`;
-        for (const input of el('dictation-mistakes-groups').querySelectorAll('input')) input.disabled = blocked;
-        for (const button of el('dictation-mistakes-groups').querySelectorAll('button')) button.disabled = blocked;
+        for (const input of el('dictation-mistakes-groups').querySelectorAll('input')) input.disabled = blocked || !!conflict && input.getAttribute('data-pronunciation-control') !== null;
+        for (const button of el('dictation-mistakes-groups').querySelectorAll('button')) button.disabled = blocked || !!conflict && button.getAttribute('data-pronunciation-control') !== null;
     }
     function renderMistakes() {
         const container = el('dictation-mistakes-groups');
+        if (pronunciationEdit?.kind === 'mistake' && (!editCurrent(pronunciationEdit) || !mistakeItems.some((item) => item.lesson_id === pronunciationEdit.lessonId
+                && item.words.some((word) => word.text === pronunciationEdit.text)))) pronunciationEdit = null;
         for (const details of container.querySelectorAll('details')) {
             if (details.open) mistakeExpanded.add(details.dataset.lesson); else mistakeExpanded.delete(details.dataset.lesson);
         }
@@ -300,7 +421,10 @@
                 remove.setAttribute('aria-label', `从${sourceName(item.lesson)}移除 ${word.text}`);
                 remove.setAttribute('title', `从错题本移除“${word.text}”`);
                 remove.addEventListener('click', () => removeMistake(item, word));
-                chip.append(text, remove); chips.appendChild(chip);
+                chip.append(text, pronunciationButton(word, 'mistake', item), remove);
+                const form = pronunciationForm(word, 'mistake', item);
+                if (form) { chip.classList.add('dictation-word-chip-editing'); chip.appendChild(form); }
+                chips.appendChild(chip);
             }
             details.appendChild(chips); container.appendChild(details);
         }
@@ -333,7 +457,7 @@
     }
     async function setMode(mode) {
         if (loading || saving || !current(capture())) return;
-        preserveDraft(); stopSpeech(); homeMode = mode; renderMode();
+        preserveDraft(); stopSpeech(); homeMode = mode; renderMode(); renderWords();
         if (mode === 'mistakes') await loadMistakes();
     }
     async function removeMistake(item, word) {
@@ -359,7 +483,8 @@
     }
     function playbackSettings() {
         return { repetitions: Number(el('dictation-repetitions').value) === 1 ? 1 : 2,
-            shuffled: el('dictation-shuffle').checked, voiceURI: el('dictation-voice').value };
+            shuffled: el('dictation-shuffle').checked, voiceURI: el('dictation-voice').value,
+            voiceSnapshot: selectedVoice(el('dictation-voice').value) };
     }
     function startMistakes() {
         if (loading || saving || mistakeLoading || mistakeDeleting || !mistakeLoaded || !active || !current(capture())) return;
@@ -372,6 +497,7 @@
         preserveDraft();
         stopSpeech();
         bookId = nextBook;
+        pronunciationEdit = null;
         lesson = null;
         wordlist = null;
         raw = '';
@@ -409,6 +535,7 @@
         if (loading || saving || !signedIn() || !item) return;
         preserveDraft(); stopSpeech();
         lesson = item;
+        if (pronunciationEdit?.kind === 'wordlist') pronunciationEdit = null;
         wordlist = null; raw = ''; conflict = null;
         loading = true;
         message(); stateLabel('正在读取…'); renderEditor(); renderDirectory();
@@ -505,6 +632,7 @@
         const latest = await inspectCloud();
         if (!latest || !current(ctx) || conflict !== original) return;
         wordlist = latest;
+        if (pronunciationEdit?.kind === 'wordlist') { pronunciationDrafts.delete(editKey(pronunciationEdit)); pronunciationEdit = null; }
         summaries.set(lesson.id, wordlist);
         raw = formatWords(wordlist.words);
         conflict = null; removeBackup();
@@ -543,10 +671,32 @@
     }
     function voiceRank(voice) {
         const lang = String(voice.lang || '').toLowerCase().replace(/_/g, '-');
-        return (/^(zh-cn|cmn|zh-hans)/u.test(lang) ? 100 : 0) + (voice.localService ? 10 : 0) + (voice.default ? 1 : 0);
+        const region = /(^|-)cn($|-)/u.test(lang) || /^(zh|cmn)-hans$/u.test(lang) ? 10000
+            : lang === 'cmn' ? 9000 : lang === 'zh' ? 8000 : /^zh-sg($|-)/u.test(lang) ? 7000 : 5000;
+        const natural = /natural|enhanced|premium|高质量|增强|优质/iu.test(voice.name || '');
+        const familiar = /xiaoxiao|yunxi|xiaoyi|ting[- ]?ting|晓晓|云希|晓伊|婷婷/iu.test(voice.name || '');
+        return region + (natural ? 300 : 0) + (familiar ? 60 : 0) + (voice.localService ? 5 : 0) + (voice.default ? 1 : 0);
+    }
+    function voiceIdentity(voice) { return { voiceURI: voice.voiceURI || '', name: voice.name || '', lang: voice.lang || '' }; }
+    function voiceLanguage(lang) { return String(lang || '').toLowerCase().replace(/_/g, '-'); }
+    function readVoicePreference() {
+        let encoded;
+        try { encoded = localStorage.getItem(VOICE_KEY); }
+        catch (_) { voiceStorageReady = false; return null; }
+        try {
+            const saved = JSON.parse(encoded || 'null');
+            if (!saved || typeof saved.voiceURI !== 'string' || saved.voiceURI.length > 1000
+                    || typeof saved.name !== 'string' || saved.name.length > 200 || typeof saved.lang !== 'string' || saved.lang.length > 64
+                    || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(saved.voiceURI + saved.name + saved.lang) || !mandarinVoice(saved)) return null;
+            return saved;
+        } catch (_) { return null; }
+    }
+    function preferredVoice() {
+        if (!voicePreference) return null;
+        return voices.find((voice) => voicePreference.voiceURI && voice.voiceURI === voicePreference.voiceURI)
+            || voices.find((voice) => voice.name === voicePreference.name && voiceLanguage(voice.lang) === voiceLanguage(voicePreference.lang)) || null;
     }
     function detectVoices() {
-        const selected = el('dictation-voice').value;
         try { voices = (window.speechSynthesis?.getVoices() || []).filter(mandarinVoice).sort((a, b) => voiceRank(b) - voiceRank(a)); }
         catch (_) { voices = []; }
         const select = el('dictation-voice');
@@ -557,13 +707,15 @@
                 option.value = voice.voiceURI || voice.name;
                 select.appendChild(option);
             }
-            select.value = voices.some((voice) => (voice.voiceURI || voice.name) === selected) ? selected : voices[0].voiceURI || voices[0].name;
+            const selected = preferredVoice() || voices[0];
+            select.value = selected.voiceURI || selected.name;
         } else {
             const option = node('option', '暂未检测到普通话语音'); option.value = ''; select.appendChild(option); select.value = '';
         }
         select.disabled = !voices.length;
         el('dictation-voice-status').textContent = voices.length
-            ? '使用设备普通话语音，按正常语速朗读。多音字请先试听，必要时填写朗读提示。'
+            ? (voicePreference && !preferredVoice() ? '已记住的声音暂未就绪，先使用其他普通话语音。' : '使用设备普通话语音，按正常语速朗读。')
+                + (voiceStorageReady ? '选好的声音会在这台设备上记住。' : '这台设备暂时不能记住设置，本次页面仍可使用所选声音。') + '多音字可逐词修正读音。'
             : '未检测到普通话语音。请在设备的语音设置中添加普通话语音，再重新检测；也可换用支持中文朗读的浏览器。';
     }
     function selectedVoice(uri) {
@@ -594,7 +746,11 @@
     function speakWords(word, repetitions, mode) {
         if (!active || !current(capture()) || (mode === 'player' && (!run || run.completed || el('dictation-player').hidden))) return;
         if (speaking && mode === 'player') return;
-        const chosen = selectedVoice(mode === 'player' ? run.voiceURI : el('dictation-voice').value);
+        let chosen = mode === 'player' ? run.voiceSnapshot : selectedVoice(el('dictation-voice').value);
+        if (mode === 'player' && !chosen) {
+            chosen = run.voiceURI ? voices.find((voice) => (voice.voiceURI || voice.name) === run.voiceURI) || null : selectedVoice(el('dictation-voice').value);
+            if (chosen) { run.voiceSnapshot = chosen; run.voiceURI = chosen.voiceURI || chosen.name; }
+        }
         if (!window.speechSynthesis || !window.SpeechSynthesisUtterance || !chosen) {
             message('设备还没有可用的普通话语音，请添加普通话语音后重新检测，再点播放。', true);
             if (mode === 'player') { run.read = false; run.status = '普通话语音未就绪，请重新检测'; renderPlayer(); }
@@ -657,7 +813,8 @@
                 [snapshot[i], snapshot[j]] = [snapshot[j], snapshot[i]];
             }
         }
-        run = { ...settings, words: snapshot, index: 0, read: false, heard: new Set(), checked: new Set(),
+        run = { ...settings, voiceSnapshot: settings.voiceSnapshot || (settings.voiceURI ? voices.find((voice) => (voice.voiceURI || voice.name) === settings.voiceURI) : null),
+            words: snapshot, index: 0, read: false, heard: new Set(), checked: new Set(),
             savedMistakes: new Set(settings.savedMistakes || []), mistakeSaveBusy: false, saveError: false, saveMessage: '',
             completed: false, status: '准备好后，点播放' };
         message(); showView('player'); renderPlayer();
@@ -771,7 +928,7 @@
         const words = all ? run.words : selectedReviewWords();
         if (!words.length) return;
         makeRun(words, { number: run.number, title: run.title, repetitions: run.repetitions, shuffled: run.shuffled, voiceURI: run.voiceURI,
-            kind: run.kind, book_id: run.book_id, lesson_id: run.lesson_id, lessonCount: run.lessonCount, savedMistakes: run.savedMistakes });
+            voiceSnapshot: run.voiceSnapshot, kind: run.kind, book_id: run.book_id, lesson_id: run.lesson_id, lessonCount: run.lessonCount, savedMistakes: run.savedMistakes });
     }
     function backHome() { stopSpeech(); showView('home'); renderControls(); }
     function leaveView() { preserveDraft(); active = false; stopSpeech(); showView('home'); }
@@ -781,6 +938,7 @@
         boundStudent = ''; boundToken = ''; loaded = false; loading = false; saving = false;
         books = []; lessons = []; summaries = new Map(); expandedUnits = new Set();
         bookId = ''; lesson = null; wordlist = null; raw = ''; conflict = null; run = null;
+        pronunciationEdit = null; pronunciationDrafts = new Map();
         mistakeSequence += 1; homeMode = 'lessons'; mistakeItems = []; mistakeSelections = new Set(); mistakeExpanded = new Set();
         mistakeLoading = false; mistakeLoaded = false; mistakeDeleting = false; mistakeStatus = ''; mistakeStatusError = false;
         el('dictation-book').replaceChildren(); el('dictation-lessons').replaceChildren();
@@ -843,6 +1001,14 @@
     el('dictation-load-cloud').addEventListener('click', inspectCloud);
     el('dictation-keep-cloud').addEventListener('click', () => { if (conflict) el('dictation-discard-confirm').hidden = false; });
     el('dictation-confirm-cloud').addEventListener('click', acceptCloud);
+    el('dictation-voice').addEventListener('change', () => {
+        const chosen = voices.find((voice) => (voice.voiceURI || voice.name) === el('dictation-voice').value);
+        if (!chosen) return;
+        voicePreference = voiceIdentity(chosen);
+        try { localStorage.setItem(VOICE_KEY, JSON.stringify(voicePreference)); voiceStorageReady = true; }
+        catch (_) { voiceStorageReady = false; }
+        detectVoices();
+    });
     el('dictation-refresh-voices').addEventListener('click', () => { detectVoices(); message(voices.length ? '普通话语音已就绪，可以试听或开始默写。' : '暂未检测到普通话语音，请先在设备中添加语音。', !voices.length); });
     el('dictation-play').addEventListener('click', playCurrent);
     el('dictation-next').addEventListener('click', next);
@@ -884,6 +1050,7 @@
     });
     if (window.speechSynthesis?.addEventListener) window.speechSynthesis.addEventListener('voiceschanged', detectVoices);
     else if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = detectVoices;
+    voicePreference = readVoicePreference();
     detectVoices();
     window.subjectDictation = { open, leaveView, reset };
 })();

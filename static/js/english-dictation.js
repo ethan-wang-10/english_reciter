@@ -21,7 +21,13 @@
     let boundStudent = '', boundToken = '', boundHostGeneration, active = false, loaded = false, loading = false, saving = false;
     let books = [], lessons = [], summaries = new Map(), expandedUnits = new Set(), initializedBooks = new Set();
     let bookId = '', lesson = null, wordlist = null, raw = '', conflict = null;
+    let pendingSpoken = new Map(), spokenEditor = null;
+    let mistakeSpokenPending = new Map(), mistakeSpokenSaving = false;
+    const backupMemory = new Map();
+    const VOICE_KEY = 'itorange-english-dictation-voice';
+    let savedVoice = readVoicePreference();
     let run = null, voices = [], voiceChosen = false, speechEpoch = 0, speaking = false, speechMode = '', utterance = null;
+    voiceChosen = !!savedVoice;
     let repeatTimer = null, watchdog = null, suppressSpaceUp = false;
     let homeMode = 'lessons', mistakeItems = [], mistakeSelections = new Set(), mistakeExpanded = new Set();
     let mistakeLoading = false, mistakeLoaded = false, mistakeDeleting = false, mistakeSequence = 0;
@@ -95,7 +101,18 @@
     function backupKey(student = boundStudent, book = bookId, id = lesson?.id) {
         return `itorange-english-dictation-draft:${student}:${book}:${id}`;
     }
+    function readBackup(key) { return backupMemory.has(key) ? backupMemory.get(key) : localStorage.getItem(key); }
     function normalized(text) { return String(text).normalize('NFC').trim().replace(/\s+/gu, ' '); }
+    function spokenValue(value) {
+        if (typeof value !== 'string' || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(value)) throw new Error('朗读内容不能包含控制字符或不可见字符。');
+        const result = normalized(value);
+        if (!result || Array.from(result).length > 500) throw new Error('请填写 1～500 个字符的朗读内容，或点击“恢复原文”。');
+        return result;
+    }
+    function spokenOverrides() { return Array.from(pendingSpoken, ([text, spoken_text]) => ({ text, spoken_text })); }
+    function localCopy(value, overrides = spokenOverrides()) {
+        return overrides.length ? `${value}\n\n朗读修正（原文不变）：\n${overrides.map((item) => `${item.text} → ${item.spoken_text}`).join('\n')}` : value;
+    }
     function formatWords(words) {
         return words.map((word) => word.text).join('\n');
     }
@@ -105,6 +122,7 @@
         const aliases = new Map((wordlist?.words || []).map((word) => [word.text, word.spoken_text || word.text]));
         let duplicates = 0;
         for (const line of value.split(/\r?\n|\r/u)) {
+            if (/[\p{Cc}\p{Cf}\p{Cs}]/u.test(line)) throw new Error('条目中不能包含控制字符或不可见字符。');
             const text = normalized(line);
             if (!text) continue;
             if (Array.from(text).length > 500) throw new Error('每行最多 500 个字符，请将过长的内容分行。');
@@ -112,7 +130,7 @@
             if (!/[\p{L}\p{N}]/u.test(text)) throw new Error('每条至少需要一个字母、汉字或数字。');
             if (seen.has(text)) { duplicates += 1; continue; }
             seen.add(text);
-            entries.push({ text, spoken_text: aliases.get(text) || text });
+            entries.push({ text, spoken_text: pendingSpoken.has(text) ? spokenValue(pendingSpoken.get(text)) : aliases.get(text) || text });
         }
         if (entries.length > 400) throw new Error('每份清单最多保存 400 条，请分组整理。');
         return { words: entries, duplicates };
@@ -122,6 +140,7 @@
     }
     function removeBackup() {
         if (!boundStudent || !bookId || !lesson) return;
+        backupMemory.set(backupKey(), null);
         try { localStorage.removeItem(backupKey()); } catch (_) { /* Cloud saving still works without local storage. */ }
     }
     function preserveDraft() {
@@ -129,22 +148,38 @@
         try {
             if (!conflict && unchanged(parseWords(raw).words)) { removeBackup(); return true; }
         } catch (_) { /* Invalid input must remain recoverable too. */ }
+        const encoded = JSON.stringify({ student: boundStudent, book_id: bookId,
+                lesson_id: lesson.id, raw, base_revision: conflict?.baseRevision ?? wordlist.revision,
+                spoken_overrides: spokenOverrides() });
+        backupMemory.set(backupKey(), encoded);
         try {
-            localStorage.setItem(backupKey(), JSON.stringify({ student: boundStudent, book_id: bookId,
-                lesson_id: lesson.id, raw, base_revision: conflict?.baseRevision ?? wordlist.revision }));
+            localStorage.setItem(backupKey(), encoded);
             return true;
         } catch (_) { stateLabel('本机空间不足，请及时保存到云端'); return false; }
     }
     function restoreDraft() {
         try {
-            const draft = JSON.parse(localStorage.getItem(backupKey()) || 'null');
+            const draft = JSON.parse(readBackup(backupKey()) || 'null');
             if (!draft || draft.student !== boundStudent || draft.book_id !== bookId || draft.lesson_id !== lesson.id
                 || typeof draft.raw !== 'string' || draft.raw.length > 440000 || !Number.isSafeInteger(draft.base_revision)
                 || draft.base_revision < 0) return;
-            if (draft.raw === formatWords(wordlist.words || [])) { removeBackup(); return; }
+            const overrides = new Map();
+            if (draft.spoken_overrides !== undefined) {
+                if (!Array.isArray(draft.spoken_overrides) || draft.spoken_overrides.length > 400) return;
+                for (const item of draft.spoken_overrides) {
+                    if (!item || Object.keys(item).sort().join(',') !== 'spoken_text,text' || typeof item.text !== 'string' || !item.text
+                            || normalized(item.text) !== item.text || Array.from(item.text).length > 500
+                            || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(item.text) || overrides.has(item.text)) return;
+                    overrides.set(item.text, spokenValue(item.spoken_text));
+                }
+            }
+            const cloudHints = new Map(wordlist.words.map((word) => [word.text, word.spoken_text || word.text]));
+            for (const [text, hint] of overrides) if (cloudHints.get(text) === hint) overrides.delete(text);
+            if (draft.raw === formatWords(wordlist.words || []) && !overrides.size) { removeBackup(); return; }
             raw = draft.raw;
+            pendingSpoken = overrides;
             if (draft.base_revision !== wordlist.revision) {
-                conflict = { localRaw: raw, baseRevision: draft.base_revision, cloud: wordlist };
+                conflict = { localRaw: raw, baseRevision: draft.base_revision, cloud: wordlist, spokenOverrides: spokenOverrides() };
                 message('这份清单的云端内容已更新。本机未保存的内容已保留，请先复制并对照。', true);
                 stateLabel('本机内容已保留，等待对照');
             } else {
@@ -170,7 +205,7 @@
         for (const [kind, label] of [['words', '旧单词与短语草稿'], ['sentences', '旧句子草稿']]) {
             const oldId = `${lesson.id}-${kind}`;
             try {
-                const encoded = localStorage.getItem(backupKey(boundStudent, bookId, oldId));
+                const encoded = readBackup(backupKey(boundStudent, bookId, oldId));
                 if (!encoded || encoded.length > 2700000) continue;
                 const draft = JSON.parse(encoded);
                 if (!draft || draft.student !== boundStudent || draft.book_id !== bookId || draft.lesson_id !== oldId
@@ -221,7 +256,7 @@
         if (name === 'home') renderResume();
     }
     function renderControls() {
-        const blocked = loading || saving;
+        const blocked = loading || saving || mistakeSpokenSaving;
         el('english-dictation-book').disabled = blocked || mistakeLoading || mistakeDeleting;
         el('english-dictation-mode-lessons').disabled = blocked;
         el('english-dictation-mode-mistakes').disabled = blocked;
@@ -254,7 +289,145 @@
             el('english-dictation-conflict').appendChild(refreshCatalog);
         }
         refreshCatalog.hidden = !catalogUpdated; refreshCatalog.disabled = blocked;
+        for (const control of el('english-dictation-word-preview').querySelectorAll('button, input')) control.disabled = blocked || !!conflict;
         renderMistakeControls();
+    }
+    function hintKey(item, word) { return JSON.stringify([item.book_id, item.lesson_id, word.text]); }
+    function mistakeHintBackupKey() { return `itorange-english-dictation-mistake-spoken:${boundStudent}:${bookId}`; }
+    function preserveMistakeHints() {
+        try {
+            const items = [];
+            for (const [key, spoken_text] of mistakeSpokenPending) {
+                const [book_id, lesson_id, text] = JSON.parse(key);
+                if (book_id === bookId) items.push({ lesson_id, text, spoken_text });
+            }
+            const encoded = items.length ? JSON.stringify({ student: boundStudent, book_id: bookId, items }) : null;
+            backupMemory.set(mistakeHintBackupKey(), encoded);
+            if (encoded) localStorage.setItem(mistakeHintBackupKey(), encoded);
+            else localStorage.removeItem(mistakeHintBackupKey());
+            return true;
+        } catch (_) { setMistakeStatus('本机空间不足，读音修改仍在当前页面，请及时保存到云端。', true); return false; }
+    }
+    function restoreMistakeHints() {
+        try {
+            const encoded = readBackup(mistakeHintBackupKey());
+            if (!encoded || encoded.length > 2500000) return;
+            const draft = JSON.parse(encoded);
+            if (!draft || draft.student !== boundStudent || draft.book_id !== bookId || !Array.isArray(draft.items) || draft.items.length > 2000) return;
+            const restored = [];
+            for (const item of draft.items) {
+                const group = mistakeItems.find((group) => group.lesson_id === item.lesson_id && group.book_id === bookId);
+                const word = group?.words.find((word) => word.text === item.text);
+                if (word) restored.push([hintKey(group, word), spokenValue(item.spoken_text)]);
+            }
+            for (const [key, hint] of restored) if (!mistakeSpokenPending.has(key)) mistakeSpokenPending.set(key, hint);
+        } catch (_) { /* A damaged optional recovery copy never replaces cloud data. */ }
+    }
+    function validSpokenEditor(target) {
+        return spokenEditor === target && visible() && current(target.ctx) && target.book === bookId
+            && (target.kind !== 'list' || target.lesson === lesson?.id);
+    }
+    function applySpoken(target, value) {
+        const hint = spokenValue(value);
+        const pending = target.kind === 'list' ? pendingSpoken : mistakeSpokenPending;
+        const key = target.kind === 'list' ? target.text : target.key;
+        const baseline = target.kind === 'list'
+            ? wordlist?.words.find((word) => word.text === target.text)?.spoken_text || target.text
+            : target.originalHint;
+        if (hint === baseline) pending.delete(key); else pending.set(key, hint);
+        return hint;
+    }
+    function spokenButton(word, kind = 'list', item = null) {
+        const button = node('button', '修正读音', 'english-dictation-spoken-toggle');
+        button.type = 'button'; button.dataset.action = 'edit-spoken'; button.dataset.word = word.text;
+        if (item) button.dataset.lesson = item.lesson_id;
+        button.setAttribute('aria-label', `修正 ${word.text} 的读音`);
+        button.addEventListener('click', () => {
+            if (loading || saving || mistakeSpokenSaving || conflict && kind === 'list' || !visible() || !current(capture())) return;
+            const key = item ? hintKey(item, word) : word.text;
+            const pending = kind === 'list' ? pendingSpoken : mistakeSpokenPending;
+            spokenEditor = { kind, key, text: word.text, rawHint: pending.get(key) || word.spoken_text || word.text,
+                originalHint: word.spoken_text || word.text, previousPending: pending.get(key), hadPending: pending.has(key),
+                book: item?.book_id || bookId, lesson: item?.lesson_id || lesson.id,
+                ctx: capture(kind === 'list'), error: '' };
+            if (kind === 'list') renderWords(); else renderMistakes();
+        });
+        return button;
+    }
+    function spokenForm(word, kind = 'list', item = null) {
+        const target = spokenEditor;
+        if (!target || target.kind !== kind || target.text !== word.text || !validSpokenEditor(target)
+                || item && target.key !== hintKey(item, word)) return null;
+        const form = node('div', '', 'english-dictation-spoken-editor');
+        const label = node('label', '朗读内容（原词句保持不变）');
+        const input = node('input'); input.type = 'text'; input.maxLength = 1000; input.value = target.rawHint;
+        input.dataset.action = 'spoken-input'; input.dataset.word = word.text;
+        input.setAttribute('aria-label', `设置 ${word.text} 的朗读内容`);
+        const status = node('p', target.error || (kind === 'list' ? '保存读音会同时保存当前整份清单。' : '仅修改这份清单中的这条错题，原清单和本轮快照保留。'), 'english-dictation-note');
+        status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+        input.addEventListener('input', () => {
+            if (!validSpokenEditor(target) || saving || mistakeSpokenSaving || conflict && kind === 'list') return;
+            target.rawHint = input.value;
+            try {
+                applySpoken(target, target.rawHint); target.error = '';
+                if (kind === 'list') { const backedUp = preserveDraft(); stateLabel(backedUp === false ? '本机空间不足，请及时保存到云端' : '读音有修改，待保存'); }
+                else preserveMistakeHints();
+                status.textContent = '朗读内容待保存，原词句保持不变。';
+            } catch (error) { target.error = error.message; status.textContent = error.message; }
+        });
+        label.appendChild(input); form.append(label, status);
+        const actions = node('div', '', 'english-dictation-spoken-actions');
+        for (const [action, title] of [['preview-spoken', '试听当前读音'], ['save-spoken', '保存读音'], ['restore-spoken', '恢复原文'], ['cancel-spoken', '取消']]) {
+            const button = node('button', title); button.type = 'button'; button.dataset.action = action; button.dataset.word = word.text;
+            button.disabled = loading || saving || mistakeSpokenSaving || !!conflict && kind === 'list';
+            button.addEventListener('click', async () => {
+                if (!validSpokenEditor(target) || loading || saving || mistakeSpokenSaving || conflict && kind === 'list') return;
+                if (action === 'cancel-spoken') {
+                    const pending = kind === 'list' ? pendingSpoken : mistakeSpokenPending;
+                    if (target.hadPending) pending.set(target.key, target.previousPending); else pending.delete(target.key);
+                    spokenEditor = null; stopSpeech();
+                    if (kind === 'list') { preserveDraft(); renderWords(); } else { preserveMistakeHints(); renderMistakes(); }
+                    return;
+                }
+                try {
+                    if (action === 'restore-spoken') target.rawHint = target.text;
+                    const hint = spokenValue(target.rawHint);
+                    if (action === 'preview-spoken') { speakWords({ text: target.text, spoken_text: hint }, 1, 'preview'); return; }
+                    applySpoken(target, hint); target.error = '';
+                    if (kind === 'list') {
+                        preserveDraft();
+                        const saved = await save();
+                        if (!validSpokenEditor(target)) return;
+                        if (saved) spokenEditor = null;
+                        else target.error = '读音还未保存，输入已保留，请处理提示后重试。';
+                        renderWords();
+                    } else { preserveMistakeHints(); await saveMistakeSpoken(target, hint); }
+                } catch (error) {
+                    if (!validSpokenEditor(target)) return;
+                    target.error = error.message; if (kind === 'list') renderWords(); else renderMistakes();
+                }
+            });
+            actions.appendChild(button);
+        }
+        input.disabled = loading || saving || mistakeSpokenSaving || !!conflict && kind === 'list';
+        form.appendChild(actions); return form;
+    }
+    async function saveMistakeSpoken(target, hint) {
+        mistakeSpokenSaving = true; renderControls(); renderMistakes();
+        try {
+            const result = await request('/mistakes', { method: 'POST', body: { items: [{ book_id: target.book,
+                lesson_id: target.lesson, words: [{ text: target.text, spoken_text: hint }] }] } });
+            if (!validSpokenEditor(target)) return;
+            if (!Number.isInteger(result.added_count) || !Number.isInteger(result.existing_count)
+                    || result.added_count < 0 || result.existing_count < 0 || result.added_count + result.existing_count !== 1) throw new Error('读音保存结果未确认，请重试。');
+            mistakeItems = mistakeItems.map((group) => group.book_id === target.book && group.lesson_id === target.lesson
+                ? { ...group, words: group.words.map((word) => word.text === target.text ? { ...word, spoken_text: hint } : word) } : group);
+            mistakeSpokenPending.delete(target.key); preserveMistakeHints(); spokenEditor = null;
+            setMistakeStatus('这条错题的读音已保存，原词句和本轮默写快照保持不变。');
+        } catch (error) { if (validSpokenEditor(target)) target.error = error.message || '读音尚未保存，请重试。'; }
+        finally {
+            if (current(target.ctx) && bookId === target.book) { mistakeSpokenSaving = false; renderMistakes(); renderControls(); }
+        }
     }
     function renderWords() {
         const container = el('english-dictation-word-preview');
@@ -263,6 +436,7 @@
             const result = parseWords(raw);
             el('english-dictation-word-count').textContent = `${result.words.length} 条不同内容${result.duplicates ? `，已合并 ${result.duplicates} 个重复项` : ''} · 每份清单最多 400 条`;
             for (const word of result.words) {
+                const ctx = capture(true);
                 const chip = node('div', '', 'english-dictation-word-chip');
                 const label = node('span', word.text);
                 if (word.spoken_text !== word.text) label.appendChild(node('small', `朗读：${word.spoken_text}`));
@@ -270,10 +444,11 @@
                 play.type = 'button';
                 play.setAttribute('aria-label', `试听 ${word.text}`);
                 play.addEventListener('click', () => {
-                    if (!active || loading || saving || !signedIn()) return;
+                    if (!visible() || loading || saving || !current(ctx)) return;
                     speakWords(word, 1, 'preview');
                 });
-                chip.append(label, play);
+                chip.append(label, play, spokenButton(word));
+                const form = spokenForm(word); if (form) chip.appendChild(form);
                 container.appendChild(chip);
             }
         } catch (error) { el('english-dictation-word-count').textContent = error.message; }
@@ -354,7 +529,7 @@
         renderControls();
     }
     function renderMistakeControls() {
-        const blocked = loading || saving || mistakeLoading || mistakeDeleting;
+        const blocked = loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving;
         const selected = mistakeItems.filter((item) => mistakeSelections.has(item.lesson_id));
         const count = mistakeRunWords().length;
         el('english-dictation-mistakes-refresh').disabled = blocked || !bookId;
@@ -403,7 +578,9 @@
                 remove.setAttribute('aria-label', `从${sourceName(item.lesson)}移除 ${word.text}`);
                 remove.setAttribute('title', `从错题本移除“${word.text}”`);
                 remove.addEventListener('click', () => removeMistake(item, word));
-                chip.append(text, remove); chips.appendChild(chip);
+                chip.append(text, spokenButton(word, 'mistake', item), remove);
+                const form = spokenForm(word, 'mistake', item); if (form) chip.appendChild(form);
+                chips.appendChild(chip);
             }
             details.appendChild(chips); container.appendChild(details);
         }
@@ -411,7 +588,7 @@
         renderMistakeControls();
     }
     async function loadMistakes() {
-        if (!bookId || mistakeLoading || mistakeDeleting || !current(capture())) return;
+        if (!bookId || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !current(capture())) return;
         const ctx = capture(), requestedBook = bookId, sequence = ++mistakeSequence;
         mistakeLoading = true;
         setMistakeStatus('正在读取错题本…'); renderMistakeControls(); renderControls();
@@ -420,6 +597,7 @@
             if (!current(ctx) || requestedBook !== bookId || sequence !== mistakeSequence) return;
             if (!Array.isArray(result.items) || result.items.some((item) => item.book_id !== requestedBook || !item.lesson?.id || !Array.isArray(item.words))) throw new Error('错题本读取结果不完整，请点击刷新重试。');
             mistakeItems = result.items.filter((item) => item.words.length).map((item) => ({ ...item, lesson: { ...item.lesson }, words: cloneWords(item.words) }));
+            restoreMistakeHints();
             mistakeSelections = new Set(Array.from(mistakeSelections).filter((id) => mistakeItems.some((item) => item.lesson_id === id)));
             mistakeLoaded = true;
             setMistakeStatus(mistakeItems.length ? `共 ${mistakeItems.length} 份清单，${mistakeItems.reduce((sum, item) => sum + item.words.length, 0)} 条错题。展开清单可查看或移除条目。` : '');
@@ -435,12 +613,12 @@
         }
     }
     async function setMode(mode) {
-        if (loading || saving || !current(capture())) return;
+        if (loading || saving || mistakeSpokenSaving || !current(capture())) return;
         preserveDraft(); stopSpeech(); homeMode = mode; renderMode();
         if (mode === 'mistakes') await loadMistakes();
     }
     async function removeMistake(item, word) {
-        if (loading || saving || mistakeLoading || mistakeDeleting || !active || !current(capture()) || item.book_id !== bookId) return;
+        if (loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !active || !current(capture()) || item.book_id !== bookId) return;
         const ctx = capture(), requestedBook = item.book_id;
         mistakeDeleting = true;
         setMistakeStatus(`正在从${sourceName(item.lesson)}移除“${word.text}”…`); renderControls();
@@ -453,6 +631,8 @@
             mistakeItems = mistakeItems.map((group) => group.lesson_id === item.lesson_id
                 ? { ...group, words: group.words.filter((entry) => entry.text !== word.text) } : group).filter((group) => group.words.length);
             if (!mistakeItems.some((group) => group.lesson_id === item.lesson_id)) mistakeSelections.delete(item.lesson_id);
+            mistakeSpokenPending.delete(hintKey(item, word)); preserveMistakeHints();
+            if (spokenEditor?.kind === 'mistake' && spokenEditor.key === hintKey(item, word)) spokenEditor = null;
             if (run) for (const entry of run.words) for (const source of entry.sources || []) {
                 if (source.book_id === item.book_id && source.lesson_id === item.lesson_id && entry.text === word.text) run.savedMistakes.delete(sourceKey(source, entry));
             }
@@ -462,10 +642,13 @@
     }
     function playbackSettings() {
         return { repetitions: Number(el('english-dictation-repetitions').value) === 1 ? 1 : 2,
-            shuffled: el('english-dictation-shuffle').checked, voiceURI: el('english-dictation-voice').value, voiceExplicit: voiceChosen };
+            shuffled: el('english-dictation-shuffle').checked, voiceURI: el('english-dictation-voice').value,
+            voiceExplicit: voiceChosen, voicePreference: savedVoice ? { ...savedVoice } : null,
+            voiceSnapshot: voiceChosen && savedVoice && !preferredVoice(savedVoice) ? null
+                : selectedVoice(voiceChosen ? el('english-dictation-voice').value : '', savedVoice) };
     }
     function startMistakes() {
-        if (loading || saving || mistakeLoading || mistakeDeleting || !mistakeLoaded || !active || !current(capture())) return;
+        if (loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !mistakeLoaded || !active || !current(capture())) return;
         const words = mistakeRunWords();
         if (!words.length) { setMistakeStatus('先勾选至少一份有错题的清单，再开始复习。', true); return; }
         makeRun(words, { ...playbackSettings(), title: '错题本复习', kind: 'mistakes', book_id: bookId, lesson_id: null,
@@ -479,6 +662,7 @@
         wordlist = null;
         raw = '';
         conflict = null;
+        pendingSpoken = new Map(); spokenEditor = null;
         lessons = [];
         summaries = new Map();
         mistakeSequence += 1; mistakeItems = []; mistakeSelections = new Set();
@@ -517,10 +701,11 @@
         }
     }
     async function selectLesson(item) {
-        if (loading || saving || !signedIn() || !item) return;
+        if (loading || saving || mistakeSpokenSaving || !signedIn() || !item) return;
         preserveDraft(); stopSpeech();
         lesson = item;
         wordlist = null; raw = ''; conflict = null;
+        pendingSpoken = new Map(); spokenEditor = null;
         loading = true;
         message(); stateLabel('正在读取…'); renderEditor(); renderDirectory();
         const ctx = capture(true), sequence = ++lessonSequence;
@@ -540,7 +725,7 @@
         }
     }
     async function save() {
-        if (!wordlist || loading || saving || conflict || !signedIn()) return false;
+        if (!wordlist || loading || saving || mistakeSpokenSaving || conflict || !signedIn()) return false;
         let parsed;
         try { parsed = parseWords(raw); }
         catch (error) { preserveDraft(); message(error.message, true); return false; }
@@ -548,7 +733,7 @@
             removeBackup(); stateLabel(wordlist.revision ? '已保存' : '还没有条目'); return true;
         }
         preserveDraft();
-        const ctx = capture(true), sentRaw = raw, sentWords = cloneWords(parsed.words);
+        const ctx = capture(true), sentRaw = raw, sentWords = cloneWords(parsed.words), sentSpoken = JSON.stringify(spokenOverrides());
         saving = true; stateLabel('正在保存…'); renderControls();
         try {
             const result = await request(`/wordlists/${encodeURIComponent(bookId)}/${encodeURIComponent(lesson.id)}`, {
@@ -559,7 +744,7 @@
             wordlist = result.wordlist;
             summaries.set(lesson.id, wordlist);
             // Controls are frozen while saving, but retain any unexpected new input defensively.
-            if (raw === sentRaw) { raw = formatWords(wordlist.words); removeBackup(); }
+            if (raw === sentRaw && JSON.stringify(spokenOverrides()) === sentSpoken) { raw = formatWords(wordlist.words); pendingSpoken.clear(); removeBackup(); }
             else preserveDraft();
             stateLabel(raw === formatWords(wordlist.words) ? '已保存' : '本机有修改，待保存');
             message(parsed.duplicates ? `清单内容已保存，重复条目已合并，共 ${wordlist.words.length} 个。` : '清单内容已保存。');
@@ -567,7 +752,7 @@
         } catch (error) {
             if (!current(ctx)) return false;
             if (error.status === 409) {
-                conflict = { localRaw: raw, baseRevision: wordlist.revision, cloud: null, catalogUpdated: error.code === 'catalog_updated' };
+                conflict = { localRaw: raw, spokenOverrides: spokenOverrides(), baseRevision: wordlist.revision, cloud: null, catalogUpdated: error.code === 'catalog_updated' };
                 stateLabel(conflict.catalogUpdated ? '目录已更新，本机草稿已保留' : '本机内容已保留，等待对照');
                 message(conflict.catalogUpdated
                     ? '教材已改为每个 Unit 一份清单。当前输入已保留，请先复制需要的内容，再刷新教材目录；进入对应 Unit 后也可查看旧版草稿恢复区。'
@@ -591,7 +776,8 @@
             if (!current(ctx) || conflict !== original) return null;
             if (!result.wordlist || !Array.isArray(result.wordlist.words) || !Number.isSafeInteger(result.wordlist.revision)) throw new Error('云端清单内容暂未读取完整，请重试。');
             conflict.cloud = result.wordlist;
-            el('english-dictation-cloud-preview').textContent = formatWords(result.wordlist.words) || '（云端清单内容为空）';
+            el('english-dictation-cloud-preview').textContent = localCopy(formatWords(result.wordlist.words),
+                result.wordlist.words.filter((word) => word.spoken_text && word.spoken_text !== word.text)) || '（云端清单内容为空）';
             el('english-dictation-cloud-preview').hidden = false;
             return result.wordlist;
         } catch (error) { if (current(ctx)) message(error.message || '暂时无法读取云端清单内容，本机内容仍保留着。', true); return null; }
@@ -599,7 +785,7 @@
     }
     async function copyLocal() {
         if (!conflict) return;
-        const original = conflict.localRaw, ctx = capture(true);
+        const original = localCopy(conflict.localRaw, conflict.spokenOverrides || spokenOverrides()), ctx = capture(true);
         try {
             await navigator.clipboard.writeText(original);
             if (current(ctx)) message('本机清单内容已复制，可以粘贴到笔记中保留。');
@@ -620,12 +806,13 @@
         wordlist = latest;
         summaries.set(lesson.id, wordlist);
         raw = formatWords(wordlist.words);
+        pendingSpoken.clear(); spokenEditor = null;
         conflict = null; removeBackup();
         stateLabel('已载入云端清单内容'); message('已使用云端清单内容，可以继续编辑。');
         renderEditor(); renderDirectory();
     }
     async function addLesson() {
-        if (loading || saving || !bookId || !signedIn()) return;
+        if (loading || saving || mistakeSpokenSaving || !bookId || !signedIn()) return;
         const title = normalized(el('english-dictation-custom-title').value);
         const numberRaw = el('english-dictation-custom-number').value.trim();
         const number = numberRaw ? Number(numberRaw) : null;
@@ -650,6 +837,30 @@
     }
 
     function englishVoice(voice) { return /^en(?:-|$)/iu.test(String(voice.lang || '').replace(/_/g, '-')); }
+    function readVoicePreference() {
+        try {
+            const encoded = localStorage.getItem(VOICE_KEY);
+            if (!encoded || encoded.length > 8192) return null;
+            const choice = JSON.parse(encoded);
+            if (!choice || !englishVoice(choice) || typeof choice.voiceURI !== 'string' || choice.voiceURI.length > 2000
+                    || typeof choice.name !== 'string' || !choice.name || choice.name.length > 2000
+                    || typeof choice.lang !== 'string' || choice.lang.length > 80) return null;
+            return { voiceURI: choice.voiceURI, name: choice.name, lang: choice.lang };
+        } catch (_) { return null; }
+    }
+    function preferredVoice(preference) {
+        if (!preference) return null;
+        return voices.find((voice) => preference.voiceURI && voice.voiceURI === preference.voiceURI)
+            || voices.find((voice) => voice.name === preference.name
+                && String(voice.lang).replace(/_/g, '-').toLowerCase() === preference.lang.replace(/_/g, '-').toLowerCase()) || null;
+    }
+    function chooseVoice() {
+        const chosen = voices.find((voice) => (voice.voiceURI || voice.name) === el('english-dictation-voice').value);
+        if (!chosen) return;
+        voiceChosen = true;
+        savedVoice = { voiceURI: chosen.voiceURI || chosen.name, name: chosen.name, lang: chosen.lang };
+        try { localStorage.setItem(VOICE_KEY, JSON.stringify(savedVoice)); } catch (_) { /* Keep this page's selection. */ }
+    }
     function voiceRank(voice) {
         const name = voice.name || '';
         const natural = /samantha|\balex\b|\bdaniel\b|google.*english|microsoft|natural|enhanced|premium/iu.test(name);
@@ -666,7 +877,9 @@
             for (const voice of voices) {
                 const option = node('option', `${voice.name}（${voice.lang}）`); option.value = voice.voiceURI || voice.name; select.appendChild(option);
             }
-            select.value = voiceChosen && voices.some((voice) => (voice.voiceURI || voice.name) === selected) ? selected : voices[0].voiceURI || voices[0].name;
+            const preferred = preferredVoice(savedVoice);
+            select.value = preferred ? preferred.voiceURI || preferred.name
+                : voiceChosen && voices.some((voice) => (voice.voiceURI || voice.name) === selected) ? selected : voices[0].voiceURI || voices[0].name;
         } else {
             const option = node('option', '未检测到设备英语语音'); option.value = ''; select.appendChild(option); select.value = '';
         }
@@ -675,7 +888,7 @@
             ? '优先使用英语朗读；需要时使用所选设备英语语音备用。始终按正常语速播放。'
             : '优先使用英语朗读。设备暂时没有英语备用语音，可在系统中添加 English 语音后重新检测。';
     }
-    function selectedVoice(uri) { return voices.find((voice) => (voice.voiceURI || voice.name) === uri) || voices[0] || null; }
+    function selectedVoice(uri, preference = null) { return preferredVoice(preference) || voices.find((voice) => (voice.voiceURI || voice.name) === uri) || voices[0] || null; }
     function releaseAudio() {
         const audio = playerAudio; playerAudio = null;
         if (audio) { audio.onended = null; audio.onerror = null; try { audio.pause(); } catch (_) { /* Already stopped. */ } }
@@ -746,7 +959,9 @@
             if (!valid() || fallbackStarted) return;
             fallbackStarted = true; completed = 0; cachedAudio = null;
             clearTimeout(repeatTimer); clearTimeout(watchdog); repeatTimer = null; watchdog = null; releaseAudio();
-            const chosen = selectedVoice(mode === 'player' ? run.voiceExplicit ? run.voiceURI : '' : voiceChosen ? el('english-dictation-voice').value : '');
+            const chosen = mode === 'player' ? run.voiceSnapshot || selectedVoice(run.voiceExplicit ? run.voiceURI : '', run.voicePreference)
+                : selectedVoice(voiceChosen ? el('english-dictation-voice').value : '', savedVoice);
+            if (mode === 'player' && chosen && !run.voiceSnapshot) run.voiceSnapshot = chosen;
             if (!window.speechSynthesis || !window.SpeechSynthesisUtterance || !chosen) {
                 fail('英语朗读暂时不可用，设备也没有英语备用语音。当前位置已保留，请稍后重试或添加 English 语音。'); return;
             }
@@ -944,7 +1159,8 @@
         const words = all ? run.words : selectedReviewWords();
         if (!words.length) return;
         makeRun(words, { number: run.number, title: run.title, repetitions: run.repetitions, shuffled: run.shuffled, voiceURI: run.voiceURI,
-            voiceExplicit: run.voiceExplicit, kind: run.kind, book_id: run.book_id, lesson_id: run.lesson_id, lessonCount: run.lessonCount, savedMistakes: run.savedMistakes });
+            voiceExplicit: run.voiceExplicit, voiceSnapshot: run.voiceSnapshot, voicePreference: run.voicePreference ? { ...run.voicePreference } : null,
+            kind: run.kind, book_id: run.book_id, lesson_id: run.lesson_id, lessonCount: run.lessonCount, savedMistakes: run.savedMistakes });
     }
     function backHome() { stopSpeech(); showView('home'); renderControls(); }
     function leaveView() { preserveDraft(); viewSequence += 1; active = false; stopSpeech(); cancelRequests(); showView('home'); }
@@ -953,7 +1169,8 @@
         generation += 1; requestSequence += 1; lessonSequence += 1; viewSequence += 1;
         boundStudent = ''; boundToken = ''; boundHostGeneration = undefined; loaded = false; loading = false; saving = false;
         books = []; lessons = []; summaries = new Map(); expandedUnits = new Set(); initializedBooks = new Set();
-        bookId = ''; lesson = null; wordlist = null; raw = ''; conflict = null; run = null; voiceChosen = false;
+        bookId = ''; lesson = null; wordlist = null; raw = ''; conflict = null; run = null; voiceChosen = !!savedVoice;
+        pendingSpoken = new Map(); spokenEditor = null; mistakeSpokenPending = new Map(); mistakeSpokenSaving = false;
         mistakeSequence += 1; homeMode = 'lessons'; mistakeItems = []; mistakeSelections = new Set(); mistakeExpanded = new Set();
         mistakeLoading = false; mistakeLoaded = false; mistakeDeleting = false; mistakeStatus = ''; mistakeStatusError = false;
         el('english-dictation-book').replaceChildren(); el('english-dictation-lessons').replaceChildren();
@@ -991,7 +1208,7 @@
     }
 
     el('english-dictation-words').maxLength = 440000;
-    el('english-dictation-book').addEventListener('change', () => { if (!loading && !saving && !mistakeLoading && !mistakeDeleting) return loadBook(el('english-dictation-book').value); });
+    el('english-dictation-book').addEventListener('change', () => { if (!loading && !saving && !mistakeLoading && !mistakeDeleting && !mistakeSpokenSaving) return loadBook(el('english-dictation-book').value); });
     el('english-dictation-mode-lessons').addEventListener('click', () => setMode('lessons'));
     el('english-dictation-mode-mistakes').addEventListener('click', () => setMode('mistakes'));
     el('english-dictation-mistakes-refresh').addEventListener('click', loadMistakes);
@@ -1006,8 +1223,10 @@
     el('english-dictation-mistakes-start').addEventListener('click', startMistakes);
     el('english-dictation-add-lesson').addEventListener('click', addLesson);
     el('english-dictation-words').addEventListener('input', () => {
-        if (loading || saving || conflict || !wordlist || !current(capture(true))) return;
-        raw = el('english-dictation-words').value; const backedUp = preserveDraft(); renderWords();
+        if (loading || saving || mistakeSpokenSaving || conflict || !wordlist || !current(capture(true))) return;
+        raw = el('english-dictation-words').value;
+        try { const present = new Set(parseWords(raw).words.map((word) => word.text)); for (const text of pendingSpoken.keys()) if (!present.has(text)) pendingSpoken.delete(text); } catch (_) { /* Keep corrections while invalid text is being fixed. */ }
+        const backedUp = preserveDraft(); renderWords();
         try { stateLabel(backedUp === false ? '本机空间不足，请及时保存到云端' : unchanged(parseWords(raw).words) ? '已保存' : '本机有修改，待保存'); }
         catch (_) { stateLabel(backedUp === false ? '本机空间不足，检查输入后请及时保存' : '本机内容已保留，请检查输入'); }
     });
@@ -1017,7 +1236,7 @@
     el('english-dictation-load-cloud').addEventListener('click', inspectCloud);
     el('english-dictation-keep-cloud').addEventListener('click', () => { if (conflict) el('english-dictation-discard-confirm').hidden = false; });
     el('english-dictation-confirm-cloud').addEventListener('click', acceptCloud);
-    el('english-dictation-voice').addEventListener('change', () => { voiceChosen = true; });
+    el('english-dictation-voice').addEventListener('change', chooseVoice);
     el('english-dictation-refresh-voices').addEventListener('click', () => { detectVoices(); message(voices.length ? '设备英语备用语音已就绪，可以试听或开始默写。' : '设备暂时没有英语备用语音，仍可尝试正常英语朗读。'); });
     el('english-dictation-play').addEventListener('click', playCurrent);
     el('english-dictation-next').addEventListener('click', next);
