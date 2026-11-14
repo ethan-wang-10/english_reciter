@@ -7,6 +7,7 @@ const { webcrypto } = require('node:crypto');
 
 const html = fs.readFileSync(path.join(__dirname, 'static/subject.html'), 'utf8');
 const source = fs.readFileSync(path.join(__dirname, 'static/js/subject-writing.js'), 'utf8');
+const GUIDED_LESSON = JSON.parse(fs.readFileSync(path.join(__dirname, 'subject_content/chinese/writing/lesson-01-game.json'), 'utf8'));
 const prefix = '/subjects/chinese/writing';
 const settle = () => new Promise(setImmediate);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -49,7 +50,7 @@ function completedData() {
     return data;
 }
 
-function writingUI({ storage = new Map(), isParent = false, seed = [] } = {}) {
+function writingUI({ storage = new Map(), isParent = false, seed = [], lesson: requestedLesson } = {}) {
     const elements = new Map();
     const timers = new Map();
     let timerId = 0;
@@ -67,6 +68,7 @@ function writingUI({ storage = new Map(), isParent = false, seed = [] } = {}) {
         })),
         reference_outline: [{ content: '交代游戏', purpose: '告诉读者谁在玩', focus: false }, { content: '有趣的一刻', purpose: '展开重点', focus: true }],
     };
+    if (requestedLesson) state.lesson = clone(requestedLesson);
 
     class Element {
         constructor(tag = 'div', attributes = {}) {
@@ -146,7 +148,19 @@ function writingUI({ storage = new Map(), isParent = false, seed = [] } = {}) {
     assert.ok(field('writing-panel'), 'The composition panel must be integrated into the real subject page');
     field('subject-site-config').textContent = JSON.stringify({ id: 'chinese' });
 
-    function makeAttempt(data = emptyData(), suffix = String(state.attempts.size + 1)) {
+    function freshData() {
+        const data = emptyData();
+        if (state.lesson.guidance) {
+            data.outline = [{ id: 'p_full', content: '', purpose: '整篇初稿（开头—重点—结尾）', focus: true }];
+            data.guidance = {
+                version: 1, step: 0, confirmed: [], review: [], theme: '', customTheme: '', structure: '',
+                slots: { begin: [], middle: [], end: [] }, notes: { begin: '', middle: '', end: '' },
+                details: [], ownDetail: '', sentence: '', paragraph: '', endingOkay: false,
+            };
+        }
+        return data;
+    }
+    function makeAttempt(data = freshData(), suffix = String(state.attempts.size + 1)) {
         const id = 'writing_' + suffix.padStart(32, '0');
         const attempt = { id, lesson_id: state.lesson.id, lesson_snapshot: clone(state.lesson), data: clone(data), revision: 1,
             status: 'in_progress', created_at: '2026-11-13T10:00:00+08:00', updated_at: '2026-11-13T10:00:00+08:00', completed_at: null };
@@ -159,10 +173,20 @@ function writingUI({ storage = new Map(), isParent = false, seed = [] } = {}) {
     function payload(attempt) { return { attempt: clone(attempt), versions: clone(versionSummaries(attempt.id)), read_only: state.session.account.is_parent }; }
     function defaultReply(call) {
         const relative = call.url.slice(prefix.length);
-        if (relative === '/lessons') return { items: [clone(state.lesson)], count: 1 };
+        if (relative === '/lessons') {
+            const item = Object.fromEntries(['id', 'version', 'title', 'grade', 'description', 'goal', 'time_hint'].filter((key) => key in state.lesson).map((key) => [key, clone(state.lesson[key])]));
+            if (state.lesson.guidance) item.flow_version = state.lesson.guidance.version;
+            return { items: [item], count: 1 };
+        }
         if (relative === '/lessons/' + state.lesson.id) return { lesson: clone(state.lesson) };
         if (relative === '/attempts' && call.method === 'GET') return { items: [...state.attempts.values()].map((attempt) => ({ id: attempt.id, lesson_id: attempt.lesson_id, title: attempt.lesson_snapshot.title, lesson_title: attempt.lesson_snapshot.title, stage: attempt.data.stage, revision: attempt.revision, status: attempt.status, updated_at: attempt.updated_at, completed_at: attempt.completed_at })), count: state.attempts.size, read_only: state.session.account.is_parent };
-        if (relative === '/attempts' && call.method === 'POST') return payload(makeAttempt());
+        if (relative === '/attempts' && call.method === 'POST') {
+            const guided = call.body.flow_version === 1;
+            if (guided) assert.equal(state.lesson.guidance?.version, 1);
+            const attempt = makeAttempt(guided ? freshData() : emptyData());
+            if (!guided) delete attempt.lesson_snapshot.guidance;
+            return payload(attempt);
+        }
         const match = relative.match(/^\/attempts\/(writing_[a-f0-9]{32})(?:\/(.*))?$/); assert.ok(match, 'Unexpected writing route: ' + call.url);
         const attempt = state.attempts.get(match[1]); assert.ok(attempt, 'Attempt missing: ' + match[1]);
         const action = match[2];
@@ -185,7 +209,7 @@ function writingUI({ storage = new Map(), isParent = false, seed = [] } = {}) {
         refreshSection: async (section) => { state.section = section; },
         async apiRequest(url, options = {}) {
             url = url.replace(/^\/api/, '');
-            const call = { url, method: options.method || 'GET', body: typeof options.body === 'string' ? JSON.parse(options.body) : clone(options.body) };
+            const call = { url, method: options.method || 'GET', headers: clone(options.headers || {}), body: typeof options.body === 'string' ? JSON.parse(options.body) : clone(options.body) };
             state.calls.push(call);
             const response = state.routes[url] ? await state.routes[url](call) : defaultReply(call);
             return clone(response);
@@ -200,7 +224,7 @@ function writingUI({ storage = new Map(), isParent = false, seed = [] } = {}) {
         queueMicrotask, requestAnimationFrame: (callback) => callback(),
     });
     vm.runInContext(source, context);
-    return { state, storage, context, field, api: window.subjectWriting, root, makeAttempt,
+    return { state, storage, context, field, api: window.subjectWriting, root, makeAttempt, freshData,
         async flush() { await settle(); await settle(); },
         async timers() { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach((callback) => callback()); await settle(); await settle(); },
         buttons(text) { return root.querySelectorAll('button').filter((button) => button.textContent.includes(text)); },
@@ -648,4 +672,372 @@ test('a pending recovery with an older base cannot be edited into or copied as t
     assert.equal(second.field('writing-plan-situation').disabled, false);
     assert.equal(second.field('writing-plan-situation').value, '另一个页面已经保存的云端选材。');
     assert.equal(second.state.calls.some((call) => call.method !== 'GET'), false);
+});
+
+function guidedData(step = 0, filled = false) {
+    const data = emptyData();
+    data.outline = [{ id: 'p_full', content: '', purpose: '整篇初稿（开头—重点—结尾）', focus: true }];
+    data.guidance = {
+        version: 1, step, confirmed: [], review: [], theme: '', customTheme: '', structure: '',
+        slots: { begin: [], middle: [], end: [] }, notes: { begin: '', middle: '', end: '' },
+        details: [], ownDetail: '', sentence: '', paragraph: '', endingOkay: false,
+    };
+    data.stage = step === 0 ? 0 : step <= 4 ? 1 : step <= 6 ? 2 : 3;
+    if (filled) {
+        Object.assign(data.guidance, {
+            confirmed: Array.from({ length: 9 }, (_, index) => index), theme: 'mixup', structure: 'sequence',
+            slots: { begin: ['start'], middle: ['frog'], end: ['echo'] },
+            notes: { begin: '课间我和同桌猜词。', middle: '猜错后的反应。', end: '回座位仍想笑。' },
+            details: ['ears'], ownDetail: '我急得直摆手。', sentence: '我把两根手指竖起来，他大喊：“青蛙！”',
+            paragraph: '我把两根手指竖起来，他大喊：“青蛙！”我还没有说答案，先笑了。', endingOkay: true,
+        });
+        data.paragraphs.p_full = '下课，我和同桌玩猜词。\n\n我比画兔子，他猜成青蛙，我们都笑了。\n\n回到座位，我还想着那声“青蛙”。';
+    }
+    return data;
+}
+
+async function openGuided(step = 0, { data = guidedData(step), ...options } = {}) {
+    const ui = writingUI({ lesson: GUIDED_LESSON, ...options });
+    const attempt = ui.makeAttempt(data);
+    await ui.api.openAttempt(attempt.id);
+    return { ui, attempt };
+}
+
+async function guidedNav(ui, step) {
+    const node = ui.field('writing-guided-step-' + step);
+    assert.ok(node, 'Missing guided navigation step ' + step);
+    await node.fire('click');
+}
+
+function writes(ui) { return ui.state.calls.filter((call) => call.method !== 'GET'); }
+
+test('the real version-two lesson negotiates its guided flow while old summaries still create classic drafts', async () => {
+    assert.equal(GUIDED_LESSON.guidance.version, 1);
+    assert.equal(GUIDED_LESSON.guidance.steps.length, 9);
+    const ui = writingUI({ lesson: GUIDED_LESSON });
+    await ui.api.open();
+    await ui.field('writing-lessons').querySelector('button').fire('click');
+    const start = ui.state.calls.find((call) => call.method === 'POST' && call.url.endsWith('/attempts'));
+    assert.equal(start.body.flow_version, 1);
+    assert.equal(start.headers['X-Writing-Flow'], 'guided-v1');
+    assert.ok(ui.field('writing-guided-customTheme'));
+    const current = [...ui.state.attempts.values()][0];
+    assert.equal(current.data.outline[0].id, 'p_full');
+    assert.deepEqual(current.data.guidance.confirmed, []);
+    await ui.type('writing-guided-customTheme', '这是我自己想到的主旨。');
+    await ui.timers();
+    const guidedSaves = ui.state.calls.filter((call) => call.method === 'PATCH');
+    assert.ok(guidedSaves.length > 0);
+    assert.ok(guidedSaves.every((call) => call.headers['X-Writing-Flow'] === 'guided-v1'));
+
+    const old = writingUI({ lesson: GUIDED_LESSON });
+    old.state.routes[prefix + '/lessons'] = () => ({ items: [{ id: GUIDED_LESSON.id, title: GUIDED_LESSON.title }], count: 1 });
+    await old.api.open();
+    await old.field('writing-lessons').querySelector('button').fire('click');
+    const classic = [...old.state.attempts.values()][0];
+    assert.equal(classic.data.guidance, undefined);
+    assert.equal(classic.lesson_snapshot.guidance, undefined);
+    assert.ok(old.field('writing-plan-situation'));
+});
+
+test('all nine questions can be visited freely without confirming answers or showing multiple question editors', async () => {
+    const { ui, attempt } = await openGuided();
+    for (let step = 0; step < 9; step += 1) {
+        assert.equal(ui.field('writing-guided-step-' + step).disabled, false);
+        await guidedNav(ui, step);
+        assert.equal(ui.field('writing-stage-title').textContent, GUIDED_LESSON.guidance.steps[step].question);
+        const text = ui.field('writing-stage-content').textContent;
+        if (step !== 0) assert.equal(ui.field('writing-guided-customTheme'), null);
+        if (step !== 5) assert.equal(ui.field('writing-guided-sentence'), null);
+        if (step !== 7) assert.equal(ui.field('writing-guided-draft'), null);
+        assert.equal(typeof text, 'string');
+    }
+    await ui.timers();
+    assert.deepEqual(attempt.data.guidance.confirmed, []);
+    assert.equal(writes(ui).some((call) => call.url.endsWith('/checkpoints') || call.url.endsWith('/complete')), false);
+});
+
+test('the learner own theme wins over reference choices and only a changed adopted meaning needs review', async () => {
+    const data = guidedData(0, true); data.guidance.customTheme = '我想写同桌猜错时带给我的快乐。';
+    const { ui, attempt } = await openGuided(0, { data });
+    await ui.field('writing-guided-theme-together').fire('click');
+    await ui.timers();
+    assert.equal(ui.field('writing-guided-adopted-theme').textContent, data.guidance.customTheme);
+    assert.deepEqual(attempt.data.guidance.review, []);
+    assert.equal(attempt.data.guidance.endingOkay, true);
+    await ui.type('writing-guided-customTheme', '  ' + data.guidance.customTheme + '  ');
+    await ui.timers();
+    assert.deepEqual(attempt.data.guidance.review, [], 'Whitespace alone does not change the adopted meaning');
+    await ui.type('writing-guided-customTheme', '我更想表达同伴愿意配合的快乐。');
+    await ui.timers();
+    assert.ok(attempt.data.guidance.review.includes(0) && attempt.data.guidance.review.includes(8));
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    assert.equal(attempt.data.guidance.endingOkay, false);
+});
+
+test('material choices and own notes coexist in the current frame and the middle keeps one chosen focus', async () => {
+    const data = guidedData(2); data.guidance.theme = 'fun'; data.guidance.structure = 'total'; data.guidance.confirmed = [0, 1];
+    const { ui, attempt } = await openGuided(2, { data });
+    assert.ok(ui.field('writing-guided-material-start'));
+    assert.ok(ui.field('writing-guided-note-begin'));
+    await ui.field('writing-guided-material-start').fire('click');
+    await ui.type('writing-guided-note-begin', '我和同桌在座位旁约好玩。');
+    await ui.field('writing-next').fire('click');
+    assert.deepEqual(attempt.data.guidance.slots.begin, ['start']);
+    assert.equal(attempt.data.guidance.notes.begin, '我和同桌在座位旁约好玩。');
+    assert.ok(attempt.data.guidance.confirmed.includes(2));
+    assert.ok(ui.field('writing-guided-material-frog'));
+    await ui.field('writing-guided-material-frog').fire('click');
+    await ui.field('writing-guided-material-laugh').fire('click');
+    await ui.type('writing-guided-note-middle', '我想写自己先一愣又笑起来。');
+    await ui.timers();
+    assert.deepEqual(attempt.data.guidance.slots.middle, ['laugh']);
+    assert.equal(attempt.data.guidance.notes.middle, '我想写自己先一愣又笑起来。');
+    await guidedNav(ui, 4);
+    await ui.type('writing-guided-note-end', '回到座位时，我还记着那一声。');
+    assert.equal(ui.field('writing-next').disabled, false, 'An own-material answer can stand without a card');
+});
+
+test('details remain beside the sentence editor and cannot replace a learner-written sentence', async () => {
+    const { ui, attempt } = await openGuided(5);
+    await ui.field('writing-guided-detail-ears').fire('click');
+    await ui.type('writing-guided-ownDetail', '我急得直摆手。');
+    assert.ok(ui.field('writing-guided-detail-reaction'));
+    assert.ok(ui.field('writing-guided-sentence'));
+    assert.equal(ui.field('writing-next').disabled, true);
+    await ui.field('writing-next').fire('click');
+    assert.equal(ui.field('writing-guided-sentence').value, '');
+    await ui.type('writing-guided-sentence', '我竖起手指，同桌喊出了“青蛙”。');
+    await ui.field('writing-next').fire('click');
+    assert.equal(ui.field('writing-guided-paragraph').value, '我竖起手指，同桌喊出了“青蛙”。');
+    assert.equal(attempt.data.guidance.paragraph, attempt.data.guidance.sentence);
+    assert.ok(attempt.data.guidance.confirmed.includes(5));
+});
+
+test('own sentences and paragraphs carry forward once without replacing existing work or duplicating manual insertions', async () => {
+    const data = guidedData(5); data.guidance.sentence = '我的新句子。'; data.guidance.paragraph = '我已经写过的重点段。'; data.paragraphs.p_full = '我已经写过的整篇初稿。';
+    const { ui, attempt } = await openGuided(5, { data });
+    await ui.field('writing-next').fire('click');
+    assert.equal(ui.field('writing-guided-paragraph').value, '我已经写过的重点段。');
+    await ui.type('writing-guided-paragraph', '我后来自己调整的重点段。');
+    await ui.field('writing-next').fire('click');
+    assert.equal(ui.field('writing-guided-draft').value, '我已经写过的整篇初稿。');
+    await ui.buttons('把写好的重点段接进来')[0].fire('click');
+    await ui.buttons('把写好的重点段接进来')[0].fire('click');
+    await ui.timers();
+    assert.equal(attempt.data.paragraphs.p_full, '我已经写过的整篇初稿。\n\n我后来自己调整的重点段。');
+    await guidedNav(ui, 5);
+    await ui.type('writing-guided-sentence', '又改了一次自己的句子。');
+    await ui.field('writing-next').fire('click');
+    assert.equal(ui.field('writing-guided-paragraph').value, '我后来自己调整的重点段。');
+    const blank = guidedData(6); blank.guidance.paragraph = '只在空白全文中初次带入的自己的段落。';
+    const fresh = await openGuided(6, { data: blank });
+    await fresh.ui.field('writing-next').fire('click');
+    assert.equal(fresh.ui.field('writing-guided-draft').value, blank.guidance.paragraph);
+});
+
+test('changed upstream material preserves downstream prose, marks only dependent confirmations and catches unfinished questions at the end', async () => {
+    const data = guidedData(3, true);
+    const { ui, attempt } = await openGuided(3, { data });
+    await ui.field('writing-guided-material-laugh').fire('click');
+    await ui.timers();
+    assert.deepEqual([...attempt.data.guidance.review].sort((a, b) => a - b), [3, 5, 6, 7, 8]);
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    assert.equal(attempt.data.guidance.paragraph, data.guidance.paragraph);
+    await guidedNav(ui, 8);
+    await ui.field('writing-guided-ending-okay').fire('click');
+    await ui.field('writing-next').fire('click');
+    assert.equal(ui.field('writing-stage-title').textContent, GUIDED_LESSON.guidance.steps[3].question);
+    assert.equal(writes(ui).some((call) => call.url.endsWith('/complete')), false);
+    const missing = guidedData(8, true); missing.guidance.confirmed = missing.guidance.confirmed.filter((step) => step !== 2);
+    const unfinished = await openGuided(8, { data: missing });
+    await unfinished.ui.field('writing-next').fire('click');
+    assert.equal(unfinished.ui.field('writing-stage-title').textContent, GUIDED_LESSON.guidance.steps[2].question);
+    assert.ok(!unfinished.attempt.data.guidance.confirmed.includes(2));
+});
+
+test('help temporarily replaces the question editor and examples never paste into the learner draft', async () => {
+    const data = guidedData(7, true); data.paragraphs.p_full = '<script>这是我自己已经写好的全文，不执行。</script>';
+    const { ui, attempt } = await openGuided(7, { data });
+    await ui.field('writing-guided-help-open').fire('click');
+    assert.equal(ui.field('writing-guided-draft'), null);
+    assert.ok(ui.field('writing-guided-help-back'));
+    await ui.buttons('再看看范文怎么安排')[0].fire('click');
+    await ui.buttons('我想阅读全文')[0].fire('click');
+    assert.match(ui.field('writing-stage-content').textContent, /写法提示/);
+    await ui.field('writing-next').fire('click');
+    assert.equal(ui.field('writing-guided-draft').value, data.paragraphs.p_full);
+    await ui.timers();
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    assert.deepEqual(attempt.data.guidance.confirmed, data.guidance.confirmed);
+});
+
+test('guided autosave serializes in-flight theme edits and the restored page keeps the final own theme', async () => {
+    const { ui, attempt } = await openGuided();
+    const gate = deferred(); let first;
+    ui.state.routes[prefix + '/attempts/' + attempt.id] = (call) => {
+        if (call.method === 'PATCH' && !first) { first = call; return gate.promise; }
+        return ui.state.defaultReply(call);
+    };
+    await ui.type('writing-guided-customTheme', '先写下的主旨。'); await ui.timers();
+    await ui.type('writing-guided-customTheme', '等待保存时补充的最终主旨。'); await ui.timers();
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PATCH').length, 1);
+    gate.resolve(ui.state.defaultReply(first)); await ui.flush(); await ui.timers();
+    const saves = ui.state.calls.filter((call) => call.method === 'PATCH');
+    assert.deepEqual(saves.map((call) => call.body.base_revision), [1, 2]);
+    assert.equal(attempt.data.guidance.customTheme, '等待保存时补充的最终主旨。');
+    assert.equal(ui.field('writing-guided-customTheme').value, '等待保存时补充的最终主旨。');
+    const restored = await openGuided(0, { data: attempt.data });
+    assert.equal(restored.ui.field('writing-guided-customTheme').value, '等待保存时补充的最终主旨。');
+});
+
+test('a guided conflict keeps canonical draft and guided notes in the account-scoped recovery copy', async () => {
+    const data = guidedData(7, true);
+    const { ui, attempt } = await openGuided(7, { data });
+    ui.state.routes[prefix + '/attempts/' + attempt.id] = (call) => {
+        if (call.method === 'PATCH') throw Object.assign(new Error('新版本冲突'), { status: 409, code: 'conflict', current_revision: 4 });
+        return ui.state.defaultReply(call);
+    };
+    await ui.type('writing-guided-draft', '我在本机补写的全文。'); await ui.timers();
+    assert.equal(ui.field('writing-conflict').hidden, false);
+    await ui.field('writing-copy-draft').fire('click');
+    assert.match(ui.state.clipboard, /我在本机补写的全文/);
+    assert.match(ui.state.clipboard, /我把两根手指竖起来/);
+    assert.ok([...ui.storage.entries()].some(([key, value]) => key.includes('alice') && value.includes('我在本机补写的全文')));
+    const gate = deferred();
+    const stale = writingUI({ lesson: GUIDED_LESSON }); const old = stale.makeAttempt(data);
+    stale.state.routes[prefix + '/attempts/' + old.id] = () => gate.promise;
+    const opening = stale.api.openAttempt(old.id); await stale.flush(); stale.api.reset();
+    stale.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    gate.resolve({ attempt: clone(old), versions: [], read_only: false }); await opening;
+    assert.equal(stale.field('writing-editor').hidden, true);
+    assert.equal(stale.field('writing-stage-content').textContent, '');
+});
+
+test('a parent may navigate all guided questions and help without confirming or modifying the student work', async () => {
+    const { ui, attempt } = await openGuided(0, { data: guidedData(0, true), isParent: true });
+    const original = clone(attempt.data);
+    assert.equal(ui.field('writing-guided-customTheme').disabled, true);
+    await ui.field('writing-guided-theme-fun').fire('click');
+    await guidedNav(ui, 7);
+    assert.equal(ui.field('writing-guided-draft').disabled, true);
+    await ui.type('writing-guided-draft', '家长程序触发的代写');
+    await ui.field('writing-guided-help-open').fire('click');
+    await ui.field('writing-guided-help-back').fire('click');
+    await ui.timers();
+    assert.equal(writes(ui).length, 0);
+    assert.deepEqual(attempt.data, original);
+});
+
+test('nine confirmed guided questions feed the existing two revision rounds and immutable completed work', async () => {
+    const data = guidedData(8, true); data.guidance.confirmed = Array.from({ length: 8 }, (_, step) => step);
+    const { ui, attempt } = await openGuided(8, { data });
+    const original = data.paragraphs.p_full;
+    await ui.field('writing-next').fire('click');
+    assert.ok(ui.field('writing-paragraph-p_full'));
+    assert.equal(ui.field('writing-paragraph-p_full').value, original);
+    await ui.type('writing-paragraph-p_full', original + '\n我补上了一次动作的反应。');
+    await ui.type('writing-revision-note', '内容稿补上反应。');
+    await ui.field('writing-next').fire('click');
+    assert.match(ui.field('writing-paragraph-p_full').value, /动作的反应/);
+    await ui.type('writing-paragraph-p_full', original + '\n我删掉重复评价，保留这个反应。');
+    await ui.type('writing-revision-note', '表达稿删去重复。');
+    await ui.field('writing-next').fire('click');
+    await ui.type('writing-reflection-learned', '我能把有趣写成具体的一刻。');
+    await ui.field('writing-complete').fire('click');
+    assert.equal(attempt.status, 'completed');
+    assert.equal(attempt.data.paragraphs.p_full, original);
+    assert.match(attempt.data.final_paragraphs.p_full, /删掉重复评价/);
+    assert.deepEqual([...attempt.data.guidance.confirmed].sort((a, b) => a - b), Array.from({ length: 9 }, (_, step) => step));
+    assert.deepEqual(attempt.data.guidance.review, []);
+    const labels = ui.state.versions.get(attempt.id).map((version) => version.label);
+    assert.ok(['初稿', '内容修改稿', '修改稿', '完成作品'].every((label) => labels.includes(label)));
+    await guidedNav(ui, 7);
+    assert.equal(ui.field('writing-guided-draft').disabled, true);
+    await ui.type('writing-guided-draft', '完成后不允许替换原稿'); await ui.timers();
+    assert.equal(attempt.data.paragraphs.p_full, original);
+});
+
+test('restoring a guided snapshot previews and retains its guided answers and original canonical draft', async () => {
+    const data = guidedData(0, true); data.guidance.customTheme = '历史版本中自己的主旨。';
+    const { ui, attempt } = await openGuided(0, { data });
+    attempt.data.guidance.customTheme = '后来保存的主旨。'; attempt.revision = 5;
+    await ui.api.openAttempt(attempt.id);
+    await ui.field('writing-history-open').fire('click');
+    assert.match(ui.field('writing-version-preview').textContent, /历史版本中自己的主旨/);
+    await ui.field('writing-version-restore').fire('click');
+    await ui.field('writing-version-restore-confirm').fire('click');
+    assert.equal(ui.field('writing-guided-customTheme').value, '历史版本中自己的主旨。');
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    assert.equal(ui.state.versions.get(attempt.id).length, 2);
+    assert.equal(attempt.revision, 6);
+});
+
+test('a slow content-to-expression checkpoint freezes old fields and carries the last accepted content into the expression draft', async () => {
+    const data = guidedData(8, true);
+    data.stage = 4; data.review_round = 'structure'; data.structure_started = true;
+    data.structure_paragraphs = { p_full: data.paragraphs.p_full };
+    const { ui, attempt } = await openGuided(8, { data });
+    const finalContent = '内容确认前，我自己补全的最后一处动作和反应。';
+    await ui.type('writing-paragraph-p_full', finalContent);
+    await ui.type('writing-revision-note', '我补上了具体动作。');
+    const gate = deferred(); let checkpoint;
+    ui.state.routes[prefix + '/attempts/' + attempt.id + '/checkpoints'] = (call) => { checkpoint = call; return gate.promise; };
+    await ui.field('writing-next').fire('click');
+    assert.ok(checkpoint);
+    assert.equal(checkpoint.body.label, '内容修改稿');
+    assert.equal(checkpoint.body.data.structure_paragraphs.p_full, finalContent);
+    assert.equal(ui.field('writing-paragraph-p_full').disabled, true);
+    assert.equal(ui.field('writing-revision-note').disabled, true);
+    await ui.type('writing-paragraph-p_full', '确认请求途中不应被接受的新段落');
+    await ui.type('writing-revision-note', '请求途中不应被接受的新说明');
+    await ui.timers();
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PATCH').length, 0);
+    gate.resolve(ui.state.defaultReply(checkpoint));
+    await ui.flush();
+    assert.equal(attempt.data.structure_paragraphs.p_full, finalContent);
+    assert.equal(attempt.data.final_paragraphs.p_full, finalContent);
+    assert.equal(attempt.data.revision_notes.structure, '我补上了具体动作。');
+    assert.equal(attempt.data.review_round, 'language');
+    assert.equal(ui.field('writing-paragraph-p_full').value, finalContent);
+    assert.equal(ui.field('writing-paragraph-p_full').disabled, false);
+    assert.equal(ui.field('writing-revision-note').disabled, false);
+});
+
+test('a slow expression-to-review transition keeps the expression draft frozen until both checkpoint and position saves are acknowledged', async () => {
+    const data = guidedData(8, true);
+    data.stage = 4; data.review_round = 'language'; data.structure_started = data.language_started = true;
+    data.structure_paragraphs = { p_full: data.paragraphs.p_full };
+    data.final_paragraphs = { p_full: data.paragraphs.p_full };
+    const { ui, attempt } = await openGuided(8, { data });
+    const finalExpression = '表达确认前，我自己删去重复评价后的最后一稿。';
+    await ui.type('writing-paragraph-p_full', finalExpression);
+    await ui.type('writing-revision-note', '删去了一句重复的话。');
+    const checkpointGate = deferred(); const positionGate = deferred();
+    let checkpoint; let position;
+    ui.state.routes[prefix + '/attempts/' + attempt.id + '/checkpoints'] = (call) => { checkpoint = call; return checkpointGate.promise; };
+    ui.state.routes[prefix + '/attempts/' + attempt.id] = (call) => {
+        if (call.method === 'PATCH') { position = call; return positionGate.promise; }
+        return ui.state.defaultReply(call);
+    };
+    await ui.field('writing-next').fire('click');
+    assert.ok(checkpoint);
+    assert.equal(checkpoint.body.label, '修改稿');
+    assert.equal(ui.field('writing-paragraph-p_full').disabled, true);
+    await ui.type('writing-paragraph-p_full', '等候修改稿确认时不能污染最终稿');
+    checkpointGate.resolve(ui.state.defaultReply(checkpoint));
+    await ui.flush();
+    assert.ok(position, 'The current position must also be persisted before moving to review');
+    assert.equal(position.body.base_revision, 2);
+    assert.equal(position.body.data.stage, 5);
+    assert.equal(position.body.data.final_paragraphs.p_full, finalExpression);
+    assert.equal(ui.field('writing-paragraph-p_full').disabled, true);
+    await ui.type('writing-paragraph-p_full', '等候位置保存时也不能污染最终稿');
+    positionGate.resolve(ui.state.defaultReply(position));
+    await ui.flush();
+    assert.equal(attempt.data.final_paragraphs.p_full, finalExpression);
+    assert.equal(attempt.data.revision_notes.language, '删去了一句重复的话。');
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    assert.equal(ui.field('writing-reflection-learned').disabled, false);
+    assert.match(ui.field('writing-stage-content').textContent, /我自己删去重复评价后的最后一稿/);
 });

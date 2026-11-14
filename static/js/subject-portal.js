@@ -57,6 +57,7 @@
     }
 
     function showAuth(view = 'login', clearMessages = true) {
+        document.body.dataset.view = 'auth';
         el('auth-view').hidden = false;
         el('learning-view').hidden = true;
         el('signed-in-actions').hidden = true;
@@ -419,6 +420,7 @@
             displayAccount();
             el('auth-view').hidden = true;
             el('learning-view').hidden = false;
+            document.body.dataset.view = 'learning';
             el('signed-in-actions').hidden = false;
             el('session-loading').hidden = true;
             feedback('portal-error');
@@ -499,6 +501,7 @@
         document.title = config.title || `${config.name}学习空间`;
         const character = config.id === 'math' ? '数' : '语';
         el('header-subject-name').textContent = config.name;
+        el('auth-brand-title').textContent = `${config.name}学习`;
         el('auth-subject-badge').textContent = `${config.name} · 学习空间`;
         el('dashboard-subject-badge').textContent = `${config.name} · 学习空间`;
         el('footer-subject').textContent = `${config.name}学习空间`;
@@ -509,7 +512,7 @@
             el('auth-description').textContent = config.description;
             el('dashboard-description').textContent = config.description;
         }
-        document.querySelector('meta[name="theme-color"]').setAttribute('content', config.id === 'math' ? '#4b82d2' : '#e96b50');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', config.id === 'math' ? '#1cb0f6' : '#8b5cf6');
         for (const [stage, start, end] of [['小学', 1, 5], ['初中', 6, 9], ['高中', 10, 12]]) {
             const group = document.createElement('optgroup');
             group.label = stage;

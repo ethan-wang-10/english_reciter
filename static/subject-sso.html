@@ -6,20 +6,25 @@
     <meta name="referrer" content="no-referrer">
     <title>正在切换学科 · 学科学习</title>
     <style>
-        :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; color: #213e3b; background: #f4f8f5; }
+        :root { color-scheme: light; --accent: #58cc02; --accent-dark: #46a302; --accent-pale: #e4ffce; font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; color: #3c3c3c; background: #f6fbf3; }
         * { box-sizing: border-box; }
-        body { min-height: 100vh; margin: 0; padding: 24px; display: grid; place-items: center; }
-        main { max-width: 420px; width: 100%; padding: 36px; border: 1px solid #dce8df; border-radius: 24px; background: white; box-shadow: 0 14px 50px #2247310a; }
-        .mark { color: #2b7451; font-size: 13px; font-weight: 750; letter-spacing: .12em; }
+        body { min-height: 100vh; margin: 0; padding: 24px; display: grid; place-items: center; background: linear-gradient(165deg, #e8f8ff, var(--accent-pale) 48%, #fff8e0); }
+        body[data-subject="chinese"] { --accent: #8b5cf6; --accent-dark: #6d3ed4; --accent-pale: #f1ebff; }
+        body[data-subject="math"] { --accent: #1cb0f6; --accent-dark: #1899d6; --accent-pale: #e8f7ff; }
+        main { max-width: 420px; width: 100%; padding: 36px; border: 2px solid #e5e5e5; border-radius: 26px; background: white; box-shadow: 0 8px 0 color-mix(in srgb, var(--accent-dark) 15%, transparent); }
+        .mark { color: var(--accent-dark); font-size: 13px; font-weight: 800; letter-spacing: .06em; display: flex; align-items: center; gap: 10px; }
+        .mark img { width: 40px; height: 40px; }
         h1 { font-size: 24px; margin: 18px 0 12px; }
         p { line-height: 1.8; font-size: 15px; color: #62706b; margin: 0 0 24px; }
-        a { display: inline-block; border-radius: 12px; color: white; background: #286a4c; padding: 12px 18px; text-decoration: none; font-weight: 650; }
+        a { display: inline-block; border-radius: 18px; color: white; background: var(--accent); box-shadow: 0 4px 0 var(--accent-dark); padding: 12px 18px; text-decoration: none; font-weight: 800; }
+        a:active { transform: translateY(4px); box-shadow: none; }
+        a:focus-visible { outline: 3px solid var(--accent-dark); outline-offset: 5px; }
         [hidden] { display: none !important; }
     </style>
 </head>
-<body>
+<body data-subject="{{ sso_config.current_site }}">
     <main>
-        <span class="mark">学科学习</span>
+        <span class="mark"><img src="/static/brand/logo-mark.svg" alt="" width="40" height="40">学科学习</span>
         <h1 id="sso-title">正在切换学科</h1>
         <p id="sso-status" role="status" aria-live="polite">正在确认你的登录状态，请稍候。</p>
         <a id="sso-return" href="/" hidden>返回学科首页</a>
