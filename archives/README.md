@@ -25,3 +25,27 @@ preserves the existing drafts; `--force` alone does not perform that handover.
 The adjacent `.sha256` file verifies the compressed archive; the archive's internal
 manifest verifies every restored file. This is a local authoring-material archive,
 not a backup of the production learning databases.
+
+## Root scratch cleanup (2026-11-14)
+
+`question-authoring-scratch-20261114.tar.gz` preserves 219 previously untracked
+files left in the main checkout: 110 audit input/correction JSON files, 108
+`.tmp` scripts, and `rebuild_0843_0845.py`. They are historical authoring materials,
+not application source dependencies. They are separate from the September archive;
+identical copies were not found in that archive or the authoring output tree.
+
+The archive contains `files/` with the original root filenames and an
+`ARCHIVE_MANIFEST.json` recording each path, byte count, SHA-256, and original
+modification time. It excludes runtime user data, wordbank backups and credentials.
+All 219 members were verified against the originals before root cleanup. The
+adjacent `.sha256` file verifies the compressed archive.
+
+Extract into an empty directory to inspect or recover individual files. Archived
+remote-maintenance and submission scripts are historical records: inspect and adapt
+them before use; do not run them as part of the application or deployment.
+
+The same cleanup removes 12 PDF output copies whose bytes match tracked published
+PDFs, five unreferenced intermediate hashed assets and one empty `?` file. The
+wordbank maintenance backup is kept locally under `backups/cleanup-20261114/`,
+which is excluded from Git. Application source, current assets, published PDFs,
+existing archives and learning data remain in place.
