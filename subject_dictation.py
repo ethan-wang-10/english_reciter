@@ -280,8 +280,12 @@ class DictationStore:
                     connection.executescript('BEGIN IMMEDIATE;\n' + SCHEMA + '\nCOMMIT;')
                 connection.execute('BEGIN IMMEDIATE')
             else:
-                connection = sqlite3.connect(self.path.resolve().as_uri() + '?mode=ro', uri=True, timeout=20)
-                _schema(connection)
+                # Another worker may already have created the SQLite file while
+                # its first schema transaction is still uncommitted. Wait only
+                # for initialization; business reads do not hold this lock.
+                with interprocess_file_lock(self.path.with_suffix('.schema.lock')):
+                    connection = sqlite3.connect(self.path.resolve().as_uri() + '?mode=ro', uri=True, timeout=20)
+                    _schema(connection)
             connection.row_factory = sqlite3.Row
             yield connection
             if write:

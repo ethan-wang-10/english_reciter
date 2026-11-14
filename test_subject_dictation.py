@@ -286,9 +286,10 @@ def test_filesystem_write_errors_return_retryable_failure_and_preserve_words(bro
     assert save(browser).status_code == 200
     def unavailable_lock(_):
         raise PermissionError('read-only volume')
-    monkeypatch.setattr('subject_dictation.interprocess_file_lock', unavailable_lock)
-    response = save(browser, words('新词语'), revision=1)
-    assert response.status_code == 503
+    with monkeypatch.context() as patch:
+        patch.setattr('subject_dictation.interprocess_file_lock', unavailable_lock)
+        response = save(browser, words('新词语'), revision=1)
+        assert response.status_code == 503
     current = browser.client.get(uri(), headers=browser.headers).json['wordlist']
     assert current['revision'] == 1 and [item['text'] for item in current['words']] == ['潮水', '笼罩']
 
@@ -503,6 +504,89 @@ def test_concurrent_mistake_merges_do_not_lose_either_list(browser):
     assert {word['text'] for word in get_mistakes(browser).json['items'][0]['words']} == {'共同词语', '潮水', '星光'}
 
 
+def test_route_waits_for_another_workers_first_schema_commit(browser, monkeypatch):
+    """Hold real DDL uncommitted so the second route sees an existing empty DB."""
+    from contextlib import contextmanager
+    from threading import Event, get_ident
+    import subject_dictation
+
+    schema_uncommitted, allow_commit, reader_progress = Event(), Event(), Event()
+    original_connect = sqlite3.connect
+    original_lock = subject_dictation.interprocess_file_lock
+    reader_identity, early_results = [], []
+
+    class PausedInitialization(sqlite3.Connection):
+        def executescript(self, sql):
+            if not schema_uncommitted.is_set():
+                assert sql.rstrip().endswith('COMMIT;')
+                cursor = super().executescript(sql.rstrip()[:-len('COMMIT;')])
+                assert self.in_transaction
+                schema_uncommitted.set()
+                assert allow_commit.wait(10), 'Test did not release the initializing worker'
+                self.commit()
+                return cursor
+            return super().executescript(sql)
+
+    def connect(*args, **kwargs):
+        kwargs['factory'] = PausedInitialization
+        return original_connect(*args, **kwargs)
+
+    @contextmanager
+    def observed_lock(path):
+        if reader_identity and get_ident() == reader_identity[0]:
+            # Signal before blocking on the real schema lock, without sleeping.
+            reader_progress.set()
+        with original_lock(path):
+            yield
+
+    monkeypatch.setattr(subject_dictation.sqlite3, 'connect', connect)
+    monkeypatch.setattr(subject_dictation, 'interprocess_file_lock', observed_lock)
+
+    def merge(text, reader=False):
+        if reader:
+            reader_identity.append(get_ident())
+        with browser.app.test_client() as client:
+            response = client.post(PREFIX + '/mistakes', headers=browser.headers,
+                                   json={'items': [mistake_item(['共同词语', text])]})
+            result = response.status_code, response.json
+            if reader and not allow_commit.is_set():
+                early_results.append(result)
+                reader_progress.set()
+            return result
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(merge, '潮水')
+        try:
+            assert schema_uncommitted.wait(5), 'Initializing worker did not reach its schema transaction'
+            assert database(browser).is_file()
+            reader = pool.submit(merge, '星光', True)
+            assert reader_progress.wait(5), 'Concurrent route did not reach its schema check'
+            assert early_results == [], 'A concurrent reader treated initialization as corruption: ' + repr(early_results)
+        finally:
+            allow_commit.set()
+        results = [writer.result(timeout=5), reader.result(timeout=5)]
+    assert [status for status, _ in results] == [200, 200]
+    assert sum(result['added_count'] for _, result in results) == 3
+    assert sum(result['existing_count'] for _, result in results) == 1
+    assert {word['text'] for word in get_mistakes(browser).json['items'][0]['words']} == {'共同词语', '潮水', '星光'}
+
+
+def test_read_processing_does_not_hold_the_short_schema_lock(browser):
+    assert save(browser).status_code == 200
+    store = DictationStore(database(browser))
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        with store._connection() as connection:
+            assert connection.execute('SELECT COUNT(*) FROM dictation_wordlists').fetchone()[0] == 1
+            writer = pool.submit(store.save_wordlist, BOOK_ID, LESSON, 1, words('另一个页面的更新'), 'alice')
+            # The read connection stays open while another worker acquires the
+            # schema lock and commits, so it cannot cover the whole read scope.
+            assert writer.result(timeout=5)['wordlist']['revision'] == 2
+    finally:
+        pool.shutdown(wait=True)
+    assert store.get_wordlist(BOOK_ID, LESSON)['words'][0]['text'] == '另一个页面的更新'
+
+
 def test_concurrent_additions_cannot_exceed_the_persisted_lesson_limit(browser):
     assert add_mistakes(browser, [mistake_item(['词' + str(index) for index in range(999)])]).status_code == 200
     def merge(text):
@@ -604,13 +688,14 @@ def test_corrupted_mistake_content_is_not_hidden_or_overwritten(browser, stateme
     assert database(browser).read_bytes() == before
 
 
-def test_malformed_existing_sqlite_file_is_not_reinitialized_as_an_empty_mistake_book(browser):
+@pytest.mark.parametrize('original', [b'', b'broken-sqlite-file'])
+def test_malformed_existing_sqlite_file_is_not_reinitialized_as_an_empty_mistake_book(browser, original):
     path = database(browser)
     path.parent.mkdir(parents=True)
-    path.write_bytes(b'broken-sqlite-file')
+    path.write_bytes(original)
     assert get_mistakes(browser).status_code == 503
     assert add_mistakes(browser).status_code == 503
-    assert path.read_bytes() == b'broken-sqlite-file'
+    assert path.read_bytes() == original
 
 
 def test_mistake_storage_failure_preserves_the_existing_snapshot(browser, monkeypatch):
@@ -618,7 +703,8 @@ def test_mistake_storage_failure_preserves_the_existing_snapshot(browser, monkey
     before = get_mistakes(browser).json
     def unavailable_lock(_):
         raise PermissionError('read-only volume')
-    monkeypatch.setattr('subject_dictation.interprocess_file_lock', unavailable_lock)
-    assert add_mistakes(browser, [mistake_item(['新词'])]).status_code == 503
-    assert remove_mistakes(browser, ['潮水']).status_code == 503
+    with monkeypatch.context() as patch:
+        patch.setattr('subject_dictation.interprocess_file_lock', unavailable_lock)
+        assert add_mistakes(browser, [mistake_item(['新词'])]).status_code == 503
+        assert remove_mistakes(browser, ['潮水']).status_code == 503
     assert get_mistakes(browser).json == before
