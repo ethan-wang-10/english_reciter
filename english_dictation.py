@@ -12,6 +12,7 @@ from subject_dictation import DictationError, DictationStore, _id, _word, valida
 
 BOOK_ID = 'english-custom-dictation'
 DEFAULT_LESSON_ID = 'default-list'
+GRADE4_BOOK_ID = 'shanghai-english-grade4-term1-2026'
 MAX_TEXT = 500
 MAX_REQUEST_BYTES = 3_500_000
 MAX_MISTAKE_REQUEST_BYTES = 13_000_000
@@ -23,6 +24,23 @@ DEFAULT_BOOK = {
     'lessons': [{'id': DEFAULT_LESSON_ID, 'title': '我的单词与句子', 'number': None,
                  'custom': False, 'unit': '我的清单'}],
 }
+GRADE4_UNITS = (
+    'My school', 'My classmates', 'Animals and their homes', 'Our birthday', 'Visiting places',
+    "It's autumn!", 'My healthy breakfast', 'Be honest', 'What time is it?', 'Weather',
+)
+GRADE4_BOOK = {
+    'id': GRADE4_BOOK_ID, 'title': '英语四年级上册', 'grade': 4, 'term': 1,
+    'edition': '上海五四学制 · 2026年7月第一版',
+    'description': '按课本单元整理单词、短语和句子，听完一条，写好后再继续。',
+    'catalog_note': '每个单元分为单词与短语、句子两份清单，内容由你录入。',
+    'lessons': [
+        {'id': f'unit-{number:02d}-{kind}', 'title': title, 'number': None,
+         'custom': False, 'unit': f'Unit {number} · {unit}'}
+        for number, unit in enumerate(GRADE4_UNITS, 1)
+        for kind, title in (('words', '单词与短语'), ('sentences', '句子'))
+    ],
+}
+BOOKS = (GRADE4_BOOK, DEFAULT_BOOK)
 
 
 def register_english_dictation_routes(app, services):
@@ -38,21 +56,22 @@ def register_english_dictation_routes(app, services):
         return response
 
     def book(book_id):
-        if _id(book_id) != BOOK_ID:
+        _id(book_id)
+        selected = next((item for item in BOOKS if item['id'] == book_id), None)
+        if selected is None:
             raise DictationError('默写清单不存在，请重新选择。', 404)
-        return deepcopy(DEFAULT_BOOK)
+        return deepcopy(selected)
 
     def store(username):
         return DictationStore(services.DATA_DIR / username / 'subjects/english/dictation.sqlite3',
                               max_text=MAX_TEXT, max_spoken=MAX_TEXT)
 
-    def merged_lessons(username):
-        items = [*deepcopy(DEFAULT_BOOK['lessons']), *store(username).list_custom_lessons(BOOK_ID)]
-        return sorted(items, key=lambda item: (item['number'] is None, item['number'] or 10000, item['custom'], item['id']))
+    def merged_lessons(username, selected):
+        return [*deepcopy(selected['lessons']), *store(username).list_custom_lessons(selected['id'])]
 
     def lesson(username, book_id, lesson_id):
-        book(book_id); _id(lesson_id)
-        result = next((entry for entry in merged_lessons(username) if entry['id'] == lesson_id), None)
+        selected = book(book_id); _id(lesson_id)
+        result = next((entry for entry in merged_lessons(username, selected) if entry['id'] == lesson_id), None)
         if result is None:
             raise DictationError('默写清单不存在，请重新选择。', 404)
         return result
@@ -69,28 +88,30 @@ def register_english_dictation_routes(app, services):
     @routes.get('/books')
     @services.token_required
     def list_books(username):
-        return jsonify({'items': [deepcopy(DEFAULT_BOOK)], 'count': 1})
+        return jsonify({'items': deepcopy(BOOKS), 'count': len(BOOKS)})
 
     @routes.get('/lessons')
     @services.token_required
     def list_lessons(username):
-        book(request.args.get('book_id'))
-        items = merged_lessons(username)
+        selected = book(request.args.get('book_id'))
+        items = merged_lessons(username, selected)
         return jsonify({'items': items, 'count': len(items)})
 
     @routes.post('/lessons')
     @services.token_required
     def add_lesson(username):
         data = body(('book_id', 'title'), ('number',))
-        book(data['book_id'])
-        item, created = store(username).create_lesson(BOOK_ID, data['title'], data.get('number'), getattr(g, 'login_username', username))
+        selected = book(data['book_id'])
+        item, created = store(username).create_lesson(selected['id'], data['title'], data.get('number'), getattr(g, 'login_username', username))
         return jsonify({'lesson': item, 'duplicate': not created}), 201 if created else 200
 
     @routes.get('/wordlists')
     @services.token_required
     def list_wordlists(username):
-        book(request.args.get('book_id'))
-        items = store(username).list_wordlists(BOOK_ID)
+        selected = book(request.args.get('book_id'))
+        order = {entry['id']: index for index, entry in enumerate(merged_lessons(username, selected))}
+        items = store(username).list_wordlists(selected['id'])
+        items.sort(key=lambda item: (order.get(item['lesson_id'], len(order)), item['lesson_id']))
         return jsonify({'items': items, 'count': len(items)})
 
     @routes.get('/wordlists/<book_id>/<lesson_id>')
@@ -109,13 +130,13 @@ def register_english_dictation_routes(app, services):
     @routes.get('/mistakes')
     @services.token_required
     def list_mistakes(username):
-        book(request.args.get('book_id'))
-        current_lessons = {entry['id']: entry for entry in merged_lessons(username)}
-        items = store(username).list_mistakes(BOOK_ID)
+        selected = book(request.args.get('book_id'))
+        current_lessons = {entry['id']: entry for entry in merged_lessons(username, selected)}
+        order = {lesson_id: index for index, lesson_id in enumerate(current_lessons)}
+        items = store(username).list_mistakes(selected['id'])
         for item in items:
             item['lesson'] = current_lessons.get(item['lesson_id'], item['lesson'])
-        items.sort(key=lambda item: (item['lesson']['number'] is None, item['lesson']['number'] or 10000,
-                                     item['lesson']['custom'], item['lesson_id']))
+        items.sort(key=lambda item: (order.get(item['lesson_id'], len(order)), item['lesson_id']))
         return jsonify({'items': items, 'count': len(items), 'word_count': sum(item['word_count'] for item in items)})
 
     @routes.post('/mistakes')
@@ -123,12 +144,12 @@ def register_english_dictation_routes(app, services):
     def add_mistakes(username):
         data = body(('items',), maximum=MAX_MISTAKE_REQUEST_BYTES)
         items = validate_mistake_items(data['items'], max_text=MAX_TEXT, max_spoken=MAX_TEXT)
-        current_lessons = None
+        lessons_by_book = {}
         for item in items:
-            book(item['book_id'])
-            if current_lessons is None:
-                current_lessons = {entry['id']: entry for entry in merged_lessons(username)}
-            entry = current_lessons.get(item['lesson_id'])
+            selected = book(item['book_id'])
+            if selected['id'] not in lessons_by_book:
+                lessons_by_book[selected['id']] = {entry['id']: entry for entry in merged_lessons(username, selected)}
+            entry = lessons_by_book[selected['id']].get(item['lesson_id'])
             if entry is None:
                 raise DictationError('默写清单不存在，请重新选择。', 404)
             item['lesson'] = entry
@@ -137,8 +158,8 @@ def register_english_dictation_routes(app, services):
     @routes.delete('/mistakes/<book_id>/<lesson_id>')
     @services.token_required
     def remove_mistakes(username, book_id, lesson_id):
-        book(book_id); _id(lesson_id)
-        current_lessons = {entry['id'] for entry in merged_lessons(username)}
+        selected = book(book_id); _id(lesson_id)
+        current_lessons = {entry['id'] for entry in merged_lessons(username, selected)}
         if (lesson_id not in current_lessons
                 and not any(group['lesson_id'] == lesson_id for group in store(username).list_mistakes(book_id))):
             raise DictationError('默写清单不存在，请重新选择。', 404)

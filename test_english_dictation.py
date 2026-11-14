@@ -11,7 +11,7 @@ import wave
 from flask import Flask, g, jsonify, request
 import pytest
 
-from english_dictation import BOOK_ID, DEFAULT_LESSON_ID, register_english_dictation_routes
+from english_dictation import BOOK_ID, DEFAULT_LESSON_ID, GRADE4_BOOK_ID, register_english_dictation_routes
 from subject_dictation import DictationStore, register_subject_dictation_routes
 
 
@@ -71,8 +71,8 @@ def browser(tmp_path):
                            parent={'Authorization': 'Bearer parent-token'}, bob={'Authorization': 'Bearer bob-token'})
 
 
-def word_url(lesson_id=DEFAULT_LESSON_ID):
-    return PREFIX + '/wordlists/' + BOOK_ID + '/' + lesson_id
+def word_url(lesson_id=DEFAULT_LESSON_ID, book_id=BOOK_ID):
+    return PREFIX + '/wordlists/' + book_id + '/' + lesson_id
 
 
 def database(browser, name='alice'):
@@ -83,31 +83,31 @@ def entries(*texts):
     return [{'text': value} for value in texts]
 
 
-def save(browser, words, revision=0, headers=None, lesson_id=DEFAULT_LESSON_ID):
-    return browser.client.put(word_url(lesson_id), headers=headers or browser.headers,
+def save(browser, words, revision=0, headers=None, lesson_id=DEFAULT_LESSON_ID, book_id=BOOK_ID):
+    return browser.client.put(word_url(lesson_id, book_id), headers=headers or browser.headers,
                               json={'base_revision': revision, 'words': words})
 
 
-def group(words, lesson_id=DEFAULT_LESSON_ID):
-    return {'book_id': BOOK_ID, 'lesson_id': lesson_id, 'words': words}
+def group(words, lesson_id=DEFAULT_LESSON_ID, book_id=BOOK_ID):
+    return {'book_id': book_id, 'lesson_id': lesson_id, 'words': words}
 
 
 def mistakes(browser, items, headers=None):
     return browser.client.post(PREFIX + '/mistakes', headers=headers or browser.headers, json={'items': items})
 
 
-def read_mistakes(browser, headers=None):
-    return browser.client.get(PREFIX + '/mistakes?book_id=' + BOOK_ID, headers=headers or browser.headers)
+def read_mistakes(browser, headers=None, book_id=BOOK_ID):
+    return browser.client.get(PREFIX + '/mistakes?book_id=' + book_id, headers=headers or browser.headers)
 
 
 def audio(browser, text='Hello, world!', headers=None):
     return browser.client.post(PREFIX + '/audio', headers=headers or browser.headers, json={'text': text})
 
 
-def test_default_list_is_ready_without_creating_a_database_or_inventing_a_textbook(browser):
+def test_legacy_default_list_keeps_its_original_ids_after_the_textbook_directory_is_added(browser):
     books = browser.client.get(PREFIX + '/books', headers=browser.headers)
-    assert books.status_code == 200 and books.json['count'] == 1
-    book = books.json['items'][0]
+    assert books.status_code == 200 and books.json['count'] == 2
+    book = books.json['items'][1]
     assert (book['id'], book['title']) == (BOOK_ID, '我的英语默写')
     assert book['lessons'] == [{'id': DEFAULT_LESSON_ID, 'title': '我的单词与句子', 'number': None, 'custom': False, 'unit': '我的清单'}]
     for path in ('/lessons?book_id=' + BOOK_ID, '/wordlists?book_id=' + BOOK_ID,
@@ -115,6 +115,123 @@ def test_default_list_is_ready_without_creating_a_database_or_inventing_a_textbo
         response = browser.client.get(PREFIX + path, headers=browser.headers)
         assert response.status_code == 200 and 'no-store' in response.headers['Cache-Control']
     assert not browser.data_dir.exists()
+
+
+def test_grade_four_catalog_has_confirmed_units_and_twenty_empty_lists_without_creating_storage(browser):
+    response = browser.client.get(PREFIX + '/books', headers=browser.headers)
+    assert [book['id'] for book in response.json['items']] == [GRADE4_BOOK_ID, BOOK_ID]
+    book = response.json['items'][0]
+    assert (book['title'], book['grade'], book['term']) == ('英语四年级上册', 4, 1)
+    assert '上海五四' in book['edition'] and '2026年7月第一版' in book['edition']
+    units = ['My school', 'My classmates', 'Animals and their homes', 'Our birthday', 'Visiting places',
+             "It's autumn!", 'My healthy breakfast', 'Be honest', 'What time is it?', 'Weather']
+    expected = [{'id': f'unit-{index:02d}-{kind}', 'title': title, 'number': None,
+                 'custom': False, 'unit': f'Unit {index} · {unit}'}
+                for index, unit in enumerate(units, 1)
+                for kind, title in (('words', '单词与短语'), ('sentences', '句子'))]
+    assert book['lessons'] == expected
+    directory = browser.client.get(PREFIX + '/lessons?book_id=' + GRADE4_BOOK_ID, headers=browser.parent)
+    assert directory.json == {'items': expected, 'count': 20}
+    for lesson in expected:
+        empty = browser.client.get(word_url(lesson['id'], GRADE4_BOOK_ID), headers=browser.headers)
+        assert empty.status_code == 200 and empty.json['wordlist']['words'] == [] and empty.json['wordlist']['revision'] == 0
+        assert empty.json['lesson'] == lesson
+    assert browser.client.get(PREFIX + '/wordlists?book_id=' + GRADE4_BOOK_ID, headers=browser.headers).json == {'items': [], 'count': 0}
+    assert read_mistakes(browser, book_id=GRADE4_BOOK_ID).json == {'items': [], 'count': 0, 'word_count': 0}
+    assert not browser.data_dir.exists()
+
+
+def test_grade_four_words_and_sentences_keep_their_own_contents_and_legacy_lists(browser):
+    legacy = save(browser, entries('My original list')).json['wordlist']
+    word_list = save(browser, entries('school', 'classmate'), headers=browser.parent,
+                     lesson_id='unit-01-words', book_id=GRADE4_BOOK_ID)
+    sentence = "It's a beautiful school. " + 'A' * 475
+    assert len(sentence) == 500
+    sentence_list = save(browser, entries(sentence), headers=browser.parent,
+                         lesson_id='unit-01-sentences', book_id=GRADE4_BOOK_ID)
+    assert word_list.status_code == sentence_list.status_code == 200
+    assert word_list.json['wordlist']['updated_by'] == sentence_list.json['wordlist']['updated_by'] == 'alice_parent'
+    assert browser.client.get(word_url(), headers=browser.headers).json['wordlist'] == legacy
+    assert browser.client.get(word_url('unit-01-words', GRADE4_BOOK_ID), headers=browser.headers).json['wordlist']['words'] == [
+        {'text': 'school', 'spoken_text': 'school'}, {'text': 'classmate', 'spoken_text': 'classmate'}]
+    assert browser.client.get(word_url('unit-01-sentences', GRADE4_BOOK_ID), headers=browser.headers).json['wordlist']['words'] == [{'text': sentence, 'spoken_text': sentence}]
+    listed = browser.client.get(PREFIX + '/wordlists?book_id=' + GRADE4_BOOK_ID, headers=browser.headers).json
+    assert [item['lesson_id'] for item in listed['items']] == ['unit-01-words', 'unit-01-sentences']
+    assert browser.client.get(PREFIX + '/wordlists?book_id=' + BOOK_ID, headers=browser.headers).json['items'] == [legacy]
+    assert browser.client.get(word_url('unit-01-words', GRADE4_BOOK_ID), headers=browser.bob).json['wordlist']['words'] == []
+    assert not database(browser, 'alice_parent').exists() and not database(browser, 'bob').exists()
+
+
+def test_custom_lessons_are_scoped_to_each_book_and_follow_the_fixed_directory(browser):
+    custom = {}
+    for book_id in (GRADE4_BOOK_ID, BOOK_ID):
+        response = browser.client.post(PREFIX + '/lessons', headers=browser.parent,
+                                       json={'book_id': book_id, 'title': 'My additional list', 'number': 1})
+        assert response.status_code == 201 and response.json['lesson']['book_id'] == book_id
+        custom[book_id] = response.json['lesson']['id']
+    assert custom[GRADE4_BOOK_ID] != custom[BOOK_ID]
+    for book_id, lesson_id in custom.items():
+        directory = browser.client.get(PREFIX + '/lessons?book_id=' + book_id, headers=browser.headers).json['items']
+        assert directory[-1]['id'] == lesson_id and directory[-1]['custom'] is True
+        assert directory[0]['id'] == ('unit-01-words' if book_id == GRADE4_BOOK_ID else DEFAULT_LESSON_ID)
+        assert save(browser, entries('Own material'), book_id=book_id, lesson_id=lesson_id).status_code == 200
+        other_book = BOOK_ID if book_id == GRADE4_BOOK_ID else GRADE4_BOOK_ID
+        assert browser.client.get(word_url(lesson_id, other_book), headers=browser.headers).status_code == 404
+        assert browser.client.get(word_url(lesson_id, book_id), headers=browser.bob).status_code == 404
+
+
+def test_mixed_book_mistakes_validate_each_directory_and_keep_exact_sources(browser):
+    assert save(browser, entries('school'), book_id=GRADE4_BOOK_ID, lesson_id='unit-01-words').status_code == 200
+    assert save(browser, entries('school')).status_code == 200
+    marked = mistakes(browser, [group(entries('school')),
+                                group(entries('This is our school.'), 'unit-01-sentences', GRADE4_BOOK_ID),
+                                group(entries('school'), 'unit-01-words', GRADE4_BOOK_ID)], headers=browser.parent)
+    assert marked.status_code == 200 and marked.json == {'added_count': 3, 'existing_count': 0}
+    textbook = read_mistakes(browser, book_id=GRADE4_BOOK_ID).json
+    legacy = read_mistakes(browser).json
+    assert textbook['word_count'] == 2 and legacy['word_count'] == 1
+    assert [item['lesson_id'] for item in textbook['items']] == ['unit-01-words', 'unit-01-sentences']
+    assert all(item['lesson']['unit'] == 'Unit 1 · My school' for item in textbook['items'])
+    assert legacy['items'][0]['lesson']['id'] == DEFAULT_LESSON_ID and legacy['items'][0]['lesson']['unit'] == '我的清单'
+    assert all(word['updated_by'] == 'alice_parent' for item in [*textbook['items'], *legacy['items']] for word in item['words'])
+    removed = browser.client.delete(PREFIX + '/mistakes/' + GRADE4_BOOK_ID + '/unit-01-words',
+                                    headers=browser.parent, json={'words': ['school']})
+    assert removed.json == {'removed_count': 1} and read_mistakes(browser).json == legacy
+    assert browser.client.get(word_url('unit-01-words', GRADE4_BOOK_ID), headers=browser.headers).json['wordlist']['word_count'] == 1
+    assert read_mistakes(browser, headers=browser.bob, book_id=GRADE4_BOOK_ID).json['items'] == []
+
+
+@pytest.mark.parametrize('first_book', [GRADE4_BOOK_ID, BOOK_ID])
+def test_invalid_cross_book_list_in_a_mixed_batch_rolls_back_every_item(browser, first_book):
+    first = (group(entries('Keep'), 'unit-01-words', GRADE4_BOOK_ID) if first_book == GRADE4_BOOK_ID
+             else group(entries('Keep')))
+    invalid = (group(entries('Invalid'), 'unit-01-words', BOOK_ID) if first_book == GRADE4_BOOK_ID
+               else group(entries('Invalid'), DEFAULT_LESSON_ID, GRADE4_BOOK_ID))
+    assert mistakes(browser, [first, invalid]).status_code == 404
+    assert not browser.data_dir.exists()
+    assert mistakes(browser, [first]).status_code == 200
+    before = read_mistakes(browser, book_id=first_book).json
+    assert mistakes(browser, [group(entries('Must not be added'), first['lesson_id'], first_book), invalid]).status_code == 404
+    assert read_mistakes(browser, book_id=first_book).json == before
+
+
+def test_reused_list_ids_in_two_books_still_have_independent_words_and_mistakes(browser, monkeypatch):
+    import english_dictation
+    # Future books can reuse a list ID; the database key must include book_id.
+    books = deepcopy(english_dictation.BOOKS)
+    books[0]['lessons'][0]['id'] = DEFAULT_LESSON_ID
+    monkeypatch.setattr(english_dictation, 'BOOKS', books)
+    for book_id, text in ((GRADE4_BOOK_ID, 'Textbook content'), (BOOK_ID, 'Original custom content')):
+        assert save(browser, entries(text), book_id=book_id).status_code == 200
+    marked = mistakes(browser, [group([{'text': 'same', 'spoken_text': 'Textbook reading'}], book_id=GRADE4_BOOK_ID),
+                                group([{'text': 'same', 'spoken_text': 'Original reading'}])])
+    assert marked.json == {'added_count': 2, 'existing_count': 0}
+    assert browser.client.get(word_url(book_id=GRADE4_BOOK_ID), headers=browser.headers).json['wordlist']['words'][0]['text'] == 'Textbook content'
+    assert browser.client.get(word_url(), headers=browser.headers).json['wordlist']['words'][0]['text'] == 'Original custom content'
+    textbook = read_mistakes(browser, book_id=GRADE4_BOOK_ID).json['items'][0]
+    original = read_mistakes(browser).json['items'][0]
+    assert textbook['words'][0]['spoken_text'] == 'Textbook reading' and textbook['lesson']['unit'] == 'Unit 1 · My school'
+    assert original['words'][0]['spoken_text'] == 'Original reading' and original['lesson']['unit'] == '我的清单'
 
 
 def test_every_english_route_uses_shared_authentication(browser):

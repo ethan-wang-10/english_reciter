@@ -1,6 +1,8 @@
 # 英语生词默写
 
-登录英语站后，在「生词默写」打开「我的单词与句子」，也可以创建按课文或单元命名的新清单。家长账号与关联学生共用清单及错题本，其他学生的数据各自隔离。
+登录英语站后，在「生词默写」选择课本。默认提供上海五四学制 2026 新版「英语四年级上册」，Unit 1–10 目录初始收起；展开 Unit 后选择「单词与短语」或「句子」，再录入自己的默写内容。也可以在当前课本下添加额外清单。家长账号与关联学生共用清单及错题本，其他学生的数据各自隔离。
+
+原有清单和错题保留在「我的英语默写」选项中，原「我的单词与句子」及自建清单可以继续使用。不同课本、不同 Unit 的单词和句子分别保存；错题显示完整 Unit 来源，可在同一本课本内选择多份清单一起复习。
 
 每行一条，可混合单词、短语、完整句子，例如：
 
@@ -20,3 +22,21 @@ Where is my schoolbag?
 完成后自行对照纸上的答案，勾选错误条目并点击「加入错题本」。错题按来源清单分组，可选择多份清单合并复习，熟练后点击条目旁的 × 移除；移除错题不会修改原清单。本模块不自动判分，不影响每日任务、积分或考前准备成绩。
 
 数据位于 `user_data_simple/<学生>/subjects/english/dictation.sqlite3`。接口前缀为 `/api/subjects/english/dictation`；语音接口返回私有 WAV。复用语文默写的版本冲突与事务保护，并保持语文的原有内容长度限制。
+
+
+四上目录沿用已核对的内置期中和期末材料，只提供目录，默写词句由用户按老师要求录入：
+
+| Unit | 主题 |
+|---|---|
+| 1 | My school |
+| 2 | My classmates |
+| 3 | Animals and their homes |
+| 4 | Our birthday |
+| 5 | Visiting places |
+| 6 | It’s autumn! |
+| 7 | My healthy breakfast |
+| 8 | Be honest |
+| 9 | What time is it? |
+| 10 | Weather |
+
+教材信息与目录来源见 `builtin_exams/shanghai-grade4-u1-u4.json`、`builtin_exams/shanghai-grade4-u5-u10-final.json` 及 [新版四上目录](http://www.dzkbw.com/books/hjb/yingyu/ws4s_2026/)。现有自建清单 ID 和保存位置不变，无需迁移旧数据。

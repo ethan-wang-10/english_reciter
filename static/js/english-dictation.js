@@ -14,12 +14,12 @@
         finally { requests.delete(controller); }
     }
     const cloneSources = (sources) => (sources || []).map((source) => ({ book_id: source.book_id,
-        lesson_id: source.lesson_id, title: source.title, number: source.number }));
+        lesson_id: source.lesson_id, title: source.title, number: source.number, unit: source.unit }));
     const cloneWords = (words) => words.map((word) => ({ text: word.text, spoken_text: word.spoken_text || word.text,
         ...(word.sources ? { sources: cloneSources(word.sources) } : {}) }));
     let generation = 0, requestSequence = 0, lessonSequence = 0, viewSequence = 0;
     let boundStudent = '', boundToken = '', boundHostGeneration, active = false, loaded = false, loading = false, saving = false;
-    let books = [], lessons = [], summaries = new Map(), expandedUnits = new Set();
+    let books = [], lessons = [], summaries = new Map(), expandedUnits = new Set(), initializedBooks = new Set();
     let bookId = '', lesson = null, wordlist = null, raw = '', conflict = null;
     let run = null, voices = [], voiceChosen = false, speechEpoch = 0, speaking = false, speechMode = '', utterance = null;
     let repeatTimer = null, watchdog = null, suppressSpaceUp = false;
@@ -30,7 +30,10 @@
 
     function visible() { return active && el('english-dictation-section').classList.contains('active') && !el('english-dictation-section').hidden; }
 
-    function sourceName(source) { return `${source.number ? `${source.number}. ` : ''}${source.title || '我的清单'}`; }
+    function sourceName(source) {
+        const title = `${source.number ? `${source.number}. ` : ''}${source.title || '我的清单'}`;
+        return source.unit ? `${source.unit} · ${title}` : title;
+    }
     function sourceKey(source, word) { return JSON.stringify([source.book_id, source.lesson_id, word.text, word.spoken_text || word.text]); }
     function mergeRunWords(words) {
         const merged = new Map();
@@ -47,7 +50,8 @@
     function mistakeRunWords() {
         return mergeRunWords(mistakeItems.filter((item) => mistakeSelections.has(item.lesson_id)).flatMap((item) =>
             item.words.map((word) => ({ text: word.text, spoken_text: word.spoken_text || word.text,
-                sources: [{ book_id: item.book_id, lesson_id: item.lesson_id, title: item.lesson.title, number: item.lesson.number }] }))));
+                sources: [{ book_id: item.book_id, lesson_id: item.lesson_id, title: item.lesson.title,
+                    number: item.lesson.number, unit: item.lesson.unit }] }))));
     }
     function setMistakeStatus(text, error = false) {
         mistakeStatus = text; mistakeStatusError = error;
@@ -218,14 +222,25 @@
             const unitKey = `${bookId}:${unit}`;
             details.dataset.unit = unitKey;
             details.open = expandedUnits.has(unitKey);
-            const summary = node('summary', unit);
-            summary.appendChild(node('span', `${items.length} 份`));
+            const unitContext = capture(), unitBook = bookId;
+            details.addEventListener('toggle', () => {
+                if (!current(unitContext) || unitBook !== bookId || !container.contains(details)) return;
+                if (details.open) expandedUnits.add(unitKey); else expandedUnits.delete(unitKey);
+            });
+            const summary = node('summary');
+            const unitLabel = node('span', '', 'english-dictation-unit-label');
+            const unitParts = /^(Unit\s+\d+)\s*(?:[·:：–—-]\s*)?(.*)$/iu.exec(unit);
+            if (unitParts) {
+                unitLabel.appendChild(node('strong', unitParts[1], 'english-dictation-unit-number'));
+                if (unitParts[2]) unitLabel.appendChild(node('small', unitParts[2], 'english-dictation-unit-topic'));
+            } else unitLabel.textContent = unit;
+            summary.append(unitLabel, node('span', `${items.length} 份`, 'english-dictation-unit-count'));
             details.appendChild(summary);
             for (const item of items) {
                 const button = node('button', '', 'english-dictation-lesson');
                 button.type = 'button';
                 const title = `${item.number ? `${item.number} ` : ''}${item.title}`;
-                button.setAttribute('aria-label', `选择清单 ${item.title}`);
+                button.setAttribute('aria-label', `选择清单 ${sourceName(item)}`);
                 button.dataset.lessonId = item.id;
                 button.setAttribute('aria-pressed', String(lesson?.id === item.id));
                 button.appendChild(node('span', title));
@@ -241,7 +256,7 @@
     function renderEditor() {
         el('english-dictation-select-prompt').hidden = !!wordlist;
         el('english-dictation-editor').hidden = !wordlist;
-        el('english-dictation-lesson-title').textContent = lesson ? `${lesson.number ? `${lesson.number} ` : ''}${lesson.title}` : '';
+        el('english-dictation-lesson-title').textContent = lesson ? sourceName(lesson) : '';
         el('english-dictation-words').value = raw;
         el('english-dictation-cloud-preview').hidden = true;
         el('english-dictation-cloud-preview').textContent = '';
@@ -392,9 +407,12 @@
             ]);
             if (!current(ctx) || sequence !== requestSequence) return;
             lessons = Array.isArray(directory.items) ? directory.items : [];
-            for (const item of lessons.filter((entry) => entry.id === 'default-list')) expandedUnits.add(`${bookId}:${item.unit || '清单目录'}`);
+            if (bookId === 'english-custom-dictation' && !initializedBooks.has(bookId)) {
+                for (const item of lessons.filter((entry) => entry.id === 'default-list')) expandedUnits.add(`${bookId}:${item.unit || '清单目录'}`);
+            }
+            initializedBooks.add(bookId);
             summaries = new Map((lists.items || []).map((item) => [item.lesson_id, item]));
-            message(lessons.length ? '' : '这个文件夹暂时没有清单，可以添加自己的清单。');
+            message(lessons.length ? '' : '这本教材暂时没有清单，可以添加自己的清单。');
         } catch (error) {
             if (current(ctx) && sequence === requestSequence) {
                 loaded = false;
@@ -404,8 +422,9 @@
             if (current(ctx) && sequence === requestSequence) { loading = false; renderDirectory(); renderControls(); }
         }
         if (current(ctx) && sequence === requestSequence && homeMode === 'mistakes') await loadMistakes();
-        else if (current(ctx) && sequence === requestSequence && lessons.length) {
-            await selectLesson(lessons.find((item) => item.id === 'default-list') || lessons[0]);
+        else if (current(ctx) && sequence === requestSequence && bookId === 'english-custom-dictation') {
+            const defaultList = lessons.find((item) => item.id === 'default-list');
+            if (defaultList) await selectLesson(defaultList);
         }
     }
     async function selectLesson(item) {
@@ -729,10 +748,10 @@
         if (loading || saving || !wordlist || conflict || !visible()) return;
         const ctx = capture(true), startingView = viewSequence;
         if (!await save() || !current(ctx) || startingView !== viewSequence || !visible()) return;
-        const source = { book_id: bookId, lesson_id: lesson.id, title: lesson.title, number: lesson.number };
+        const source = { book_id: bookId, lesson_id: lesson.id, title: lesson.title, number: lesson.number, unit: lesson.unit };
         const words = cloneWords(wordlist.words).map((word) => ({ ...word, sources: cloneSources([source]) }));
         if (!words.length) { message('先录入至少一条，再开始默写。', true); return; }
-        makeRun(words, { ...playbackSettings(), number: lesson.number, title: lesson.title, kind: 'lesson',
+        makeRun(words, { ...playbackSettings(), number: lesson.number, title: sourceName(source), kind: 'lesson',
             book_id: source.book_id, lesson_id: source.lesson_id });
     }
     function playCurrent() {
@@ -842,7 +861,7 @@
         preserveDraft(); active = false; stopSpeech(); cancelRequests(); cachedAudio = null;
         generation += 1; requestSequence += 1; lessonSequence += 1; viewSequence += 1;
         boundStudent = ''; boundToken = ''; boundHostGeneration = undefined; loaded = false; loading = false; saving = false;
-        books = []; lessons = []; summaries = new Map(); expandedUnits = new Set();
+        books = []; lessons = []; summaries = new Map(); expandedUnits = new Set(); initializedBooks = new Set();
         bookId = ''; lesson = null; wordlist = null; raw = ''; conflict = null; run = null; voiceChosen = false;
         mistakeSequence += 1; homeMode = 'lessons'; mistakeItems = []; mistakeSelections = new Set(); mistakeExpanded = new Set();
         mistakeLoading = false; mistakeLoaded = false; mistakeDeleting = false; mistakeStatus = ''; mistakeStatusError = false;
@@ -874,9 +893,9 @@
                 const option = node('option', book.title); option.value = book.id; el('english-dictation-book').appendChild(option);
             }
             loaded = true; loading = false;
-            if (books.length) await loadBook(books[0].id);
-            else message('文件夹目录暂未准备好，请稍后再来。');
-        } catch (error) { if (current(ctx)) message(error.message || '文件夹暂未能读取，请重新打开生词默写。', true); }
+            if (books.length) await loadBook((books.find((book) => book.id === 'shanghai-english-grade4-term1-2026') || books[0]).id);
+            else message('教材目录暂未准备好，请稍后再来。');
+        } catch (error) { if (current(ctx)) message(error.message || '教材暂未能读取，请重新打开生词默写。', true); }
         finally { if (current(ctx)) { loading = false; renderControls(); } }
     }
 

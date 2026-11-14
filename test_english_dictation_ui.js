@@ -16,7 +16,7 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
-function englishDictationUI({ storage = new Map(), isParent = false, voices, words = ['apple', 'Where is my schoolbag?'], revision = 1, mistakes = [], mistakeStore = new Map() } = {}) {
+function englishDictationUI({ storage = new Map(), isParent = false, voices, words = ['apple', 'Where is my schoolbag?'], revision = 1, mistakes = [], mistakeStore = new Map(), books: requestedBooks } = {}) {
     const html = fs.readFileSync(path.join(__dirname, 'static/index.html'), 'utf8');
     const source = fs.readFileSync(path.join(__dirname, 'static/js/english-dictation.js'), 'utf8');
     const elements = new Map(), timers = new Map();
@@ -30,7 +30,8 @@ function englishDictationUI({ storage = new Map(), isParent = false, voices, wor
             { id: 'custom-2', title: '重点句子', number: 2, unit: '我的清单', custom: true },
             { id: 'custom-3', title: '课外积累', number: 3, unit: '我的清单', custom: true },
         ] };
-    state.books = [state.book];
+    state.books = requestedBooks ? clone(requestedBooks) : [state.book];
+    state.book = state.books.find((book) => book.id === bookId) || state.book;
     state.wordlists = new Map();
     state.wordlistsByBook = new Map([[bookId, state.wordlists]]);
     state.wordlistsByStudent = new Map([['alice', state.wordlistsByBook]]);
@@ -165,8 +166,10 @@ function englishDictationUI({ storage = new Map(), isParent = false, voices, wor
     state.defaultReply = (call) => {
         if (call.url === prefix + '/books') return { items: clone(state.books), count: state.books.length };
         if (call.url === prefix + '/lessons' && call.method === 'POST') {
-            const lesson = { id: 'custom-' + (state.book.lessons.length + 1), title: call.body.title, number: call.body.number ?? null, custom: true, unit: '我的其他清单' };
-            state.book.lessons.push(lesson);
+            const target = state.books.find((book) => book.id === call.body.book_id);
+            assert.ok(target, 'Unknown target book');
+            const lesson = { id: 'custom-' + (target.lessons.length + 1), title: call.body.title, number: call.body.number ?? null, custom: true, unit: '我的其他清单' };
+            target.lessons.push(lesson);
             return { lesson: clone(lesson), duplicate: false };
         }
         const query = call.url.match(new RegExp(`^${prefix}/(lessons|wordlists|mistakes)\\?book_id=([^&]+)$`));
@@ -298,6 +301,14 @@ function englishDictationUI({ storage = new Map(), isParent = false, voices, wor
             assert.ok(button, `Missing lesson ${number}`); await button.fire('click');
         },
         async openLesson(number = 1) { await window.englishDictation.open(); await this.chooseLesson(number); },
+        async chooseList(id) {
+            const button = field('english-dictation-lessons').querySelectorAll('button').find((button) => button.dataset.lessonId === id);
+            assert.ok(button, 'Missing list ' + id);
+            const group = button.closest('details');
+            if (group && !group.open) { group.open = true; await group.fire('toggle'); }
+            await button.fire('click');
+        },
+        async chooseBook(id) { const select = field('english-dictation-book'); select.value = id; await select.fire('change'); },
         async start() { await field('english-dictation-start').fire('click'); },
         async finishRun(count) {
             await field('english-dictation-play').fire('click');
@@ -651,4 +662,127 @@ test('a full 500-character sentence reaches the authenticated speech request unc
     assert.equal(ui.state.audioRequests[0].body.text, text);
     assert.equal(ui.state.audioRequests[0].body.text.length, 500);
     assert.equal(ui.state.audioPlayed[0].playbackRate, 1);
+});
+
+const textbookId = 'shanghai-english-grade4-term1-2026';
+function englishBooks() {
+    const topics = ['My school', 'My classmates', 'Animals and their homes', 'Our birthday', 'Visiting places', "It's autumn!", 'My healthy breakfast', 'Be honest', 'What time is it?', 'Weather'];
+    const textbook = { id: textbookId, title: '四年级上册英语 · 2026新版', edition: '2026新版五四学制', grade: 4, term: 1,
+        lessons: topics.flatMap((topic, index) => {
+            const number = String(index + 1).padStart(2, '0');
+            const unit = `Unit ${index + 1} · ${topic}`;
+            return [
+                { id: `unit-${number}-words`, title: '单词与短语', unit, number: null, custom: false },
+                { id: `unit-${number}-sentences`, title: '句子', unit, number: null, custom: false },
+            ];
+        }) };
+    return [textbook, { id: bookId, title: '我的英语默写', edition: '自建清单', lessons: [
+        { id: 'default-list', title: '我的单词与句子', number: null, unit: '我的清单', custom: false },
+    ] }];
+}
+function textbookList(id, words = [], revision = 0) {
+    return { book_id: textbookId, lesson_id: id, words: words.map((text) => ({ text, spoken_text: text })),
+        word_count: words.length, revision, updated_at: revision ? '2026-11-14T19:00:00+08:00' : null };
+}
+
+test('the textbook is the first folder with ten initially collapsed units and no automatic list selection, while the legacy folder still opens its default list', async () => {
+    const ui = englishDictationUI({ books: englishBooks() });
+    await ui.api.open();
+    assert.deepEqual(ui.field('english-dictation-book').options.map((option) => option.value), [textbookId, bookId]);
+    assert.equal(ui.field('english-dictation-book').value, textbookId);
+    const groups = ui.field('english-dictation-lessons').querySelectorAll('details');
+    assert.equal(groups.length, 10);
+    assert.ok(groups.every((group) => !group.open));
+    assert.equal(ui.field('english-dictation-lessons').querySelectorAll('button').length, 20);
+    assert.equal(ui.field('english-dictation-editor').hidden, true);
+    assert.equal(ui.field('english-dictation-select-prompt').hidden, false);
+    assert.equal(ui.state.calls.some((call) => call.url.startsWith(prefix + '/wordlists/' + textbookId + '/')), false);
+    assert.equal(ui.state.audioRequests.length, 0);
+    await ui.chooseBook(bookId);
+    assert.equal(ui.field('english-dictation-editor').hidden, false);
+    assert.equal(ui.field('english-dictation-words').value, 'apple\nWhere is my schoolbag?');
+});
+
+test('word and sentence lists keep short directory labels but full unit context and independent saved content', async () => {
+    const ui = englishDictationUI({ books: englishBooks() });
+    await ui.api.open(); await ui.chooseList('unit-01-words');
+    const wordButton = ui.field('english-dictation-lessons').querySelectorAll('button').find((button) => button.dataset.lessonId === 'unit-01-words');
+    assert.equal(wordButton.querySelector('span').textContent, '单词与短语');
+    assert.match(wordButton.getAttribute('aria-label'), /Unit 1.*My school.*单词与短语/);
+    assert.match(ui.field('english-dictation-lesson-title').textContent, /Unit 1.*My school.*单词与短语/);
+    await ui.type('english-dictation-words', 'classroom\nlibrary'); await ui.field('english-dictation-save').fire('click');
+    await ui.chooseList('unit-01-sentences');
+    assert.equal(ui.field('english-dictation-words').value, '');
+    assert.match(ui.field('english-dictation-lesson-title').textContent, /Unit 1.*My school.*句子/);
+    await ui.type('english-dictation-words', "Where is my classroom?\nLet's meet in the library, Tom."); await ui.field('english-dictation-save').fire('click');
+    await ui.chooseList('unit-01-words');
+    assert.equal(ui.field('english-dictation-words').value, 'classroom\nlibrary');
+    const lists = ui.state.wordlistsByBook.get(textbookId);
+    assert.deepEqual(lists.get('unit-01-words').words.map((word) => word.text), ['classroom', 'library']);
+    assert.deepEqual(lists.get('unit-01-sentences').words.map((word) => word.text), ['Where is my classroom?', "Let's meet in the library, Tom."]);
+    assert.deepEqual(ui.state.wordlists.get('default-list').words.map((word) => word.text), ['apple', 'Where is my schoolbag?']);
+});
+
+test('switching between textbook and legacy folders preserves each raw draft and a resumed run keeps its original textbook source', async () => {
+    const storage = new Map(); const ui = englishDictationUI({ books: englishBooks(), storage });
+    ui.state.wordlistsByBook.set(textbookId, new Map([['unit-01-words', textbookList('unit-01-words', ['school'], 1)]]));
+    await ui.api.open(); await ui.chooseList('unit-01-words');
+    const textbookDraft = "Let's keep this textbook phrase, please.";
+    await ui.type('english-dictation-words', textbookDraft);
+    await ui.chooseBook(bookId);
+    assert.equal(ui.field('english-dictation-words').value, 'apple\nWhere is my schoolbag?');
+    await ui.type('english-dictation-words', 'A separate legacy draft.');
+    await ui.chooseBook(textbookId); await ui.chooseList('unit-01-words');
+    assert.equal(ui.field('english-dictation-words').value, textbookDraft);
+    assert.ok([...storage.entries()].some(([key, value]) => key.includes(bookId) && value.includes('A separate legacy draft.')));
+    await ui.type('english-dictation-repetitions', '1', 'change'); await ui.start();
+    await ui.field('english-dictation-play').fire('click');
+    await ui.field('english-dictation-player-exit').fire('click');
+    await ui.chooseBook(bookId);
+    assert.equal(ui.field('english-dictation-words').value, 'A separate legacy draft.');
+    await ui.field('english-dictation-resume').fire('click'); await ui.field('english-dictation-play').fire('click');
+    assert.equal(ui.state.audioRequests.at(-1).body.text, textbookDraft);
+    await ui.finishItem(); await ui.field('english-dictation-next').fire('click');
+    assert.match(ui.field('english-dictation-finish-label').textContent, /Unit 1.*My school.*单词与短语/);
+    await ui.markReviewWords([textbookDraft]); await ui.field('english-dictation-save-mistakes').fire('click');
+    const saved = ui.state.calls.find((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.equal(saved.body.items[0].book_id, textbookId);
+    assert.equal(saved.body.items[0].lesson_id, 'unit-01-words');
+    assert.deepEqual(ui.state.wordlists.get('default-list').words.map((word) => word.text), ['apple', 'Where is my schoolbag?']);
+});
+
+test('same-named lists in different units retain full mistake origins through merged playback, retry and removal', async () => {
+    const ui = englishDictationUI({ books: englishBooks(), mistakes: [
+        { book_id: textbookId, lesson_id: 'unit-01-words', words: ['school'] },
+        { book_id: textbookId, lesson_id: 'unit-02-words', words: ['school'] },
+    ] });
+    ui.state.wordlistsByBook.set(textbookId, new Map([
+        ['unit-01-words', textbookList('unit-01-words', ['school', 'library'], 1)],
+        ['unit-02-words', textbookList('unit-02-words', ['classmate', 'school'], 1)],
+    ]));
+    await ui.api.open(); await ui.type('english-dictation-repetitions', '1', 'change'); await ui.openMistakes();
+    assert.match(ui.field('english-dictation-mistakes-groups').textContent, /Unit 1.*My school/);
+    assert.match(ui.field('english-dictation-mistakes-groups').textContent, /Unit 2.*My classmates/);
+    await ui.chooseMistakeLessons(['unit-01-words', 'unit-02-words']);
+    await ui.field('english-dictation-mistakes-start').fire('click'); await finishRound(ui, 1);
+    assert.deepEqual(ui.state.audioRequests.map((call) => call.body.text), ['school']);
+    let review = ui.field('english-dictation-review-list');
+    assert.equal(review.querySelectorAll('label').length, 1);
+    assert.match(review.textContent, /Unit 1.*My school.*单词与短语/);
+    assert.match(review.textContent, /Unit 2.*My classmates.*单词与短语/);
+    await ui.field('english-dictation-retry-all').fire('click'); await finishRound(ui, 1);
+    review = ui.field('english-dictation-review-list');
+    assert.match(review.textContent, /Unit 1.*My school.*单词与短语/);
+    assert.match(review.textContent, /Unit 2.*My classmates.*单词与短语/);
+    await ui.markReviewWords(['school']); await ui.field('english-dictation-save-mistakes').fire('click');
+    const saved = ui.state.calls.find((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.deepEqual(saved.body.items.map((item) => [item.book_id, item.lesson_id, item.words.map((word) => word.text)]), [
+        [textbookId, 'unit-01-words', ['school']], [textbookId, 'unit-02-words', ['school']],
+    ]);
+    await ui.field('english-dictation-finish-back').fire('click'); await ui.openMistakes();
+    const remove = ui.field('english-dictation-mistakes-groups').querySelectorAll('button').find((button) => /Unit 2.*My classmates.*移除 school/.test(button.getAttribute('aria-label') || ''));
+    assert.ok(remove); await remove.fire('click');
+    assert.deepEqual(ui.state.mistakeGroups(textbookId).map((group) => group.lesson_id), ['unit-01-words']);
+    assert.deepEqual(ui.state.wordlistsByBook.get(textbookId).get('unit-01-words').words.map((word) => word.text), ['school', 'library']);
+    assert.deepEqual(ui.state.wordlistsByBook.get(textbookId).get('unit-02-words').words.map((word) => word.text), ['classmate', 'school']);
 });
