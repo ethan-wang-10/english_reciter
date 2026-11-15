@@ -374,3 +374,72 @@ def test_actual_shared_auth_routes_and_parent_decorator_work_on_subject_hosts(in
         assert 'no-store' in response.headers.get('Cache-Control', '')
     state.users['alice']['enabled'] = False
     assert client.get('/api/subjects/chinese/bootstrap', base_url='https://' + HOSTS[1], headers=headers).status_code == 403
+
+
+@pytest.mark.parametrize('subject', ['chinese', 'math'])
+@pytest.mark.parametrize('kind', ['papers', 'knowledge'])
+def test_catalog_pdf_download_uses_attachment_and_preserves_printable_bytes(subject_app, tmp_path, subject, kind):
+    state = subject_app
+    state.app.static_folder = str(tmp_path / 'static')
+    directory = Path(state.app.static_folder) / 'subject-content' / subject
+    directory.mkdir(parents=True)
+    content = b'%PDF-1.4\npublic printable material\n%%EOF\n'
+    (directory / 'review.pdf').write_bytes(content)
+    item = sample_paper('review') if kind == 'papers' else sample_knowledge('review')
+    item.update(title='四年级复习 / 课堂练习', pdf_url=f'/static/subject-content/{subject}/review.pdf')
+    write_catalog(state.content_dir, subject, **{kind: [item]})
+    response = state.client.get(f'/api/subjects/{subject}/materials/{kind}/review/download')
+    assert response.status_code == 200 and response.data == content
+    assert response.mimetype == 'application/pdf'
+    assert response.headers['Content-Disposition'].startswith('attachment;')
+    assert "filename*=UTF-8''" in response.headers['Content-Disposition']
+    from urllib.parse import unquote
+    assert '四年级复习 _ 课堂练习.pdf' in unquote(response.headers['Content-Disposition'])
+    assert response.headers['X-Content-Type-Options'] == 'nosniff'
+    assert 'no-store' in response.headers['Cache-Control']
+    assert state.client.get(f'/api/subjects/{subject}/materials/records/review/download').status_code == 404
+    other = 'math' if subject == 'chinese' else 'chinese'
+    assert state.client.get(f'/api/subjects/{other}/materials/{kind}/review/download').status_code == 404
+
+
+def test_pdf_download_only_resolves_existing_catalog_entries_and_files(subject_app, tmp_path):
+    state = subject_app
+    state.app.static_folder = str(tmp_path / 'static')
+    item = {**sample_paper('missing-pdf'), 'pdf_url': '/static/subject-content/math/missing.pdf'}
+    write_catalog(state.content_dir, 'math', papers=[item, sample_paper('no-pdf')])
+    for subject, kind, identifier in (('math', 'papers', 'missing-pdf'), ('math', 'papers', 'no-pdf'),
+                                      ('math', 'papers', 'unknown'), ('history', 'papers', 'missing-pdf'),
+                                      ('math', 'private', 'missing-pdf'), ('math', 'papers', 'bad.pdf')):
+        assert state.client.get(f'/api/subjects/{subject}/materials/{kind}/{identifier}/download').status_code == 404
+
+
+def test_pdf_download_rejects_symlinks_outside_static_materials(subject_app, tmp_path):
+    state = subject_app
+    root = tmp_path / 'static'
+    state.app.static_folder = str(root)
+    directory = root / 'subject-content' / 'math'
+    directory.mkdir(parents=True)
+    private = tmp_path / 'private.pdf'
+    private.write_bytes(b'%PDF-private')
+    (directory / 'review.pdf').symlink_to(private)
+    write_catalog(state.content_dir, 'math', papers=[{**sample_paper('review'), 'pdf_url': '/static/subject-content/math/review.pdf'}])
+    assert state.client.get('/api/subjects/math/materials/papers/review/download').status_code == 404
+    (directory / 'review.pdf').unlink()
+    directory.rmdir()
+    directory.symlink_to(tmp_path, target_is_directory=True)
+    (tmp_path / 'review.pdf').write_bytes(b'%PDF-private')
+    assert state.client.get('/api/subjects/math/materials/papers/review/download').status_code == 404
+
+
+def test_pdf_download_supports_the_main_apps_custom_static_handler(subject_app, tmp_path):
+    state = subject_app
+    state.app.static_folder = None
+    state.app.root_path = str(tmp_path)
+    directory = tmp_path / 'static' / 'subject-content' / 'math'
+    directory.mkdir(parents=True)
+    content = b'%PDF-1.4\ncustom static handler\n%%EOF\n'
+    (directory / 'review.pdf').write_bytes(content)
+    write_catalog(state.content_dir, 'math', papers=[{**sample_paper('review'), 'pdf_url': '/static/subject-content/math/review.pdf'}])
+    response = state.client.get('/api/subjects/math/materials/papers/review/download')
+    assert response.status_code == 200 and response.data == content
+    assert response.headers['Content-Disposition'].startswith('attachment;')

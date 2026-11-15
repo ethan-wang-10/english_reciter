@@ -40,6 +40,12 @@
 
 既有 `user_data_simple/<学生用户名>/subjects/<学科>/records.json` 继续保留，新练习和答卷存入同目录下的 `practice.sqlite3`，记录列表合并两者。没有记录时返回空列表，不创建英语任务或假记录；最多展示最近200条。在线练习包括自动保存、显式续答、放弃、交卷、分栏判分和已交答卷查看，权限与数学材料说明一致。
 
+## 阅读、返回与打印
+
+考卷卡片的“查看考卷”在站内预览 PDF；知识点的“打开阅读”优先直接展示正文，未提供正文时预览 PDF。顶部始终显示标题、“返回考卷列表”或“返回知识点列表”，并提供“下载 PDF”。返回后保留原筛选及位置；按 Escape 也可关闭。设备无法内嵌预览时可使用“新标签页打开 PDF”或下载后打印，页面明确提示新标签页的返回方式。
+
+卡片上也可直接“下载 PDF”。下载只使用目录已发布的 PDF，接口为 `GET /api/subjects/<subject>/materials/<papers|knowledge>/<id>/download`，以附件返回友好的文件名。材料与原静态 PDF 一样公开，学生和家长均可下载，不包含个人答卷或私人学习数据。目前数学四上期中、期末考卷及知识点共四份 PDF 可下载。
+
 ## 构建和部署
 
 `scripts/build_assets.py` 同时处理 `static/index.html` 和 `static/subject.html`，生成共享 manifest 和内容哈希资源。SSO 模板从 manifest 读取脚本地址。修改后执行 `python3 scripts/build_assets.py` 和 `python3 scripts/build_assets.py --check`。

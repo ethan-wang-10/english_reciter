@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from urllib.parse import urlsplit
 
-from flask import Blueprint, abort, current_app, g, jsonify, make_response, render_template_string, request
+from flask import Blueprint, abort, current_app, g, jsonify, make_response, render_template_string, request, send_file
 
 from exam_grades import normalize_grade, normalize_term
 
@@ -229,6 +229,27 @@ def register_subject_portal_routes(app, services):
     def knowledge(username, subject):
         items = checked(subject)['knowledge']
         return jsonify({'items': items, 'count': len(items)})
+
+    @routes.get('/api/subjects/<subject>/materials/<kind>/<content_id>/download')
+    def download_material(subject, kind, content_id):
+        # These PDFs are already public static materials. Resolve only an entry
+        # in the subject catalog, never a user-supplied filesystem path or URL.
+        if subject not in SUBJECTS or kind not in ('papers', 'knowledge') or not ID_PATTERN.fullmatch(content_id):
+            abort(404)
+        item = next((entry for entry in checked(subject)[kind] if entry['id'] == content_id), None)
+        if not item or not item.get('pdf_url'):
+            abort(404)
+        static_root = Path(app.static_folder or Path(app.root_path) / 'static').resolve()
+        directory = static_root / 'subject-content' / subject
+        path = directory / item['pdf_url'].rsplit('/', 1)[-1]
+        if (directory.is_symlink() or not directory.resolve().is_relative_to(static_root)
+                or path.is_symlink() or not path.is_file() or path.resolve().parent != directory.resolve()):
+            abort(404)
+        title = re.sub(r'[\x00-\x1f\x7f/\\]', '_', item['title']).strip(' .') or content_id
+        response = send_file(path, mimetype='application/pdf', as_attachment=True,
+                             download_name=title + '.pdf', conditional=True)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response
 
     @routes.get('/api/subjects/<subject>/records')
     @services.token_required

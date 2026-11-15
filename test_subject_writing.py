@@ -854,3 +854,128 @@ def test_invalid_guided_configuration_never_creates_student_storage(guided_brows
     assert guided_browser.client.post(PREFIX + '/attempts', headers=guided_browser.headers,
                                       json={'lesson_id': LESSON_ID, 'flow_version': 1}).status_code == 503
     assert not guided_browser.data_dir.exists()
+
+
+@pytest.mark.parametrize('guided', [False, True])
+def test_abandon_hides_incomplete_practice_and_preserves_the_entire_draft_and_versions(browser, guided):
+    if guided:
+        browser.lesson_path.write_text(json.dumps(guided_lesson(), ensure_ascii=False))
+        browser.headers['X-Writing-Flow'] = 'guided-v1'
+    attempt = start_guided(browser) if guided else start(browser)
+    store = WritingStore(database(browser)); endpoint = PREFIX + '/attempts/' + attempt['id']
+    data = deepcopy(attempt['data'])
+    data['paragraphs'] = {'p_full' if guided else 'p2': '只写了一半的文章\n保留我自己的原话。'}
+    if guided:
+        data['guidance'].update(step=6, sentence='自己的句子。', paragraph='还没有写完的重点段。')
+    checkpoint = store.save(attempt['id'], 1, data, label='之前保存的版本')
+    prior = checkpoint['versions']
+    later = deepcopy(data); later['reflection']['next_time'] = '还没保存为里程碑的最新想法。'
+    store.save(attempt['id'], 2, later)
+    abandoned = browser.client.post(endpoint + '/abandon', headers=browser.headers, json={'base_revision': 3})
+    assert abandoned.status_code == 200 and abandoned.json['read_only'] is True
+    result = abandoned.json['attempt']
+    assert result['status'] == 'abandoned' and result['revision'] == 4 and result['completed_at'] is None
+    assert result['data'] == later and result['lesson_snapshot'] == attempt['lesson_snapshot']
+    assert database(browser).is_file()
+    assert all(version in abandoned.json['versions'] for version in prior)
+    final_version = next(version for version in abandoned.json['versions'] if version['label'] == '放弃时草稿')
+    assert store.get_version(attempt['id'], final_version['id'])['data'] == later
+    assert browser.client.get(endpoint, headers=browser.headers).json['read_only'] is True
+    assert browser.client.get(PREFIX + '/attempts', headers=browser.headers).json['items'] == []
+    assert store.records() == []
+    for suffix, method, payload in (
+        ('', 'patch', {'base_revision': 4, 'data': later}),
+        ('/checkpoints', 'post', {'base_revision': 4, 'data': later, 'label': '不可重新保存'}),
+        ('/complete', 'post', {'base_revision': 4, 'data': guided_complete_data() if guided else complete_data()}),
+        ('/restore', 'post', {'base_revision': 4, 'version_id': prior[0]['id']}),
+    ):
+        rejected = getattr(browser.client, method)(endpoint + suffix, headers=browser.headers, json=payload)
+        assert rejected.status_code == 409 and rejected.json['code'] == 'abandoned'
+    assert store.get(attempt['id'])['attempt'] == result
+    repeat = browser.client.post(endpoint + '/abandon', headers=browser.headers, json={'base_revision': 4})
+    assert repeat.status_code == 200 and repeat.json == abandoned.json
+    stale = browser.client.post(endpoint + '/abandon', headers=browser.headers, json={'base_revision': 3})
+    assert stale.status_code == 409 and stale.json['code'] == 'conflict' and stale.json['current_revision'] == 4
+
+
+def test_abandon_requires_student_ownership_and_guided_capability_before_any_mutation(guided_browser):
+    attempt = start_guided(guided_browser); endpoint = PREFIX + '/attempts/' + attempt['id'] + '/abandon'
+    before = WritingStore(database(guided_browser)).get(attempt['id'])
+    for headers, expected in (
+        ({}, 401),
+        ({'Authorization': 'Bearer parent-token'}, 403),
+        ({'Authorization': 'Bearer parent-token', 'X-Writing-Flow': 'guided-v1'}, 403),
+        ({'Authorization': 'Bearer bob-token', 'X-Writing-Flow': 'guided-v1'}, 404),
+        ({'Authorization': 'Bearer alice-token'}, 409),
+    ):
+        response = guided_browser.client.post(endpoint, headers=headers, json={'base_revision': 1})
+        assert response.status_code == expected
+        if expected == 409:
+            assert response.json['code'] == 'upgrade_required'
+    assert WritingStore(database(guided_browser)).get(attempt['id']) == before
+    assert not (guided_browser.data_dir / 'bob').exists()
+
+
+@pytest.mark.parametrize('payload', [None, [], {}, {'base_revision': None}, {'base_revision': True},
+                                     {'base_revision': 0}, {'base_revision': '1'}, {'base_revision': 1, 'data': {}}])
+def test_abandon_rejects_invalid_json_and_revision_without_hiding_the_practice(browser, payload):
+    attempt = start(browser)
+    response = browser.client.post(PREFIX + '/attempts/' + attempt['id'] + '/abandon', headers=browser.headers, json=payload)
+    assert response.status_code == 400
+    assert WritingStore(database(browser)).get(attempt['id'])['attempt'] == attempt
+    assert [item['id'] for item in WritingStore(database(browser)).list_attempts()] == [attempt['id']]
+
+
+def test_stale_abandon_cannot_discard_a_newer_saved_draft(browser):
+    attempt = start(browser); store = WritingStore(database(browser))
+    data = deepcopy(attempt['data']); data['planning']['main_idea'] = '另一页刚写好的主旨'
+    latest = store.save(attempt['id'], 1, data)['attempt']
+    response = browser.client.post(PREFIX + '/attempts/' + attempt['id'] + '/abandon', headers=browser.headers,
+                                   json={'base_revision': 1})
+    assert response.status_code == 409 and response.json['code'] == 'conflict'
+    assert response.json['current_revision'] == 2 and store.get(attempt['id'])['attempt'] == latest
+
+
+def test_abandon_does_not_hide_other_drafts_or_change_completed_work_and_records(browser):
+    discarded, active, completed = start(browser), start(browser), start(browser)
+    store = WritingStore(database(browser))
+    complete = store.save(completed['id'], 1, complete_data(), complete=True)['attempt']
+    records = store.records()
+    store.abandon(discarded['id'], 1)
+    assert {item['id'] for item in store.list_attempts()} == {active['id'], completed['id']}
+    assert store.records() == records and len(records) == 1 and records[0]['id'] == completed['id']
+    response = browser.client.post(PREFIX + '/attempts/' + completed['id'] + '/abandon', headers=browser.headers,
+                                   json={'base_revision': complete['revision']})
+    assert response.status_code == 409 and response.json['code'] == 'completed'
+    assert store.get(completed['id'])['attempt'] == complete and store.records() == records
+
+
+def test_concurrent_save_and_abandon_preserve_exactly_one_winning_revision(browser):
+    attempt = start(browser); store = WritingStore(database(browser)); initial = deepcopy(attempt['data'])
+    changed = deepcopy(initial); changed['planning']['materials'] = '并发保存的最新文字'
+    def mutate(operation):
+        try:
+            result = store.save(attempt['id'], 1, changed) if operation == 'save' else store.abandon(attempt['id'], 1)
+            return operation, result['attempt']
+        except WritingError as error:
+            assert error.status == 409 and error.details['code'] in ('conflict', 'abandoned')
+            return operation, None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(mutate, ['save', 'abandon']))
+    winners = [(operation, attempt) for operation, attempt in outcomes if attempt]
+    assert len(winners) == 1
+    operation, winner = winners[0]
+    assert store.get(attempt['id'])['attempt'] == winner and winner['revision'] == 2
+    assert winner['data'] == (changed if operation == 'save' else initial)
+    assert winner['status'] == ('in_progress' if operation == 'save' else 'abandoned')
+
+
+def test_failed_abandon_snapshot_rolls_back_status_revision_and_keeps_the_draft(browser, monkeypatch):
+    store = WritingStore(database(browser)); attempt = start(browser); before = store.get(attempt['id'])
+    def failure(*args, **kwargs):
+        raise PermissionError('simulated unavailable storage')
+    monkeypatch.setattr(store, '_snapshot', failure)
+    with pytest.raises(WritingError) as error:
+        store.abandon(attempt['id'], 1)
+    assert error.value.status == 503 and store.get(attempt['id']) == before
+    assert [item['id'] for item in store.list_attempts()] == [attempt['id']]

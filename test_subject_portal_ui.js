@@ -18,7 +18,7 @@ function deferred() {
 
 function subjectUI({ subject = 'chinese', storage = new Map(), href } = {}) {
     const elements = new Map();
-    const state = { calls: [], navigations: [], storageWrites: [], windowListeners: {}, routes: {} };
+    const state = { calls: [], navigations: [], storageWrites: [], windowListeners: {}, routes: {}, scrolls: [] };
     const account = { username: 'alice', email: 'alice@example.com', display_name: 'Alice', is_parent: false, child_username: '', plan: 'free' };
     state.account = account;
     state.resources = { papers: [], knowledge: [], records: [] };
@@ -37,24 +37,29 @@ function subjectUI({ subject = 'chinese', storage = new Map(), href } = {}) {
             for (const [name, value] of Object.entries(attributes)) {
                 if (name.startsWith('data-')) this.dataset[name.slice(5)] = value;
             }
-            const classes = new Set((attributes.class || '').split(/\s+/).filter(Boolean));
+            this._classes = new Set((attributes.class || '').split(/\s+/).filter(Boolean));
             this.classList = {
-                toggle(name, value) {
-                    const enabled = value === undefined ? !classes.has(name) : value;
-                    if (enabled) classes.add(name); else classes.delete(name);
+                toggle: (name, value) => {
+                    const enabled = value === undefined ? !this._classes.has(name) : value;
+                    if (enabled) this._classes.add(name); else this._classes.delete(name);
+                    this.attributes.class = [...this._classes].join(' ');
                 },
-                contains: (name) => classes.has(name),
+                contains: (name) => this._classes.has(name),
             };
         }
+        set id(value) { this.attributes.id = String(value); elements.set(String(value), this); }
+        get id() { return this.attributes.id || ''; }
+        set className(value) { this.attributes.class = String(value); this._classes = new Set(String(value).split(/\s+/).filter(Boolean)); }
+        get className() { return this.attributes.class || ''; }
         set textContent(value) { this.ownText = String(value); this.children = []; }
         get textContent() { return this.ownText + this.children.map((child) => child.textContent).join(''); }
         set innerHTML(_value) { throw new Error('Untrusted resource content must use safe DOM nodes'); }
         get innerHTML() { throw new Error('Tests should inspect the DOM nodes'); }
         appendChild(child) { this.children.push(child); child.parentElement = this; return child; }
         replaceChildren(...children) { this.children = []; this.ownText = ''; children.forEach((child) => this.appendChild(child)); }
-        setAttribute(name, value) { this.attributes[name] = String(value); }
+        setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'id') this.id = value; if (name === 'class') this.className = value; }
         getAttribute(name) { return this.attributes[name] ?? null; }
-        removeAttribute(name) { delete this.attributes[name]; if (name === 'src') this.src = ''; }
+        removeAttribute(name) { delete this.attributes[name]; if (name === 'src') this.src = ''; if (name === 'href') this.href = ''; }
         addEventListener(name, callback) { this.listeners[name] = callback; }
         querySelectorAll(selector) {
             const tests = selector.split(',').map((value) => value.trim());
@@ -70,6 +75,7 @@ function subjectUI({ subject = 'chinese', storage = new Map(), href } = {}) {
             return this.children.flatMap((child) => [...(matches(child) ? [child] : []), ...child.querySelectorAll(selector)]);
         }
         querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+        contains(other) { return other === this || this.children.some((child) => child.contains(other)); }
         focus() { state.focused = this; }
         reset() { this.querySelectorAll('input').forEach((node) => { node.value = ''; }); }
         async fire(name, extra = {}) {
@@ -114,7 +120,8 @@ function subjectUI({ subject = 'chinese', storage = new Map(), href } = {}) {
     };
     elements.get('subject-site-config').textContent = JSON.stringify(config);
     const location = { origin, href: href || origin + '/', assign: (url) => state.navigations.push(url) };
-    const window = { addEventListener: (name, callback) => { state.windowListeners[name] = callback; }, location };
+    const window = { addEventListener: (name, callback) => { state.windowListeners[name] = callback; }, location, scrollX: 0, scrollY: 0,
+        scrollTo(position) { state.scrolls.push(position); this.scrollX = position.left; this.scrollY = position.top; } };
     function bootstrapPayload() {
         return { subject: config, account: { ...state.account }, summary: {
             paper_count: state.resources.papers.length,
@@ -136,7 +143,7 @@ function subjectUI({ subject = 'chinese', storage = new Map(), href } = {}) {
             getElementById: (id) => elements.get(id),
             createElement: (tagName) => new Element(tagName),
             querySelectorAll: (selector) => root.querySelectorAll(selector),
-            querySelector: (selector) => selector === 'meta[name="theme-color"]' ? state.themeColor : null,
+            querySelector: (selector) => selector === 'meta[name="theme-color"]' ? state.themeColor : root.querySelector(selector),
         },
         localStorage: {
             getItem: (key) => storage.get(key) || null,
@@ -178,6 +185,141 @@ function subjectUI({ subject = 'chinese', storage = new Map(), href } = {}) {
 }
 
 function descendant(node, tagName) { return node.querySelectorAll(tagName); }
+
+test('paper PDF opens in a reader and returns to the unchanged filtered list, scroll position and trigger', async () => {
+    const ui = subjectUI({ subject: 'math' });
+    const pdf = '/static/subject-content/math/期中考卷.pdf';
+    ui.state.resources.papers = [
+        { id: 'math-midterm', title: '四年级期中考卷', grade: 4, term: 1, exam_kind: 'midterm', pdf_url: pdf },
+        { id: 'math-final', title: '四年级期末考卷', grade: 4, term: 1, exam_kind: 'final', pdf_url: '/static/subject-content/math/final.pdf' },
+    ];
+    await ui.login();
+    ui.field('paper-grade-filter').value = '4'; ui.field('paper-term-filter').value = '1'; ui.field('paper-phase-filter').value = 'midterm';
+    await ui.field('paper-phase-filter').fire('change');
+    const list = ui.field('papers-list'), originalCard = list.children[0];
+    assert.equal(list.children.length, 1);
+    const read = originalCard.querySelector('.resource-read'), download = originalCard.querySelector('.resource-download');
+    assert.equal(download.href, '/api/subjects/math/materials/papers/math-midterm/download');
+    assert.equal(download.getAttribute('download'), '');
+    ui.context.window.scrollX = 7; ui.context.window.scrollY = 640;
+    await read.fire('click');
+    assert.equal(ui.field('subject-resource-reader').hidden, false);
+    assert.equal(ui.field('subject-resource-reader').getAttribute('role'), 'dialog');
+    assert.equal(ui.field('resource-reader-title').textContent, '四年级期中考卷');
+    assert.match(ui.field('resource-reader-back').textContent, /返回考卷列表/);
+    assert.equal(ui.field('resource-reader-frame').src, new URL(pdf, ui.config.origin).href);
+    assert.match(ui.field('resource-reader-frame').title, /四年级期中考卷/);
+    assert.equal(ui.field('resource-reader-download').href, download.href);
+    assert.equal(ui.field('resource-reader-frame').hidden, false);
+    assert.equal(ui.field('resource-reader-content').hidden, true);
+    ui.field('resource-reader-frame').onerror();
+    assert.match(ui.field('resource-reader-status').textContent, /预览未能打开/);
+    assert.equal(ui.field('resource-reader-open').target, '_blank');
+    assert.equal(ui.field('resource-reader-open').rel, 'noopener noreferrer');
+    assert.match(ui.field('subject-resource-reader').textContent, /下载后打印/);
+    assert.equal(ui.state.focused, ui.field('resource-reader-back'));
+    assert.equal(ui.context.document.querySelector('.site-shell').getAttribute('inert'), '');
+    assert.deepEqual(ui.state.navigations, []);
+    await ui.field('resource-reader-back').fire('click');
+    assert.equal(ui.field('subject-resource-reader').hidden, true);
+    assert.equal(ui.field('resource-reader-frame').src, '');
+    assert.equal(list.children[0], originalCard, 'Reader return must not reload or reset the list');
+    assert.equal(ui.field('paper-phase-filter').value, 'midterm');
+    assert.equal(ui.field('paper-grade-filter').value, '4');
+    assert.equal(ui.field('paper-term-filter').value, '1');
+    assert.equal(ui.state.focused, read);
+    assert.deepEqual(JSON.parse(JSON.stringify(ui.state.scrolls.at(-1))), { left: 7, top: 640, behavior: 'instant' });
+    assert.equal(ui.context.document.querySelector('.site-shell').getAttribute('inert'), null);
+});
+
+test('knowledge reading supports Escape, focus boundaries and a visible fallback without resetting the parent account', async () => {
+    const ui = subjectUI();
+    ui.state.account = { ...ui.state.account, username: 'alice_parent', is_parent: true, child_username: 'alice' };
+    ui.state.resources.knowledge = [{ id: 'chinese-points', title: '<img>阅读知识点', pdf_url: '/static/subject-content/chinese/points.pdf',
+        sections: [{ title: '阅读方法', items: ['先读题，再找依据。', '<script>文本形式的知识点</script>'] }] }];
+    await ui.login('alice_parent'); await ui.field('knowledge-tab').fire('click');
+    const read = ui.field('knowledge-list').querySelector('.resource-read');
+    assert.equal(ui.field('knowledge-list').querySelector('.resource-download').href, '/api/subjects/chinese/materials/knowledge/chinese-points/download');
+    await read.fire('click');
+    assert.equal(ui.field('resource-reader-title').textContent, '<img>阅读知识点');
+    assert.match(ui.field('resource-reader-back').textContent, /返回知识点列表/);
+    assert.equal(ui.field('resource-reader-frame').hidden, true);
+    assert.equal(ui.field('resource-reader-frame').src || '', '');
+    assert.equal(ui.field('resource-reader-content').hidden, false);
+    assert.match(ui.field('resource-reader-content').textContent, /阅读方法.*先读题，再找依据/);
+    assert.match(ui.field('resource-reader-content').textContent, /<script>文本形式的知识点<\/script>/);
+    assert.equal(ui.field('resource-reader-content').querySelectorAll('script').length, 0);
+    assert.match(ui.field('resource-reader-status').textContent, /全部知识点/);
+    assert.equal(ui.field('resource-reader-back').hidden, false);
+    assert.equal(ui.field('resource-reader-download').hidden, false);
+    let prevented = false;
+    ui.state.windowListeners.keydown({ key: 'Tab', target: ui.field('resource-reader-back'), shiftKey: true, preventDefault() { prevented = true; } });
+    assert.equal(prevented, true); assert.equal(ui.state.focused, ui.field('resource-reader-content'));
+    ui.state.windowListeners.keydown({ key: 'Tab', target: ui.field('resource-reader-content'), shiftKey: false, preventDefault() {} });
+    assert.equal(ui.state.focused, ui.field('resource-reader-back'));
+    ui.state.windowListeners.keydown({ key: 'Escape', target: ui.field('resource-reader-back'), preventDefault() {} });
+    assert.equal(ui.field('subject-resource-reader').hidden, true);
+    assert.equal(ui.field('resource-reader-content').hidden, true);
+    assert.equal(ui.field('resource-reader-content').textContent, '');
+    assert.equal(ui.state.focused, read);
+    assert.equal(ui.field('knowledge-panel').hidden, false);
+    assert.equal(ui.api.getSession().account.is_parent, true);
+});
+
+test('navigation, logout and account replacement unload the PDF and ignore stale iframe callbacks', async () => {
+    const ui = subjectUI({ subject: 'math' });
+    ui.state.resources.papers = [{ id: 'paper-one', title: '旧账号考卷', pdf_url: '/static/subject-content/math/one.pdf' }];
+    await ui.login(); await ui.field('papers-list').querySelector('.resource-read').fire('click');
+    const oldLoad = ui.field('resource-reader-frame').onload;
+    await ui.field('account-tab').fire('click');
+    assert.equal(ui.field('subject-resource-reader').hidden, true); assert.equal(ui.field('resource-reader-frame').src, '');
+    oldLoad(); assert.equal(ui.field('resource-reader-status').textContent, '');
+    await ui.field('papers-tab').fire('click'); await ui.field('papers-list').querySelector('.resource-read').fire('click');
+    const previousError = ui.field('resource-reader-frame').onerror;
+    await ui.field('subject-logout').fire('click');
+    assert.equal(ui.field('subject-resource-reader').hidden, true);
+    assert.equal(ui.field('resource-reader-frame').src, '');
+    assert.equal(ui.field('resource-reader-title').textContent, '');
+    assert.equal(ui.field('resource-reader-download').href, '');
+    assert.equal(ui.field('resource-reader-open').href, '');
+    previousError(); assert.equal(ui.field('resource-reader-status').textContent, '');
+    assert.equal(ui.context.document.querySelector('.site-shell').getAttribute('inert'), null);
+    await ui.login(); await ui.field('papers-list').querySelector('.resource-read').fire('click');
+    ui.state.resources.papers = [];
+    await ui.api.acceptSession({ access_token: 'bob-token', username: 'bob' });
+    assert.equal(ui.field('subject-resource-reader').hidden, true);
+    assert.equal(ui.field('resource-reader-frame').src, '');
+});
+
+test('only same-subject static PDFs receive reading controls and downloads require a valid catalog PDF and identifier', async () => {
+    const ui = subjectUI({ subject: 'math' });
+    const bad = [
+        'javascript:alert(1)', 'data:application/pdf;base64,AA==', 'https://evil.test/one.pdf',
+        '//evil.test/static/subject-content/math/one.pdf', '/api/auth/logout.pdf', '/static/subject-content/chinese/one.pdf',
+        '/static/subject-content/math/one.html', '/static/subject-content/math/one.pdf?token=secret',
+        '/static/subject-content/math/one.pdf#unsafe', '/static/subject-content/math/../math/one.pdf',
+        '/static/subject-content/math/%2e%2e/math/one.pdf', '/static/subject-content/math/one%0a.pdf',
+        '/static/subject-content/math/one%252f.pdf', '/static/subject-content/math\\one.pdf',
+        'https://user:password@math.itorange.online/static/subject-content/math/one.pdf',
+    ];
+    ui.state.resources.papers = bad.map((pdf_url, index) => ({ id: `unsafe-${index}`, title: '历史不安全链接', pdf_url }));
+    ui.state.resources.papers.push({ id: 'url-only', title: '历史 PDF', url: '/static/subject-content/math/legacy.pdf' });
+    ui.state.resources.papers.push({ id: '../not-a-catalog-id', title: '不合法编号', pdf_url: '/static/subject-content/math/id.pdf' });
+    await ui.login();
+    const cards = ui.field('papers-list').children;
+    for (const card of cards.slice(0, bad.length)) {
+        assert.equal(card.querySelectorAll('.resource-read').length, 0);
+        assert.equal(card.querySelectorAll('a').length, 0);
+    }
+    const historical = cards[bad.length];
+    assert.equal(historical.querySelectorAll('.resource-read').length, 1);
+    assert.equal(historical.querySelectorAll('.resource-download').length, 0, 'Legacy URL alone is not a downloadable catalog PDF');
+    await historical.querySelector('.resource-read').fire('click');
+    assert.equal(ui.field('resource-reader-download').hidden, true);
+    await ui.field('resource-reader-back').fire('click');
+    assert.equal(cards.at(-1).querySelectorAll('.resource-download').length, 0, 'Invalid IDs cannot form download routes');
+    assert.deepEqual(ui.state.navigations, []);
+});
 
 test('existing account logs into the subject workspace without initializing English learning data', async () => {
     const storage = new Map([['token', 'legacy-english-token'], ['username', 'english-user']]);

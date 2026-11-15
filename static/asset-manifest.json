@@ -26,9 +26,9 @@
       "url": "/static/assets/css/subject-dictation.0233f21b59dc85db.css"
     },
     "/static/css/subject-portal.css": {
-      "bytes": 24332,
-      "sha256": "0e178cea6f0b2b0938edfde57903d7067a0f3f84807b4044444e08e7d1863a7b",
-      "url": "/static/assets/css/subject-portal.0e178cea6f0b2b09.css"
+      "bytes": 29175,
+      "sha256": "a45fb9618be121c47b8723f1226940dbdfebe5b3c1734f4cfd7dbcfe43d1d0b7",
+      "url": "/static/assets/css/subject-portal.a45fb9618be121c4.css"
     },
     "/static/css/subject-practice.css": {
       "bytes": 7508,
@@ -41,9 +41,9 @@
       "url": "/static/assets/css/subject-switch.4a8cdd20b9fb56be.css"
     },
     "/static/css/subject-writing.css": {
-      "bytes": 21444,
-      "sha256": "56b79c2cce0083787c6abc1dd69b92425245730c97318a5037ea37db26ee619e",
-      "url": "/static/assets/css/subject-writing.56b79c2cce008378.css"
+      "bytes": 22650,
+      "sha256": "9a8869cb36d5b36599753437292dd7824dafd30cf4eee8646a047d67de85809c",
+      "url": "/static/assets/css/subject-writing.9a8869cb36d5b365.css"
     },
     "/static/js/admin.js": {
       "bytes": 40255,
@@ -86,9 +86,9 @@
       "url": "/static/assets/js/subject-dictation.b6338d2c1bc6f72f.js"
     },
     "/static/js/subject-portal.js": {
-      "bytes": 31223,
-      "sha256": "3ed39a7a8136755ccbf8aacbc48d3ce541bf6dcb1a97b28bb9af34f75d80a206",
-      "url": "/static/assets/js/subject-portal.3ed39a7a8136755c.js"
+      "bytes": 41592,
+      "sha256": "00301ddac21065576ddc0aacb242b8f5e9a77d7898b4cbeac57e4710f2d5e5ed",
+      "url": "/static/assets/js/subject-portal.00301ddac2106557.js"
     },
     "/static/js/subject-practice.js": {
       "bytes": 22024,
@@ -101,9 +101,9 @@
       "url": "/static/assets/js/subject-sso.5564dee98f722338.js"
     },
     "/static/js/subject-writing.js": {
-      "bytes": 88711,
-      "sha256": "7ca7fc2722466e3b106d431b7aa32ef598c9e79431d5773f5a74f490f8f35cb6",
-      "url": "/static/assets/js/subject-writing.7ca7fc2722466e3b.js"
+      "bytes": 94403,
+      "sha256": "1f744e52e269982c2883c63108bd33c7abf08910bd6265e456e750732b72dc11",
+      "url": "/static/assets/js/subject-writing.1f744e52e269982c.js"
     },
     "/static/js/textbook.js": {
       "bytes": 49241,

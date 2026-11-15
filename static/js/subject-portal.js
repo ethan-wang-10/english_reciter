@@ -40,6 +40,7 @@
     let activeSection = 'papers';
     let resetToken = '';
     let resources = { papers: [], knowledge: [], records: [] };
+    let resourceReader = null;
     const context = () => ({ generation, token });
     const current = (ctx) => ctx.generation === generation && ctx.token === token;
     const staleError = () => Object.assign(new Error('账号状态已更新。'), { stale: true });
@@ -57,6 +58,7 @@
     }
 
     function showAuth(view = 'login', clearMessages = true) {
+        closeResourceReader(false);
         document.body.dataset.view = 'auth';
         el('auth-view').hidden = false;
         el('learning-view').hidden = true;
@@ -130,12 +132,139 @@
         return data;
     }
 
-    function safeResourceUrl(value) {
-        if (typeof value !== 'string' || !value) return '';
+    function safePdfUrl(value) {
+        if (typeof value !== 'string' || !value || /[\s\\\u0000-\u001f\u007f]/u.test(value)) return '';
         try {
             const url = new URL(value, location.origin);
-            return url.origin === location.origin && ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+            if (url.origin !== location.origin || !['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) return '';
+            const path = decodeURIComponent(url.pathname);
+            const prefix = `/static/subject-content/${config.id}/`;
+            if (!path.startsWith(prefix) || !path.endsWith('.pdf') || /[%\\\u0000-\u001f\u007f]/u.test(path)
+                    || path.slice(1).split('/').some((part) => !part || part === '.' || part === '..')) return '';
+            const rawPath = value.replace(/^https?:\/\/[^/]+/iu, '').split(/[?#]/u)[0];
+            if (rawPath.split('/').some((part) => ['.', '..'].includes(decodeURIComponent(part)))) return '';
+            return url.href;
         } catch (_) { return ''; }
+    }
+
+    function materialDownload(name, item) {
+        return ['papers', 'knowledge'].includes(name) && safePdfUrl(item.pdf_url) && /^[a-z0-9][a-z0-9_-]{0,95}$/u.test(item.id || '')
+            ? `/api/subjects/${config.id}/materials/${name}/${encodeURIComponent(item.id)}/download` : '';
+    }
+
+    function readerNode(tag, id, text = '', className = '') {
+        const node = document.createElement(tag);
+        if (id) node.id = id;
+        if (text) node.textContent = text;
+        if (className) node.className = className;
+        return node;
+    }
+
+    function ensureResourceReader() {
+        if (el('subject-resource-reader')) return el('subject-resource-reader');
+        const reader = readerNode('div', 'subject-resource-reader', '', 'resource-reader');
+        reader.hidden = true; reader.setAttribute('role', 'dialog'); reader.setAttribute('aria-modal', 'true');
+        reader.setAttribute('aria-labelledby', 'resource-reader-title');
+        const header = readerNode('header', '', '', 'resource-reader-header');
+        const back = readerNode('button', 'resource-reader-back', '返回列表', 'resource-reader-back');
+        back.type = 'button'; back.addEventListener('click', () => closeResourceReader());
+        const heading = readerNode('div', '', '', 'resource-reader-heading');
+        const badge = readerNode('span', 'resource-reader-kind', '', 'eyebrow');
+        const title = readerNode('h2', 'resource-reader-title'); heading.appendChild(badge); heading.appendChild(title);
+        const download = readerNode('a', 'resource-reader-download', '下载 PDF', 'resource-reader-download');
+        download.setAttribute('download', '');
+        header.appendChild(back); header.appendChild(heading); header.appendChild(download); reader.appendChild(header);
+        const help = readerNode('div', '', '', 'resource-reader-help');
+        help.appendChild(readerNode('p', '', '可使用 PDF 工具栏打印，也可下载后打印。若下方未显示内容，可在新标签页打开 PDF，或直接下载；关闭新标签即可返回本页。'));
+        const direct = readerNode('a', 'resource-reader-open', '在新标签页打开 PDF');
+        direct.target = '_blank'; direct.rel = 'noopener noreferrer'; help.appendChild(direct); reader.appendChild(help);
+        const status = readerNode('p', 'resource-reader-status', '', 'resource-reader-status');
+        status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); reader.appendChild(status);
+        const frame = readerNode('iframe', 'resource-reader-frame', '', 'resource-reader-frame');
+        frame.title = 'PDF 阅读预览'; frame.setAttribute('referrerpolicy', 'no-referrer'); reader.appendChild(frame);
+        const content = readerNode('div', 'resource-reader-content', '', 'resource-reader-content');
+        content.hidden = true; content.tabIndex = 0; content.setAttribute('aria-label', '知识点全文'); reader.appendChild(content);
+        document.body.appendChild(reader);
+        return reader;
+    }
+
+    function readerKeyboard(event) {
+        if (!resourceReader || el('subject-resource-reader')?.hidden) return;
+        if (event.key === 'Escape') { event.preventDefault(); closeResourceReader(); return; }
+        if (event.key !== 'Tab') return;
+        const controls = ['resource-reader-back', 'resource-reader-download', 'resource-reader-open', 'resource-reader-frame', 'resource-reader-content']
+            .map(el).filter((node) => node && !node.hidden);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && (event.target === first || !controls.includes(event.target))) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && event.target === last) { event.preventDefault(); first?.focus(); }
+    }
+
+    function closeResourceReader(restore = true) {
+        const saved = resourceReader;
+        resourceReader = null;
+        const reader = el('subject-resource-reader');
+        if (!reader) return;
+        reader.hidden = true;
+        const frame = el('resource-reader-frame');
+        frame.onload = null; frame.onerror = null; frame.src = 'about:blank'; frame.removeAttribute('src');
+        frame.hidden = true;
+        el('resource-reader-content').replaceChildren(); el('resource-reader-content').hidden = true;
+        el('resource-reader-title').textContent = ''; el('resource-reader-status').textContent = '';
+        el('resource-reader-download').removeAttribute('href'); el('resource-reader-open').removeAttribute('href');
+        document.body.classList.toggle('resource-reader-open', false);
+        const shell = document.querySelector('.site-shell');
+        if (shell && saved) {
+            if (saved.shellHidden === null) shell.removeAttribute('aria-hidden'); else shell.setAttribute('aria-hidden', saved.shellHidden);
+            if (!saved.shellInert) shell.removeAttribute('inert');
+        }
+        if (!restore || !saved || !current(saved.ctx) || activeSection !== saved.section) return;
+        const focusTarget = saved.opener && document.body.contains(saved.opener) ? saved.opener : el(`${saved.section}-tab`);
+        focusTarget?.focus?.({ preventScroll: true });
+        window.scrollTo?.({ left: saved.scrollX, top: saved.scrollY, behavior: 'instant' });
+    }
+
+    function openResourceReader(name, item, opener) {
+        if (!['papers', 'knowledge'].includes(name) || !token || !account || activeSection !== name) return;
+        const url = safePdfUrl(item.pdf_url) || safePdfUrl(item.url);
+        if (!url) return;
+        closeResourceReader(false);
+        const reader = ensureResourceReader();
+        const shell = document.querySelector('.site-shell');
+        const saved = { ctx: context(), section: name, opener, scrollX: window.scrollX || 0, scrollY: window.scrollY || 0,
+            shellHidden: shell?.getAttribute('aria-hidden') ?? null, shellInert: !!shell && shell.getAttribute('inert') !== null };
+        resourceReader = saved;
+        el('resource-reader-back').textContent = name === 'papers' ? '← 返回考卷列表' : '← 返回知识点列表';
+        el('resource-reader-kind').textContent = name === 'papers' ? '考卷阅读' : '知识点阅读';
+        const title = String(item.title || item.name || '学习材料');
+        el('resource-reader-title').textContent = title;
+        const download = materialDownload(name, item);
+        el('resource-reader-download').hidden = !download;
+        if (download) el('resource-reader-download').href = download;
+        el('resource-reader-open').href = url;
+        const frame = el('resource-reader-frame');
+        frame.title = `${title} · PDF 阅读预览`;
+        const content = el('resource-reader-content');
+        const textSections = name === 'knowledge' && Array.isArray(item.sections)
+            ? item.sections.filter((section) => section && typeof section === 'object') : [];
+        content.replaceChildren(); content.scrollTop = 0; content.hidden = !textSections.length; frame.hidden = !!textSections.length;
+        if (textSections.length) {
+            for (const section of textSections) {
+                const block = readerNode('section', '', '', 'resource-reader-knowledge-section');
+                block.appendChild(readerNode('h3', '', String(section.title || '知识点')));
+                const list = readerNode('ul');
+                for (const value of Array.isArray(section.items) ? section.items : []) list.appendChild(readerNode('li', '', String(value)));
+                block.appendChild(list); content.appendChild(block);
+            }
+            el('resource-reader-status').textContent = '已展开全部知识点，可在下方滚动阅读。需要打印时请下载 PDF。';
+        } else {
+            el('resource-reader-status').textContent = '正在打开 PDF；返回和下载按钮始终可用。';
+            frame.onload = () => { if (resourceReader === saved && current(saved.ctx)) el('resource-reader-status').textContent = '若预览空白，请使用“在新标签页打开 PDF”或“下载 PDF”。'; };
+            frame.onerror = () => { if (resourceReader === saved && current(saved.ctx)) el('resource-reader-status').textContent = 'PDF 预览未能打开，请在新标签页打开或下载后阅读。'; };
+        }
+        reader.hidden = false; document.body.classList.toggle('resource-reader-open', true);
+        shell?.setAttribute('aria-hidden', 'true'); shell?.setAttribute('inert', '');
+        if (!textSections.length) frame.src = url;
+        el('resource-reader-back').focus({ preventScroll: true });
     }
 
     function subjectTargets() {
@@ -149,6 +278,7 @@
 
     async function switchSubject(target) {
         if (!target || target.id === config.id) return;
+        closeResourceReader(false);
         if (window.subjectSSO && typeof window.subjectSSO.navigate === 'function' && token) {
             const ctx = context();
             try {
@@ -264,12 +394,22 @@
                 text.textContent = String(description);
                 content.appendChild(text);
             }
-            const url = safeResourceUrl(item.url || item.pdf_url);
-            if (url) {
-                const link = document.createElement('a');
-                link.href = url;
-                link.textContent = name === 'papers' ? '查看考卷 →' : '打开阅读 →';
-                content.appendChild(link);
+            const url = safePdfUrl(item.pdf_url) || safePdfUrl(item.url);
+            if (['papers', 'knowledge'].includes(name) && url) {
+                const actions = document.createElement('div'); actions.className = 'resource-file-actions';
+                const read = document.createElement('button');
+                read.type = 'button'; read.className = 'resource-read';
+                read.textContent = name === 'papers' ? '查看考卷' : '打开阅读';
+                read.addEventListener('click', () => openResourceReader(name, item, read));
+                actions.appendChild(read);
+                const downloadUrl = materialDownload(name, item);
+                if (downloadUrl) {
+                    const download = document.createElement('a');
+                    download.href = downloadUrl; download.textContent = '下载 PDF';
+                    download.className = 'resource-download'; download.setAttribute('download', '');
+                    actions.appendChild(download);
+                }
+                content.appendChild(actions);
             }
             if (name === 'papers' && item.interactive) {
                 const start = document.createElement('button');
@@ -347,6 +487,7 @@
 
     function showSection(name, focus = false) {
         if (!sections.includes(name) || !token || !account) return;
+        closeResourceReader(false);
         window.subjectPractice?.leaveView();
         if (name !== 'writing') window.subjectWriting?.leaveView();
         if (name !== 'dictation') window.subjectDictation?.leaveView();
@@ -438,6 +579,7 @@
 
     async function acceptSession(data) {
         if (!data || typeof data.access_token !== 'string' || !data.access_token) throw new Error('登录返回无效，请重试。');
+        closeResourceReader(false);
         generation += 1;
         token = data.access_token;
         username = typeof data.username === 'string' ? data.username : '';
@@ -622,6 +764,8 @@
             }
         }
     });
+    window.addEventListener('keydown', readerKeyboard);
+    window.addEventListener('pagehide', () => closeResourceReader(false));
 
     window.subjectPortal = {
         apiRequest, acceptSession, switchSubject, showSection, refreshSection, refreshRecords,

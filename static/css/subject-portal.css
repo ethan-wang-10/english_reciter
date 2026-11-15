@@ -179,6 +179,41 @@ body[data-view=auth] .site-footer { justify-content: center; }
 .knowledge-details h4 { margin: 20px 0 8px; font-size: 15px; }
 .knowledge-details ul { margin: 0; padding-left: 21px; color: var(--muted); font-size: 13px; line-height: 1.9; }
 .knowledge-details li + li { margin-top: 9px; }
+.resource-file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 19px; }
+.resource-read, .resource-card a.resource-download { display: inline-flex; align-items: center; justify-content: center; min-height: 41px; margin: 0; padding: 9px 13px; border: 2px solid var(--accent-line); border-radius: 14px; background: var(--accent-pale); color: var(--accent-dark); box-shadow: 0 3px 0 var(--accent-line); text-decoration: none; font-size: 12px; font-weight: 800; line-height: 1.5; }
+.resource-card a.resource-download { border-color: var(--line); background: white; box-shadow: 0 3px 0 var(--line); color: var(--muted); }
+.resource-read:active, .resource-card a.resource-download:active { transform: translateY(3px); box-shadow: none; }
+body.resource-reader-open { overflow: hidden; }
+.resource-reader { position: fixed; inset: 0; z-index: 300; display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--canvas); padding: max(18px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px)); }
+.resource-reader-header { display: flex; align-items: center; gap: 20px; flex-shrink: 0; width: 100%; max-width: 1400px; margin: 0 auto; padding: 18px 21px; border: 2px solid var(--line); border-radius: 22px; background: white; box-shadow: 0 5px 0 #00000006; }
+.resource-reader-back, .resource-reader-download { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-height: 44px; padding: 10px 16px; border: 2px solid var(--line); border-radius: 15px; background: white; color: var(--accent-dark); box-shadow: 0 3px 0 var(--line); text-decoration: none; font-size: 13px; font-weight: 800; line-height: 1.5; }
+.resource-reader-download { border-color: var(--accent); background: var(--accent); color: white; box-shadow: 0 3px 0 var(--accent-dark); }
+.resource-reader-back:active, .resource-reader-download:active { transform: translateY(3px); box-shadow: none; }
+.resource-reader-heading { flex: 1; min-width: 0; }
+.resource-reader-heading .eyebrow { margin-bottom: 5px; padding: 2px 9px; font-size: 10px; }
+.resource-reader-heading h2 { font-size: 18px; font-weight: 800; line-height: 1.7; overflow-wrap: anywhere; }
+.resource-reader-help { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-shrink: 0; width: 100%; max-width: 1400px; margin: 16px auto 0; padding: 0 4px; font-size: 12px; color: var(--muted); line-height: 1.8; }
+.resource-reader-help a { flex-shrink: 0; color: var(--accent-dark); font-weight: 800; text-underline-offset: 4px; }
+.resource-reader-status { flex-shrink: 0; width: 100%; max-width: 1400px; margin: 8px auto 11px; padding: 0 4px; color: var(--muted); font-size: 11px; line-height: 1.8; }
+.resource-reader-frame { display: block; flex: 1; width: 100%; min-height: 0; max-width: 1400px; margin: 0 auto; border: 2px solid var(--line); border-radius: 16px; background: #e9edf0; }
+.resource-reader-content { flex: 1; width: 100%; min-height: 0; max-width: 1400px; margin: 0 auto; padding: 28px 32px; overflow-y: auto; overscroll-behavior: contain; border: 2px solid var(--line); border-radius: 16px; background: white; }
+.resource-reader-knowledge-section + .resource-reader-knowledge-section { margin-top: 28px; padding-top: 24px; border-top: 2px solid #f0f0f0; }
+.resource-reader-knowledge-section h3 { margin: 0 0 13px; color: var(--accent-dark); font-size: 19px; font-weight: 800; line-height: 1.7; overflow-wrap: anywhere; }
+.resource-reader-knowledge-section ul { margin: 0; padding-left: 24px; color: var(--ink); font-size: 15px; line-height: 2; overflow-wrap: anywhere; }
+.resource-reader-knowledge-section li + li { margin-top: 12px; }
+@media (max-width: 760px) {
+    .resource-reader { padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+    .resource-reader-header { gap: 12px; padding: 14px; flex-wrap: wrap; border-radius: 19px; }
+    .resource-reader-heading { order: -1; flex-basis: 100%; }
+    .resource-reader-heading h2 { max-height: 6.8em; overflow: auto; font-size: 16px; }
+    .resource-reader-back, .resource-reader-download { flex: 1; padding: 9px 10px; font-size: 12px; }
+    .resource-reader-help { flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 13px; font-size: 11px; }
+    .resource-reader-status { font-size: 10px; margin: 7px auto 10px; }
+    .resource-reader-frame { border-radius: 12px; }
+    .resource-reader-content { padding: 21px 18px; border-radius: 12px; }
+    .resource-reader-knowledge-section h3 { font-size: 17px; }
+    .resource-reader-knowledge-section ul { padding-left: 20px; font-size: 14px; }
+}
 
 @media (min-width: 1500px) {
     .site-shell { max-width: 1470px; padding: 0 50px; }

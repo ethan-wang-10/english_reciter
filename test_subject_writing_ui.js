@@ -170,7 +170,7 @@ function writingUI({ storage = new Map(), isParent = false, seed = [], lesson: r
     }
     seed.forEach((data, index) => makeAttempt(data, String(index + 1)));
     const versionSummaries = (id) => state.versions.get(id).map(({ data, lesson_snapshot, ...summary }) => summary);
-    function payload(attempt) { return { attempt: clone(attempt), versions: clone(versionSummaries(attempt.id)), read_only: state.session.account.is_parent }; }
+    function payload(attempt) { return { attempt: clone(attempt), versions: clone(versionSummaries(attempt.id)), read_only: state.session.account.is_parent || attempt.status === 'abandoned' }; }
     function defaultReply(call) {
         const relative = call.url.slice(prefix.length);
         if (relative === '/lessons') {
@@ -179,7 +179,7 @@ function writingUI({ storage = new Map(), isParent = false, seed = [], lesson: r
             return { items: [item], count: 1 };
         }
         if (relative === '/lessons/' + state.lesson.id) return { lesson: clone(state.lesson) };
-        if (relative === '/attempts' && call.method === 'GET') return { items: [...state.attempts.values()].map((attempt) => ({ id: attempt.id, lesson_id: attempt.lesson_id, title: attempt.lesson_snapshot.title, lesson_title: attempt.lesson_snapshot.title, stage: attempt.data.stage, revision: attempt.revision, status: attempt.status, updated_at: attempt.updated_at, completed_at: attempt.completed_at })), count: state.attempts.size, read_only: state.session.account.is_parent };
+        if (relative === '/attempts' && call.method === 'GET') return { items: [...state.attempts.values()].filter((attempt) => attempt.status !== 'abandoned').map((attempt) => ({ id: attempt.id, lesson_id: attempt.lesson_id, title: attempt.lesson_snapshot.title, lesson_title: attempt.lesson_snapshot.title, stage: attempt.data.stage, revision: attempt.revision, status: attempt.status, updated_at: attempt.updated_at, completed_at: attempt.completed_at })), count: state.attempts.size, read_only: state.session.account.is_parent };
         if (relative === '/attempts' && call.method === 'POST') {
             const guided = call.body.flow_version === 1;
             if (guided) assert.equal(state.lesson.guidance?.version, 1);
@@ -194,6 +194,7 @@ function writingUI({ storage = new Map(), isParent = false, seed = [], lesson: r
         if (call.method === 'GET' && action?.startsWith('versions/')) return { version: clone(state.versions.get(attempt.id).find((version) => version.id === action.slice(9))) };
         assert.equal(call.body.base_revision, attempt.revision, 'Writing saves must use the latest server revision');
         attempt.revision += 1;
+        if (action === 'abandon') { attempt.status = 'abandoned'; return payload(attempt); }
         if (action === 'restore') attempt.data = clone(state.versions.get(attempt.id).find((version) => version.id === call.body.version_id).data);
         else attempt.data = clone(call.body.data);
         if (action === 'complete') { attempt.status = 'completed'; attempt.completed_at = '2026-11-13T10:30:00+08:00'; }
@@ -1040,4 +1041,139 @@ test('a slow expression-to-review transition keeps the expression draft frozen u
     assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
     assert.equal(ui.field('writing-reflection-learned').disabled, false);
     assert.match(ui.field('writing-stage-content').textContent, /我自己删去重复评价后的最后一稿/);
+});
+
+function abandonControls(ui, id) {
+    const card = ui.field('writing-attempt-list').querySelector(`[data-attempt-id="${id}"]`);
+    assert.ok(card, 'The unfinished attempt should have its own card');
+    return { card, abandon: card.querySelector('.writing-abandon'), confirmation: () => card.querySelector('.writing-abandon-confirmation') };
+}
+
+async function confirmAbandon(ui, controls) {
+    await controls.abandon.fire('click');
+    const confirmation = controls.confirmation();
+    assert.ok(confirmation, 'Abandonment requires an inline confirmation');
+    const confirm = confirmation.querySelectorAll('button').find((button) => button.textContent === '确认放弃');
+    await confirm.fire('click');
+    await ui.flush();
+}
+
+test('abandonment can be cancelled without posting and then removes only the chosen unfinished draft', async () => {
+    const ui = writingUI({ seed: [emptyData(), emptyData()] });
+    const [first, second] = [...ui.state.attempts.values()];
+    const original = clone(first.data); const originalVersions = clone(ui.state.versions.get(first.id));
+    const firstBackup = `itorange-writing-draft:alice:${first.id}`;
+    const secondBackup = `itorange-writing-draft:alice:${second.id}`;
+    ui.storage.set(firstBackup, 'first local draft'); ui.storage.set(secondBackup, 'second local draft');
+    await ui.api.open();
+    const controls = abandonControls(ui, first.id);
+    await controls.abandon.fire('click');
+    assert.match(controls.confirmation().textContent, /不再出现在.*我的练习.*已保存内容和版本会保留/);
+    await controls.confirmation().querySelectorAll('button').find((button) => button.textContent === '继续保留').fire('click');
+    assert.equal(controls.confirmation(), null);
+    assert.equal(ui.state.calls.some((call) => call.url.endsWith('/abandon')), false);
+    await confirmAbandon(ui, controls);
+    const call = ui.state.calls.find((call) => call.url.endsWith('/abandon'));
+    assert.deepEqual(call.body, { base_revision: 1 });
+    assert.equal(call.headers['X-Writing-Flow'], 'guided-v1');
+    assert.equal(first.status, 'abandoned'); assert.deepEqual(first.data, original);
+    assert.deepEqual(ui.state.versions.get(first.id), originalVersions, 'The original text and versions remain saved');
+    assert.equal(ui.field('writing-attempt-list').querySelector(`[data-attempt-id="${first.id}"]`), null);
+    assert.ok(ui.field('writing-attempt-list').querySelector(`[data-attempt-id="${second.id}"]`));
+    assert.equal(ui.storage.has(firstBackup), false); assert.equal(ui.storage.get(secondBackup), 'second local draft');
+    assert.match(ui.field('writing-message').textContent, /已放弃/);
+});
+
+test('a failed abandonment preserves the confirmation and local backup so the student can retry', async () => {
+    const ui = writingUI({ seed: [emptyData()] }); const attempt = [...ui.state.attempts.values()][0];
+    const key = `itorange-writing-draft:alice:${attempt.id}`; ui.storage.set(key, 'unsynced draft');
+    let requests = 0;
+    ui.state.routes[prefix + '/attempts/' + attempt.id + '/abandon'] = (call) => {
+        requests += 1;
+        assert.equal(ui.storage.get(key), 'unsynced draft', 'Local data is retained until a successful response');
+        if (requests === 1) throw new Error('网络暂时中断');
+        return ui.state.defaultReply(call);
+    };
+    await ui.api.open(); const controls = abandonControls(ui, attempt.id);
+    await confirmAbandon(ui, controls);
+    assert.equal(attempt.status, 'in_progress'); assert.ok(controls.confirmation());
+    assert.match(controls.confirmation().textContent, /网络暂时中断/);
+    assert.equal(ui.storage.get(key), 'unsynced draft');
+    await controls.confirmation().querySelector('.writing-abandon-confirm').fire('click'); await ui.flush();
+    assert.equal(requests, 2); assert.equal(attempt.status, 'abandoned'); assert.equal(ui.storage.has(key), false);
+});
+
+test('an abandonment conflict refreshes the draft list without automatically retrying or discarding the local copy', async () => {
+    const ui = writingUI({ seed: [emptyData()] }); const attempt = [...ui.state.attempts.values()][0];
+    const key = `itorange-writing-draft:alice:${attempt.id}`; ui.storage.set(key, 'retain this local copy');
+    ui.state.routes[prefix + '/attempts/' + attempt.id + '/abandon'] = () => {
+        attempt.revision = 7;
+        throw Object.assign(new Error('内容已有更新'), { status: 409, code: 'conflict', current_revision: 7 });
+    };
+    await ui.api.open(); await confirmAbandon(ui, abandonControls(ui, attempt.id));
+    assert.equal(ui.state.calls.filter((call) => call.url.endsWith('/abandon')).length, 1);
+    assert.equal(attempt.status, 'in_progress'); assert.equal(ui.storage.get(key), 'retain this local copy');
+    const refreshed = abandonControls(ui, attempt.id); assert.equal(refreshed.confirmation(), null);
+    assert.match(ui.field('writing-message').textContent, /未自动放弃.*核对/);
+    assert.ok(ui.state.calls.filter((call) => call.url === prefix + '/attempts' && call.method === 'GET').length >= 2);
+});
+
+test('parent and completed-attempt cards do not offer abandonment', async () => {
+    const parent = writingUI({ isParent: true, seed: [emptyData()] }); await parent.api.open();
+    assert.equal(parent.field('writing-attempt-list').querySelector('.writing-abandon'), null);
+    const student = writingUI({ seed: [completedData()] });
+    [...student.state.attempts.values()][0].status = 'completed'; await student.api.open();
+    assert.equal(student.field('writing-attempt-list').querySelector('.writing-abandon'), null);
+    assert.equal(student.state.calls.some((call) => call.url.endsWith('/abandon')), false);
+});
+
+test('an abandonment in flight locks draft navigation and cannot affect a newly signed-in account', async () => {
+    const ui = writingUI({ seed: [emptyData()] }); const attempt = [...ui.state.attempts.values()][0];
+    const key = `itorange-writing-draft:alice:${attempt.id}`; ui.storage.set(key, 'alice local copy');
+    const gate = deferred(); let pending;
+    ui.state.routes[prefix + '/attempts/' + attempt.id + '/abandon'] = (call) => { pending = call; return gate.promise; };
+    await ui.api.open(); const controls = abandonControls(ui, attempt.id);
+    await controls.abandon.fire('click');
+    const confirming = controls.confirmation().querySelector('.writing-abandon-confirm').fire('click'); await ui.flush();
+    assert.ok(pending); assert.ok(ui.field('writing-home').querySelectorAll('button').every((button) => button.disabled));
+    const calls = ui.state.calls.length;
+    await ui.api.openAttempt(attempt.id);
+    await ui.field('writing-lessons').querySelector('button').fire('click');
+    assert.equal(ui.state.calls.length, calls, 'No second draft can be opened or started during abandonment');
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    gate.resolve(ui.state.defaultReply(pending)); await confirming; await ui.flush();
+    assert.equal(ui.storage.get(key), 'alice local copy', 'A late response must not clear another account recovery data');
+    assert.equal(ui.field('writing-attempt-list').children.length, 0); assert.equal(ui.field('writing-message').textContent, '');
+});
+
+test('abandoning the active hidden draft waits for autosave and uses the acknowledged revision', async () => {
+    const ui = writingUI({ seed: [emptyData()] }); const attempt = [...ui.state.attempts.values()][0];
+    await ui.api.openAttempt(attempt.id);
+    const gate = deferred(); let saving;
+    ui.state.routes[prefix + '/attempts/' + attempt.id] = (call) => {
+        if (call.method === 'PATCH' && !saving) { saving = call; return gate.promise; }
+        return ui.state.defaultReply(call);
+    };
+    await ui.type('writing-plan-situation', '这段输入需要先保存。'); await ui.timers(); assert.ok(saving);
+    await ui.api.open(); const controls = abandonControls(ui, attempt.id);
+    await controls.abandon.fire('click');
+    const confirming = controls.confirmation().querySelector('.writing-abandon-confirm').fire('click'); await ui.flush();
+    assert.equal(ui.state.calls.some((call) => call.url.endsWith('/abandon')), false);
+    assert.equal(ui.field('writing-plan-situation').disabled, true);
+    await ui.type('writing-plan-situation', '不应接受放弃中的迟到输入');
+    gate.resolve(ui.state.defaultReply(saving)); await confirming; await ui.flush(); await ui.timers();
+    const abandoning = ui.state.calls.find((call) => call.url.endsWith('/abandon'));
+    assert.deepEqual(abandoning.body, { base_revision: 2 });
+    assert.equal(attempt.data.planning.situation, '这段输入需要先保存。'); assert.equal(attempt.status, 'abandoned');
+    const abandonedIndex = ui.state.calls.indexOf(abandoning);
+    assert.equal(ui.state.calls.slice(abandonedIndex + 1).some((call) => call.method === 'PATCH'), false, 'Autosave cannot keep writing after abandonment');
+});
+
+test('a previously abandoned attempt stays readonly even if an older response omits the readonly flag', async () => {
+    const ui = writingUI({ seed: [emptyData()] }); const attempt = [...ui.state.attempts.values()][0]; attempt.status = 'abandoned';
+    ui.state.routes[prefix + '/attempts/' + attempt.id] = () => ({ attempt: clone(attempt), versions: [], read_only: false });
+    await ui.api.openAttempt(attempt.id);
+    assert.equal(ui.field('writing-plan-situation').disabled, true); assert.match(ui.field('writing-read-only').textContent, /已放弃/);
+    await ui.type('writing-plan-situation', '不应写入已放弃的练习'); await ui.timers();
+    assert.equal(ui.state.calls.some((call) => call.method === 'PATCH'), false);
 });

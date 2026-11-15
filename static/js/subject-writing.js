@@ -37,11 +37,12 @@
     let editingEnding = false;
     let guidanceConfirming = false;
     let transitionBusy = false;
+    let abandonBusy = false;
     const lessonFlows = new Map();
     const capture = () => ({ generation, token: session().token, student: student(), attemptId: attempt?.id });
     const current = (ctx, checkAttempt = true) => ctx.generation === generation && ctx.token === session().token
         && ctx.student === student() && (!checkAttempt || ctx.attemptId === attempt?.id);
-    const writeAllowed = () => !!attempt && !readOnly && attempt.status !== 'completed';
+    const writeAllowed = () => !!attempt && !readOnly && attempt.status === 'in_progress';
     const editable = () => writeAllowed() && !localRecovery;
     const backupKey = (ctx = capture()) => `itorange-writing-draft:${ctx.student}:${ctx.attemptId}`;
     const orderedText = (state, paragraphs) => state.outline.map((card) => paragraphs?.[card.id] || '').filter((text) => text.trim()).join('\n\n');
@@ -97,9 +98,9 @@
     function button(text, handler, options = {}) {
         const result = node('button', text, 'writing-button' + (options.light ? ' writing-button-light' : '') + (options.small ? ' writing-button-small' : ''));
         result.type = 'button';
-        result.disabled = !!options.disabled || transitionBusy;
+        result.disabled = !!options.disabled || transitionBusy || abandonBusy;
         if (options.label) result.setAttribute('aria-label', options.label);
-        result.addEventListener('click', (event) => { if (transitionBusy) return; return handler(event); });
+        result.addEventListener('click', (event) => { if (transitionBusy || abandonBusy) return; return handler(event); });
         return result;
     }
     function note(text, parent, className = 'writing-note') { parent.appendChild(node('p', text, className)); }
@@ -193,11 +194,11 @@
         else input.rows = options.rows || 3;
         input.value = value || '';
         input.maxLength = options.maxLength || 2000;
-        input.disabled = !editable() || completing || guidanceConfirming || transitionBusy;
+        input.disabled = !editable() || completing || guidanceConfirming || transitionBusy || abandonBusy;
         input.autocomplete = 'off';
         if (options.placeholder) input.placeholder = options.placeholder;
         if (options.list) input.setAttribute('list', options.list);
-        input.addEventListener('input', () => { if (!editable() || completing || guidanceConfirming || transitionBusy) return; update(input.value); changed(); });
+        input.addEventListener('input', () => { if (!editable() || completing || guidanceConfirming || transitionBusy || abandonBusy) return; update(input.value); changed(); });
         input.addEventListener('blur', () => { if (editable() && !conflict) void flush().catch(() => {}); });
         wrapper.appendChild(input);
         if (options.help) wrapper.appendChild(node('small', options.help));
@@ -209,9 +210,9 @@
         const input = node('input');
         input.type = 'checkbox';
         input.checked = !!checked;
-        input.disabled = !editable() || completing || guidanceConfirming || transitionBusy;
+        input.disabled = !editable() || completing || guidanceConfirming || transitionBusy || abandonBusy;
         if (id) input.id = id;
-        input.addEventListener('change', () => { if (!editable() || completing || guidanceConfirming || transitionBusy) return; update(input.checked); changed(); });
+        input.addEventListener('change', () => { if (!editable() || completing || guidanceConfirming || transitionBusy || abandonBusy) return; update(input.checked); changed(); });
         wrapper.append(input, node('span', label));
         parent.appendChild(wrapper);
         return input;
@@ -265,8 +266,8 @@
             const wrapper = node('label');
             const radio = node('input');
             radio.type = 'radio'; radio.name = 'writing-mode'; radio.value = value;
-            radio.checked = data.mode === value; radio.disabled = !editable() || transitionBusy;
-            radio.addEventListener('change', () => { if (editable() && !transitionBusy) { data.mode = value; changed(); renderStage(); } });
+            radio.checked = data.mode === value; radio.disabled = !editable() || transitionBusy || abandonBusy;
+            radio.addEventListener('change', () => { if (editable() && !transitionBusy && !abandonBusy) { data.mode = value; changed(); renderStage(); } });
             wrapper.append(radio, node('span', label)); modes.appendChild(wrapper);
         }
         parent.appendChild(modes);
@@ -465,7 +466,7 @@
         el('writing-stage-goal').textContent = guide.goal || guide.question || '';
         el('writing-read-only').hidden = !readOnly && attempt.status !== 'completed';
         el('writing-read-only').textContent = session().account?.is_parent ? '家长查看模式：可以看过程和版本，正文由学生编辑。'
-            : attempt.status === 'completed' ? '作品已保存。可以查看过程，或再开一次练习。' : '当前为只读查看。';
+            : attempt.status === 'abandoned' ? '这份练习已放弃，已保存内容和版本仍可查看。' : attempt.status === 'completed' ? '作品已保存。可以查看过程，或再开一次练习。' : '当前为只读查看。';
         renderSteps(); renderHints();
         const helpAside = el('writing-hints').parentElement;
         if (helpAside) helpAside.hidden = guided;
@@ -501,7 +502,7 @@
         return '';
     }
     async function moveStage(next, validate = true) {
-        if (!attempt || navigationBusy || next === viewStage) return;
+        if (!attempt || navigationBusy || abandonBusy || next === viewStage) return;
         if (localRecovery && next > furthestStage) return message('先决定继续本机草稿，还是使用云端这一份。', true);
         if (!editable()) { viewStage = Math.max(0, Math.min(5, next)); renderStage(); return; }
         if (validate && next > viewStage) { const error = validateStage(); if (error) return message(error, true); }
@@ -526,7 +527,7 @@
         finally { if (current(ctx)) { navigationBusy = false; transitionBusy = false; renderStage(); } }
     }
     async function nextStage() {
-        if (!attempt || navigationBusy) return;
+        if (!attempt || navigationBusy || abandonBusy) return;
         if (isGuided() && guidedView !== 'question') { guidedView = 'question'; renderStage(); return; }
         if (isGuided() && viewStage <= 3) return confirmGuidedStep();
         if (localRecovery) return message('先决定继续本机草稿，还是使用云端这一份。', true);
@@ -547,7 +548,7 @@
         return moveStage(Math.min(5, viewStage + 1));
     }
     async function finish() {
-        if (!editable() || navigationBusy) return;
+        if (!editable() || navigationBusy || abandonBusy) return;
         if (isGuided() && guidedPending() !== null) { const pending = guidedPending(); openGuidedStep(pending); message('还有问题需要确认或复核，文字都会保留。', true); return; }
         if (!data.reflection.learned.trim()) return message('用一句话说说这次学会了什么，再保存作品。', true);
         const ctx = capture(); navigationBusy = true; completing = true; renderStage();
@@ -567,14 +568,14 @@
         lesson = attempt.lesson_snapshot;
         guidedStep = data.guidance?.step || 0; guidedView = 'question'; guidedFullExample = false; editingEnding = false; guidanceConfirming = false; transitionBusy = false;
         versions = Array.isArray(result.versions) ? result.versions : [];
-        readOnly = !!result.read_only || !!session().account?.is_parent || attempt.status === 'completed';
+        readOnly = !!result.read_only || !!session().account?.is_parent || attempt.status !== 'in_progress';
         viewStage = attempt.status === 'completed' ? 5 : data.stage;
         furthestStage = viewStage;
         sequence = 0; savedSequence = 0; conflict = false; navigationBusy = false; completing = false;
         el('writing-conflict').hidden = true;
         el('writing-history').hidden = true;
         el('writing-home').hidden = true; el('writing-editor').hidden = false;
-        saveState(attempt.status === 'completed' ? '作品已保存' : readOnly ? '只读查看' : '已保存');
+        saveState(attempt.status === 'abandoned' ? '练习已放弃，内容保留' : attempt.status === 'completed' ? '作品已保存' : readOnly ? '只读查看' : '已保存');
         localRecovery = readBackup();
         el('writing-local-recovery').hidden = !localRecovery;
         el('writing-recover-local').textContent = localRecovery && localRecovery.base_revision !== attempt.revision
@@ -583,6 +584,7 @@
         renderStage(); el('writing-title').focus?.({ preventScroll: true });
     }
     async function openAttempt(id) {
+        if (abandonBusy || navigationBusy) return;
         const ctx = capture(); const requestId = ++viewRequest;
         clearTimeout(timer);
         if (editable() && sequence !== savedSequence) {
@@ -597,7 +599,7 @@
         } catch (error) { if (current(ctx, false) && requestId === viewRequest) message(error.message || '练习加载失败，请重试。', true); }
     }
     async function startLesson(id) {
-        if (session().account?.is_parent || navigationBusy) return;
+        if (session().account?.is_parent || navigationBusy || abandonBusy) return;
         const ctx = capture(); const requestId = ++viewRequest;
         navigationBusy = true; message('正在准备练习…');
         try {
@@ -611,6 +613,7 @@
         finally { if (current(ctx, false)) navigationBusy = false; }
     }
     async function open() {
+        if (abandonBusy) return;
         if (session().subject !== 'chinese' || !session().token || !session().account) return;
         const ctx = capture(); const requestId = ++viewRequest;
         clearTimeout(timer);
@@ -633,20 +636,97 @@
                 list.appendChild(card);
             }
             const history = el('writing-attempt-list'); history.replaceChildren();
-            for (const item of attempts.items || []) {
+            const visibleAttempts = (attempts.items || []).filter((item) => item.status !== 'abandoned');
+            for (const item of visibleAttempts) {
                 const card = node('article', '', 'writing-attempt-card');
+                card.setAttribute('data-attempt-id', item.id);
                 const info = node('div'); info.appendChild(node('h4', item.title || item.lesson_title || '一次有趣的课间游戏'));
                 const savedStage = item.stage ?? item.data?.stage ?? 0;
                 note(`${item.status === 'completed' ? '已完成' : '进行中 · ' + (item.guidance_step !== undefined && savedStage <= 3 ? guidedStepTitle(item.guidance_step) : STAGES[savedStage])}${item.updated_at ? ' · ' + item.updated_at.replace('T', ' ').slice(0, 16) : ''}`, info);
                 const actions = node('div'); actions.appendChild(button(item.status === 'completed' || session().account?.is_parent ? '查看作品与过程' : '继续练习', () => void openAttempt(item.id), { light: true }));
+                if (item.status === 'in_progress' && !session().account?.is_parent && !attempts.read_only) {
+                    const abandon = button('放弃练习', () => requestAbandon(item, card, ctx), { light: true });
+                    abandon.classList.add('writing-abandon');
+                    abandon.setAttribute('aria-label', '放弃练习：' + (item.title || item.lesson_title || '作文练习'));
+                    actions.appendChild(abandon);
+                }
                 card.append(info, actions); history.appendChild(card);
             }
-            if (!(attempts.items || []).length) history.appendChild(node('p', session().account?.is_parent ? '关联学生还没有开始作文练习。' : '还没有练习记录，从上面的第 1 题开始吧。', 'writing-empty'));
+            if (!visibleAttempts.length) history.appendChild(node('p', session().account?.is_parent ? '关联学生还没有开始作文练习。' : '还没有练习记录，从上面的第 1 题开始吧。', 'writing-empty'));
             message();
         } catch (error) { if (current(ctx, false) && requestId === viewRequest) message(error.message || '作文练习加载失败，请重试。', true); }
     }
+    function freezeWritingHome(value) {
+        for (const id of ['writing-home', 'writing-editor']) {
+            el(id).querySelectorAll('button, input, textarea, select').forEach((control) => { control.disabled = value; });
+        }
+        if (!value && attempt && !el('writing-editor').hidden) renderStage();
+    }
+    function requestAbandon(item, card, listContext) {
+        if (abandonBusy || navigationBusy || session().account?.is_parent || !current(listContext, false) || item.status !== 'in_progress') return;
+        if (card.querySelector('.writing-abandon-confirmation')) return;
+        const confirmation = node('div', '', 'writing-abandon-confirmation');
+        confirmation.setAttribute('role', 'group');
+        confirmation.setAttribute('aria-label', '确认放弃作文练习');
+        confirmation.appendChild(node('strong', '确认放弃这次练习？'));
+        note('放弃后不再出现在“我的练习”中，可以重新开始；已保存内容和版本会保留。', confirmation);
+        const status = node('p', '', 'writing-abandon-status'); status.setAttribute('role', 'status');
+        const actions = node('div', '', 'writing-abandon-confirm-actions');
+        const cancel = button('继续保留', () => { if (!abandonBusy) confirmation.remove(); }, { light: true });
+        const confirm = button('确认放弃', () => abandonAttempt(item, confirmation, status, listContext));
+        confirm.classList.add('writing-abandon-confirm');
+        actions.append(cancel, confirm); confirmation.append(status, actions); card.appendChild(confirmation);
+        cancel.focus?.({ preventScroll: true });
+    }
+    async function abandonAttempt(item, confirmation, status, listContext) {
+        if (abandonBusy || navigationBusy || session().account?.is_parent || !current(listContext, false) || item.status !== 'in_progress') return;
+        const ctx = capture(); const activeTarget = attempt?.id === item.id;
+        if (activeTarget && (localRecovery || conflict)) {
+            status.textContent = '这台设备上还有需要对照的草稿。请先继续练习并处理草稿，再决定放弃。';
+            return;
+        }
+        abandonBusy = true; viewRequest += 1; clearTimeout(timer); timer = null;
+        freezeWritingHome(true); status.textContent = '正在保存并放弃…';
+        let succeeded = false;
+        try {
+            if (activeTarget && editable()) {
+                await flush();
+                while (current(ctx) && editable() && sequence !== savedSequence) await flush();
+            }
+            if (!current(ctx, false)) return;
+            const revision = activeTarget ? attempt.revision : item.revision;
+            const result = await request(`/attempts/${encodeURIComponent(item.id)}/abandon`, apiOptions({ base_revision: revision }));
+            if (!current(ctx, false)) return;
+            if (!result.attempt || result.attempt.id !== item.id || result.attempt.status !== 'abandoned') throw new Error('放弃结果未确认，请重试。');
+            if (activeTarget) {
+                attempt = { ...result.attempt, data };
+                readOnly = true; localRecovery = null; sequence = savedSequence;
+                versions = Array.isArray(result.versions) ? result.versions : versions;
+            }
+            removeBackup({ ...ctx, attemptId: item.id });
+            succeeded = true;
+            abandonBusy = false; freezeWritingHome(false);
+            await open();
+            if (current(ctx, false)) message('已放弃本次练习，已保存内容和版本会保留。可以开始一次新练习。');
+        } catch (error) {
+            if (!current(ctx, false)) return;
+            abandonBusy = false; freezeWritingHome(false);
+            if (error.status === 409) {
+                await open();
+                if (current(ctx, false)) message('练习内容或状态已有更新，未自动放弃。请核对最新内容后再决定。', true);
+            } else {
+                status.textContent = error.message || '暂时未能放弃，练习仍然保留，可以重试。';
+            }
+        } finally {
+            if (current(ctx, false)) {
+                abandonBusy = false;
+                if (!succeeded && confirmation.parentElement) freezeWritingHome(false);
+            }
+        }
+    }
+
     async function exit() {
-        if (navigationBusy) return;
+        if (navigationBusy || abandonBusy) return;
         const ctx = capture(); navigationBusy = true;
         try {
             await flush();
@@ -669,7 +749,7 @@
         clearTimeout(timer);
         generation += 1; viewRequest += 1;
         attempt = null; data = null; lesson = null; versions = []; selectedVersion = null; localRecovery = null; furthestStage = 0;
-        guidedView = 'question'; guidedStep = 0; guidedFullExample = false; editingEnding = false; guidanceConfirming = false; transitionBusy = false; lessonFlows.clear();
+        guidedView = 'question'; guidedStep = 0; guidedFullExample = false; editingEnding = false; guidanceConfirming = false; transitionBusy = false; abandonBusy = false; lessonFlows.clear();
         sequence = 0; savedSequence = 0; conflict = false; navigationBusy = false; completing = false; queue = Promise.resolve();
         for (const id of ['writing-lessons', 'writing-attempt-list', 'writing-stage-content', 'writing-hints', 'writing-steps', 'writing-version-preview']) el(id).replaceChildren();
         el('writing-title').textContent = ''; el('writing-save-state').textContent = '';
@@ -720,7 +800,7 @@
         } catch (error) { if (current(ctx)) el('writing-version-preview').textContent = error.message || '版本读取失败。'; }
     }
     async function showHistory() {
-        if (!attempt || navigationBusy) return;
+        if (!attempt || navigationBusy || abandonBusy) return;
         const ctx = capture();
         try {
             await flush();
@@ -740,7 +820,7 @@
         } catch (error) { if (current(ctx)) message(error.message || '请先保存当前内容。', true); }
     }
     async function restoreVersion() {
-        if (!editable() || !selectedVersion || navigationBusy) return;
+        if (!editable() || !selectedVersion || navigationBusy || abandonBusy) return;
         const ctx = capture(); navigationBusy = true;
         try {
             await flush();
@@ -886,14 +966,14 @@
         container.appendChild(progress);
     }
     function openGuidedStep(index) {
-        if (!isGuided() || navigationBusy || guidanceConfirming || index < 0 || index > 8) return;
+        if (!isGuided() || navigationBusy || guidanceConfirming || abandonBusy || index < 0 || index > 8) return;
         guidedStep = index; guidedView = 'question'; guidedFullExample = false; guidedHelpExamples = false; editingEnding = false;
         viewStage = guidedStageFor(index);
         if (editable()) { guidance().step = index; data.stage = viewStage; changed(); }
         renderStage();
     }
     function openGuidedRevision(mode) {
-        if (!isGuided() || navigationBusy || guidanceConfirming) return;
+        if (!isGuided() || navigationBusy || guidanceConfirming || abandonBusy) return;
         if (editable()) {
             const pending = guidedPending();
             if (pending !== null) { openGuidedStep(pending); message(`还需要确认“${GUIDED_TITLES[pending]}”，已经写的文字都会保留。`, true); return; }
@@ -907,14 +987,14 @@
     function guidedChoice(parent, id, title, selected, handler, help = '', prefix = 'choice') {
         const choice = node('button', '', 'writing-guided-option');
         choice.type = 'button'; choice.id = `writing-guided-${prefix}-${id}`;
-        choice.disabled = !editable() || navigationBusy || guidanceConfirming || completing || transitionBusy;
+        choice.disabled = !editable() || navigationBusy || guidanceConfirming || completing || transitionBusy || abandonBusy;
         choice.setAttribute('aria-pressed', String(!!selected));
         choice.appendChild(node('span', selected ? '✓' : '○', 'writing-guided-choice-mark'));
         const description = node('span', '', 'writing-guided-option-text'); description.appendChild(node('span', title));
         if (help) description.appendChild(node('small', help));
         choice.appendChild(description);
         choice.addEventListener('click', () => {
-            if (!editable() || navigationBusy || guidanceConfirming || completing || transitionBusy) return;
+            if (!editable() || navigationBusy || guidanceConfirming || completing || transitionBusy || abandonBusy) return;
             handler();
             el(choice.id)?.focus?.({ preventScroll: true });
         });
@@ -1129,7 +1209,7 @@
             : editingEnding && guidedStep === 7 ? '只改结尾，让它接住你的主旨。' : step.question || GUIDED_TITLES[guidedStep];
         el('writing-stage-goal').textContent = guidedView === 'question' ? step.description || step.phase || '' : '读完后回到自己的输入，文字都会保留。';
         el('writing-read-only').hidden = !readOnly;
-        el('writing-read-only').textContent = session().account?.is_parent ? '家长查看模式：可以看过程和版本，正文由学生编辑。' : '作品已保存，可以回看每一步。';
+        el('writing-read-only').textContent = session().account?.is_parent ? '家长查看模式：可以看过程和版本，正文由学生编辑。' : attempt.status === 'abandoned' ? '这份练习已放弃，已保存内容和版本仍可查看。' : '作品已保存，可以回看每一步。';
         renderGuidedSteps();
         const main = el('writing-stage-content'); main.replaceChildren();
         if (guidedView === 'question') renderGuidedQuestion(main); else renderGuidedSupport(main);
@@ -1140,7 +1220,7 @@
         updateGuidedFooter();
     }
     async function confirmGuidedStep() {
-        if (!attempt || navigationBusy || guidanceConfirming) return;
+        if (!attempt || navigationBusy || guidanceConfirming || abandonBusy) return;
         if (!editable()) { if (!localRecovery) openGuidedStep(Math.min(8, guidedStep + 1)); return; }
         if (!guidedValid(guidedStep)) return message('先完成当前问题，可以用选项，也可以用自己的话。', true);
         const value = guidance();

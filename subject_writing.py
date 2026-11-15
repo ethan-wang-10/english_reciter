@@ -468,6 +468,9 @@ class WritingStore:
         return version_id
 
     def _check_write(self, row, base_revision):
+        if row['status'] == 'abandoned':
+            raise WritingError('这次练习已放弃，原稿和版本已保留，可以另开一次练习。',
+                               409, code='abandoned', current_revision=row['revision'])
         if row['status'] != 'in_progress':
             raise WritingError('这次练习已完成，可以另开一次练习。', 409, code='completed', current_revision=row['revision'])
         if _revision(base_revision) != row['revision']:
@@ -491,7 +494,7 @@ class WritingStore:
         if not self.path.is_file():
             return []
         with self._connection() as connection:
-            rows = connection.execute('SELECT * FROM writing_attempts ORDER BY updated_at DESC,id DESC LIMIT 200').fetchall()
+            rows = connection.execute("SELECT * FROM writing_attempts WHERE status!='abandoned' ORDER BY updated_at DESC,id DESC LIMIT 200").fetchall()
             result = []
             for row in rows:
                 lesson, data = self._stored(row)
@@ -547,6 +550,24 @@ class WritingStore:
             except WritingError as error:
                 raise WritingError('作文版本暂时无法读取，原稿已保留。', 503) from error
             return {**{key: row[key] for key in ('id', 'attempt_id', 'label', 'revision', 'created_at')}, 'data': data}
+
+    def abandon(self, attempt_id, base_revision):
+        _valid_id(attempt_id, ATTEMPT_ID)
+        _revision(base_revision)
+        with self._connection(write=True) as connection:
+            row = self._row(connection, attempt_id)
+            if row['status'] == 'abandoned':
+                if base_revision != row['revision']:
+                    raise WritingError('这次练习的状态已有更新，请刷新列表后查看。', 409,
+                                       code='conflict', current_revision=row['revision'])
+                return {'attempt': self._public(row), 'versions': self._versions(connection, attempt_id)}
+            self._check_write(row, base_revision)
+            _, data = self._stored(row)
+            now, revision = china_now_iso(timespec='microseconds'), row['revision'] + 1
+            connection.execute("UPDATE writing_attempts SET revision=?,status='abandoned',updated_at=? WHERE id=?",
+                               (revision, now, attempt_id))
+            self._snapshot(connection, attempt_id, data, revision, '放弃时草稿', now)
+            return {'attempt': self._public(self._row(connection, attempt_id)), 'versions': self._versions(connection, attempt_id)}
 
     def restore(self, attempt_id, base_revision, version_id):
         _valid_id(attempt_id, ATTEMPT_ID)
@@ -661,7 +682,7 @@ def register_subject_writing_routes(app, services):
     @services.token_required
     def get(username, attempt_id):
         _, result = flow_access(username, attempt_id)
-        return jsonify({**result, 'read_only': bool(getattr(g, 'is_parent', False))})
+        return jsonify({**result, 'read_only': bool(getattr(g, 'is_parent', False)) or result['attempt']['status'] == 'abandoned'})
 
     @routes.patch('/attempts/<attempt_id>')
     @services.token_required
@@ -688,6 +709,14 @@ def register_subject_writing_routes(app, services):
         learning_store, _ = flow_access(username, attempt_id)
         data = body(('base_revision', 'data'))
         return jsonify(learning_store.save(attempt_id, data['base_revision'], data['data'], complete=True))
+
+    @routes.post('/attempts/<attempt_id>/abandon')
+    @services.token_required
+    @services.parent_forbidden
+    def abandon(username, attempt_id):
+        learning_store, _ = flow_access(username, attempt_id)
+        data = body(('base_revision',))
+        return jsonify({**learning_store.abandon(attempt_id, data['base_revision']), 'read_only': True})
 
     @routes.get('/attempts/<attempt_id>/versions/<version_id>')
     @services.token_required
