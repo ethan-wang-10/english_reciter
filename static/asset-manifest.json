@@ -66,9 +66,9 @@
       "url": "/static/assets/js/english-dictation-host.10c6b22669f3fff1.js"
     },
     "/static/js/english-dictation.js": {
-      "bytes": 87984,
-      "sha256": "af9578b19af30da5efd00451cfbf7de5c44b6567bf809ed7cebec67ff7953191",
-      "url": "/static/assets/js/english-dictation.af9578b19af30da5.js"
+      "bytes": 90232,
+      "sha256": "d4940260f218b8d2ce8324f647df0bc7a1bce052980256e7e4a63716846399a3",
+      "url": "/static/assets/js/english-dictation.d4940260f218b8d2.js"
     },
     "/static/js/exam-preparation.js": {
       "bytes": 54418,
@@ -81,14 +81,14 @@
       "url": "/static/assets/js/performance.cabc7fdc8aff1192.js"
     },
     "/static/js/subject-dictation.js": {
-      "bytes": 71102,
-      "sha256": "b6338d2c1bc6f72f238fee70481ea2cff6368039b7e7841db241f26db896fe55",
-      "url": "/static/assets/js/subject-dictation.b6338d2c1bc6f72f.js"
+      "bytes": 79023,
+      "sha256": "6d698315cdd77a50e60e0a5ddb969c78c1d3abc5564647d7452d5ea97b034ce9",
+      "url": "/static/assets/js/subject-dictation.6d698315cdd77a50.js"
     },
     "/static/js/subject-portal.js": {
-      "bytes": 41592,
-      "sha256": "00301ddac21065576ddc0aacb242b8f5e9a77d7898b4cbeac57e4710f2d5e5ed",
-      "url": "/static/assets/js/subject-portal.00301ddac2106557.js"
+      "bytes": 41616,
+      "sha256": "a3c2956a970d55dacc092859bd0883788c0ab03add4e25bf1dc0254e6c9bfc16",
+      "url": "/static/assets/js/subject-portal.a3c2956a970d55da.js"
     },
     "/static/js/subject-practice.js": {
       "bytes": 22024,

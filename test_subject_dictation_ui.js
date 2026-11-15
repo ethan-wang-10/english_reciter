@@ -32,12 +32,12 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
-function dictationUI({ storage = new Map(), isParent = false, voices, words = ['潮水', '繁星'], revision = 1, mistakes = [], mistakeStore = new Map() } = {}) {
+function dictationUI({ storage = new Map(), isParent = false, voices, capabilities = { kokoro: false, prepare: false }, words = ['潮水', '繁星'], revision = 1, mistakes = [], mistakeStore = new Map() } = {}) {
     const html = fs.readFileSync(path.join(__dirname, 'static/subject.html'), 'utf8');
     const source = fs.readFileSync(path.join(__dirname, 'static/js/subject-dictation.js'), 'utf8');
     const elements = new Map(), timers = new Map();
     let timerId = 0, now = 0;
-    const state = { calls: [], routes: {}, listeners: {}, clipboard: '', section: 'dictation', spoken: [], cancelled: 0, speechListeners: {} };
+    const state = { calls: [], routes: {}, listeners: {}, clipboard: '', section: 'dictation', spoken: [], cancelled: 0, speechListeners: {}, audioRequests: [], audios: [], audioPlayed: [], objectUrls: new Map(), revoked: [] };
     state.session = { token: 'alice-token', username: isParent ? 'alice_parent' : 'alice', subject: 'chinese',
         account: { username: isParent ? 'alice_parent' : 'alice', is_parent: isParent, child_username: isParent ? 'alice' : null } };
     state.book = { id: bookId, title: '四年级上册 · 2026版', grade: 4, term: 1, edition: '2026',
@@ -172,7 +172,19 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
         addEventListener(name, callback) { if (name === 'DOMContentLoaded') callback(); else (state.listeners[name] ||= []).push(callback); }, activeElement: null,
         body: root.querySelector('body'), hidden: false, visibilityState: 'visible' };
 
+    state.capabilities = clone(capabilities);
     state.defaultReply = (call) => {
+        if (call.url === prefix + '/audio/capabilities') {
+            assert.equal(call.method, 'GET');
+            return clone(state.capabilities);
+        }
+        if (call.url === prefix + '/audio/prepare') {
+            assert.equal(call.method, 'POST');
+            assert.ok(Array.isArray(call.body.texts));
+            assert.ok(call.body.texts.length <= 200, 'Audio prewarming respects the subject batch limit');
+            assert.equal(new Set(call.body.texts).size, call.body.texts.length, 'Prewarming sends distinct spoken text');
+            return { enabled: true, accepted: call.body.texts.length, cached: 0, pending: call.body.texts.length, rejected: 0 };
+        }
         if (call.url === prefix + '/books') return { items: clone(state.books), count: state.books.length };
         const query = call.url.match(new RegExp(`^${prefix}/(lessons|wordlists|mistakes)\\?book_id=([^&]+)$`));
         if (query) {
@@ -235,12 +247,42 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
         removeEventListener(name, callback) { this.listeners[name] = (this.listeners[name] || []).filter((item) => item !== callback); }
         emit(name, event = {}) { this[`on${name}`]?.(event); for (const callback of this.listeners[name] || []) callback(event); }
     }
-    const window = { speechSynthesis, SpeechSynthesisUtterance, addEventListener(name, callback) { (state.listeners[name] ||= []).push(callback); } };
+    class FakeAudio extends Element {
+        constructor() { super('audio'); this.src = ''; this.currentTime = 0; this.playbackRate = 1; this.defaultPlaybackRate = 1; this.paused = true; this.readyState = 4; state.audios.push(this); }
+        get currentSrc() { return this.src; }
+        play() {
+            if (state.audioPlayError) return Promise.reject(state.audioPlayError);
+            this.paused = false; state.currentAudio = this;
+            state.audioPlayed.push({ audio: this, src: this.src, playbackRate: this.playbackRate, currentTime: this.currentTime });
+            this.emit('play');
+            return state.audioPlay ? state.audioPlay(this) : Promise.resolve();
+        }
+        pause() { this.paused = true; this.pauseCount = (this.pauseCount || 0) + 1; if (state.currentAudio === this) state.currentAudio = null; }
+        load() { this.loadCount = (this.loadCount || 0) + 1; }
+        emit(name, event = {}) { this['on' + name]?.({ target: this, ...event }); for (const callback of this.listeners[name] || []) callback({ target: this, ...event }); }
+        removeAttribute(name) { super.removeAttribute(name); if (name === 'src') this.src = ''; }
+    }
+    class ObjectURL extends URL {
+        static createObjectURL(blob) { assert.ok(blob instanceof Blob); const value = 'blob:chinese-dictation-' + (state.objectUrls.size + state.revoked.length + 1); state.objectUrls.set(value, blob); return value; }
+        static revokeObjectURL(value) { state.revoked.push(value); state.objectUrls.delete(value); }
+    }
+    function audioResponse(status = 200, { type = 'audio/wav', blob = new Blob(['RIFF0123WAVEdata'], { type }) } = {}) {
+        return { status, ok: status >= 200 && status < 300, headers: { get: (name) => name.toLowerCase() === 'content-type' ? type : null },
+            blob: async () => blob, json: async () => ({ error: 'Server audio unavailable' }) };
+    }
+    state.audioResponse = audioResponse;
+    const fetchAudio = async (url, options = {}) => {
+        assert.equal(url, '/api/subjects/chinese/dictation/audio', 'Only the dedicated Chinese speech endpoint should be fetched directly');
+        const call = { url, method: options.method || 'GET', headers: options.headers || {}, body: options.body ? JSON.parse(options.body) : null, signal: options.signal, credentials: options.credentials };
+        state.audioRequests.push(call);
+        return state.audioFetch ? state.audioFetch(call) : audioResponse(state.audioStatus || 200);
+    };
+    const window = { Audio: FakeAudio, speechSynthesis, SpeechSynthesisUtterance, addEventListener(name, callback) { (state.listeners[name] ||= []).push(callback); } };
     window.subjectPortal = {
         getSession: () => clone(state.session), showSection: (section) => { state.section = section; },
         async apiRequest(url, options = {}) {
             url = url.replace(/^\/api/, '');
-            const call = { url, method: options.method || 'GET', body: typeof options.body === 'string' ? JSON.parse(options.body) : clone(options.body), username: state.session.username,
+            const call = { url, method: options.method || 'GET', body: typeof options.body === 'string' ? JSON.parse(options.body) : clone(options.body), signal: options.signal, username: state.session.username,
                 student: state.session.account?.is_parent ? state.session.account.child_username : state.session.account?.username || state.session.username };
             state.calls.push(call);
             return clone(state.routes[url] ? await state.routes[url](call) : state.defaultReply(call));
@@ -249,7 +291,7 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
     const context = vm.createContext({ window, document, speechSynthesis, SpeechSynthesisUtterance, Element, HTMLElement: Element,
         localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)), removeItem: (key) => storage.delete(key) },
         navigator: { clipboard: { writeText: async (value) => { state.clipboard = value; } } },
-        URL, URLSearchParams, structuredClone, console, queueMicrotask,
+        URL: ObjectURL, URLSearchParams, Blob, AbortController, fetch: fetchAudio, Audio: FakeAudio, structuredClone, console, queueMicrotask,
         Date: class extends Date { static now() { return now; } },
         setTimeout(callback, delay = 0, ...args) { const id = ++timerId; timers.set(id, { at: now + Number(delay), callback: () => callback(...args) }); return id; },
         clearTimeout(id) { timers.delete(id); }, requestAnimationFrame: (callback) => callback(),
@@ -294,6 +336,8 @@ function dictationUI({ storage = new Map(), isParent = false, voices, words = ['
                 input.checked = words.some((word) => label.textContent.includes(word)); await input.fire('change');
             }
         },
+        async finishAudio() { const audio = state.currentAudio; assert.ok(audio, 'No audio to finish'); state.currentAudio = null; audio.paused = true; audio.emit('ended'); await settle(); await settle(); return audio; },
+        async finishItem() { for (let count = 0; count < Number(field('dictation-repetitions').value || 2); count += 1) { if (state.currentAudio) await this.finishAudio(); else await this.finishSpeech(); if (count + 1 < Number(field('dictation-repetitions').value || 2)) await this.tick(700); } },
         async finishSpeech() { const utterance = state.currentUtterance; assert.ok(utterance, 'No speech to finish'); speechSynthesis.speaking = false; state.currentUtterance = null; utterance.emit('end', { utterance }); await settle(); await settle(); return utterance; },
         async failSpeech(error = 'synthesis-failed') { const utterance = state.currentUtterance; assert.ok(utterance, 'No speech to fail'); speechSynthesis.speaking = false; state.currentUtterance = null; utterance.emit('error', { error, utterance }); await settle(); await settle(); return utterance; },
         async voicesChanged(next) { state.voices = next; for (const callback of state.speechListeners.voiceschanged || []) callback(); speechSynthesis.onvoiceschanged?.(); await settle(); await settle(); },
@@ -869,4 +913,151 @@ test('correcting one Mandarin mistake source preserves other sources, original l
     assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
     await ui.field('dictation-resume').fire('click'); await ui.finishRun(1);
     assert.deepEqual(ui.state.spoken.map((utterance) => utterance.text), ['重庆'], 'A resumed round keeps the pronunciation and merged sources from its start');
+});
+
+
+test('Chinese speech remains immediate device Mandarin when optional server capabilities are disabled, pending or unavailable', { timeout: 3000 }, async () => {
+    for (const mode of ['disabled', 'pending', 'failure']) {
+        const ui = dictationUI(); const gate = deferred();
+        if (mode === 'pending') ui.state.routes[prefix + '/audio/capabilities'] = () => gate.promise;
+        if (mode === 'failure') ui.state.routes[prefix + '/audio/capabilities'] = () => { throw new Error('optional capabilities unavailable'); };
+        await ui.openLesson(); await ui.start(); await ui.field('dictation-play').fire('click');
+        assert.equal(ui.state.spoken.length, 1, mode);
+        assert.equal(ui.state.spoken[0].text, '潮水'); assert.equal(ui.state.spoken[0].voice.lang, 'zh-CN');
+        assert.equal(ui.state.audioRequests.length, 0);
+        assert.equal(ui.state.calls.some((call) => call.url === prefix + '/audio/prepare'), false);
+        assert.doesNotMatch(ui.field('dictation-message').textContent, /optional capabilities unavailable/);
+        if (mode === 'pending') { gate.resolve({ kokoro: false, prepare: false }); await ui.flush(); assert.equal(ui.state.spoken.length, 1); }
+    }
+});
+
+test('enabled Chinese server audio fetches authenticated corrected speech, repeats one WAV twice and waits for manual advancement', async () => {
+    const ui = dictationUI({ voices: [], capabilities: { kokoro: true, prepare: true }, words: [{ text: '重庆', spoken_text: 'chóng qìng' }, '繁星'] });
+    await ui.openLesson(); await ui.flush(); await ui.start();
+    assert.equal(ui.state.audioRequests.length, 0);
+    assert.equal(ui.state.spoken.length, 0);
+    assert.doesNotMatch(ui.visibleText(), /重庆|chóng qìng|繁星/);
+    await ui.space();
+    assert.equal(ui.state.audioRequests.length, 1);
+    assert.deepEqual(ui.state.audioRequests[0].body, { text: 'chóng qìng' });
+    assert.equal(ui.state.audioRequests[0].method, 'POST');
+    assert.equal(ui.state.audioRequests[0].headers.Authorization, 'Bearer alice-token');
+    assert.equal(ui.state.audioPlayed[0].playbackRate, 1);
+    assert.equal(ui.state.spoken.length, 0, 'A successful server clip works without installed Mandarin voices');
+    const audio = ui.state.currentAudio;
+    await ui.space(); await ui.field('dictation-next').fire('click'); assert.equal(ui.state.audioRequests.length, 1);
+    await ui.finishAudio(); await ui.tick(699); assert.equal(ui.state.audioPlayed.length, 1);
+    await ui.tick(1); assert.equal(ui.state.audioPlayed.length, 2); assert.strictEqual(ui.state.currentAudio, audio);
+    assert.equal(ui.state.audioRequests.length, 1, 'Both repetitions reuse one recording');
+    await ui.finishAudio(); await ui.tick(1000);
+    assert.equal(ui.state.audioPlayed.length, 2);
+    assert.equal(ui.state.objectUrls.size, 0); assert.equal(ui.state.revoked.length, 1);
+    await ui.space(); assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: '繁星' });
+});
+
+test('Chinese server errors, invalid WAVs, rejected play and a 25-second timeout fall back to the round Mandarin voice snapshot', { timeout: 3000 }, async () => {
+    for (const mode of ['network', 'mime', 'empty', 'play', 'timeout', 'late-response', 'late-blob']) {
+        const voice = { name: 'Chosen Mainland', lang: 'zh-CN', voiceURI: 'chosen' };
+        const ui = dictationUI({ voices: [voice], capabilities: { kokoro: true, prepare: true } }); const late = deferred();
+        if (mode === 'late-response') ui.state.audioFetch = () => late.promise;
+        if (mode === 'late-blob') ui.state.audioFetch = () => ({ ...ui.state.audioResponse(), blob: () => late.promise });
+        if (mode === 'network') ui.state.audioFetch = () => { throw new Error('audio unavailable'); };
+        if (mode === 'mime') ui.state.audioFetch = () => ui.state.audioResponse(200, { type: 'application/json' });
+        if (mode === 'empty') ui.state.audioFetch = () => ui.state.audioResponse(200, { blob: new Blob([], { type: 'audio/wav' }) });
+        if (mode === 'play') ui.state.audioPlayError = new Error('audio playback rejected');
+        if (mode === 'timeout') ui.state.audioFetch = (call) => new Promise((resolve, reject) => call.signal.addEventListener('abort', () => reject(Object.assign(new Error('timed out'), { name: 'AbortError' }))));
+        await ui.openLesson(); await ui.flush(); await ui.start();
+        await ui.voicesChanged([{ name: 'Xiaoxiao Premium', lang: 'zh-CN', voiceURI: 'later' }]);
+        await ui.field('dictation-play').fire('click');
+        if (mode === 'timeout' || mode.startsWith('late-')) {
+            await ui.tick(24999); assert.equal(ui.state.spoken.length, 0);
+            await ui.tick(1); assert.equal(ui.state.audioRequests[0].signal.aborted, true);
+        }
+        if (mode.startsWith('late-')) {
+            late.resolve(mode === 'late-response' ? ui.state.audioResponse() : new Blob(['RIFF-new-WAVE'], { type: 'audio/wav' })); await ui.flush();
+            assert.equal(ui.state.audioPlayed.length, 0, 'Late server audio cannot overlap the device fallback');
+        }
+        assert.equal(ui.state.spoken.length, 1, mode);
+        assert.strictEqual(ui.state.spoken[0].voice, voice, mode + ' keeps the original Mainland voice');
+        assert.equal(ui.state.spoken[0].text, '潮水'); assert.equal(ui.state.spoken[0].rate, 1);
+        assert.equal(ui.state.objectUrls.size, 0, mode + ' releases any server blob before fallback');
+    }
+    for (const status of [401, 403]) {
+        const ui = dictationUI({ capabilities: { kokoro: true, prepare: true } }); ui.state.audioStatus = status;
+        await ui.openLesson(); await ui.flush(); await ui.start(); await ui.field('dictation-play').fire('click');
+        assert.equal(ui.state.spoken.length, 0, 'Expired authorization cannot fall back to device playback');
+        assert.equal(ui.state.audioPlayed.length, 0); assert.equal(ui.field('dictation-next').disabled, true);
+        assert.match(ui.field('dictation-message').textContent, /登录/);
+        ui.state.audioStatus = 200; await ui.field('dictation-play').fire('click');
+        assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: '潮水' }); assert.equal(ui.state.audioPlayed.length, 1);
+    }
+});
+
+test('Chinese audio requests, late blobs and stale playback failures cannot resume after leaving or account reset', { timeout: 3000 }, async () => {
+    const capability = { kokoro: true, prepare: true };
+    const gate = deferred(); const ui = dictationUI({ capabilities: capability }); ui.state.audioFetch = () => gate.promise;
+    await ui.openLesson(); await ui.flush(); await ui.start(); await ui.field('dictation-play').fire('click');
+    const pending = ui.state.audioRequests[0]; ui.api.leaveView(); assert.equal(pending.signal.aborted, true);
+    gate.resolve(ui.state.audioResponse()); await ui.flush();
+    assert.equal(ui.state.audioPlayed.length, 0); assert.equal(ui.state.spoken.length, 0); assert.equal(ui.state.objectUrls.size, 0);
+    ui.state.audioFetch = null; await ui.api.open(); await ui.field('dictation-resume').fire('click'); await ui.field('dictation-play').fire('click');
+    const audio = ui.state.currentAudio, ended = audio.onended; const playCount = ui.state.audioPlayed.length;
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    ended(); await ui.tick(1000);
+    assert.equal(ui.state.audioPlayed.length, playCount); assert.equal(ui.state.objectUrls.size, 0); assert.ok(audio.pauseCount > 0);
+    const blobGate = deferred(); const blobUI = dictationUI({ capabilities: capability });
+    blobUI.state.audioFetch = () => ({ ...blobUI.state.audioResponse(), blob: () => blobGate.promise });
+    await blobUI.openLesson(); await blobUI.flush(); await blobUI.start(); await blobUI.field('dictation-play').fire('click');
+    blobUI.api.reset(); blobGate.resolve(new Blob(['RIFF-new-WAVE'], { type: 'audio/wav' })); await blobUI.flush();
+    assert.equal(blobUI.state.audios.length, 0); assert.equal(blobUI.state.spoken.length, 0);
+    const playing = deferred(); const playUI = dictationUI({ capabilities: capability }); playUI.state.audioPlay = () => playing.promise;
+    await playUI.openLesson(); await playUI.flush(); await playUI.start(); await playUI.field('dictation-play').fire('click');
+    const oldAudio = playUI.state.currentAudio, oldError = oldAudio.onerror;
+    playUI.api.leaveView(); playing.reject(new Error('late play failure')); oldError(); await playUI.flush();
+    assert.equal(playUI.state.spoken.length, 0); assert.equal(playUI.state.objectUrls.size, 0); assert.ok(oldAudio.pauseCount > 0);
+});
+
+test('Chinese prewarming retains the newest saved or corrected snapshot and never waits for capabilities or the background queue', { timeout: 3000 }, async () => {
+    const ui = dictationUI(); const caps = deferred(), queue = deferred();
+    ui.state.routes[prefix + '/audio/capabilities'] = () => caps.promise;
+    ui.state.routes[prefix + '/audio/prepare'] = () => queue.promise;
+    await ui.openLesson();
+    await ui.type('dictation-words', '重庆｜chóng qìng\n长大｜zhǎng dà'); await ui.field('dictation-save').fire('click');
+    await ui.type('dictation-words', '重庆｜chóng qìng\n音乐｜yīn yuè'); await ui.field('dictation-save').fire('click');
+    assert.equal(ui.state.calls.some((call) => call.url === prefix + '/audio/prepare'), false);
+    caps.resolve({ kokoro: true, prepare: true }); await ui.flush();
+    assert.deepEqual(ui.state.calls.findLast((call) => call.url === prefix + '/audio/prepare').body, { texts: ['chóng qìng', 'yīn yuè'] });
+    assert.equal(ui.state.audioPlayed.length, 0); assert.equal(ui.state.spoken.length, 0);
+    let editor = await editChinesePronunciation(ui, '音乐'); editor.input.value = 'yīn yuè revised'; await editor.input.fire('input');
+    await editor.button('preview').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'yīn yuè revised' }, 'Inline correction previews the unsaved pronunciation through the enabled server');
+    assert.equal(ui.state.wordlists.get('lesson-01').words[1].spoken_text, 'yīn yuè');
+    await editor.button('save').fire('click');
+    assert.deepEqual(ui.state.calls.findLast((call) => call.url === prefix + '/audio/prepare').body, { texts: ['chóng qìng', 'yīn yuè revised'] });
+    assert.equal(ui.state.wordlists.get('lesson-01').words[1].text, '音乐');
+    await ui.start(); assert.equal(ui.field('dictation-player').hidden, false);
+    queue.reject(new Error('预加载失败')); await ui.flush();
+    assert.equal(ui.field('dictation-player').hidden, false); assert.doesNotMatch(ui.field('dictation-message').textContent, /预加载失败/);
+    await ui.field('dictation-play').fire('click'); assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'chóng qìng' });
+    const words = Array.from({ length: 250 }, (_, index) => ({ text: '词语' + index, spoken_text: '提示' + (index === 1 ? 0 : index) }));
+    const large = dictationUI({ capabilities: { kokoro: true, prepare: true }, mistakes: [{ lesson_id: 'lesson-01', words }] });
+    await large.api.open(); await large.flush(); await large.openMistakes(); await large.chooseMistakeLessons(['lesson-01']); await large.field('dictation-mistakes-start').fire('click');
+    assert.deepEqual(large.state.calls.findLast((call) => call.url === prefix + '/audio/prepare').body.texts, [...new Set(words.map((word) => word.spoken_text))].slice(0, 200));
+    assert.match(large.field('dictation-position').textContent, /250/);
+    assert.equal(large.state.audioRequests.length, 0);
+});
+
+test('Chinese server capabilities stay account-scoped and a late old capability reply cannot enable another learner', { timeout: 3000 }, async () => {
+    const ui = dictationUI(); const gate = deferred();
+    ui.state.routes[prefix + '/audio/capabilities'] = () => gate.promise;
+    await ui.openLesson(); await ui.start(); await ui.api.open();
+    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/audio/capabilities' && call.student === 'alice').length, 1);
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    delete ui.state.routes[prefix + '/audio/capabilities']; await ui.openLesson(); await ui.type('dictation-words', '小明词语'); await ui.start();
+    gate.resolve({ kokoro: true, prepare: true }); await ui.flush();
+    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/audio/capabilities').length, 2);
+    assert.equal(ui.state.calls.some((call) => call.url === prefix + '/audio/prepare'), false);
+    assert.equal(ui.state.audioRequests.length, 0); assert.equal(ui.state.spoken.length, 0);
+    await ui.field('dictation-play').fire('click');
+    assert.equal(ui.state.spoken[0].text, '小明词语'); assert.equal(ui.state.audioRequests.length, 0);
 });

@@ -33,6 +33,33 @@
     let mistakeLoading = false, mistakeLoaded = false, mistakeDeleting = false, mistakeSequence = 0;
     let mistakeStatus = '', mistakeStatusError = false;
     let audioFetch = null, playerAudio = null, audioUrl = '', cachedAudio = null, fetchTimer = null;
+    let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesChecked = false;
+    let prepareSnapshot = [], prepareInFlight = '', lastPrepared = '', lastPreparedAt = 0;
+
+    function prepareAudio(words) {
+        const texts = Array.from(new Set(words.map((word) => word.spoken_text || word.text).filter((text) => typeof text === 'string' && text.trim()))).slice(0, 400);
+        prepareSnapshot = texts;
+        if (!active || !current(capture()) || !audioCapabilities.prepare || !texts.length) return;
+        const signature = JSON.stringify(texts);
+        if (prepareInFlight === signature || lastPrepared === signature && Date.now() - lastPreparedAt < 5000) return;
+        const ctx = capture(); prepareInFlight = signature;
+        void request('/audio/prepare', { method: 'POST', body: { texts } }).then(() => {
+            if (!current(ctx)) return;
+            lastPrepared = signature; lastPreparedAt = Date.now();
+        }).catch(() => { /* Optional preparation never changes the saved draft or playback state. */ }).finally(() => {
+            if (current(ctx) && prepareInFlight === signature) prepareInFlight = '';
+        });
+    }
+    function checkAudioCapabilities() {
+        if (capabilitiesChecked || !current(capture())) return;
+        capabilitiesChecked = true;
+        const ctx = capture();
+        void request('/audio/capabilities').then((result) => {
+            if (!current(ctx)) return;
+            audioCapabilities = { kokoro: result?.kokoro === true, prepare: result?.prepare === true };
+            if (active && prepareSnapshot.length) prepareAudio(prepareSnapshot.map((text) => ({ text, spoken_text: text })));
+        }).catch(() => { /* Existing server and device playback remain available. */ });
+    }
 
     function visible() { return active && el('english-dictation-section').classList.contains('active') && !el('english-dictation-section').hidden; }
 
@@ -424,6 +451,7 @@
                 ? { ...group, words: group.words.map((word) => word.text === target.text ? { ...word, spoken_text: hint } : word) } : group);
             mistakeSpokenPending.delete(target.key); preserveMistakeHints(); spokenEditor = null;
             setMistakeStatus('这条错题的读音已保存，原词句和本轮默写快照保持不变。');
+            prepareAudio([{ text: target.text, spoken_text: hint }]);
         } catch (error) { if (validSpokenEditor(target)) target.error = error.message || '读音尚未保存，请重试。'; }
         finally {
             if (current(target.ctx) && bookId === target.book) { mistakeSpokenSaving = false; renderMistakes(); renderControls(); }
@@ -730,7 +758,7 @@
         try { parsed = parseWords(raw); }
         catch (error) { preserveDraft(); message(error.message, true); return false; }
         if (unchanged(parsed.words)) {
-            removeBackup(); stateLabel(wordlist.revision ? '已保存' : '还没有条目'); return true;
+            removeBackup(); stateLabel(wordlist.revision ? '已保存' : '还没有条目'); prepareAudio(parsed.words); return true;
         }
         preserveDraft();
         const ctx = capture(true), sentRaw = raw, sentWords = cloneWords(parsed.words), sentSpoken = JSON.stringify(spokenOverrides());
@@ -748,6 +776,7 @@
             else preserveDraft();
             stateLabel(raw === formatWords(wordlist.words) ? '已保存' : '本机有修改，待保存');
             message(parsed.duplicates ? `清单内容已保存，重复条目已合并，共 ${wordlist.words.length} 个。` : '清单内容已保存。');
+            prepareAudio(wordlist.words);
             return true;
         } catch (error) {
             if (!current(ctx)) return false;
@@ -1010,19 +1039,19 @@
         async function fetchAudio() {
             if (cachedAudio?.student === ctx.student && cachedAudio.token === ctx.token && cachedAudio.text === text) { playBlob(cachedAudio.blob); return; }
             const controller = new AbortController(); audioFetch = controller;
-            fetchTimer = setTimeout(() => controller.abort(), 30000);
+            fetchTimer = setTimeout(() => { controller.abort(); if (valid() && audioFetch === controller) fallback(); }, 25000);
             try {
                 const response = await fetch('/api/subjects/english/dictation/audio', {
                     method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/wav', Authorization: `Bearer ${ctx.token}` },
                     body: JSON.stringify({ text }), signal: controller.signal, credentials: 'same-origin', cache: 'no-store',
                 });
-                if (!valid()) return;
+                if (!valid() || fallbackStarted) return;
                 if (response.status === 401 || response.status === 403) { fail('登录状态已失效，请重新登录后继续默写。'); return; }
                 if (!response.ok) throw new Error('Audio unavailable');
                 const type = response.headers?.get?.('Content-Type') || '';
                 if (type && !/^audio\/(wav|x-wav|wave|vnd\.wave)(;|$)/iu.test(type)) throw new Error('Invalid audio response');
                 const blob = await response.blob();
-                if (!valid()) return;
+                if (!valid() || fallbackStarted) return;
                 if (!blob || !blob.size) throw new Error('Empty audio');
                 cachedAudio = { student: ctx.student, token: ctx.token, text, blob };
                 clearTimeout(fetchTimer); fetchTimer = null;
@@ -1048,6 +1077,7 @@
         run = { ...settings, words: snapshot, index: 0, read: false, heard: new Set(), checked: new Set(),
             savedMistakes: new Set(settings.savedMistakes || []), mistakeSaveBusy: false, saveError: false, saveMessage: '',
             completed: false, status: '准备好后，点播放' };
+        prepareAudio(snapshot);
         message(); showView('player'); renderPlayer();
     }
     async function start() {
@@ -1166,6 +1196,8 @@
     function leaveView() { preserveDraft(); viewSequence += 1; active = false; stopSpeech(); cancelRequests(); showView('home'); }
     function reset() {
         preserveDraft(); active = false; stopSpeech(); cancelRequests(); cachedAudio = null;
+        audioCapabilities = { kokoro: false, prepare: false }; capabilitiesChecked = false;
+        prepareSnapshot = []; prepareInFlight = ''; lastPrepared = ''; lastPreparedAt = 0;
         generation += 1; requestSequence += 1; lessonSequence += 1; viewSequence += 1;
         boundStudent = ''; boundToken = ''; boundHostGeneration = undefined; loaded = false; loading = false; saving = false;
         books = []; lessons = []; summaries = new Map(); expandedUnits = new Set(); initializedBooks = new Set();
@@ -1189,6 +1221,7 @@
             reset(); boundStudent = learner(); boundToken = session().token; boundHostGeneration = session().generation;
         }
         stopSpeech(); viewSequence += 1; active = true; showView('home'); renderMode(); detectVoices();
+        checkAudioCapabilities();
         if (loaded || loading) { if (loaded && homeMode === 'mistakes') await loadMistakes(); return; }
         const ctx = capture(), sequence = ++requestSequence;
         loading = true; renderControls();

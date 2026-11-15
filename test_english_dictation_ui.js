@@ -16,7 +16,7 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
-function englishDictationUI({ storage = new Map(), isParent = false, voices, words = ['apple', 'Where is my schoolbag?'], revision = 1, mistakes = [], mistakeStore = new Map(), books: requestedBooks } = {}) {
+function englishDictationUI({ storage = new Map(), isParent = false, voices, capabilities = { kokoro: false, prepare: false }, words = ['apple', 'Where is my schoolbag?'], revision = 1, mistakes = [], mistakeStore = new Map(), books: requestedBooks } = {}) {
     const html = fs.readFileSync(path.join(__dirname, 'static/index.html'), 'utf8');
     const source = fs.readFileSync(path.join(__dirname, 'static/js/english-dictation.js'), 'utf8');
     const elements = new Map(), timers = new Map();
@@ -165,7 +165,19 @@ function englishDictationUI({ storage = new Map(), isParent = false, voices, wor
         addEventListener(name, callback) { if (name === 'DOMContentLoaded') callback(); else (state.listeners[name] ||= []).push(callback); }, activeElement: null,
         body: root.querySelector('body'), hidden: false, visibilityState: 'visible' };
 
+    state.capabilities = clone(capabilities);
     state.defaultReply = (call) => {
+        if (call.url === prefix + '/audio/capabilities') {
+            assert.equal(call.method, 'GET');
+            return clone(state.capabilities);
+        }
+        if (call.url === prefix + '/audio/prepare') {
+            assert.equal(call.method, 'POST');
+            assert.ok(Array.isArray(call.body.texts));
+            assert.ok(call.body.texts.length <= 400, 'Audio prewarming respects the subject batch limit');
+            assert.equal(new Set(call.body.texts).size, call.body.texts.length, 'Prewarming sends distinct spoken text');
+            return { enabled: true, accepted: call.body.texts.length, cached: 0, pending: call.body.texts.length, rejected: 0 };
+        }
         if (call.url === prefix + '/books') return { items: clone(state.books), count: state.books.length };
         if (call.url === prefix + '/lessons' && call.method === 'POST') {
             const target = state.books.find((book) => book.id === call.body.book_id);
@@ -1025,4 +1037,86 @@ test('editing one English mistake pronunciation updates only its source and pres
     assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
     await ui.field('english-dictation-resume').fire('click'); await finishRound(ui, 1);
     assert.deepEqual(ui.state.audioRequests.map((call) => call.body.text), ['read']);
+});
+
+
+test('English audio prewarming uses the saved pronunciation snapshot and cannot delay saving, correction, starting or manual playback', { timeout: 3000 }, async () => {
+    const ui = englishDictationUI({ capabilities: { kokoro: true, prepare: true }, words: [
+        { text: 'read', spoken_text: 'red' }, { text: 'red', spoken_text: 'red' }, 'one | two',
+    ] });
+    const queue = deferred(); ui.state.routes[prefix + '/audio/prepare'] = () => queue.promise;
+    await ui.api.open(); await ui.flush();
+    await ui.type('english-dictation-words', 'read\nred\none | two\nnew phrase'); await ui.field('english-dictation-save').fire('click');
+    assert.deepEqual(ui.state.calls.findLast((call) => call.url === prefix + '/audio/prepare').body, { texts: ['red', 'one | two', 'new phrase'] });
+    assert.equal(ui.state.wordlists.get('default-list').revision, 2);
+    assert.equal(ui.field('english-dictation-save').disabled, false);
+    let editor = await editEnglishPronunciation(ui, 'read'); editor.input.value = 'reed'; await editor.input.fire('input'); await editor.button('save').fire('click');
+    assert.deepEqual(ui.state.calls.findLast((call) => call.url === prefix + '/audio/prepare').body, { texts: ['reed', 'red', 'one | two', 'new phrase'] });
+    await ui.start();
+    assert.equal(ui.field('english-dictation-player').hidden, false);
+    assert.equal(ui.state.audioRequests.length, 0, 'Background preparation never starts speech');
+    assert.equal(ui.state.audioPlayed.length, 0);
+    queue.reject(new Error('预加载队列暂不可用')); await ui.flush();
+    assert.equal(ui.field('english-dictation-player').hidden, false);
+    assert.doesNotMatch(ui.field('english-dictation-message').textContent, /预加载队列暂不可用/);
+    await ui.field('english-dictation-play').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'reed' });
+    assert.equal(ui.state.audioPlayed.length, 1);
+});
+
+test('large English mistake rounds keep all entries while prewarming only the first 400 distinct spoken texts', async () => {
+    const words = Array.from({ length: 450 }, (_, index) => ({ text: 'word-' + index, spoken_text: 'spoken-' + (index === 1 ? 0 : index) }));
+    const ui = englishDictationUI({ capabilities: { kokoro: true, prepare: true }, mistakes: [{ lesson_id: 'default-list', words }] });
+    const original = clone(ui.state.wordlists.get('default-list'));
+    await ui.api.open(); await ui.flush(); await ui.openMistakes(); await ui.chooseMistakeLessons(['default-list']);
+    await ui.field('english-dictation-mistakes-start').fire('click');
+    const prepared = ui.state.calls.findLast((call) => call.url === prefix + '/audio/prepare');
+    assert.ok(prepared, 'Starting notebook review queues a pronunciation snapshot');
+    assert.deepEqual(prepared.body.texts, [...new Set(words.map((word) => word.spoken_text))].slice(0, 400));
+    assert.match(ui.field('english-dictation-position').textContent, /450/);
+    assert.equal(ui.state.audioRequests.length, 0);
+    assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+    assert.deepEqual(ui.state.wordlists.get('default-list'), original);
+    await ui.field('english-dictation-play').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'spoken-0' });
+});
+
+test('English capabilities are optional, cached per account and late replies cannot prewarm another learner', { timeout: 3000 }, async () => {
+    const ui = englishDictationUI(); const capabilityGate = deferred();
+    ui.state.routes[prefix + '/audio/capabilities'] = () => capabilityGate.promise;
+    await ui.api.open(); await ui.start();
+    assert.equal(ui.field('english-dictation-player').hidden, false, 'A pending optional capability lookup cannot block the run');
+    await ui.api.open();
+    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/audio/capabilities' && call.student === 'alice').length, 1);
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', student: 'bob', isParent: false, generation: 2 };
+    delete ui.state.routes[prefix + '/audio/capabilities']; await ui.api.open();
+    await ui.type('english-dictation-words', 'Bob private phrase.'); await ui.start();
+    capabilityGate.resolve({ kokoro: true, prepare: true }); await ui.flush();
+    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/audio/capabilities').length, 2);
+    assert.equal(ui.state.calls.some((call) => call.url === prefix + '/audio/prepare'), false);
+    assert.equal(ui.state.audioRequests.length, 0);
+    assert.doesNotMatch(ui.visibleText(), /apple|Where is my schoolbag/);
+    await ui.field('english-dictation-play').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'Bob private phrase.' });
+    assert.equal(ui.state.audioRequests.at(-1).headers.Authorization, 'Bearer bob-token');
+    const failed = englishDictationUI(); failed.state.routes[prefix + '/audio/capabilities'] = () => { throw new Error('optional capabilities unavailable'); };
+    await failed.api.open(); await failed.start(); await failed.field('english-dictation-play').fire('click');
+    assert.equal(failed.state.audioPlayed.length, 1, 'Capability failure preserves the established server audio path');
+    assert.doesNotMatch(failed.field('english-dictation-message').textContent, /optional capabilities unavailable/);
+});
+
+
+test('an English recording that ignores abort and arrives after timeout cannot overlap the device fallback', { timeout: 3000 }, async () => {
+    for (const stage of ['response', 'blob']) {
+        const ui = englishDictationUI(); const gate = deferred();
+        ui.state.audioFetch = () => stage === 'response' ? gate.promise : { ...ui.state.audioResponse(), blob: () => gate.promise };
+        await ui.api.open(); await ui.start(); await ui.field('english-dictation-play').fire('click');
+        await ui.tick(24999); assert.equal(ui.state.spoken.length, 0);
+        await ui.tick(1); assert.equal(ui.state.audioRequests[0].signal.aborted, true); assert.equal(ui.state.spoken.length, 1);
+        gate.resolve(stage === 'response' ? ui.state.audioResponse() : new Blob(['RIFF-new-WAVE'], { type: 'audio/wav' })); await ui.flush();
+        assert.equal(ui.state.audioPlayed.length, 0, stage + ' arriving late must not overlap the active device utterance');
+        assert.equal(ui.state.objectUrls.size, 0); assert.equal(ui.state.spoken.length, 1);
+        await ui.finishSpeech(); await ui.tick(700); assert.equal(ui.state.spoken.length, 2);
+        assert.equal(ui.state.audioPlayed.length, 0);
+    }
 });

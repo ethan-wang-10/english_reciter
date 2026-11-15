@@ -317,6 +317,10 @@ def register_english_dictation_routes(app, services):
         text = _word({'text': data['text']}, max_text=MAX_TEXT, max_spoken=MAX_TEXT)['text']
         if not services._rate_allow(f'tts_audio:{username}', services._RATE_MAX_TTS_AUDIO):
             raise DictationError('朗读请求过于频繁，请稍后再试。', 429)
+        from dictation_audio import audio_response, kokoro_audio
+        experimental = kokoro_audio(text, 'en')
+        if experimental:
+            return audio_response(*experimental)
         ready = getattr(services, 'piper_runtime_ready', None)
         synthesize = getattr(services, 'piper_synthesize_wav', None)
         try:
@@ -330,6 +334,7 @@ def register_english_dictation_routes(app, services):
         except Exception:
             raise DictationError('英语语音暂时不可用，请使用设备英语语音或稍后重试。', 503) from None
         response = Response(bytes(wav), mimetype='audio/wav')
+        response.headers['X-TTS-Engine'] = 'piper'
         metadata = getattr(services, 'piper_last_result_metadata', None)
         if callable(metadata):
             try:

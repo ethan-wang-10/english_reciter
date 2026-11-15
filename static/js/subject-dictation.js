@@ -26,6 +26,44 @@
     let mistakeLoading = false, mistakeLoaded = false, mistakeDeleting = false, mistakeSequence = 0;
     let mistakeStatus = '', mistakeStatusError = false;
     let voicePreference = null, voiceStorageReady = true, pronunciationEdit = null, pronunciationDrafts = new Map();
+    let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesChecked = false;
+    let prepareSnapshot = [], prepareInFlight = '', lastPrepared = '', lastPreparedAt = 0;
+    let audioFetch = null, playerAudio = null, audioUrl = '', cachedAudio = null, fetchTimer = null;
+    const backgroundRequests = new Set();
+
+    async function backgroundRequest(path, options = {}) {
+        const controller = new AbortController(); backgroundRequests.add(controller);
+        try { return await request(path, { ...options, signal: controller.signal }); }
+        finally { backgroundRequests.delete(controller); }
+    }
+    function cancelBackgroundRequests() { for (const controller of backgroundRequests) controller.abort(); backgroundRequests.clear(); }
+    function prepareAudio(words) {
+        const texts = Array.from(new Set(words.map((word) => word.spoken_text || word.text).filter((text) => typeof text === 'string' && text.trim()))).slice(0, 200);
+        prepareSnapshot = texts;
+        if (!active || !current(capture()) || !audioCapabilities.prepare || !texts.length) return;
+        const signature = JSON.stringify(texts);
+        if (prepareInFlight === signature || lastPrepared === signature && Date.now() - lastPreparedAt < 5000) return;
+        const ctx = capture(); prepareInFlight = signature;
+        void backgroundRequest('/audio/prepare', { method: 'POST', body: { texts } }).then(() => {
+            if (!current(ctx)) return;
+            lastPrepared = signature; lastPreparedAt = Date.now();
+        }).catch(() => { /* Optional preparation never changes saved work or starts playback. */ }).finally(() => {
+            if (current(ctx) && prepareInFlight === signature) prepareInFlight = '';
+        });
+    }
+    function checkAudioCapabilities() {
+        if (capabilitiesChecked || !current(capture())) return;
+        capabilitiesChecked = true;
+        const ctx = capture();
+        void backgroundRequest('/audio/capabilities').then((result) => {
+            if (!current(ctx)) return;
+            audioCapabilities = { kokoro: result?.kokoro === true, prepare: result?.prepare === true };
+            if (active) {
+                detectVoices();
+                if (prepareSnapshot.length) prepareAudio(prepareSnapshot.map((text) => ({ text, spoken_text: text })));
+            }
+        }).catch(() => { /* Device Mandarin remains the default when optional service discovery fails. */ });
+    }
 
     function sourceName(source) { return `${source.number ? `第${source.number}课 ` : ''}${source.title || '我的课文'}`; }
     function sourceKey(source, word) { return JSON.stringify([source.book_id, source.lesson_id, word.text, word.spoken_text || word.text]); }
@@ -293,6 +331,7 @@
                 word.text === edit.text ? { ...word, spoken_text: spoken } : word) } : group);
             pronunciationDrafts.delete(editKey(edit)); pronunciationEdit = null;
             message('本课错题的读音已保存。原词表和已经开始的默写保持各自的读音。');
+            prepareAudio([{ text: edit.text, spoken_text: spoken }]);
         } catch (error) { if (editCurrent(edit)) { edit.error = true; edit.status = `${error.message || '未能保存读音。'} 当前修正内容仍保留在这里，请重试。`; } }
         finally { if (current(edit.ctx) && bookId === edit.book) { mistakeDeleting = false; renderMistakes(); renderControls(); } }
     }
@@ -561,7 +600,7 @@
         try { parsed = parseWords(raw); }
         catch (error) { preserveDraft(); message(error.message, true); return false; }
         if (unchanged(parsed.words)) {
-            removeBackup(); stateLabel(wordlist.revision ? '已保存' : '还没有词语'); return true;
+            removeBackup(); stateLabel(wordlist.revision ? '已保存' : '还没有词语'); prepareAudio(parsed.words); return true;
         }
         preserveDraft();
         const ctx = capture(true), sentRaw = raw, sentWords = cloneWords(parsed.words);
@@ -579,6 +618,7 @@
             else preserveDraft();
             stateLabel(raw === formatWords(wordlist.words) ? '已保存' : '本机有修改，待保存');
             message(parsed.duplicates ? `词表已保存，重复词语已合并，共 ${wordlist.words.length} 个。` : '词表已保存。');
+            prepareAudio(wordlist.words);
             return true;
         } catch (error) {
             if (!current(ctx)) return false;
@@ -716,19 +756,27 @@
         el('dictation-voice-status').textContent = voices.length
             ? (voicePreference && !preferredVoice() ? '已记住的声音暂未就绪，先使用其他普通话语音。' : '使用设备普通话语音，按正常语速朗读。')
                 + (voiceStorageReady ? '选好的声音会在这台设备上记住。' : '这台设备暂时不能记住设置，本次页面仍可使用所选声音。') + '多音字可逐词修正读音。'
-            : '未检测到普通话语音。请在设备的语音设置中添加普通话语音，再重新检测；也可换用支持中文朗读的浏览器。';
+            : audioCapabilities.kokoro ? '按正常语速朗读。设备暂时没有普通话备用声音，若朗读失败请稍后重试。'
+                : '未检测到普通话语音。请在设备的语音设置中添加普通话语音，再重新检测；也可换用支持中文朗读的浏览器。';
     }
     function selectedVoice(uri) {
         return voices.find((voice) => (voice.voiceURI || voice.name) === uri) || voices[0] || null;
     }
+    function releaseAudio() {
+        const audio = playerAudio; playerAudio = null;
+        if (audio) { audio.onended = null; audio.onerror = null; try { audio.pause(); } catch (_) { /* Already stopped. */ } }
+        if (audioUrl) { try { URL.revokeObjectURL(audioUrl); } catch (_) { /* Optional cleanup. */ } audioUrl = ''; }
+    }
     function stopSpeech() {
         const interruptedPlayer = speaking && speechMode === 'player';
         speechEpoch += 1;
-        clearTimeout(repeatTimer); clearTimeout(watchdog);
-        repeatTimer = null; watchdog = null; utterance = null;
-        speaking = false; speechMode = '';
+        clearTimeout(repeatTimer); clearTimeout(watchdog); clearTimeout(fetchTimer);
+        repeatTimer = null; watchdog = null; fetchTimer = null;
+        if (audioFetch) { audioFetch.abort(); audioFetch = null; }
+        if (utterance) { utterance.onend = null; utterance.onerror = null; }
+        utterance = null; releaseAudio(); speaking = false; speechMode = '';
         if (interruptedPlayer && run) { run.read = false; run.status = '播放已暂停，点播放重听本词'; }
-        try { window.speechSynthesis?.cancel(); } catch (_) { /* A missing voice engine has no queue to cancel. */ }
+        try { window.speechSynthesis?.cancel(); } catch (_) { /* No speech queue. */ }
     }
     function renderPlayer() {
         if (!run) return;
@@ -743,66 +791,125 @@
         el('dictation-next').disabled = speaking || !run.read;
         el('dictation-next').textContent = run.index === run.words.length - 1 ? '完成并对照' : '下一个';
     }
+    function playbackVisible() { return active && !el('dictation-panel').hidden && !document.hidden; }
     function speakWords(word, repetitions, mode) {
-        if (!active || !current(capture()) || (mode === 'player' && (!run || run.completed || el('dictation-player').hidden))) return;
+        if (!playbackVisible() || !current(capture()) || (mode === 'player' && (!run || run.completed || el('dictation-player').hidden))) return;
         if (speaking && mode === 'player') return;
-        let chosen = mode === 'player' ? run.voiceSnapshot : selectedVoice(el('dictation-voice').value);
-        if (mode === 'player' && !chosen) {
-            chosen = run.voiceURI ? voices.find((voice) => (voice.voiceURI || voice.name) === run.voiceURI) || null : selectedVoice(el('dictation-voice').value);
-            if (chosen) { run.voiceSnapshot = chosen; run.voiceURI = chosen.voiceURI || chosen.name; }
-        }
-        if (!window.speechSynthesis || !window.SpeechSynthesisUtterance || !chosen) {
-            message('设备还没有可用的普通话语音，请添加普通话语音后重新检测，再点播放。', true);
-            if (mode === 'player') { run.read = false; run.status = '普通话语音未就绪，请重新检测'; renderPlayer(); }
-            return;
-        }
         stopSpeech();
         speaking = true; speechMode = mode;
         const epoch = speechEpoch, ctx = capture(), running = run;
-        let completed = 0;
-        if (mode === 'player') { run.read = false; run.status = '正在朗读，请听清…'; renderPlayer(); }
-        else message('正在试听…');
-        const valid = () => epoch === speechEpoch && current(ctx) && active
+        const text = word.spoken_text || word.text;
+        let completed = 0, fallbackStarted = false;
+        if (mode === 'player') { run.read = false; run.status = '正在准备朗读…'; renderPlayer(); }
+        else message('正在准备试听…');
+        const valid = () => epoch === speechEpoch && current(ctx) && playbackVisible()
             && (mode !== 'player' || run === running && !run.completed && !el('dictation-player').hidden);
-        function fail() {
+        function status(text) { if (mode === 'player' && valid()) { run.status = text; renderPlayer(); } }
+        function fail(detail = '') {
             if (!valid()) return;
             stopSpeech();
-            if (mode === 'player' && run === running) {
-                run.read = false; run.status = '这次未能读完，请点播放重试'; renderPlayer();
-            }
-            message('语音没有正常读完，当前位置已保留。请检查设备声音后点播放重试。', true);
+            if (mode === 'player' && run === running) { run.read = false; run.status = '这次未能读完，请点播放重试'; renderPlayer(); }
+            message(detail || '普通话朗读没有正常读完，当前位置已保留。请检查设备声音后点播放重试。', true);
         }
-        function speakOne() {
+        function done() {
             if (!valid()) return;
-            let currentUtterance;
-            try {
-                currentUtterance = new window.SpeechSynthesisUtterance(word.spoken_text || word.text);
-                utterance = currentUtterance;
-                currentUtterance.voice = chosen;
-                currentUtterance.lang = 'zh-CN';
-                currentUtterance.rate = 1;
-                currentUtterance.pitch = 1;
-                currentUtterance.volume = 1;
-                currentUtterance.onerror = () => { if (utterance === currentUtterance) fail(); };
-                currentUtterance.onend = () => {
-                    if (!valid() || utterance !== currentUtterance) return;
-                    clearTimeout(watchdog); watchdog = null; utterance = null;
-                    completed += 1;
-                    if (completed < repetitions) {
-                        if (mode === 'player') { run.status = '稍后再读一遍…'; renderPlayer(); }
-                        repeatTimer = setTimeout(() => { repeatTimer = null; speakOne(); }, 700);
-                    } else {
-                        speaking = false; speechMode = '';
-                        if (mode === 'player') { run.read = true; run.heard.add(run.index); run.status = '读完了，写好后继续'; renderPlayer(); }
-                        else message('试听完成，可以按需要调整朗读提示。');
-                    }
-                };
-                watchdog = setTimeout(fail, 45000);
-                window.speechSynthesis.resume?.();
-                window.speechSynthesis.speak(currentUtterance);
-            } catch (_) { fail(); }
+            clearTimeout(repeatTimer); clearTimeout(watchdog); clearTimeout(fetchTimer);
+            repeatTimer = null; watchdog = null; fetchTimer = null;
+            if (utterance) { utterance.onend = null; utterance.onerror = null; }
+            utterance = null; releaseAudio(); speaking = false; speechMode = ''; speechEpoch += 1;
+            if (mode === 'player') { run.read = true; run.heard.add(run.index); run.status = '读完了，写好后继续'; renderPlayer(); }
+            else message('试听完成，确认后就可以开始默写。');
         }
-        speakOne();
+        function readingEnded(repeat) {
+            if (!valid()) return;
+            clearTimeout(watchdog); watchdog = null; completed += 1;
+            if (completed < repetitions) {
+                status('稍后再读一遍…');
+                repeatTimer = setTimeout(() => { repeatTimer = null; if (valid()) repeat(); }, 700);
+            } else done();
+        }
+        function fallback() {
+            if (!valid() || fallbackStarted) return;
+            fallbackStarted = true; completed = 0; cachedAudio = null;
+            clearTimeout(repeatTimer); clearTimeout(watchdog); repeatTimer = null; watchdog = null; releaseAudio();
+            let chosen = mode === 'player' ? run.voiceSnapshot : selectedVoice(el('dictation-voice').value);
+            if (mode === 'player' && !chosen) {
+                chosen = run.voiceURI ? voices.find((voice) => (voice.voiceURI || voice.name) === run.voiceURI) || null : selectedVoice(el('dictation-voice').value);
+                if (chosen) { run.voiceSnapshot = chosen; run.voiceURI = chosen.voiceURI || chosen.name; }
+            }
+            if (!window.speechSynthesis || !window.SpeechSynthesisUtterance || !chosen) {
+                fail('普通话朗读暂时不可用，设备也没有普通话备用语音。当前位置已保留，请稍后重试或添加普通话语音。'); return;
+            }
+            message('正在使用设备普通话语音，按正常语速朗读。');
+            function speakOne() {
+                if (!valid()) return;
+                const spoken = new window.SpeechSynthesisUtterance(text); utterance = spoken;
+                spoken.voice = chosen; spoken.lang = 'zh-CN'; spoken.rate = 1; spoken.pitch = 1; spoken.volume = 1;
+                spoken.onend = () => {
+                    if (!valid() || utterance !== spoken) return;
+                    spoken.onend = null; spoken.onerror = null; utterance = null; readingEnded(speakOne);
+                };
+                spoken.onerror = () => { if (valid() && utterance === spoken) fail(); };
+                watchdog = setTimeout(() => { if (utterance === spoken) fail(); }, 45000);
+                status('正在朗读，请听清…');
+                try { window.speechSynthesis.resume?.(); window.speechSynthesis.speak(spoken); } catch (_) { fail(); }
+            }
+            speakOne();
+        }
+        function playBlob(blob) {
+            if (!valid()) return;
+            if (!window.Audio || !URL.createObjectURL) { fallback(); return; }
+            let audio, audioPass = 0;
+            try {
+                audioUrl = URL.createObjectURL(blob); audio = new window.Audio(); playerAudio = audio;
+                audio.src = audioUrl; audio.preload = 'auto'; audio.playbackRate = 1; audio.defaultPlaybackRate = 1;
+            } catch (_) { fallback(); return; }
+            function playOne() {
+                if (!valid() || playerAudio !== audio) return;
+                const pass = ++audioPass;
+                try {
+                    audio.currentTime = 0;
+                    audio.onended = () => {
+                        if (!valid() || playerAudio !== audio || audioPass !== pass) return;
+                        audioPass += 1; audio.onended = null; audio.onerror = null; readingEnded(playOne);
+                    };
+                    audio.onerror = () => { if (valid() && playerAudio === audio && audioPass === pass) fallback(); };
+                    watchdog = setTimeout(() => { if (playerAudio === audio && audioPass === pass) fallback(); }, 45000);
+                    status('正在朗读，请听清…');
+                    const playing = audio.play();
+                    if (playing?.catch) playing.catch(() => { if (valid() && playerAudio === audio) fallback(); });
+                } catch (_) { fallback(); }
+            }
+            playOne();
+        }
+        async function fetchAudio() {
+            if (cachedAudio?.student === ctx.student && cachedAudio.token === ctx.token && cachedAudio.text === text) { playBlob(cachedAudio.blob); return; }
+            const controller = new AbortController(); audioFetch = controller;
+            fetchTimer = setTimeout(() => { controller.abort(); if (valid() && audioFetch === controller) fallback(); }, 25000);
+            try {
+                const response = await fetch('/api/subjects/chinese/dictation/audio', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/wav', Authorization: `Bearer ${ctx.token}` },
+                    body: JSON.stringify({ text }), signal: controller.signal, credentials: 'same-origin', cache: 'no-store',
+                });
+                if (!valid() || fallbackStarted) return;
+                if (response.status === 401 || response.status === 403) { fail('登录状态已失效，请重新登录后继续默写。'); return; }
+                if (!response.ok) throw new Error('Audio unavailable');
+                const type = response.headers?.get?.('Content-Type') || '';
+                if (type && !/^audio\/(wav|x-wav|wave|vnd\.wave)(;|$)/iu.test(type)) throw new Error('Invalid audio response');
+                const blob = await response.blob();
+                if (!valid() || fallbackStarted) return;
+                if (!blob || !blob.size) throw new Error('Empty audio');
+                cachedAudio = { student: ctx.student, token: ctx.token, text, blob };
+                clearTimeout(fetchTimer); fetchTimer = null;
+                if (audioFetch === controller) audioFetch = null;
+                playBlob(blob);
+            } catch (_) { if (valid()) fallback(); }
+            finally {
+                if (epoch === speechEpoch) { clearTimeout(fetchTimer); fetchTimer = null; }
+                if (audioFetch === controller) audioFetch = null;
+            }
+        }
+        if (audioCapabilities.kokoro) void fetchAudio(); else fallback();
     }
     function makeRun(words, settings) {
         stopSpeech();
@@ -817,6 +924,7 @@
             words: snapshot, index: 0, read: false, heard: new Set(), checked: new Set(),
             savedMistakes: new Set(settings.savedMistakes || []), mistakeSaveBusy: false, saveError: false, saveMessage: '',
             completed: false, status: '准备好后，点播放' };
+        prepareAudio(snapshot);
         message(); showView('player'); renderPlayer();
     }
     async function start() {
@@ -931,9 +1039,11 @@
             voiceSnapshot: run.voiceSnapshot, kind: run.kind, book_id: run.book_id, lesson_id: run.lesson_id, lessonCount: run.lessonCount, savedMistakes: run.savedMistakes });
     }
     function backHome() { stopSpeech(); showView('home'); renderControls(); }
-    function leaveView() { preserveDraft(); active = false; stopSpeech(); showView('home'); }
+    function leaveView() { preserveDraft(); active = false; stopSpeech(); cancelBackgroundRequests(); showView('home'); }
     function reset() {
-        preserveDraft(); active = false; stopSpeech();
+        preserveDraft(); active = false; stopSpeech(); cancelBackgroundRequests(); cachedAudio = null;
+        audioCapabilities = { kokoro: false, prepare: false }; capabilitiesChecked = false;
+        prepareSnapshot = []; prepareInFlight = ''; lastPrepared = ''; lastPreparedAt = 0;
         generation += 1; requestSequence += 1; lessonSequence += 1;
         boundStudent = ''; boundToken = ''; loaded = false; loading = false; saving = false;
         books = []; lessons = []; summaries = new Map(); expandedUnits = new Set();
@@ -956,7 +1066,8 @@
         if (boundStudent !== learner() || boundToken !== session().token) {
             reset(); boundStudent = learner(); boundToken = session().token;
         }
-        active = true; showView('home'); renderMode(); detectVoices();
+        stopSpeech(); active = true; showView('home'); renderMode(); detectVoices();
+        checkAudioCapabilities();
         if (loaded || loading) { if (loaded && homeMode === 'mistakes') await loadMistakes(); return; }
         const ctx = capture(), sequence = ++requestSequence;
         loading = true; renderControls();

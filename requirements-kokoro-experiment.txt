@@ -1,0 +1,8 @@
+# Isolated CPU worker only. Do not install into the web application environment.
+# misaki[en] pulls Torch/Transformers; English uses phonemizer + espeakng-loader.
+kokoro-onnx==0.6.1
+misaki[zh]==0.9.4
+# Verified isolated CPU runtime for the candidate export. Other versions were
+# not validated; the earlier INT8 export failed with both 1.32 and 1.22.
+onnxruntime==1.32.0
+numpy>=2.0.2,<3

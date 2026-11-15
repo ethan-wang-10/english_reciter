@@ -6853,6 +6853,9 @@ register_subject_dictation_routes(app, sys.modules[__name__])
 from english_dictation import register_english_dictation_routes
 register_english_dictation_routes(app, sys.modules[__name__])
 
+from dictation_audio import register_dictation_audio_routes
+register_dictation_audio_routes(app, sys.modules[__name__])
+
 # ==================== 启动配置 ====================
 
 if __name__ == '__main__':

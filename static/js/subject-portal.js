@@ -116,7 +116,7 @@
         const url = path.startsWith('/api/') ? path : `/api${path.startsWith('/') ? path : `/${path}`}`;
         const response = await fetch(url, {
             method: options.method || 'GET', headers, body,
-            credentials: 'same-origin', cache: 'no-store',
+            credentials: 'same-origin', cache: 'no-store', signal: options.signal,
         });
         let data;
         try { data = await response.json(); } catch (_) { data = {}; }
