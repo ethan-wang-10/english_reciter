@@ -46,9 +46,9 @@
       "url": "/static/assets/css/subject-writing.9a8869cb36d5b365.css"
     },
     "/static/js/admin.js": {
-      "bytes": 46403,
-      "sha256": "f22efa826d1e93d5e1a6aad333822ce343e807ad25c1f808ce12e348ed2bdabd",
-      "url": "/static/assets/js/admin.f22efa826d1e93d5.js"
+      "bytes": 46469,
+      "sha256": "c768f0b63b2a14597d365fe4289002f372ed940f00606707f47568b684b241c1",
+      "url": "/static/assets/js/admin.c768f0b63b2a1459.js"
     },
     "/static/js/app.js": {
       "bytes": 461119,
