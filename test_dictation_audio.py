@@ -148,6 +148,7 @@ def test_preparation_worker_failure_does_not_claim_success_or_change_saved_lists
 
 def test_interrupted_local_http_response_uses_existing_english_fallback(browser,monkeypatch):
     from http.client import IncompleteRead
+    browser.state.kokoro_enabled = True
     monkeypatch.setenv('DICTATION_KOKORO_URL','http://127.0.0.1:8877')
     class Interrupted:
         def open(self,*args,**kwargs):
@@ -156,3 +157,22 @@ def test_interrupted_local_http_response_uses_existing_english_fallback(browser,
     response=browser.client.post('/api/subjects/english/dictation/audio',headers=browser.headers,json={'text':'A complete sentence.'})
     assert response.status_code==200 and response.headers['X-TTS-Engine']=='piper'
     assert browser.state.piper==['A complete sentence.']
+
+
+def test_cache_first_worker_timeout_is_short_and_both_languages_keep_their_fallback(browser, monkeypatch):
+    browser.state.kokoro_enabled = True
+    monkeypatch.setenv('DICTATION_KOKORO_URL', 'http://127.0.0.1:8877')
+    waits = []
+    class SlowWorker:
+        def open(self, message, *, timeout):
+            waits.append(timeout)
+            assert timeout == 1.5, 'Playback must not wait for a cold model to finish loading'
+            raise TimeoutError('simulated cold local worker')
+    monkeypatch.setattr(audio.urllib.request, 'build_opener', lambda *_: SlowWorker())
+    english = browser.client.post('/api/subjects/english/dictation/audio', headers=browser.headers,
+                                  json={'text': 'Keep the complete sentence.'})
+    assert english.status_code == 200 and english.headers['X-TTS-Engine'] == 'piper'
+    assert browser.state.piper == ['Keep the complete sentence.']
+    chinese = browser.client.post('/api/subjects/chinese/dictation/audio', headers=browser.parent, json={'text': '观潮'})
+    assert chinese.status_code == 503
+    assert waits == [1.5, 1.5] and not browser.services.DATA_DIR.exists()

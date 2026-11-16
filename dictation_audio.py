@@ -87,7 +87,7 @@ def kokoro_audio(text, language):
     """Return a complete validated WAV or None, preserving the caller's fallback."""
     if not enabled():
         return None
-    result = _worker('/audio', {'text': text, 'language': language}, timeout=15, maximum=MAX_WAV_BYTES)
+    result = _worker('/audio', {'text': text, 'language': language}, timeout=1.5, maximum=MAX_WAV_BYTES)
     if not result or not enabled():
         return None
     content, headers = result
