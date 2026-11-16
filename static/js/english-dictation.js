@@ -32,6 +32,8 @@
     let homeMode = 'lessons', mistakeItems = [], mistakeSelections = new Set(), mistakeExpanded = new Set();
     let mistakeLoading = false, mistakeLoaded = false, mistakeDeleting = false, mistakeSequence = 0;
     let mistakeStatus = '', mistakeStatusError = false;
+    let directAddOpen = false, directAddBusy = false, directAddLists = [], directAddLesson = '', directAddSelected = new Set();
+    let directAddStatus = '', directAddError = false, directAddSequence = 0, directAddAcknowledged = new Map();
     let audioFetch = null, playerAudio = null, audioUrl = '', fetchTimer = null;
     let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesPromise = null, capabilitiesSequence = 0;
     let prepareSnapshot = [], prepareInFlight = '', lastPrepared = '', lastPreparedAt = 0;
@@ -297,7 +299,7 @@
         if (name === 'home') renderResume();
     }
     function renderControls() {
-        const blocked = loading || saving || mistakeSpokenSaving;
+        const blocked = loading || saving || mistakeSpokenSaving || directAddBusy;
         el('english-dictation-book').disabled = blocked || mistakeLoading || mistakeDeleting;
         el('english-dictation-mode-lessons').disabled = blocked;
         el('english-dictation-mode-mistakes').disabled = blocked;
@@ -331,6 +333,8 @@
         }
         refreshCatalog.hidden = !catalogUpdated; refreshCatalog.disabled = blocked;
         for (const control of el('english-dictation-word-preview').querySelectorAll('button, input')) control.disabled = blocked || !!conflict;
+        el('english-dictation-resume').disabled = directAddBusy;
+        el('english-dictation-end-run').disabled = directAddBusy;
         renderMistakeControls();
     }
     function hintKey(item, word) { return JSON.stringify([item.book_id, item.lesson_id, word.text]); }
@@ -384,7 +388,7 @@
         if (item) button.dataset.lesson = item.lesson_id;
         button.setAttribute('aria-label', `修正 ${word.text} 的读音`);
         button.addEventListener('click', () => {
-            if (loading || saving || mistakeSpokenSaving || conflict && kind === 'list' || !visible() || !current(capture())) return;
+            if (loading || saving || directAddBusy || mistakeSpokenSaving || conflict && kind === 'list' || !visible() || !current(capture())) return;
             const key = item ? hintKey(item, word) : word.text;
             const pending = kind === 'list' ? pendingSpoken : mistakeSpokenPending;
             spokenEditor = { kind, key, text: word.text, rawHint: pending.get(key) || word.spoken_text || word.text,
@@ -571,7 +575,7 @@
         renderControls();
     }
     function renderMistakeControls() {
-        const blocked = loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving;
+        const blocked = loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || directAddBusy;
         const selected = mistakeItems.filter((item) => mistakeSelections.has(item.lesson_id));
         const count = mistakeRunWords().length;
         el('english-dictation-mistakes-refresh').disabled = blocked || !bookId;
@@ -581,6 +585,123 @@
         el('english-dictation-mistakes-selection').textContent = `已选 ${selected.length} 份清单，共 ${count} 条朗读内容（相同条目与读法合并）`;
         for (const input of el('english-dictation-mistakes-groups').querySelectorAll('input')) input.disabled = blocked;
         for (const button of el('english-dictation-mistakes-groups').querySelectorAll('button')) button.disabled = blocked;
+        el('english-dictation-mistakes-add').disabled = blocked || !bookId;
+        renderDirectAddControls();
+    }
+    function clearDirectAdd() {
+        directAddSequence += 1; directAddOpen = false; directAddBusy = false; directAddLists = []; directAddLesson = '';
+        directAddSelected = new Set(); directAddStatus = ''; directAddError = false; directAddAcknowledged = new Map();
+        renderDirectAdd();
+    }
+    function directAddCurrent(ctx) {
+        return current(ctx) && visible() && homeMode === 'mistakes' && directAddOpen && ctx.book === bookId
+            && ctx.view === viewSequence && ctx.sequence === directAddSequence;
+    }
+    function directAddCapture() { return { ...capture(), book: bookId, view: viewSequence, sequence: directAddSequence }; }
+    function directAddExisting(lessonId = directAddLesson) {
+        return new Set([...(mistakeItems.find((item) => item.book_id === bookId && item.lesson_id === lessonId)?.words || []).map((word) => word.text),
+            ...(directAddAcknowledged.get(lessonId) || [])]);
+    }
+    function directAddAvailable() {
+        const existing = directAddExisting();
+        return (directAddLists.find((item) => item.lesson_id === directAddLesson)?.words || []).filter((word) => !existing.has(word.text));
+    }
+    function renderDirectAddControls() {
+        const blocked = directAddBusy || loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving;
+        const available = directAddAvailable(), count = available.filter((word) => directAddSelected.has(word.text)).length;
+        el('english-dictation-mistakes-add-lesson').disabled = blocked || !directAddLists.length;
+        el('english-dictation-mistakes-add-select-all').disabled = blocked || !available.length;
+        el('english-dictation-mistakes-add-clear').disabled = blocked || !count;
+        el('english-dictation-mistakes-add-submit').disabled = blocked || !count;
+        el('english-dictation-mistakes-add-close').disabled = directAddBusy;
+        el('english-dictation-mistakes-add-submit').textContent = directAddBusy ? '正在处理…' : '加入错题本';
+        el('english-dictation-mistakes-add-count').textContent = `已选 ${count} 条`;
+        for (const input of el('english-dictation-mistakes-add-words').querySelectorAll('input')) input.disabled = blocked || input.dataset.existing === 'true';
+    }
+    function renderDirectAdd() {
+        el('english-dictation-mistakes-add-panel').hidden = !directAddOpen;
+        const select = el('english-dictation-mistakes-add-lesson'); select.replaceChildren();
+        for (const item of directAddLists) { const option = node('option', `${sourceName(item.lesson)}（${item.words.length} 条）`); option.value = item.lesson_id; select.appendChild(option); }
+        select.value = directAddLesson;
+        const words = el('english-dictation-mistakes-add-words'); words.replaceChildren();
+        const source = directAddLists.find((item) => item.lesson_id === directAddLesson), existing = directAddExisting();
+        if (source) for (const word of source.words) {
+            const row = node('label', '', 'english-dictation-direct-word'), input = node('input');
+            input.type = 'checkbox'; input.value = word.text; input.dataset.existing = String(existing.has(word.text));
+            input.checked = directAddSelected.has(word.text) && !existing.has(word.text);
+            input.setAttribute('aria-label', existing.has(word.text) ? `${word.text}，已加入本清单错题本` : `添加 ${word.text}`);
+            const text = node('span', word.text);
+            const savedWord = existing.has(word.text) ? mistakeItems.find((item) => item.book_id === bookId && item.lesson_id === directAddLesson)?.words.find((item) => item.text === word.text) : null;
+            const spoken = existing.has(word.text) ? savedWord?.spoken_text : word.spoken_text;
+            if (spoken && spoken !== word.text) text.appendChild(node('small', `朗读：${spoken}`));
+            if (existing.has(word.text)) { row.classList.add('english-dictation-direct-existing'); text.appendChild(node('small', '已加入，保留原读音')); }
+            const ctx = directAddCapture();
+            input.addEventListener('change', () => {
+                if (!directAddCurrent(ctx) || directAddBusy || !words.contains(row) || directAddExisting().has(word.text)) return;
+                if (input.checked) directAddSelected.add(word.text); else directAddSelected.delete(word.text);
+                renderDirectAddControls();
+            });
+            row.append(input, text); words.appendChild(row);
+        }
+        const status = el('english-dictation-mistakes-add-status'); status.textContent = directAddStatus;
+        status.classList.toggle('english-dictation-status-error', directAddError);
+        renderDirectAddControls();
+    }
+    function applyDirectMistakes(result, requestedBook) {
+        if (!Array.isArray(result.items) || result.items.some((item) => item.book_id !== requestedBook || !item.lesson?.id || !Array.isArray(item.words))) throw new Error('错题本读取结果不完整，请重试。');
+        mistakeItems = result.items.filter((item) => item.words.length).map((item) => ({ ...item, lesson: { ...item.lesson }, words: cloneWords(item.words) }));
+        restoreMistakeHints(); mistakeLoaded = true;
+        mistakeSelections = new Set(Array.from(mistakeSelections).filter((id) => mistakeItems.some((item) => item.lesson_id === id)));
+        setMistakeStatus(mistakeItems.length ? `共 ${mistakeItems.length} 份清单，${mistakeItems.reduce((sum, item) => sum + item.words.length, 0)} 条错题。展开清单可查看或移除条目。` : '');
+    }
+    async function openDirectAdd() {
+        if (directAddBusy || loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !visible() || homeMode !== 'mistakes' || !current(capture()) || !bookId) return;
+        stopSpeech(); directAddSequence += 1; directAddOpen = true; directAddBusy = true; directAddLists = [];
+        directAddLesson = ''; directAddSelected = new Set(); directAddAcknowledged = new Map(); directAddStatus = '正在读取已保存清单…'; directAddError = false;
+        renderDirectAdd(); renderControls();
+        const ctx = directAddCapture();
+        try {
+            const [lists, directory, notebook] = await Promise.all([request(`/wordlists?book_id=${encodeURIComponent(ctx.book)}`),
+                request(`/lessons?book_id=${encodeURIComponent(ctx.book)}`), request(`/mistakes?book_id=${encodeURIComponent(ctx.book)}`)]);
+            if (!directAddCurrent(ctx)) return;
+            if (!Array.isArray(lists.items) || !Array.isArray(directory.items)) throw new Error('已保存清单读取结果不完整，请重试。');
+            applyDirectMistakes(notebook, ctx.book);
+            directAddLists = directory.items.flatMap((meta) => {
+                const saved = lists.items.find((item) => item.book_id === ctx.book && item.lesson_id === meta.id);
+                return saved && Number.isSafeInteger(saved.revision) && saved.revision > 0 && Array.isArray(saved.words) && saved.words.length
+                    ? [{ book_id: ctx.book, lesson_id: meta.id, lesson: { ...meta }, words: cloneWords(saved.words) }] : [];
+            });
+            directAddLesson = directAddLists.some((item) => item.lesson_id === lesson?.id) ? lesson.id : directAddLists[0]?.lesson_id || '';
+            directAddStatus = directAddLists.length ? '勾选要加入的内容；已加入本清单错题本的条目不能重复选择。' : '还没有保存过内容的清单，请先在课文或 Unit 中录入并保存。';
+            renderMistakes();
+        } catch (error) { if (directAddCurrent(ctx)) { directAddStatus = `${error.message || '暂时无法读取。'} 请关闭后重新点击“直接添加”重试。`; directAddError = true; } }
+        finally { if (directAddCurrent(ctx)) { directAddBusy = false; renderDirectAdd(); renderControls(); } }
+    }
+    async function submitDirectAdd() {
+        if (directAddBusy || loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !directAddCurrent(directAddCapture())) return;
+        const source = directAddLists.find((item) => item.lesson_id === directAddLesson);
+        const selected = directAddAvailable().filter((word) => directAddSelected.has(word.text));
+        if (!source || !selected.length) return;
+        const ctx = directAddCapture(), words = selected.map((word) => ({ text: word.text, spoken_text: word.spoken_text || word.text }));
+        directAddBusy = true; directAddStatus = '正在加入错题本…'; directAddError = false; renderDirectAdd(); renderControls();
+        try {
+            const result = await request('/mistakes', { method: 'POST', body: { preserve_existing: true,
+                items: [{ book_id: ctx.book, lesson_id: source.lesson_id, words }] } });
+            if (!directAddCurrent(ctx)) return;
+            if (!Number.isInteger(result.added_count) || !Number.isInteger(result.existing_count) || result.added_count < 0 || result.existing_count < 0
+                    || result.added_count + result.existing_count !== words.length) throw new Error('加入结果未确认，请重试；重复提交不会覆盖已有读音。');
+            const acknowledged = directAddAcknowledged.get(source.lesson_id) || new Set();
+            words.forEach((word) => acknowledged.add(word.text)); directAddAcknowledged.set(source.lesson_id, acknowledged);
+            directAddSelected.clear();
+            directAddStatus = `已加入错题本：新增 ${result.added_count} 条，已有 ${result.existing_count} 条；已有读音保持不变。`;
+            try {
+                const notebook = await request(`/mistakes?book_id=${encodeURIComponent(ctx.book)}`);
+                if (!directAddCurrent(ctx)) return;
+                applyDirectMistakes(notebook, ctx.book);
+            } catch (_) { if (directAddCurrent(ctx)) { mistakeLoaded = false; directAddStatus += ' 分组暂未刷新，请点击“刷新错题本”核对。'; directAddError = true; } }
+            if (directAddCurrent(ctx)) renderMistakes();
+        } catch (error) { if (directAddCurrent(ctx)) { directAddStatus = `${error.message || '暂时未能加入错题本。'} 勾选仍保留，请重试。`; directAddError = true; } }
+        finally { if (directAddCurrent(ctx)) { directAddBusy = false; renderDirectAdd(); renderControls(); } }
     }
     function renderMistakes() {
         const container = el('english-dictation-mistakes-groups');
@@ -627,10 +748,11 @@
             details.appendChild(chips); container.appendChild(details);
         }
         setMistakeStatus(mistakeStatus, mistakeStatusError);
+        renderDirectAdd();
         renderMistakeControls();
     }
     async function loadMistakes() {
-        if (!bookId || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !current(capture())) return;
+        if (!bookId || directAddBusy || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !current(capture())) return;
         const ctx = capture(), requestedBook = bookId, sequence = ++mistakeSequence;
         mistakeLoading = true;
         setMistakeStatus('正在读取错题本…'); renderMistakeControls(); renderControls();
@@ -655,12 +777,12 @@
         }
     }
     async function setMode(mode) {
-        if (loading || saving || mistakeSpokenSaving || !current(capture())) return;
-        preserveDraft(); stopSpeech(); homeMode = mode; renderMode();
+        if (loading || saving || directAddBusy || mistakeSpokenSaving || !current(capture())) return;
+        preserveDraft(); stopSpeech(); if (homeMode !== mode) clearDirectAdd(); homeMode = mode; renderMode();
         if (mode === 'mistakes') await loadMistakes();
     }
     async function removeMistake(item, word) {
-        if (loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !active || !current(capture()) || item.book_id !== bookId) return;
+        if (loading || saving || directAddBusy || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !active || !current(capture()) || item.book_id !== bookId) return;
         const ctx = capture(), requestedBook = item.book_id;
         mistakeDeleting = true;
         setMistakeStatus(`正在从${sourceName(item.lesson)}移除“${word.text}”…`); renderControls();
@@ -690,13 +812,14 @@
                 : selectedVoice(voiceChosen ? el('english-dictation-voice').value : '', savedVoice) };
     }
     function startMistakes() {
-        if (loading || saving || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !mistakeLoaded || !active || !current(capture())) return;
+        if (loading || saving || directAddBusy || mistakeLoading || mistakeDeleting || mistakeSpokenSaving || !mistakeLoaded || !active || !current(capture())) return;
         const words = mistakeRunWords();
         if (!words.length) { setMistakeStatus('先勾选至少一份有错题的清单，再开始复习。', true); return; }
         makeRun(words, { ...playbackSettings(), title: '错题本复习', kind: 'mistakes', book_id: bookId, lesson_id: null,
             number: null, lessonCount: mistakeItems.filter((item) => mistakeSelections.has(item.lesson_id)).length });
     }
     async function loadBook(nextBook) {
+        clearDirectAdd();
         preserveDraft();
         stopSpeech();
         bookId = nextBook;
@@ -743,7 +866,7 @@
         }
     }
     async function selectLesson(item) {
-        if (loading || saving || mistakeSpokenSaving || !signedIn() || !item) return;
+        if (loading || saving || directAddBusy || mistakeSpokenSaving || !signedIn() || !item) return;
         preserveDraft(); stopSpeech();
         lesson = item;
         wordlist = null; raw = ''; conflict = null;
@@ -767,7 +890,7 @@
         }
     }
     async function save() {
-        if (!wordlist || loading || saving || mistakeSpokenSaving || conflict || !signedIn()) return false;
+        if (!wordlist || loading || saving || directAddBusy || mistakeSpokenSaving || conflict || !signedIn()) return false;
         let parsed;
         try { parsed = parseWords(raw); }
         catch (error) { preserveDraft(); message(error.message, true); return false; }
@@ -855,7 +978,7 @@
         renderEditor(); renderDirectory();
     }
     async function addLesson() {
-        if (loading || saving || mistakeSpokenSaving || !bookId || !signedIn()) return;
+        if (loading || saving || directAddBusy || mistakeSpokenSaving || !bookId || !signedIn()) return;
         const title = normalized(el('english-dictation-custom-title').value);
         const numberRaw = el('english-dictation-custom-number').value.trim();
         const number = numberRaw ? Number(numberRaw) : null;
@@ -1093,7 +1216,7 @@
         message(); showView('player'); renderPlayer();
     }
     async function start() {
-        if (loading || saving || !wordlist || conflict || !visible()) return;
+        if (loading || saving || directAddBusy || !wordlist || conflict || !visible()) return;
         const ctx = capture(true), startingView = viewSequence;
         if (!await save() || !current(ctx) || startingView !== viewSequence || !visible()) return;
         const source = { book_id: bookId, lesson_id: lesson.id, title: lesson.title, number: lesson.number, unit: lesson.unit };
@@ -1205,8 +1328,9 @@
             kind: run.kind, book_id: run.book_id, lesson_id: run.lesson_id, lessonCount: run.lessonCount, savedMistakes: run.savedMistakes });
     }
     function backHome() { stopSpeech(); showView('home'); renderControls(); }
-    function leaveView() { preserveDraft(); viewSequence += 1; active = false; stopSpeech(); cancelRequests(); showView('home'); }
+    function leaveView() { preserveDraft(); clearDirectAdd(); viewSequence += 1; active = false; stopSpeech(); cancelRequests(); showView('home'); }
     function reset() {
+        clearDirectAdd();
         preserveDraft(); active = false; stopSpeech(); cancelRequests();
         audioCapabilities = { kokoro: false, prepare: false }; capabilitiesPromise = null; capabilitiesSequence += 1;
         prepareSnapshot = []; prepareInFlight = ''; lastPrepared = ''; lastPreparedAt = 0;
@@ -1232,7 +1356,7 @@
         if (boundStudent !== learner() || boundToken !== session().token || boundHostGeneration !== session().generation) {
             reset(); boundStudent = learner(); boundToken = session().token; boundHostGeneration = session().generation;
         }
-        stopSpeech(); viewSequence += 1; active = true; showView('home'); renderMode(); detectVoices();
+        clearDirectAdd(); stopSpeech(); viewSequence += 1; active = true; showView('home'); renderMode(); detectVoices();
         checkAudioCapabilities();
         if (loaded || loading) { if (loaded && homeMode === 'mistakes') await loadMistakes(); return; }
         const ctx = capture(), sequence = ++requestSequence;
@@ -1253,10 +1377,27 @@
     }
 
     el('english-dictation-words').maxLength = 440000;
-    el('english-dictation-book').addEventListener('change', () => { if (!loading && !saving && !mistakeLoading && !mistakeDeleting && !mistakeSpokenSaving) return loadBook(el('english-dictation-book').value); });
+    el('english-dictation-book').addEventListener('change', () => { if (!loading && !saving && !directAddBusy && !mistakeLoading && !mistakeDeleting && !mistakeSpokenSaving) return loadBook(el('english-dictation-book').value); });
     el('english-dictation-mode-lessons').addEventListener('click', () => setMode('lessons'));
     el('english-dictation-mode-mistakes').addEventListener('click', () => setMode('mistakes'));
     el('english-dictation-mistakes-refresh').addEventListener('click', loadMistakes);
+    el('english-dictation-mistakes-add').addEventListener('click', openDirectAdd);
+    el('english-dictation-mistakes-add-close').addEventListener('click', () => { if (!directAddBusy) clearDirectAdd(); });
+    el('english-dictation-mistakes-add-lesson').addEventListener('change', () => {
+        if (directAddBusy || !directAddCurrent(directAddCapture())) return;
+        directAddLesson = el('english-dictation-mistakes-add-lesson').value;
+        directAddSelected.clear(); directAddStatus = ''; directAddError = false; renderDirectAdd();
+    });
+    el('english-dictation-mistakes-add-select-all').addEventListener('click', () => {
+        if (directAddBusy || !directAddCurrent(directAddCapture())) return;
+        directAddSelected = new Set(directAddAvailable().map((word) => word.text)); renderDirectAdd();
+    });
+    el('english-dictation-mistakes-add-clear').addEventListener('click', () => {
+        if (directAddBusy || !directAddCurrent(directAddCapture())) return;
+        directAddSelected.clear(); renderDirectAdd();
+    });
+    el('english-dictation-mistakes-add-submit').addEventListener('click', submitDirectAdd);
+
     el('english-dictation-mistakes-select-all').addEventListener('click', () => {
         if (loading || saving || mistakeLoading || mistakeDeleting || !current(capture())) return;
         mistakeSelections = new Set(mistakeItems.map((item) => item.lesson_id)); renderMistakes();
@@ -1268,7 +1409,7 @@
     el('english-dictation-mistakes-start').addEventListener('click', startMistakes);
     el('english-dictation-add-lesson').addEventListener('click', addLesson);
     el('english-dictation-words').addEventListener('input', () => {
-        if (loading || saving || mistakeSpokenSaving || conflict || !wordlist || !current(capture(true))) return;
+        if (loading || saving || directAddBusy || mistakeSpokenSaving || conflict || !wordlist || !current(capture(true))) return;
         raw = el('english-dictation-words').value;
         try { const present = new Set(parseWords(raw).words.map((word) => word.text)); for (const text of pendingSpoken.keys()) if (!present.has(text)) pendingSpoken.delete(text); } catch (_) { /* Keep corrections while invalid text is being fixed. */ }
         const backedUp = preserveDraft(); renderWords();

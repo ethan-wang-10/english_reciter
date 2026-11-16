@@ -441,8 +441,10 @@ class DictationStore:
         with self._connection() as connection:
             return self._mistake_groups(connection, book_id)
 
-    def merge_mistakes(self, items, updated_by):
+    def merge_mistakes(self, items, updated_by, *, preserve_existing=False):
         """Merge resolved lesson snapshots atomically; never alter source wordlists."""
+        if type(preserve_existing) is not bool:
+            raise DictationError('preserve_existing 必须为 true 或 false。')
         if not isinstance(items, list) or any(not isinstance(item, dict) or set(item) != {
                 'book_id', 'lesson_id', 'lesson', 'words'} for item in items):
             raise DictationError('请提交有效的课文错词。')
@@ -479,6 +481,8 @@ class DictationStore:
                 for word in item['words']:
                     if word['text'] in old_words:
                         existing += 1
+                        if preserve_existing:
+                            continue
                     else:
                         added += 1
                     connection.execute('INSERT INTO dictation_mistakes(book_id,lesson_id,text,spoken_text,added_at,updated_at,updated_by) '
@@ -610,7 +614,10 @@ def register_subject_dictation_routes(app, services):
     @routes.post('/mistakes')
     @services.token_required
     def add_mistakes(username):
-        data = body(('items',), maximum=MAX_MISTAKE_REQUEST_BYTES)
+        data = body(('items',), ('preserve_existing',), maximum=MAX_MISTAKE_REQUEST_BYTES)
+        preserve_existing = data.get('preserve_existing', False)
+        if type(preserve_existing) is not bool:
+            raise DictationError('preserve_existing 必须为 true 或 false。')
         items = validate_mistake_items(data['items'])
         selected_books, lessons_by_book = {}, {}
         for item in items:
@@ -622,7 +629,8 @@ def register_subject_dictation_routes(app, services):
             if entry is None:
                 raise DictationError('课文不存在，请重新选择。', 404)
             item['lesson'] = entry
-        return jsonify(store(username).merge_mistakes(items, getattr(g, 'login_username', username)))
+        return jsonify(store(username).merge_mistakes(items, getattr(g, 'login_username', username),
+                                                     preserve_existing=preserve_existing))
 
     @routes.delete('/mistakes/<book_id>/<lesson_id>')
     @services.token_required

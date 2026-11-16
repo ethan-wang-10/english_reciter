@@ -203,7 +203,7 @@ function englishDictationUI({ storage = new Map(), isParent = false, voices, cap
                 const group = state.mistakes.get(key) || { book_id: item.book_id, lesson_id: item.lesson_id, words: [] };
                 for (const word of item.words) {
                     const previous = group.words.find((saved) => saved.text === word.text);
-                    if (previous) { previous.spoken_text = word.spoken_text || word.text; previous.updated_by = call.username; existing += 1; continue; }
+                    if (previous) { if (!call.body.preserve_existing) { previous.spoken_text = word.spoken_text || word.text; previous.updated_by = call.username; } existing += 1; continue; }
                     group.words.push({ ...clone(word), spoken_text: word.spoken_text || word.text, added_at: '2026-11-13T13:00:00+08:00', updated_at: '2026-11-13T13:00:00+08:00', updated_by: call.username });
                     added += 1;
                 }
@@ -1161,4 +1161,93 @@ test('English saving and starting refresh preparation capabilities after admin t
     await ui.field('english-dictation-player-exit').fire('click'); ui.state.capabilities = { kokoro: true, prepare: true };
     await ui.start(); assert.deepEqual(prepared().at(-1)?.body, { texts: ['third phrase'] });
     assert.equal(ui.field('english-dictation-player').hidden, false); assert.equal(ui.state.audioRequests.length, 0); assert.equal(ui.state.spoken.length, 0);
+});
+
+test('a linked parent directly adds saved words and sentences without a run or saving the editor draft', async () => {
+    const ui = englishDictationUI({ isParent: true, words: [{ text: 'Apple', spoken_text: 'an apple' }, 'Where is my bag?'] });
+    await ui.api.open(); await ui.type('english-dictation-words', 'unsaved child draft'); await ui.openMistakes();
+    await ui.field('english-dictation-mistakes-add').fire('click');
+    assert.equal(ui.field('english-dictation-mistakes-add-panel').hidden, false);
+    assert.equal(ui.field('english-dictation-mistakes-add-words').querySelectorAll('input').length, 2);
+    assert.doesNotMatch(ui.field('english-dictation-mistakes-add-words').textContent, /unsaved/);
+    await ui.field('english-dictation-mistakes-add-select-all').fire('click');
+    await ui.field('english-dictation-mistakes-add-submit').fire('click');
+    const post = ui.state.calls.find((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.equal(post.body.preserve_existing, true);
+    assert.deepEqual(post.body.items[0].words, [{ text: 'Apple', spoken_text: 'an apple' }, { text: 'Where is my bag?', spoken_text: 'Where is my bag?' }]);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 0);
+    assert.equal(ui.state.audioRequests.length, 0);
+    assert.match(ui.field('english-dictation-mistakes-groups').textContent, /Apple.*Where is my bag/);
+    assert.match(ui.field('english-dictation-mistakes-status').textContent, /共 1 份清单，2 条错题/);
+    assert.ok(ui.field('english-dictation-mistakes-add-words').querySelectorAll('input').every((input) => input.disabled));
+    await ui.field('english-dictation-mistakes-add-close').fire('click'); await ui.field('english-dictation-mode-lessons').fire('click');
+    assert.equal(ui.field('english-dictation-words').value, 'unsaved child draft');
+});
+
+test('direct additions skip existing mistakes and atomically preserve a concurrently corrected pronunciation', async () => {
+    const ui = englishDictationUI({ words: [{ text: 'Apple', spoken_text: 'source apple' }, 'Pear'], mistakes: [{ lesson_id: 'default-list', words: [{ text: 'Apple', spoken_text: 'corrected apple' }] }] });
+    await ui.api.open(); await ui.openMistakes(); await ui.field('english-dictation-mistakes-add').fire('click');
+    const checks = ui.field('english-dictation-mistakes-add-words').querySelectorAll('input');
+    assert.equal(checks[0].disabled, true); assert.match(ui.field('english-dictation-mistakes-add-words').textContent, /已加入，保留原读音/);
+    assert.match(checks[0].parentElement.textContent, /朗读：corrected apple/);
+    assert.doesNotMatch(checks[0].parentElement.textContent, /source apple/);
+    await ui.field('english-dictation-mistakes-add-select-all').fire('click');
+    ui.state.seedMistakes([{ lesson_id: 'default-list', words: [{ text: 'Apple', spoken_text: 'corrected apple' }, { text: 'Pear', spoken_text: 'another page correction' }] }]);
+    await ui.field('english-dictation-mistakes-add-submit').fire('click');
+    const saved = ui.state.mistakeGroups()[0].words;
+    assert.equal(saved.find((word) => word.text === 'Pear').spoken_text, 'another page correction');
+    assert.equal(saved.find((word) => word.text === 'Apple').spoken_text, 'corrected apple');
+    assert.equal(ui.state.wordlists.get('default-list').words[0].spoken_text, 'source apple');
+});
+
+test('direct-add failure keeps the selection and retry, while empty saved lists explain how to prepare content', async () => {
+    const ui = englishDictationUI({ words: ['Pear'] }); await ui.api.open(); await ui.openMistakes(); await ui.field('english-dictation-mistakes-add').fire('click');
+    await ui.field('english-dictation-mistakes-add-select-all').fire('click');
+    const gate = deferred(); ui.state.routes[prefix + '/mistakes'] = () => gate.promise;
+    const pending = ui.field('english-dictation-mistakes-add-submit').fire('click'); await ui.flush();
+    assert.equal(ui.field('english-dictation-book').disabled, true);
+    await ui.field('english-dictation-mistakes-add-submit').fire('click');
+    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/mistakes').length, 1);
+    gate.reject(new Error('服务暂不可用')); await pending;
+    assert.equal(ui.field('english-dictation-mistakes-add-words').querySelector('input').checked, true);
+    assert.match(ui.field('english-dictation-mistakes-add-status').textContent, /仍保留.*重试/);
+    delete ui.state.routes[prefix + '/mistakes']; await ui.field('english-dictation-mistakes-add-submit').fire('click');
+    assert.equal(ui.state.mistakeGroups()[0].words[0].text, 'Pear');
+    const empty = englishDictationUI({ words: [], revision: 0 }); await empty.api.open(); await empty.openMistakes(); await empty.field('english-dictation-mistakes-add').fire('click');
+    assert.match(empty.field('english-dictation-mistakes-add-status').textContent, /先.*录入并保存/);
+    assert.equal(empty.field('english-dictation-mistakes-add-submit').disabled, true);
+});
+
+test('late direct-add list reads and submissions cannot reopen a departed view or expose a previous learner', async () => {
+    const ui = englishDictationUI({ words: ['Private word'] }); await ui.api.open(); await ui.openMistakes();
+    const lists = deferred(); ui.state.routes[prefix + '/wordlists?book_id=' + bookId] = () => lists.promise;
+    const opening = ui.field('english-dictation-mistakes-add').fire('click'); await ui.flush();
+    ui.api.leaveView(); lists.resolve({ items: [clone(ui.state.wordlists.get('default-list'))] }); await opening;
+    assert.equal(ui.field('english-dictation-mistakes-add-panel').hidden, true);
+    assert.equal(ui.field('english-dictation-mistakes-add-words').textContent, '');
+    delete ui.state.routes[prefix + '/wordlists?book_id=' + bookId]; await ui.api.open(); await ui.field('english-dictation-mistakes-add').fire('click');
+    await ui.field('english-dictation-mistakes-add-select-all').fire('click');
+    const post = deferred(); ui.state.routes[prefix + '/mistakes'] = () => post.promise;
+    const saving = ui.field('english-dictation-mistakes-add-submit').fire('click'); await ui.flush();
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', student: 'bob', isParent: false, generation: 2 }; await ui.api.open();
+    post.resolve({ added_count: 1, existing_count: 0 }); await saving;
+    assert.equal(ui.field('english-dictation-mistakes-add-panel').hidden, true);
+    assert.doesNotMatch(ui.visibleText(), /Private word/);
+    assert.equal(ui.field('english-dictation-book').disabled, false);
+});
+
+test('direct-add textbook selection keeps Unit labels and clears old choices when switching books', async () => {
+    const ui = englishDictationUI({ books: englishBooks() });
+    ui.state.wordlistsByBook.set(textbookId, new Map([['unit-01', textbookList('unit-01', ['school'], 1)], ['unit-02', textbookList('unit-02', ['teacher'], 1)]]));
+    await ui.api.open(); await ui.openMistakes(); await ui.field('english-dictation-mistakes-add').fire('click');
+    assert.match(ui.field('english-dictation-mistakes-add-lesson').options[0].textContent, /Unit 1/);
+    await ui.type('english-dictation-mistakes-add-lesson', 'unit-02', 'change');
+    assert.equal(ui.field('english-dictation-mistakes-add-words').querySelector('input').value, 'teacher');
+    await ui.field('english-dictation-mistakes-add-select-all').fire('click'); await ui.field('english-dictation-mistakes-add-submit').fire('click');
+    assert.equal(ui.state.mistakeGroups(textbookId)[0].lesson_id, 'unit-02');
+    await ui.chooseBook(bookId);
+    assert.equal(ui.field('english-dictation-mistakes-add-panel').hidden, true);
+    assert.equal(ui.field('english-dictation-mistakes-add-words').textContent, '');
+    await ui.field('english-dictation-mistakes-add').fire('click');
+    assert.deepEqual(ui.field('english-dictation-mistakes-add-words').querySelectorAll('input').map((input) => input.value), ['apple', 'Where is my schoolbag?']);
 });

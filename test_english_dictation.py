@@ -365,6 +365,45 @@ def test_mistakes_preserve_long_snapshots_and_list_boundaries_and_remove_only_ex
     assert read_mistakes(browser, browser.bob).json['items'] == [] and not database(browser, 'bob').exists()
 
 
+def test_direct_wordlist_addition_keeps_corrected_reading_and_source_subjects(browser):
+    chinese_path = '/api/subjects/chinese/dictation/wordlists/chinese-book/lesson-01'
+    chinese = browser.client.put(chinese_path, headers=browser.headers,
+                                 json={'base_revision': 0, 'words': entries('观潮')}).json['wordlist']
+    original = save(browser, [{'text': 'Dr. Smith', 'spoken_text': 'Dr Smith'}, *entries('Apple', 'apple')]).json['wordlist']
+    assert mistakes(browser, [group([{'text': 'Dr. Smith', 'spoken_text': 'Doctor Smith'}])]).status_code == 200
+    old_word = read_mistakes(browser).json['items'][0]['words'][0]
+    listed = browser.client.get(PREFIX + '/wordlists?book_id=' + BOOK_ID, headers=browser.parent).json['items']
+    payload = {'preserve_existing': True, 'items': [
+        {'book_id': row['book_id'], 'lesson_id': row['lesson_id'], 'words': row['words']} for row in listed
+    ]}
+    response = browser.client.post(PREFIX + '/mistakes', headers=browser.parent, json=payload)
+    assert response.status_code == 200 and response.json == {'added_count': 2, 'existing_count': 1}
+    notebook = read_mistakes(browser).json
+    marked = {word['text']: word for word in notebook['items'][0]['words']}
+    assert marked['Dr. Smith'] == old_word
+    assert marked['Apple']['updated_by'] == marked['apple']['updated_by'] == 'alice_parent'
+    assert browser.client.post(PREFIX + '/mistakes', headers=browser.parent, json=payload).json == {
+        'added_count': 0, 'existing_count': 3}
+    assert read_mistakes(browser, browser.parent).json == notebook
+    assert browser.client.get(word_url(), headers=browser.headers).json['wordlist'] == original
+    assert browser.client.get(chinese_path, headers=browser.headers).json['wordlist'] == chinese
+    chinese_notebook = browser.client.get('/api/subjects/chinese/dictation/mistakes?book_id=chinese-book', headers=browser.headers)
+    assert chinese_notebook.json['word_count'] == 0
+    assert read_mistakes(browser, browser.bob).json['items'] == []
+    assert not database(browser, 'alice_parent').exists() and not database(browser, 'bob').exists()
+    assert not browser.state.spoken
+    for name in ('learning.sqlite3', 'exam_preparation.sqlite3', 'subjects/math'):
+        assert not (browser.data_dir / 'alice' / name).exists()
+
+
+@pytest.mark.parametrize('flag', [None, 0, 1, '', 'true', 'false', [], {}])
+def test_direct_mistake_add_requires_a_strict_preservation_flag_before_writing(browser, flag):
+    response = browser.client.post(PREFIX + '/mistakes', headers=browser.headers,
+                                   json={'items': [group(entries('Apple'))], 'preserve_existing': flag})
+    assert response.status_code == 400
+    assert not browser.data_dir.exists()
+
+
 def test_an_invalid_source_rejects_a_whole_mistake_batch_before_writing(browser):
     for bad in ({**group(entries('Bad')), 'book_id': 'unknown'}, group(entries('Bad'), 'unknown'),
                 group(entries('Bad'), 'custom_' + 'a' * 32)):

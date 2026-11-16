@@ -6,9 +6,9 @@
       "url": "/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg"
     },
     "/static/css/english-dictation.css": {
-      "bytes": 31651,
-      "sha256": "a6d6a57fa2e127c617998b571de18c9b217e739801f75b01878a86ce081eebd8",
-      "url": "/static/assets/css/english-dictation.a6d6a57fa2e127c6.css"
+      "bytes": 33948,
+      "sha256": "77a2bdc7a5004ee22450e07e86fe58b9dc79b7cdbd3c526775f37baf4b556984",
+      "url": "/static/assets/css/english-dictation.77a2bdc7a5004ee2.css"
     },
     "/static/css/exam-preparation.css": {
       "bytes": 12558,
@@ -21,9 +21,9 @@
       "url": "/static/assets/css/style.5a475613d811f533.css"
     },
     "/static/css/subject-dictation.css": {
-      "bytes": 20091,
-      "sha256": "0233f21b59dc85dbebc254629efccb2013dfeda6d80793cf38e06c3440674668",
-      "url": "/static/assets/css/subject-dictation.0233f21b59dc85db.css"
+      "bytes": 22091,
+      "sha256": "7460ce361ca625798ccef3127bb9ce18b6a22372ab3a36125329ea912ab0cc66",
+      "url": "/static/assets/css/subject-dictation.7460ce361ca62579.css"
     },
     "/static/css/subject-portal.css": {
       "bytes": 29175,
@@ -66,9 +66,9 @@
       "url": "/static/assets/js/english-dictation-host.10c6b22669f3fff1.js"
     },
     "/static/js/english-dictation.js": {
-      "bytes": 90532,
-      "sha256": "9200ba0ad0687f20dcbb94f44f5dd7bdd9ce48430c7f31730b67af0c2579baac",
-      "url": "/static/assets/js/english-dictation.9200ba0ad0687f20.js"
+      "bytes": 102915,
+      "sha256": "7972c0a8fae9da1da0ac80db001de8c389aa6a6f53e118c4a23718f84d7d5e72",
+      "url": "/static/assets/js/english-dictation.7972c0a8fae9da1d.js"
     },
     "/static/js/exam-preparation.js": {
       "bytes": 54418,
@@ -81,9 +81,9 @@
       "url": "/static/assets/js/performance.cabc7fdc8aff1192.js"
     },
     "/static/js/subject-dictation.js": {
-      "bytes": 81500,
-      "sha256": "c00c880ab7336eaef4b9023e63b4774203acdf12e1f56fccbe5767544ac89134",
-      "url": "/static/assets/js/subject-dictation.c00c880ab7336eae.js"
+      "bytes": 93517,
+      "sha256": "1fb20841d5e3a233b774ff6894e532fc614b279b75b90a618f0b36932b478e64",
+      "url": "/static/assets/js/subject-dictation.1fb20841d5e3a233.js"
     },
     "/static/js/subject-portal.js": {
       "bytes": 41616,

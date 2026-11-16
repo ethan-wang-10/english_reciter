@@ -276,7 +276,10 @@ def register_english_dictation_routes(app, services):
     @routes.post('/mistakes')
     @services.token_required
     def add_mistakes(username):
-        data = body(('items',), maximum=MAX_MISTAKE_REQUEST_BYTES)
+        data = body(('items',), ('preserve_existing',), maximum=MAX_MISTAKE_REQUEST_BYTES)
+        preserve_existing = data.get('preserve_existing', False)
+        if type(preserve_existing) is not bool:
+            raise DictationError('preserve_existing 必须为 true 或 false。')
         items = validate_mistake_items(data['items'], max_text=MAX_TEXT, max_spoken=MAX_TEXT, max_mistakes=MAX_MISTAKES)
         submitted = sum(len(item['words']) for item in items)
         for item in items:
@@ -292,7 +295,8 @@ def register_english_dictation_routes(app, services):
             if entry is None:
                 raise DictationError('默写清单不存在，请重新选择。', 404)
             item['lesson'] = entry
-        result = store(username).merge_mistakes(items, getattr(g, 'login_username', username))
+        result = store(username).merge_mistakes(items, getattr(g, 'login_username', username),
+                                               preserve_existing=preserve_existing)
         result['existing_count'] += collapsed_aliases
         return jsonify(result)
 

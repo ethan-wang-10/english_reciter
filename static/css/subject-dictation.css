@@ -201,3 +201,22 @@
     .dictation-mistakes-save > .dictation-button { width: 100%; }
     .dictation-mistakes-save .dictation-note { min-width: 0; font-size: 11px; }
 }
+.dictation-mistakes-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; }
+.dictation-direct-add { margin: 18px 0 22px; padding: 18px; border: 2px solid var(--accent-line); border-radius: 18px; background: var(--accent-pale); }
+.dictation-direct-add-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.dictation-direct-add-heading h4 { margin: 0; font-size: 16px; color: var(--ink); }
+.dictation-direct-add > label { display: block; margin: 14px 0 6px; color: var(--ink); font-size: 12px; font-weight: 800; }
+.dictation-direct-add > select { width: 100%; min-width: 0; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: white; color: var(--ink); font: inherit; }
+.dictation-direct-add-words { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; max-height: 300px; overflow-y: auto; }
+.dictation-direct-add-word { display: flex; align-items: center; gap: 9px; min-width: 0; max-width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 13px; background: white; color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; }
+.dictation-direct-add-word > input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
+.dictation-direct-add-word > span { min-width: 0; overflow-wrap: anywhere; }
+.dictation-direct-add-word small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 500; }
+.dictation-direct-add-word.is-added { background: #f5f6f7; color: var(--muted); cursor: default; }
+.dictation-direct-add-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin: 12px 0; }
+.dictation-direct-add-actions > .dictation-button { margin-left: auto; }
+@media (max-width: 620px) {
+    .dictation-mistakes-heading-actions { gap: 8px; }
+    .dictation-direct-add { padding: 14px; }
+    .dictation-direct-add-actions > .dictation-button { width: 100%; margin-left: 0; }
+}

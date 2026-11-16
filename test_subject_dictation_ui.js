@@ -203,7 +203,10 @@ function dictationUI({ storage = new Map(), isParent = false, voices, capabiliti
                 const group = state.mistakes.get(key) || { book_id: item.book_id, lesson_id: item.lesson_id, words: [] };
                 for (const word of item.words) {
                     const previous = group.words.find((saved) => saved.text === word.text);
-                    if (previous) { previous.spoken_text = word.spoken_text || word.text; previous.updated_by = call.username; existing += 1; continue; }
+                    if (previous) {
+                        if (!call.body.preserve_existing) { previous.spoken_text = word.spoken_text || word.text; previous.updated_by = call.username; }
+                        existing += 1; continue;
+                    }
                     group.words.push({ ...clone(word), spoken_text: word.spoken_text || word.text, added_at: '2026-11-13T13:00:00+08:00', updated_at: '2026-11-13T13:00:00+08:00', updated_by: call.username });
                     added += 1;
                 }
@@ -1182,4 +1185,122 @@ test('Chinese saving and starting refresh preparation capabilities after admin t
     await ui.field('dictation-player-exit').fire('click'); ui.state.capabilities = { kokoro: true, prepare: true };
     await ui.start(); assert.deepEqual(prepared().at(-1)?.body, { texts: ['第三词语'] });
     assert.equal(ui.field('dictation-player').hidden, false); assert.equal(ui.state.audioRequests.length, 0); assert.equal(ui.state.spoken.length, 0);
+});
+
+
+test('parents can directly add saved words without starting dictation or saving the open raw draft', async () => {
+    const ui = dictationUI({ isParent: true, words: [{ text: '薄', spoken_text: '单薄的薄' }, '繁星'],
+        mistakes: [{ lesson_id: 'lesson-01', words: [{ text: '薄', spoken_text: '薄雾的薄' }] }] });
+    const original = clone(ui.state.wordlists.get('lesson-01'));
+    await ui.openLesson(); await ui.type('dictation-words', '本机尚未保存的词语');
+    await ui.openMistakes();
+    assert.equal(ui.field('dictation-mistakes-add-panel').hidden, true);
+    await ui.field('dictation-mistakes-add').fire('click');
+    assert.equal(ui.field('dictation-mistakes-add-panel').hidden, false);
+    const inputs = ui.field('dictation-mistakes-add-words').querySelectorAll('input');
+    assert.deepEqual(inputs.map((input) => input.value), ['薄', '繁星']);
+    assert.equal(inputs[0].disabled, true); assert.match(inputs[0].parentElement.textContent, /已加入/);
+    await ui.field('dictation-mistakes-add-select-all').fire('click');
+    assert.match(ui.field('dictation-mistakes-add-submit').textContent, /1/);
+    await ui.field('dictation-mistakes-add-submit').fire('click');
+    const call = ui.state.calls.findLast((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.equal(call.student, 'alice'); assert.equal(call.username, 'alice_parent');
+    assert.deepEqual(call.body, { preserve_existing: true,
+        items: [{ book_id: bookId, lesson_id: 'lesson-01', words: [{ text: '繁星', spoken_text: '繁星' }] }] });
+    assert.equal(ui.state.mistakeGroups()[0].words.find((word) => word.text === '薄').spoken_text, '薄雾的薄');
+    assert.match(ui.field('dictation-mistakes-status').textContent, /共 1 篇课文，2 条错词/);
+    assert.deepEqual(ui.state.wordlists.get('lesson-01'), original);
+    assert.equal(ui.field('dictation-words').value, '本机尚未保存的词语');
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 0);
+    assert.equal(ui.field('dictation-player').hidden, true); assert.equal(ui.state.spoken.length, 0);
+    assert.ok(ui.field('dictation-mistakes-add-words').querySelectorAll('input').every((input) => input.disabled && !input.checked));
+    await ui.field('dictation-mistakes-add-close').fire('click');
+    assert.equal(ui.field('dictation-mistakes-add-panel').hidden, true);
+});
+
+
+test('direct addition refreshes saved snapshots, carries pronunciation hints and handles empty lists', async () => {
+    const empty = dictationUI({ words: [] }); await empty.api.open(); await empty.openMistakes();
+    await empty.field('dictation-mistakes-add').fire('click');
+    assert.match(empty.field('dictation-mistakes-add-status').textContent, /录入.*保存/);
+    assert.equal(empty.field('dictation-mistakes-add-submit').disabled, true);
+    const ui = dictationUI(); await ui.api.open(); await ui.openMistakes();
+    const second = clone(ui.state.wordlists.get('lesson-02'));
+    second.words = [{ text: '长大', spoken_text: '慢慢长大' }]; second.word_count = 1; second.revision = 1;
+    ui.state.wordlists.set('lesson-02', second);
+    await ui.field('dictation-mistakes-add').fire('click');
+    assert.equal(ui.field('dictation-mistakes-add-lesson').querySelectorAll('option').length, 2);
+    await ui.type('dictation-mistakes-add-lesson', 'lesson-02', 'change');
+    await ui.field('dictation-mistakes-add-select-all').fire('click');
+    await ui.field('dictation-mistakes-add-clear').fire('click');
+    assert.equal(ui.field('dictation-mistakes-add-submit').disabled, true);
+    await ui.field('dictation-mistakes-add-select-all').fire('click');
+    await ui.field('dictation-mistakes-add-submit').fire('click');
+    const saved = ui.state.calls.findLast((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.deepEqual(saved.body.items, [{ book_id: bookId, lesson_id: 'lesson-02', words: [{ text: '长大', spoken_text: '慢慢长大' }] }]);
+    assert.equal(ui.field('dictation-editor').hidden, true, 'Picking a source must not change the main wordlist editor');
+});
+
+
+test('direct-add retries keep checks and atomically preserve a concurrently corrected existing word', async () => {
+    const ui = dictationUI({ words: [{ text: '薄', spoken_text: '单薄的薄' }] });
+    await ui.api.open(); await ui.openMistakes(); await ui.field('dictation-mistakes-add').fire('click');
+    await ui.field('dictation-mistakes-add-select-all').fire('click');
+    ui.state.routes[prefix + '/mistakes'] = () => { throw new Error('暂时无法加入'); };
+    await ui.field('dictation-mistakes-add-submit').fire('click');
+    assert.equal(ui.field('dictation-mistakes-add-words').querySelector('input').checked, true);
+    assert.equal(ui.field('dictation-mistakes-add-submit').disabled, false);
+    assert.match(ui.field('dictation-mistakes-add-status').textContent, /保留.*重试/);
+    ui.state.seedMistakes([{ lesson_id: 'lesson-01', words: [{ text: '薄', spoken_text: '另一页已修好的读音' }] }]);
+    const concurrent = clone(ui.state.mistakeGroups()[0].words[0]);
+    delete ui.state.routes[prefix + '/mistakes'];
+    await ui.field('dictation-mistakes-add-submit').fire('click');
+    assert.deepEqual(ui.state.mistakeGroups()[0].words[0], concurrent);
+    assert.equal(ui.field('dictation-mistakes-add-words').querySelector('input').disabled, true);
+    assert.match(ui.field('dictation-mistakes-add-status').textContent, /已有 1/);
+});
+
+
+test('direct-add busy controls prevent duplicate submission and late completion cannot enter another account', async () => {
+    const ui = dictationUI(); await ui.api.open(); await ui.openMistakes();
+    await ui.field('dictation-mistakes-add').fire('click'); await ui.field('dictation-mistakes-add-select-all').fire('click');
+    const gate = deferred(); let oldCall;
+    ui.state.routes[prefix + '/mistakes'] = (call) => { oldCall = call; return gate.promise; };
+    const pending = ui.field('dictation-mistakes-add-submit').fire('click'); await ui.flush();
+    assert.equal(ui.field('dictation-book').disabled, true);
+    assert.equal(ui.field('dictation-mode-lessons').disabled, true);
+    assert.equal(ui.field('dictation-mistakes-add-close').disabled, true);
+    await ui.field('dictation-mistakes-add-submit').fire('click');
+    assert.equal(ui.state.calls.filter((call) => call.method === 'POST' && call.url === prefix + '/mistakes').length, 1);
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    ui.state.seedMistakes([{ lesson_id: 'lesson-02', words: ['新账号错词'] }], 'bob');
+    delete ui.state.routes[prefix + '/mistakes'];
+    await ui.api.open(); await ui.openMistakes();
+    gate.resolve(ui.state.defaultReply(oldCall)); await pending; await ui.flush();
+    assert.match(ui.field('dictation-mistakes-groups').textContent, /新账号错词/);
+    assert.doesNotMatch(ui.field('dictation-mistakes-groups').textContent, /潮水/);
+    assert.equal(ui.field('dictation-mistakes-add-panel').hidden, true);
+});
+
+
+test('direct-add saved-list replies cannot revive a closed view or cross into another textbook', async () => {
+    const ui = dictationUI();
+    const secondBook = { id: 'grade4-next-book', title: '另一册', edition: '测试', grade: 4, term: 2,
+        lessons: [{ id: 'lesson-next', title: '新课文', number: 1, unit: '另一单元', custom: false }] };
+    ui.state.books.push(secondBook);
+    await ui.api.open(); await ui.openMistakes();
+    const path = prefix + '/wordlists?book_id=' + bookId, gate = deferred();
+    ui.state.routes[path] = () => gate.promise;
+    const pending = ui.field('dictation-mistakes-add').fire('click'); await ui.flush();
+    const request = ui.state.calls.findLast((call) => call.url === path);
+    assert.equal(ui.field('dictation-book').disabled, true);
+    ui.api.leaveView(); assert.equal(request.signal.aborted, true);
+    delete ui.state.routes[path];
+    await ui.api.open(); await ui.type('dictation-book', secondBook.id, 'change');
+    await ui.field('dictation-mistakes-add').fire('click');
+    gate.resolve({ items: [{ book_id: bookId, lesson_id: 'lesson-01', revision: 2, words: [{ text: '迟到的旧册词语', spoken_text: '迟到的旧册词语' }] }], count: 1 });
+    await pending; await ui.flush();
+    assert.equal(ui.field('dictation-book').value, secondBook.id);
+    assert.doesNotMatch(ui.field('dictation-mistakes-add-words').textContent, /迟到|潮水|繁星/);
+    assert.match(ui.field('dictation-mistakes-add-status').textContent, /录入.*保存/);
 });

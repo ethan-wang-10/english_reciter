@@ -25,6 +25,9 @@
     let homeMode = 'lessons', mistakeItems = [], mistakeSelections = new Set(), mistakeExpanded = new Set();
     let mistakeLoading = false, mistakeLoaded = false, mistakeDeleting = false, mistakeSequence = 0;
     let mistakeStatus = '', mistakeStatusError = false;
+    const blankDirectAdd = () => ({ open: false, loading: false, saving: false, book: '', ctx: null,
+        lists: [], lessonId: '', selected: new Set(), status: '', error: false });
+    let directAdd = blankDirectAdd();
     let voicePreference = null, voiceStorageReady = true, pronunciationEdit = null, pronunciationDrafts = new Map();
     let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesPromise = null, capabilitiesSequence = 0;
     let prepareSnapshot = [], prepareInFlight = '', lastPrepared = '', lastPreparedAt = 0;
@@ -215,7 +218,7 @@
         if (name === 'home') renderResume();
     }
     function renderControls() {
-        const blocked = loading || saving || mistakeDeleting;
+        const blocked = loading || saving || mistakeDeleting || directAdd.loading || directAdd.saving;
         el('dictation-book').disabled = blocked || mistakeLoading || mistakeDeleting;
         el('dictation-mode-lessons').disabled = blocked;
         el('dictation-mode-mistakes').disabled = blocked;
@@ -241,7 +244,7 @@
         return result;
     }
     function beginPronunciation(word, kind, source = null) {
-        if (!active || loading || saving || mistakeDeleting || conflict || !current(capture())) return;
+        if (!active || loading || saving || mistakeDeleting || directAdd.loading || directAdd.saving || conflict || !current(capture())) return;
         const edit = { kind, text: word.text, value: word.spoken_text || word.text, book: bookId,
             lessonId: kind === 'wordlist' ? lesson?.id : source.lesson_id, ctx: capture(kind === 'wordlist'), status: '', error: false, rawApplied: false };
         edit.value = pronunciationDrafts.get(editKey(edit)) ?? edit.value;
@@ -279,7 +282,7 @@
             edit.status = text; edit.error = error; feedback.textContent = text; feedback.classList.toggle('dictation-status-error', error);
         }
         input.addEventListener('input', () => {
-            if (!attached() || loading || saving || mistakeDeleting || conflict) return;
+            if (!attached() || loading || saving || mistakeDeleting || directAdd.loading || directAdd.saving || conflict) return;
             edit.value = input.value; pronunciationDrafts.set(editKey(edit), edit.value); report('');
         });
         input.addEventListener('paste', (event) => {
@@ -292,7 +295,7 @@
             button.type = 'button'; button.dataset.action = action; button.setAttribute('data-pronunciation-control', '');
             button.disabled = loading || saving || mistakeDeleting || !!conflict;
             button.addEventListener('click', () => {
-                if (!attached() || loading || saving || mistakeDeleting || conflict) return;
+                if (!attached() || loading || saving || mistakeDeleting || directAdd.loading || directAdd.saving || conflict) return;
                 if (action === 'cancel') {
                     pronunciationDrafts.delete(editKey(edit)); pronunciationEdit = null; stopSpeech(); renderWords(); renderMistakes(); renderControls();
                     if (edit.rawApplied) message('读音草稿仍保留在词表中，可点击“保存词表”继续保存。');
@@ -311,7 +314,7 @@
         form.append(label, input, feedback, actions); return form;
     }
     async function commitPronunciation(edit, spoken) {
-        if (!editCurrent(edit) || loading || saving || mistakeDeleting || conflict) return;
+        if (!editCurrent(edit) || loading || saving || mistakeDeleting || directAdd.loading || directAdd.saving || conflict) return;
         stopSpeech(); edit.value = spoken; edit.status = '正在保存读音…'; edit.error = false;
         if (edit.kind === 'wordlist') {
             try {
@@ -420,7 +423,7 @@
         renderControls();
     }
     function renderMistakeControls() {
-        const blocked = loading || saving || mistakeLoading || mistakeDeleting;
+        const blocked = loading || saving || mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving;
         const selected = mistakeItems.filter((item) => mistakeSelections.has(item.lesson_id));
         const count = mistakeRunWords().length;
         el('dictation-mistakes-refresh').disabled = blocked || !bookId;
@@ -430,6 +433,134 @@
         el('dictation-mistakes-selection').textContent = `已选 ${selected.length} 篇课文，共 ${count} 个朗读词语（相同词语与读法合并）`;
         for (const input of el('dictation-mistakes-groups').querySelectorAll('input')) input.disabled = blocked || !!conflict && input.getAttribute('data-pronunciation-control') !== null;
         for (const button of el('dictation-mistakes-groups').querySelectorAll('button')) button.disabled = blocked || !!conflict && button.getAttribute('data-pronunciation-control') !== null;
+        renderDirectAddControls();
+    }
+    function currentDirectAdd(target) {
+        return target === directAdd && target.open && active && homeMode === 'mistakes'
+            && target.book === bookId && current(target.ctx);
+    }
+    function directAddExisting(target) {
+        return new Set(mistakeItems.filter((item) => item.book_id === target.book && item.lesson_id === target.lessonId)
+            .flatMap((item) => item.words.map((word) => word.text)));
+    }
+    function readMistakeRows(result, requestedBook) {
+        if (!Array.isArray(result.items) || result.items.some((item) => item.book_id !== requestedBook || !item.lesson?.id || !Array.isArray(item.words))) throw new Error('错题本读取结果不完整，请刷新后重试。');
+        return result.items.filter((item) => item.words.length).map((item) => ({ ...item, lesson: { ...item.lesson }, words: cloneWords(item.words) }));
+    }
+    function synchronizeMistakes(items) {
+        mistakeItems = items;
+        mistakeSelections = new Set(Array.from(mistakeSelections).filter((id) => items.some((item) => item.lesson_id === id)));
+        mistakeLoaded = true;
+        setMistakeStatus(items.length ? `共 ${items.length} 篇课文，${items.reduce((sum, item) => sum + item.words.length, 0)} 条错词。展开课文可查看或移除词语。` : '');
+    }
+    function resetDirectAdd() {
+        directAdd = blankDirectAdd();
+        renderDirectAdd();
+    }
+    function renderDirectAddControls() {
+        const blocked = loading || saving || mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving;
+        const saved = directAdd.lists.find((item) => item.lesson_id === directAdd.lessonId);
+        const existing = directAddExisting(directAdd);
+        const selected = (saved?.words || []).filter((word) => directAdd.selected.has(word.text) && !existing.has(word.text));
+        el('dictation-mistakes-add').disabled = blocked || !bookId;
+        el('dictation-mistakes-add').setAttribute('aria-expanded', String(directAdd.open));
+        el('dictation-mistakes-add-panel').hidden = !directAdd.open;
+        el('dictation-mistakes-add-panel').setAttribute('aria-busy', String(directAdd.loading || directAdd.saving));
+        el('dictation-mistakes-add-lesson').disabled = blocked || !directAdd.lists.length;
+        el('dictation-mistakes-add-select-all').disabled = blocked || !(saved?.words.some((word) => !existing.has(word.text)));
+        el('dictation-mistakes-add-clear').disabled = blocked || !selected.length;
+        el('dictation-mistakes-add-submit').disabled = blocked || !selected.length;
+        el('dictation-mistakes-add-submit').textContent = directAdd.saving ? '正在加入…' : `加入错题本${selected.length ? `（${selected.length}）` : ''}`;
+        el('dictation-mistakes-add-close').disabled = directAdd.loading || directAdd.saving;
+        el('dictation-mistakes-add-status').textContent = directAdd.status || (saved
+            ? `已选 ${selected.length} 个词语，共 ${saved.words.length} 个；本课已加入的词语会保留原读音。`
+            : directAdd.loading ? '正在读取已保存的词表…' : '还没有已保存的词表，请先到课文目录录入并保存词语。');
+        el('dictation-mistakes-add-status').classList.toggle('dictation-status-error', directAdd.error);
+        for (const input of el('dictation-mistakes-add-words').querySelectorAll('input')) input.disabled = blocked || existing.has(input.value);
+    }
+    function renderDirectAdd() {
+        const select = el('dictation-mistakes-add-lesson'), words = el('dictation-mistakes-add-words');
+        select.replaceChildren(); words.replaceChildren();
+        for (const saved of directAdd.lists) {
+            const option = node('option', `${sourceName(saved.lesson)}（${saved.words.length} 词）`);
+            option.value = saved.lesson_id; select.appendChild(option);
+        }
+        if (!directAdd.lists.length) {
+            const option = node('option', '暂无已保存词表'); option.value = ''; select.appendChild(option);
+        }
+        select.value = directAdd.lessonId;
+        const target = directAdd, existing = directAddExisting(target);
+        const saved = target.lists.find((item) => item.lesson_id === target.lessonId);
+        for (const word of saved?.words || []) {
+            const label = node('label', '', 'dictation-direct-add-word');
+            const input = node('input'); input.type = 'checkbox'; input.value = word.text;
+            input.checked = target.selected.has(word.text) && !existing.has(word.text);
+            input.setAttribute('aria-label', `将“${word.text}”加入本课错题本`);
+            const text = node('span', word.text);
+            if (existing.has(word.text)) { label.classList.add('is-added'); text.appendChild(node('small', '已加入')); }
+            else if (word.spoken_text !== word.text) text.appendChild(node('small', `朗读：${word.spoken_text}`));
+            input.addEventListener('change', () => {
+                if (!currentDirectAdd(target) || target.loading || target.saving || loading || saving || existing.has(word.text)) return;
+                if (input.checked) target.selected.add(word.text); else target.selected.delete(word.text);
+                target.status = ''; target.error = false; renderDirectAddControls();
+            });
+            label.append(input, text); words.appendChild(label);
+        }
+        renderDirectAddControls();
+    }
+    async function openDirectAdd() {
+        if (!active || !bookId || homeMode !== 'mistakes' || loading || saving || mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving || !current(capture())) return;
+        if (directAdd.open) { resetDirectAdd(); return; }
+        const target = { ...blankDirectAdd(), open: true, loading: true, book: bookId, ctx: capture() };
+        directAdd = target; renderDirectAdd(); renderControls();
+        try {
+            const [lists, notebook] = await Promise.all([
+                backgroundRequest(`/wordlists?book_id=${encodeURIComponent(target.book)}`),
+                backgroundRequest(`/mistakes?book_id=${encodeURIComponent(target.book)}`),
+            ]);
+            if (!currentDirectAdd(target)) return;
+            if (!Array.isArray(lists.items) || lists.items.some((item) => item.book_id !== target.book || !Array.isArray(item.words))) throw new Error('已保存词表读取不完整，请关闭后重试。');
+            const metadata = new Map(lessons.map((entry) => [entry.id, entry]));
+            target.lists = lists.items.filter((item) => item.words.length && metadata.has(item.lesson_id))
+                .map((item) => ({ ...item, lesson: { ...metadata.get(item.lesson_id) }, words: cloneWords(item.words) }));
+            const order = new Map(lessons.map((entry, index) => [entry.id, index]));
+            target.lists.sort((a, b) => order.get(a.lesson_id) - order.get(b.lesson_id));
+            target.lessonId = target.lists.find((item) => item.lesson_id === lesson?.id)?.lesson_id || target.lists[0]?.lesson_id || '';
+            synchronizeMistakes(readMistakeRows(notebook, target.book));
+            renderMistakes();
+        } catch (error) {
+            if (currentDirectAdd(target)) { target.status = error.message || '暂时无法读取词表，请关闭后重试。'; target.error = true; }
+        } finally {
+            if (currentDirectAdd(target)) { target.loading = false; renderDirectAdd(); renderControls(); }
+        }
+    }
+    async function submitDirectAdd() {
+        const target = directAdd;
+        if (!currentDirectAdd(target) || target.loading || target.saving || loading || saving || mistakeLoading || mistakeDeleting) return;
+        const saved = target.lists.find((item) => item.lesson_id === target.lessonId), existing = directAddExisting(target);
+        const words = (saved?.words || []).filter((word) => target.selected.has(word.text) && !existing.has(word.text));
+        if (!words.length) return;
+        target.saving = true; target.status = '正在加入错题本…'; target.error = false; renderControls();
+        let acknowledged = false;
+        try {
+            const result = await backgroundRequest('/mistakes', { method: 'POST', body: { preserve_existing: true,
+                items: [{ book_id: target.book, lesson_id: target.lessonId, words: cloneWords(words) }] } });
+            if (!currentDirectAdd(target)) return;
+            if (!Number.isInteger(result.added_count) || !Number.isInteger(result.existing_count) || result.added_count < 0 || result.existing_count < 0
+                    || result.added_count + result.existing_count !== words.length) throw new Error('保存结果未确认，选择已保留，请重试。');
+            acknowledged = true;
+            const notebook = await backgroundRequest(`/mistakes?book_id=${encodeURIComponent(target.book)}`);
+            if (!currentDirectAdd(target)) return;
+            synchronizeMistakes(readMistakeRows(notebook, target.book));
+            target.selected.clear(); target.status = `已加入 ${result.added_count} 个词语，已有 ${result.existing_count} 个；原词表和已有读音保持不变。`;
+            renderMistakes();
+        } catch (error) {
+            if (currentDirectAdd(target)) { target.error = true; target.status = acknowledged
+                ? '词语已加入，但错题本暂未刷新。选择仍保留，可以重试。'
+                : `${error.message || '暂时未能加入错题本。'} 选择已保留，请重试。`; }
+        } finally {
+            if (currentDirectAdd(target)) { target.saving = false; renderDirectAdd(); renderControls(); }
+        }
     }
     function renderMistakes() {
         const container = el('dictation-mistakes-groups');
@@ -454,7 +585,7 @@
             checkbox.setAttribute('aria-label', `选择${sourceName(item.lesson)}的错词加入本轮`);
             checkbox.addEventListener('click', (event) => { event.stopPropagation(); });
             checkbox.addEventListener('change', () => {
-                if (mistakeLoading || mistakeDeleting || !current(capture())) return;
+                if (mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving || !current(capture())) return;
                 if (checkbox.checked) mistakeSelections.add(item.lesson_id); else mistakeSelections.delete(item.lesson_id);
                 renderMistakeControls();
             });
@@ -482,17 +613,15 @@
         renderMistakeControls();
     }
     async function loadMistakes() {
-        if (!bookId || mistakeLoading || mistakeDeleting || !current(capture())) return;
+        if (!bookId || mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving || !current(capture())) return;
         const ctx = capture(), requestedBook = bookId, sequence = ++mistakeSequence;
         mistakeLoading = true;
         setMistakeStatus('正在读取错题本…'); renderMistakeControls(); renderControls();
         try {
             const result = await request(`/mistakes?book_id=${encodeURIComponent(requestedBook)}`);
             if (!current(ctx) || requestedBook !== bookId || sequence !== mistakeSequence) return;
-            if (!Array.isArray(result.items) || result.items.some((item) => item.book_id !== requestedBook || !item.lesson?.id || !Array.isArray(item.words))) throw new Error('错题本读取结果不完整，请点击刷新重试。');
-            mistakeItems = result.items.filter((item) => item.words.length).map((item) => ({ ...item, lesson: { ...item.lesson }, words: cloneWords(item.words) }));
-            mistakeSelections = new Set(Array.from(mistakeSelections).filter((id) => mistakeItems.some((item) => item.lesson_id === id)));
-            mistakeLoaded = true;
+            synchronizeMistakes(readMistakeRows(result, requestedBook));
+            if (directAdd.open) renderDirectAdd();
             setMistakeStatus(mistakeItems.length ? `共 ${mistakeItems.length} 篇课文，${mistakeItems.reduce((sum, item) => sum + item.words.length, 0)} 条错词。展开课文可查看或移除词语。` : '');
         } catch (error) {
             if (current(ctx) && requestedBook === bookId && sequence === mistakeSequence) {
@@ -506,12 +635,13 @@
         }
     }
     async function setMode(mode) {
-        if (loading || saving || !current(capture())) return;
+        if (loading || saving || directAdd.loading || directAdd.saving || !current(capture())) return;
+        if (mode !== homeMode) resetDirectAdd();
         preserveDraft(); stopSpeech(); homeMode = mode; renderMode(); renderWords();
         if (mode === 'mistakes') await loadMistakes();
     }
     async function removeMistake(item, word) {
-        if (loading || saving || mistakeLoading || mistakeDeleting || !active || !current(capture()) || item.book_id !== bookId) return;
+        if (loading || saving || mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving || !active || !current(capture()) || item.book_id !== bookId) return;
         const ctx = capture(), requestedBook = item.book_id;
         mistakeDeleting = true;
         setMistakeStatus(`正在从${sourceName(item.lesson)}移除“${word.text}”…`); renderControls();
@@ -529,7 +659,7 @@
             }
             setMistakeStatus(`已从${sourceName(item.lesson)}移除“${word.text}”。原课文词表仍可继续默写。`);
         } catch (error) { if (current(ctx) && requestedBook === bookId) setMistakeStatus(`${error.message || '暂时未能移除。'} 请再点该词旁的 × 重试。`, true); }
-        finally { if (current(ctx) && requestedBook === bookId) { mistakeDeleting = false; renderMistakes(); renderControls(); } }
+        finally { if (current(ctx) && requestedBook === bookId) { mistakeDeleting = false; renderMistakes(); if (directAdd.open) renderDirectAdd(); renderControls(); } }
     }
     function playbackSettings() {
         return { repetitions: Number(el('dictation-repetitions').value) === 1 ? 1 : 2,
@@ -537,7 +667,7 @@
             voiceSnapshot: selectedVoice(el('dictation-voice').value) };
     }
     function startMistakes() {
-        if (loading || saving || mistakeLoading || mistakeDeleting || !mistakeLoaded || !active || !current(capture())) return;
+        if (loading || saving || mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving || !mistakeLoaded || !active || !current(capture())) return;
         const words = mistakeRunWords();
         if (!words.length) { setMistakeStatus('先勾选至少一篇有错词的课文，再开始复习。', true); return; }
         makeRun(words, { ...playbackSettings(), title: '错题本复习', kind: 'mistakes', book_id: bookId, lesson_id: null,
@@ -546,6 +676,7 @@
     async function loadBook(nextBook) {
         preserveDraft();
         stopSpeech();
+        resetDirectAdd();
         bookId = nextBook;
         pronunciationEdit = null;
         lesson = null;
@@ -582,7 +713,7 @@
         if (current(ctx) && sequence === requestSequence && homeMode === 'mistakes') await loadMistakes();
     }
     async function selectLesson(item) {
-        if (loading || saving || !signedIn() || !item) return;
+        if (loading || saving || directAdd.loading || directAdd.saving || !signedIn() || !item) return;
         preserveDraft(); stopSpeech();
         lesson = item;
         if (pronunciationEdit?.kind === 'wordlist') pronunciationEdit = null;
@@ -606,7 +737,7 @@
         }
     }
     async function save() {
-        if (!wordlist || loading || saving || conflict || !signedIn()) return false;
+        if (!wordlist || loading || saving || directAdd.loading || directAdd.saving || conflict || !signedIn()) return false;
         let parsed;
         try { parsed = parseWords(raw); }
         catch (error) { preserveDraft(); message(error.message, true); return false; }
@@ -691,7 +822,7 @@
         renderEditor(); renderDirectory();
     }
     async function addLesson() {
-        if (loading || saving || !bookId || !signedIn()) return;
+        if (loading || saving || directAdd.loading || directAdd.saving || !bookId || !signedIn()) return;
         const title = normalized(el('dictation-custom-title').value);
         const numberRaw = el('dictation-custom-number').value.trim();
         const number = numberRaw ? Number(numberRaw) : null;
@@ -969,7 +1100,7 @@
         message(); showView('player'); renderPlayer();
     }
     async function start() {
-        if (loading || saving || !wordlist || conflict) return;
+        if (loading || saving || directAdd.loading || directAdd.saving || !wordlist || conflict) return;
         const ctx = capture(true);
         if (!await save() || !current(ctx)) return;
         const source = { book_id: bookId, lesson_id: lesson.id, title: lesson.title, number: lesson.number };
@@ -1080,13 +1211,14 @@
             voiceSnapshot: run.voiceSnapshot, kind: run.kind, book_id: run.book_id, lesson_id: run.lesson_id, lessonCount: run.lessonCount, savedMistakes: run.savedMistakes });
     }
     function backHome() { stopSpeech(); showView('home'); renderControls(); }
-    function leaveView() { preserveDraft(); active = false; stopSpeech(); cancelBackgroundRequests(); showView('home'); }
+    function leaveView() { preserveDraft(); active = false; resetDirectAdd(); stopSpeech(); cancelBackgroundRequests(); showView('home'); }
     function reset() {
         preserveDraft(); active = false; stopSpeech(); cancelBackgroundRequests();
         audioCapabilities = { kokoro: false, prepare: false }; capabilitiesPromise = null; capabilitiesSequence += 1;
         prepareSnapshot = []; prepareInFlight = ''; lastPrepared = ''; lastPreparedAt = 0;
         generation += 1; requestSequence += 1; lessonSequence += 1;
         boundStudent = ''; boundToken = ''; loaded = false; loading = false; saving = false;
+        resetDirectAdd();
         books = []; lessons = []; summaries = new Map(); expandedUnits = new Set();
         bookId = ''; lesson = null; wordlist = null; raw = ''; conflict = null; run = null;
         pronunciationEdit = null; pronunciationDrafts = new Map();
@@ -1127,22 +1259,41 @@
         finally { if (current(ctx)) { loading = false; renderControls(); } }
     }
 
-    el('dictation-book').addEventListener('change', () => { if (!loading && !saving && !mistakeLoading && !mistakeDeleting) return loadBook(el('dictation-book').value); });
+    el('dictation-book').addEventListener('change', () => { if (!loading && !saving && !mistakeLoading && !mistakeDeleting && !directAdd.loading && !directAdd.saving) return loadBook(el('dictation-book').value); });
     el('dictation-mode-lessons').addEventListener('click', () => setMode('lessons'));
     el('dictation-mode-mistakes').addEventListener('click', () => setMode('mistakes'));
     el('dictation-mistakes-refresh').addEventListener('click', loadMistakes);
+    el('dictation-mistakes-add').addEventListener('click', openDirectAdd);
+    el('dictation-mistakes-add-close').addEventListener('click', () => { if (!directAdd.loading && !directAdd.saving) { resetDirectAdd(); renderControls(); } });
+    el('dictation-mistakes-add-lesson').addEventListener('change', () => {
+        if (!currentDirectAdd(directAdd) || directAdd.loading || directAdd.saving) return;
+        const id = el('dictation-mistakes-add-lesson').value;
+        if (!directAdd.lists.some((item) => item.lesson_id === id)) return;
+        directAdd.lessonId = id; directAdd.selected.clear(); directAdd.status = ''; directAdd.error = false; renderDirectAdd();
+    });
+    el('dictation-mistakes-add-select-all').addEventListener('click', () => {
+        if (!currentDirectAdd(directAdd) || directAdd.loading || directAdd.saving || loading || saving) return;
+        const saved = directAdd.lists.find((item) => item.lesson_id === directAdd.lessonId), existing = directAddExisting(directAdd);
+        directAdd.selected = new Set((saved?.words || []).filter((word) => !existing.has(word.text)).map((word) => word.text));
+        directAdd.status = ''; directAdd.error = false; renderDirectAdd();
+    });
+    el('dictation-mistakes-add-clear').addEventListener('click', () => {
+        if (!currentDirectAdd(directAdd) || directAdd.loading || directAdd.saving || loading || saving) return;
+        directAdd.selected.clear(); directAdd.status = ''; directAdd.error = false; renderDirectAdd();
+    });
+    el('dictation-mistakes-add-submit').addEventListener('click', submitDirectAdd);
     el('dictation-mistakes-select-all').addEventListener('click', () => {
-        if (loading || saving || mistakeLoading || mistakeDeleting || !current(capture())) return;
+        if (loading || saving || mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving || !current(capture())) return;
         mistakeSelections = new Set(mistakeItems.map((item) => item.lesson_id)); renderMistakes();
     });
     el('dictation-mistakes-clear-selection').addEventListener('click', () => {
-        if (loading || saving || mistakeLoading || mistakeDeleting || !current(capture())) return;
+        if (loading || saving || mistakeLoading || mistakeDeleting || directAdd.loading || directAdd.saving || !current(capture())) return;
         mistakeSelections = new Set(); renderMistakes();
     });
     el('dictation-mistakes-start').addEventListener('click', startMistakes);
     el('dictation-add-lesson').addEventListener('click', addLesson);
     el('dictation-words').addEventListener('input', () => {
-        if (loading || saving || conflict || !wordlist || !current(capture(true))) return;
+        if (loading || saving || directAdd.loading || directAdd.saving || conflict || !wordlist || !current(capture(true))) return;
         raw = el('dictation-words').value; preserveDraft(); renderWords();
         try { stateLabel(unchanged(parseWords(raw).words) ? '已保存' : '本机有修改，待保存'); }
         catch (_) { stateLabel('本机内容已保留，请检查输入'); }

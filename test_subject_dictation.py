@@ -409,6 +409,57 @@ def test_repeat_mistake_updates_the_reading_hint_but_keeps_the_first_added_time(
     assert after['updated_at'] >= before['updated_at']
 
 
+def test_direct_wordlist_addition_preserves_existing_mistakes_and_parent_ownership(browser):
+    original = save(browser, [{'text': '薄', 'spoken_text': '单薄的薄'}, *words('潮水', '笼罩')]).json['wordlist']
+    assert add_mistakes(browser, [mistake_item([{'text': '薄', 'spoken_text': '薄雾的薄'}])]).status_code == 200
+    old_word = get_mistakes(browser).json['items'][0]['words'][0]
+    listed = browser.client.get(PREFIX + '/wordlists?book_id=' + BOOK_ID, headers=browser.parent_headers).json['items']
+    payload = {'preserve_existing': True, 'items': [
+        {'book_id': row['book_id'], 'lesson_id': row['lesson_id'], 'words': row['words']} for row in listed
+    ]}
+    response = browser.client.post(PREFIX + '/mistakes', headers=browser.parent_headers, json=payload)
+    assert response.status_code == 200 and response.json == {'added_count': 2, 'existing_count': 1}
+    notebook = get_mistakes(browser).json
+    marked = {word['text']: word for word in notebook['items'][0]['words']}
+    assert marked['薄'] == old_word
+    assert marked['潮水']['updated_by'] == marked['笼罩']['updated_by'] == 'alice_parent'
+    assert browser.client.post(PREFIX + '/mistakes', headers=browser.parent_headers, json=payload).json == {
+        'added_count': 0, 'existing_count': 3}
+    assert get_mistakes(browser, browser.parent_headers).json == notebook
+    assert browser.client.get(uri(), headers=browser.headers).json['wordlist'] == original
+    assert get_mistakes(browser, browser.bob_headers).json['items'] == []
+    assert not database(browser, 'alice_parent').exists() and not database(browser, 'bob').exists()
+    for name in ('learning.sqlite3', 'exam_preparation.sqlite3', 'subjects/english', 'subjects/math'):
+        assert not (browser.data_dir / 'alice' / name).exists()
+
+
+@pytest.mark.parametrize('flag', [None, 0, 1, '', 'true', 'false', [], {}])
+def test_direct_mistake_add_requires_a_strict_preservation_flag_before_writing(browser, flag):
+    response = browser.client.post(PREFIX + '/mistakes', headers=browser.headers,
+                                   json={'items': [mistake_item()], 'preserve_existing': flag})
+    assert response.status_code == 400
+    assert not browser.data_dir.exists()
+
+
+def test_concurrent_preserving_merges_keep_old_metadata_and_insert_both_new_words(browser):
+    assert add_mistakes(browser, [mistake_item([{'text': '薄', 'spoken_text': '薄雾的薄'}])]).status_code == 200
+    old_word = get_mistakes(browser).json['items'][0]['words'][0]
+    def merge(text):
+        with browser.app.test_client() as client:
+            response = client.post(PREFIX + '/mistakes', headers=browser.parent_headers, json={
+                'preserve_existing': True,
+                'items': [mistake_item([{'text': '薄', 'spoken_text': text + '的薄'}, text])],
+            })
+            return response.status_code, response.json
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(merge, ['潮水', '星光']))
+    assert results == [(200, {'added_count': 1, 'existing_count': 1})] * 2
+    marked = {word['text']: word for word in get_mistakes(browser).json['items'][0]['words']}
+    assert set(marked) == {'薄', '潮水', '星光'} and marked['薄'] == old_word
+    with sqlite3.connect(database(browser)) as connection:
+        assert connection.execute('SELECT COUNT(*) FROM dictation_wordlists').fetchone()[0] == 0
+
+
 def test_multiple_lessons_and_repeated_input_groups_keep_their_source_boundaries(browser):
     items = [mistake_item(['潮水', '繁星', '潮水']), mistake_item(['潮水', '星光'], 'lesson-02'),
              mistake_item([{'text': '潮水', 'spoken_text': '海边的潮水'}])]
@@ -482,10 +533,14 @@ def test_mistake_lists_can_accumulate_and_readd_a_full_thousand_words(browser):
     assert remove_mistakes(browser, first + second).json == {'removed_count': 1000}
 
 
-def test_an_overflowing_group_rejects_the_entire_multi_lesson_merge(browser):
+@pytest.mark.parametrize('preserve_existing', [False, True])
+def test_an_overflowing_group_rejects_the_entire_multi_lesson_merge(browser, preserve_existing):
     assert add_mistakes(browser, [mistake_item(['词' + str(index) for index in range(1000)])]).status_code == 200
     before = get_mistakes(browser).json
-    response = add_mistakes(browser, [mistake_item(['另课不应插入'], 'lesson-02'), mistake_item(['超过上限'])])
+    response = browser.client.post(PREFIX + '/mistakes', headers=browser.headers, json={
+        'items': [mistake_item(['另课不应插入'], 'lesson-02'), mistake_item(['超过上限'])],
+        'preserve_existing': preserve_existing,
+    })
     assert response.status_code == 400
     assert get_mistakes(browser).json == before
 
