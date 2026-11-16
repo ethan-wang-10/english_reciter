@@ -328,8 +328,8 @@ function applyBootstrapPayload(boot) {
         articleAiExtractEnabled = boot.article_ai_extract_enabled === true;
         updatePlanUI();
     }
-    if (boot.tts_capabilities && typeof boot.tts_capabilities.piper === 'boolean') {
-        serverPiperAvailable = boot.tts_capabilities.piper;
+    if (boot.tts_capabilities && (typeof boot.tts_capabilities.piper === 'boolean' || typeof boot.tts_capabilities.kokoro === 'boolean')) {
+        serverPiperAvailable = boot.tts_capabilities.piper === true || boot.tts_capabilities.kokoro === true;
     }
 }
 

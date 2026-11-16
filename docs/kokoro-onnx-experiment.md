@@ -1,10 +1,11 @@
 # Kokoro ONNX 默写朗读实验
 
-状态：默认关闭的实验。模型在独立 CPU 进程运行，网站进程不导入或加载模型。保持现有清单、读音修正、错题、正常语速、每条两遍及手动下一条。
+状态：英语管理员统一开关控制的可选朗读。模型在独立 CPU 进程运行，网站进程不导入或加载模型。保持现有清单、读音修正、错题、正常语速、每条两遍及手动下一条。
 
 ## 结构
 
-- 网站通过 `DICTATION_KOKORO_URL=http://127.0.0.1:8877` 显式连接独立 worker；未设置时沿用现有朗读。
+- 英语站管理员配置中的“启用 Kokoro 朗读”统一控制中英文；服务端 `config.json` 中的 `kokoro_enabled` 为布尔值，默认关闭，每次音频请求热读取。
+- 网站通过 `DICTATION_KOKORO_URL=http://127.0.0.1:8877` 连接独立 worker。只设置地址不会绕过管理员开关；服务未就绪或关闭时沿用现有朗读。
 - 英语：Kokoro → Piper → 设备英语语音。语文：Kokoro → 设备普通话。登录失效时要求重新登录。
 - 保存清单、开始默写和保存读音后，页面异步提交实际 `spoken_text` 提前生成；不阻塞保存或开始，不自动播放。单批英语最多400条、语文200条，错题大清单先准备首批，后续仍可按需朗读。
 - 单 worker 只加载一个 ONNX Runtime CPU session，合成线程数1、并发1；有界后台队列，排队重复项合并。忙碌时音频请求尽快失败，网页沿现有路径朗读。
@@ -85,3 +86,27 @@ python3 -m pytest -q test_tts_kokoro.py test_dictation_audio.py test_english_dic
 合成有软超时：加载后与每个音素分块前后检查期限；ONNX 单次原生运行无法被 Python 立刻中断。网站请求15秒后可先走备用朗读，原生计算返回后释放锁；如果仍在 worker 的软期限内，完整有效音频可留作后续缓存。超过 worker 自身软期限的结果不缓存。停止实验时取消排队并退出worker；移除网站环境变量即可恢复旧路径。
 
 现场音质、冷启动、缓存命中延迟、峰值RSS和长句覆盖，需依据本轮实验记录评估；不得把模型文件大小或Mac速度当作现有2核2GB服务器的运行结论。
+
+
+## 管理员开关与小内存部署
+
+入口：英语站管理后台 → 中英文朗读 → 启用 Kokoro 朗读。GET/PATCH `/api/admin/config` 使用现有管理员认证；普通用户及家长不能更改。状态显示是否启用及服务是否就绪，不暴露私有文件路径。损坏的配置文件拒绝被覆盖，朗读请求按关闭处理。
+
+共享开关作用于中英默写及英语日常朗读。关闭后后端停止使用Kokoro，前端下一次朗读重新核对配置，不复用旧provider的跨轮音频。关闭同时向loopbackworker发送reset，退出已加载进程；systemd重启为未加载模型的轻量进程，释放内存并清空待生成队列。缓存保留供再次启用。
+
+当前2核2GB主机采用 `KOKORO_BACKGROUND_ONLY=1`：缓存未命中时只将条目加入后台队列并立即返回备用朗读，缓存命中直接播放；优先准备当前点击条目。此模式避免让首次生成阻塞学生播放，但不能把模型常驻的内存成本视为消失。
+
+服务单位模板：`deploy/systemd/english-reciter-kokoro.service`。依赖和模型安装在独立 `/opt/english-reciter-kokoro/`，网站环境不安装Kokoro或Torch。CPUQuota70%、Nice15、MemoryHigh320MiB、MemoryMax480MiB、MemorySwapMax1800MiB限制只作用于该服务；超限时只终止worker并沿用原朗读。实际限制需要在目标主机验证，不可把AppleM3实验数据当云服务器保证。
+
+环境文件示例（仅root可读）：
+
+```sh
+KOKORO_EXPERIMENT_ENABLED=1
+KOKORO_BACKGROUND_ONLY=1
+KOKORO_MODEL=/opt/english-reciter-kokoro/models/kokoro-v1.1-zh.fp16.onnx
+KOKORO_VOICES=/opt/english-reciter-kokoro/models/voices-v1.1-zh.bin
+KOKORO_CACHE_DIR=/opt/english-reciter-kokoro/cache
+KOKORO_SYNTHESIS_TIMEOUT=120
+```
+
+关闭开关和worker不可用都不影响清单保存、错题、考试或现有Piper/设备朗读。管理员开关状态与worker是否已加载是不同概念：就绪只代表服务与本地资源可用，首次使用可能仍在后台准备。

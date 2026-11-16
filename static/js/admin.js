@@ -872,10 +872,116 @@ function bindAdminAuthoringOnce() {
     saveAdminAuthoringDraft();
 }
 
+let adminKokoroBound = false;
+let adminKokoroBusy = false;
+let adminKokoroLoaded = false;
+let adminKokoroRequest = 0;
+let adminKokoroEdit = 0;
+let adminKokoroScope = '';
+
+function adminKokoroControls() {
+    const checkbox = document.getElementById('admin-kokoro-enabled');
+    const save = document.getElementById('admin-save-kokoro');
+    const refresh = document.getElementById('admin-refresh-kokoro');
+    if (checkbox) checkbox.disabled = adminKokoroBusy || !adminKokoroLoaded;
+    if (save) { save.disabled = adminKokoroBusy || !adminKokoroLoaded; save.textContent = adminKokoroBusy ? '正在处理…' : '保存朗读设置'; }
+    if (refresh) refresh.disabled = adminKokoroBusy;
+}
+
+function expireAdminKokoroRequest(at, requestId) {
+    if (requestId !== adminKokoroRequest || getAdminToken() || adminKokoroScope !== at) return;
+    adminKokoroLoaded = false; adminKokoroBusy = false;
+    const status = document.getElementById('admin-kokoro-status');
+    if (status) status.textContent = '管理员登录已失效，请重新登录后读取朗读配置。';
+    adminKokoroControls(); showAdminNotice('管理员登录已失效，请重新登录。'); showAdminLoginPanel();
+}
+
+function renderAdminKokoroConfig(cfg, preserveChoice = false) {
+    const status = document.getElementById('admin-kokoro-status');
+    const checkbox = document.getElementById('admin-kokoro-enabled');
+    if (!status || !checkbox) return false;
+    if (!cfg || typeof cfg.kokoro_enabled !== 'boolean' || typeof cfg.kokoro_service_ready !== 'boolean') {
+        status.textContent = '朗读配置载入失败，当前选择已保留。请刷新状态后重试。';
+        status.style.color = 'var(--error-color)';
+        adminKokoroControls(); return false;
+    }
+    adminKokoroLoaded = true;
+    if (!preserveChoice) checkbox.checked = cfg.kokoro_enabled;
+    status.textContent = !cfg.kokoro_enabled ? '已关闭 Kokoro，沿用原有语音。'
+        : cfg.kokoro_service_ready ? 'Kokoro 已启用，服务可用。'
+            : 'Kokoro 已启用，服务未启动或暂不可用；当前沿用备用语音。';
+    if (preserveChoice) status.textContent += ' 表单还有未保存的修改。';
+    status.style.color = cfg.kokoro_enabled && !cfg.kokoro_service_ready ? 'var(--text-secondary)' : 'var(--primary-dark)';
+    adminKokoroControls(); return true;
+}
+
+async function refreshAdminKokoroConfig() {
+    if (adminKokoroBusy || !getAdminToken()) return;
+    const at = getAdminToken(), requestId = ++adminKokoroRequest, edit = adminKokoroEdit;
+    adminKokoroBusy = true; adminKokoroControls();
+    try {
+        const cfg = await apiAdminRequest('/admin/config');
+        if (getAdminToken() !== at || requestId !== adminKokoroRequest) return;
+        renderAdminKokoroConfig(cfg, edit !== adminKokoroEdit);
+    } catch (_) {
+        expireAdminKokoroRequest(at, requestId);
+        if (getAdminToken() === at && requestId === adminKokoroRequest) renderAdminKokoroConfig(null);
+    } finally {
+        if (getAdminToken() === at && requestId === adminKokoroRequest) { adminKokoroBusy = false; adminKokoroControls(); }
+    }
+}
+
+function bindAdminKokoroOnce() {
+    const checkbox = document.getElementById('admin-kokoro-enabled');
+    const save = document.getElementById('admin-save-kokoro');
+    if (!checkbox || !save) return;
+    const at = getAdminToken() || '';
+    if (adminKokoroScope !== at) { adminKokoroScope = at; adminKokoroLoaded = false; adminKokoroBusy = false; adminKokoroRequest += 1; }
+    adminKokoroControls();
+    if (adminKokoroBound) return;
+    adminKokoroBound = true;
+    checkbox.addEventListener('change', () => {
+        if (adminKokoroBusy || !adminKokoroLoaded) return;
+        adminKokoroEdit += 1;
+        const status = document.getElementById('admin-kokoro-status');
+        if (status) { status.textContent = '朗读设置有修改，点击保存后生效。'; status.style.color = 'var(--text-secondary)'; }
+    });
+    save.addEventListener('click', async () => {
+        if (adminKokoroBusy || !adminKokoroLoaded || !getAdminToken()) return;
+        const at = getAdminToken(), requestId = ++adminKokoroRequest, wanted = checkbox.checked;
+        adminKokoroBusy = true; adminKokoroControls(); showAdminNotice('');
+        try {
+            const cfg = await apiAdminRequest('/admin/config', { method: 'PATCH', body: JSON.stringify({ kokoro_enabled: wanted }) });
+            if (getAdminToken() !== at || requestId !== adminKokoroRequest) return;
+            if (cfg.kokoro_enabled !== wanted || !renderAdminKokoroConfig(cfg)) throw new Error('保存结果未确认，请刷新状态核对后重试。');
+            showAdminNotice('中英文朗读设置已保存，下次朗读生效。');
+            if (typeof refreshTtsCapabilities === 'function') void refreshTtsCapabilities();
+        } catch (error) {
+            expireAdminKokoroRequest(at, requestId);
+            if (getAdminToken() !== at || requestId !== adminKokoroRequest) return;
+            const status = document.getElementById('admin-kokoro-status');
+            if (status) { status.textContent = '朗读设置尚未确认保存，当前选择已保留，可重试或刷新状态。'; status.style.color = 'var(--error-color)'; }
+            showAdminNotice(error.message || '保存失败，请重试。');
+        } finally {
+            if (getAdminToken() === at && requestId === adminKokoroRequest) { adminKokoroBusy = false; adminKokoroControls(); }
+        }
+    });
+    document.getElementById('admin-refresh-kokoro')?.addEventListener('click', refreshAdminKokoroConfig);
+    document.getElementById('admin-logout')?.addEventListener('click', () => {
+        adminKokoroRequest += 1; adminKokoroScope = ''; adminKokoroLoaded = false; adminKokoroBusy = false;
+        checkbox.checked = false;
+        const status = document.getElementById('admin-kokoro-status');
+        if (status) status.textContent = '重新登录后加载朗读配置。';
+        adminKokoroControls();
+    });
+}
+
 async function loadAdminDashboard() {
     bindAdminDeleteUserOnce();
     bindAdminSystemBroadcastOnce();
     bindAdminAuthoringOnce();
+    bindAdminKokoroOnce();
+    const kokoroToken = getAdminToken(), kokoroEdit = adminKokoroEdit;
     const [usersRes, invRes, cfgRes] = await Promise.all([
         apiAdminRequest('/admin/users'),
         apiAdminRequest('/admin/invites'),
@@ -884,6 +990,7 @@ async function loadAdminDashboard() {
     renderAdminUsers(usersRes.users);
     renderAdminInvites(invRes.invites);
     renderAdminDeepseekStatus(cfgRes);
+    if (getAdminToken() === kokoroToken) renderAdminKokoroConfig(cfgRes, kokoroEdit !== adminKokoroEdit);
     populateAdminWordsUserSelect(usersRes.users);
     await loadAdminUserWords();
     await loadAdminTroubles();

@@ -26,9 +26,9 @@
     let mistakeLoading = false, mistakeLoaded = false, mistakeDeleting = false, mistakeSequence = 0;
     let mistakeStatus = '', mistakeStatusError = false;
     let voicePreference = null, voiceStorageReady = true, pronunciationEdit = null, pronunciationDrafts = new Map();
-    let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesChecked = false;
+    let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesPromise = null, capabilitiesSequence = 0;
     let prepareSnapshot = [], prepareInFlight = '', lastPrepared = '', lastPreparedAt = 0;
-    let audioFetch = null, playerAudio = null, audioUrl = '', cachedAudio = null, fetchTimer = null;
+    let audioFetch = null, playerAudio = null, audioUrl = '', fetchTimer = null, capabilityFetch = null, capabilityTimer = null;
     const backgroundRequests = new Set();
 
     async function backgroundRequest(path, options = {}) {
@@ -40,6 +40,11 @@
     function prepareAudio(words) {
         const texts = Array.from(new Set(words.map((word) => word.spoken_text || word.text).filter((text) => typeof text === 'string' && text.trim()))).slice(0, 200);
         prepareSnapshot = texts;
+        if (!active || !current(capture()) || !texts.length) return;
+        void checkAudioCapabilities();
+    }
+    function submitAudioPreparation() {
+        const texts = prepareSnapshot.slice();
         if (!active || !current(capture()) || !audioCapabilities.prepare || !texts.length) return;
         const signature = JSON.stringify(texts);
         if (prepareInFlight === signature || lastPrepared === signature && Date.now() - lastPreparedAt < 5000) return;
@@ -47,22 +52,28 @@
         void backgroundRequest('/audio/prepare', { method: 'POST', body: { texts } }).then(() => {
             if (!current(ctx)) return;
             lastPrepared = signature; lastPreparedAt = Date.now();
-        }).catch(() => { /* Optional preparation never changes saved work or starts playback. */ }).finally(() => {
+        }).catch(() => { /* Preparation never changes saved work or starts playback. */ }).finally(() => {
             if (current(ctx) && prepareInFlight === signature) prepareInFlight = '';
         });
     }
     function checkAudioCapabilities() {
-        if (capabilitiesChecked || !current(capture())) return;
-        capabilitiesChecked = true;
-        const ctx = capture();
-        void backgroundRequest('/audio/capabilities').then((result) => {
-            if (!current(ctx)) return;
+        if (!current(capture())) return Promise.resolve(null);
+        if (capabilitiesPromise) return capabilitiesPromise;
+        const ctx = capture(), sequence = ++capabilitiesSequence;
+        const pending = backgroundRequest('/audio/capabilities').then((result) => {
+            if (!current(ctx) || sequence !== capabilitiesSequence) return null;
             audioCapabilities = { kokoro: result?.kokoro === true, prepare: result?.prepare === true };
             if (active) {
                 detectVoices();
-                if (prepareSnapshot.length) prepareAudio(prepareSnapshot.map((text) => ({ text, spoken_text: text })));
+                submitAudioPreparation();
             }
-        }).catch(() => { /* Device Mandarin remains the default when optional service discovery fails. */ });
+            return audioCapabilities;
+        }).catch(() => {
+            if (current(ctx) && sequence === capabilitiesSequence) audioCapabilities = { kokoro: false, prepare: false };
+            return null;
+        }).finally(() => { if (current(ctx) && capabilitiesPromise === pending) capabilitiesPromise = null; });
+        capabilitiesPromise = pending;
+        return pending;
     }
 
     function sourceName(source) { return `${source.number ? `第${source.number}课 ` : ''}${source.title || '我的课文'}`; }
@@ -754,7 +765,8 @@
         }
         select.disabled = !voices.length;
         el('dictation-voice-status').textContent = voices.length
-            ? (voicePreference && !preferredVoice() ? '已记住的声音暂未就绪，先使用其他普通话语音。' : '使用设备普通话语音，按正常语速朗读。')
+            ? (voicePreference && !preferredVoice() ? '已记住的声音暂未就绪，先使用其他普通话语音。'
+                : audioCapabilities.kokoro ? '按正常语速朗读，所选设备普通话声音用于备用。' : '使用设备普通话语音，按正常语速朗读。')
                 + (voiceStorageReady ? '选好的声音会在这台设备上记住。' : '这台设备暂时不能记住设置，本次页面仍可使用所选声音。') + '多音字可逐词修正读音。'
             : audioCapabilities.kokoro ? '按正常语速朗读。设备暂时没有普通话备用声音，若朗读失败请稍后重试。'
                 : '未检测到普通话语音。请在设备的语音设置中添加普通话语音，再重新检测；也可换用支持中文朗读的浏览器。';
@@ -770,8 +782,9 @@
     function stopSpeech() {
         const interruptedPlayer = speaking && speechMode === 'player';
         speechEpoch += 1;
-        clearTimeout(repeatTimer); clearTimeout(watchdog); clearTimeout(fetchTimer);
-        repeatTimer = null; watchdog = null; fetchTimer = null;
+        clearTimeout(repeatTimer); clearTimeout(watchdog); clearTimeout(fetchTimer); clearTimeout(capabilityTimer);
+        repeatTimer = null; watchdog = null; fetchTimer = null; capabilityTimer = null;
+        if (capabilityFetch) { capabilityFetch.abort(); capabilityFetch = null; }
         if (audioFetch) { audioFetch.abort(); audioFetch = null; }
         if (utterance) { utterance.onend = null; utterance.onerror = null; }
         utterance = null; releaseAudio(); speaking = false; speechMode = '';
@@ -830,7 +843,7 @@
         }
         function fallback() {
             if (!valid() || fallbackStarted) return;
-            fallbackStarted = true; completed = 0; cachedAudio = null;
+            fallbackStarted = true; completed = 0;
             clearTimeout(repeatTimer); clearTimeout(watchdog); repeatTimer = null; watchdog = null; releaseAudio();
             let chosen = mode === 'player' ? run.voiceSnapshot : selectedVoice(el('dictation-voice').value);
             if (mode === 'player' && !chosen) {
@@ -883,7 +896,6 @@
             playOne();
         }
         async function fetchAudio() {
-            if (cachedAudio?.student === ctx.student && cachedAudio.token === ctx.token && cachedAudio.text === text) { playBlob(cachedAudio.blob); return; }
             const controller = new AbortController(); audioFetch = controller;
             fetchTimer = setTimeout(() => { controller.abort(); if (valid() && audioFetch === controller) fallback(); }, 25000);
             try {
@@ -899,7 +911,6 @@
                 const blob = await response.blob();
                 if (!valid() || fallbackStarted) return;
                 if (!blob || !blob.size) throw new Error('Empty audio');
-                cachedAudio = { student: ctx.student, token: ctx.token, text, blob };
                 clearTimeout(fetchTimer); fetchTimer = null;
                 if (audioFetch === controller) audioFetch = null;
                 playBlob(blob);
@@ -909,7 +920,37 @@
                 if (audioFetch === controller) audioFetch = null;
             }
         }
-        if (audioCapabilities.kokoro) void fetchAudio(); else fallback();
+        async function chooseCurrentVoiceRoute() {
+            const controller = new AbortController(); capabilityFetch = controller;
+            let finished = false;
+            const sequence = ++capabilitiesSequence;
+            capabilityTimer = setTimeout(() => {
+                if (finished || !valid()) return;
+                finished = true; controller.abort();
+                if (capabilityFetch === controller) capabilityFetch = null;
+                capabilityTimer = null; fallback();
+            }, 1500);
+            try {
+                const response = await fetch('/api/subjects/chinese/dictation/audio/capabilities', {
+                    headers: { Accept: 'application/json', Authorization: `Bearer ${ctx.token}` },
+                    signal: controller.signal, credentials: 'same-origin', cache: 'no-store',
+                });
+                if (!valid() || finished) return;
+                if (response.status === 401 || response.status === 403) { finished = true; fail('登录状态已失效，请重新登录后继续默写。'); return; }
+                if (!response.ok) throw new Error('Voice capability unavailable');
+                const result = await response.json();
+                if (!valid() || finished) return;
+                finished = true; clearTimeout(capabilityTimer); capabilityTimer = null;
+                if (capabilityFetch === controller) capabilityFetch = null;
+                const caps = { kokoro: result?.kokoro === true, prepare: result?.prepare === true };
+                if (sequence === capabilitiesSequence) { audioCapabilities = caps; detectVoices(); }
+                if (caps.kokoro) void fetchAudio(); else fallback();
+            } catch (_) { if (valid() && !finished) { finished = true; fallback(); } }
+            finally {
+                if (capabilityFetch === controller) { clearTimeout(capabilityTimer); capabilityTimer = null; capabilityFetch = null; }
+            }
+        }
+        void chooseCurrentVoiceRoute();
     }
     function makeRun(words, settings) {
         stopSpeech();
@@ -1041,8 +1082,8 @@
     function backHome() { stopSpeech(); showView('home'); renderControls(); }
     function leaveView() { preserveDraft(); active = false; stopSpeech(); cancelBackgroundRequests(); showView('home'); }
     function reset() {
-        preserveDraft(); active = false; stopSpeech(); cancelBackgroundRequests(); cachedAudio = null;
-        audioCapabilities = { kokoro: false, prepare: false }; capabilitiesChecked = false;
+        preserveDraft(); active = false; stopSpeech(); cancelBackgroundRequests();
+        audioCapabilities = { kokoro: false, prepare: false }; capabilitiesPromise = null; capabilitiesSequence += 1;
         prepareSnapshot = []; prepareInFlight = ''; lastPrepared = ''; lastPreparedAt = 0;
         generation += 1; requestSequence += 1; lessonSequence += 1;
         boundStudent = ''; boundToken = ''; loaded = false; loading = false; saving = false;

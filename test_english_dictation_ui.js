@@ -1081,18 +1081,18 @@ test('large English mistake rounds keep all entries while prewarming only the fi
     assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'spoken-0' });
 });
 
-test('English capabilities are optional, cached per account and late replies cannot prewarm another learner', { timeout: 3000 }, async () => {
+test('English preparation capabilities remain optional and refreshed replies cannot cross account boundaries', { timeout: 3000 }, async () => {
     const ui = englishDictationUI(); const capabilityGate = deferred();
     ui.state.routes[prefix + '/audio/capabilities'] = () => capabilityGate.promise;
     await ui.api.open(); await ui.start();
     assert.equal(ui.field('english-dictation-player').hidden, false, 'A pending optional capability lookup cannot block the run');
     await ui.api.open();
-    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/audio/capabilities' && call.student === 'alice').length, 1);
+    assert.ok(ui.state.calls.some((call) => call.url === prefix + '/audio/capabilities' && call.student === 'alice'));
     ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', student: 'bob', isParent: false, generation: 2 };
     delete ui.state.routes[prefix + '/audio/capabilities']; await ui.api.open();
     await ui.type('english-dictation-words', 'Bob private phrase.'); await ui.start();
     capabilityGate.resolve({ kokoro: true, prepare: true }); await ui.flush();
-    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/audio/capabilities').length, 2);
+    assert.ok(ui.state.calls.some((call) => call.url === prefix + '/audio/capabilities' && call.student === 'bob'));
     assert.equal(ui.state.calls.some((call) => call.url === prefix + '/audio/prepare'), false);
     assert.equal(ui.state.audioRequests.length, 0);
     assert.doesNotMatch(ui.visibleText(), /apple|Where is my schoolbag/);
@@ -1119,4 +1119,46 @@ test('an English recording that ignores abort and arrives after timeout cannot o
         await ui.finishSpeech(); await ui.tick(700); assert.equal(ui.state.spoken.length, 2);
         assert.equal(ui.state.audioPlayed.length, 0);
     }
+});
+
+
+test('English manual replays and previews request the current server provider instead of replaying a blob from before the admin toggle', async () => {
+    const ui = englishDictationUI(); let provider = 'kokoro';
+    ui.state.audioFetch = () => ui.state.audioResponse(200, { blob: new Blob(['RIFF-' + provider + '-WAVE'], { type: 'audio/wav' }) });
+    await ui.api.open(); await ui.start(); await ui.field('english-dictation-play').fire('click');
+    const firstAudio = ui.state.currentAudio, firstBlob = ui.state.objectUrls.get(firstAudio.src);
+    await ui.finishItem(); assert.equal(ui.state.audioRequests.length, 1); assert.equal(ui.state.audioPlayed.length, 2);
+    assert.strictEqual(ui.state.audioPlayed[1].audio, firstAudio, 'One listening action repeats its fetched clip twice');
+    provider = 'piper'; await ui.field('english-dictation-play').fire('click');
+    assert.equal(ui.state.audioRequests.length, 2, 'A new listening action always reaches the server gate');
+    assert.deepEqual(ui.state.audioRequests[1].body, { text: 'apple' });
+    const secondAudio = ui.state.currentAudio, secondBlob = ui.state.objectUrls.get(secondAudio.src);
+    assert.notStrictEqual(secondAudio, firstAudio); assert.match(await firstBlob.text(), /kokoro/); assert.match(await secondBlob.text(), /piper/);
+    await ui.finishItem(); assert.equal(ui.state.audioRequests.length, 2); assert.equal(ui.state.audioPlayed.length, 4);
+    assert.equal(ui.state.spoken.length, 0); assert.equal(ui.state.objectUrls.size, 0);
+    await ui.field('english-dictation-player-exit').fire('click');
+    const preview = () => ui.field('english-dictation-word-preview').querySelectorAll('button').find((button) => button.getAttribute('aria-label') === '试听 apple');
+    await preview().fire('click'); assert.equal(ui.state.audioRequests.length, 3); await ui.finishAudio();
+    provider = 'kokoro'; await preview().fire('click'); assert.equal(ui.state.audioRequests.length, 4);
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'apple' }); assert.equal(ui.state.audioRequests.at(-1).headers.Authorization, 'Bearer alice-token');
+});
+
+
+test('English saving and starting refresh preparation capabilities after admin toggles without blocking the learner', async () => {
+    const ui = englishDictationUI(); await ui.api.open();
+    const prepared = () => ui.state.calls.filter((call) => call.url === prefix + '/audio/prepare');
+    await ui.type('english-dictation-words', 'first phrase'); await ui.field('english-dictation-save').fire('click');
+    assert.equal(prepared().length, 0);
+    ui.state.capabilities = { kokoro: true, prepare: true };
+    await ui.type('english-dictation-words', 'second phrase'); await ui.field('english-dictation-save').fire('click');
+    assert.deepEqual(prepared().at(-1)?.body, { texts: ['second phrase'] }, 'A fresh enabled capability result prewarms the newly saved content');
+    const before = prepared().length;
+    ui.state.capabilities = { kokoro: false, prepare: false };
+    await ui.type('english-dictation-words', 'third phrase'); await ui.field('english-dictation-save').fire('click');
+    assert.equal(prepared().length, before, 'An old enabled result cannot enqueue after the current admin setting is off');
+    assert.equal(ui.field('english-dictation-save').disabled, false);
+    await ui.start(); assert.equal(ui.field('english-dictation-player').hidden, false); assert.equal(prepared().length, before);
+    await ui.field('english-dictation-player-exit').fire('click'); ui.state.capabilities = { kokoro: true, prepare: true };
+    await ui.start(); assert.deepEqual(prepared().at(-1)?.body, { texts: ['third phrase'] });
+    assert.equal(ui.field('english-dictation-player').hidden, false); assert.equal(ui.state.audioRequests.length, 0); assert.equal(ui.state.spoken.length, 0);
 });

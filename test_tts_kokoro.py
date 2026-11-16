@@ -340,3 +340,51 @@ def test_worker_http_validates_local_requests_and_exposes_cache_and_prepare_with
         server.shutdown(); server.server_close(); thread.join(3)
     with pytest.raises(ValueError):
         worker.WorkerServer(('0.0.0.0', 8877), core)
+
+
+def test_background_queue_prioritizes_current_item_without_duplicating_work(config):
+    worker = engine(config)
+    queue = PreparationQueue(worker, start=False)
+    queue.prepare('en', ['First', 'Second', 'Current'])
+    receipt = queue.prepare('en', ['Current'], priority=True)
+    assert receipt == {'accepted': 0, 'cached': 0, 'pending': 1, 'failed': 0, 'count': 1}
+    assert [item['text'] for _, item in queue._queue] == ['Current', 'First', 'Second']
+    queue.prepare('en', ['New current'], priority=True)
+    assert [item['text'] for _, item in queue._queue] == ['New current', 'Current', 'First', 'Second']
+    queue.close()
+
+
+def test_worker_background_audio_enqueues_then_uses_cache_and_reset_releases_process(config, monkeypatch):
+    path = Path(__file__).parent / 'scripts/kokoro_worker.py'
+    spec = importlib.util.spec_from_file_location('background_kokoro_worker_test', path)
+    worker = importlib.util.module_from_spec(spec); spec.loader.exec_module(worker)
+    monkeypatch.setenv('KOKORO_BACKGROUND_ONLY', '1')
+    calls = []; core = engine(config, calls)
+    try:
+        server = worker.WorkerServer(('127.0.0.1', 0), core)
+    except PermissionError:
+        pytest.skip('The sandbox does not allow local loopback sockets')
+    thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+    def post(path, payload, origin=None):
+        connection = HTTPConnection('127.0.0.1', server.server_port, timeout=3)
+        headers = {'Content-Type': 'application/json'}
+        if origin: headers['Origin'] = origin
+        connection.request('POST', path, body=json.dumps(payload), headers=headers)
+        response = connection.getresponse(); content = response.read(); result = response.status, content, dict(response.getheaders()); connection.close()
+        return result
+    stopped = False
+    try:
+        first = post('/audio', {'language': 'en', 'text': 'Prepare then play'})
+        assert first[0] == 503 and json.loads(first[1])['code'] == 'preparing'
+        with server.preparation._condition:
+            assert server.preparation._condition.wait_for(lambda: server.preparation.status()['completed'] == 1, timeout=3)
+        cached = post('/audio', {'language': 'en', 'text': 'Prepare then play'})
+        assert cached[0] == 200 and valid_wav(cached[1]) and cached[2]['X-TTS-Cache'] == 'HIT'
+        assert len(calls) == 2, 'Only background generation should load and synthesize once'
+        assert post('/reset', {}, 'https://external.example')[0] == 403
+        assert post('/reset', {'unexpected': True})[0] == 400
+        assert post('/reset', {})[:2] == (200, b'{"reset":true}')
+        thread.join(3); assert not thread.is_alive(); stopped = True
+    finally:
+        if not stopped: server.shutdown()
+        server.server_close(); thread.join(3)

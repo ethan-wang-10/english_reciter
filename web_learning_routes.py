@@ -349,6 +349,10 @@ def register_routes(app, services):
             safe_text = services.sanitize_tts_text(text)
             if not safe_text:
                 return (services.jsonify({'error': '文本无效或过长'}), 400)
+            from dictation_audio import audio_response, kokoro_audio
+            experimental = kokoro_audio(safe_text, 'en')
+            if experimental:
+                return audio_response(*experimental)
             if services.piper_runtime_ready is None or not services.piper_runtime_ready():
                 return (services.jsonify({'error': 'Piper 未配置'}), 503)
             if services.piper_synthesize_wav is None:
@@ -357,6 +361,8 @@ def register_routes(app, services):
             if not wav:
                 return (services.jsonify({'error': '语音合成失败'}), 503)
             response = services.Response(wav, mimetype='audio/wav')
+            response.headers['X-TTS-Engine'] = 'piper'
+            response.cache_control.no_store = True
             if services.piper_last_result_metadata is not None:
                 metadata = services.piper_last_result_metadata()
                 response.headers['X-TTS-Cache'] = 'HIT' if metadata.get('cache_hit') else 'MISS'

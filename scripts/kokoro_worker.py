@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import socket
 import sys
@@ -36,6 +37,8 @@ class WorkerServer(ThreadingHTTPServer):
         self.engine = engine
         self.preparation = preparation or PreparationQueue(engine, start=False)
         self.slots = threading.BoundedSemaphore(8)
+        self.resetting = threading.Event()
+        self.background_only = os.environ.get('KOKORO_BACKGROUND_ONLY', '').lower() in ('1', 'true', 'yes')
         super().__init__(address, WorkerHandler)
         self.preparation.start()
 
@@ -136,8 +139,10 @@ class WorkerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             self._origin()
+            if self.server.resetting.is_set():
+                raise KokoroError('Speech worker is restarting.', code='restarting')
             if self.path == '/health':
-                self._json(200, self.server.engine.health())
+                self._json(200, {**self.server.engine.health(), 'background_only': self.server.background_only})
             elif self.path == '/status':
                 self._json(200, self.server.preparation.status())
             else:
@@ -148,6 +153,20 @@ class WorkerHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             self._origin()
+            if self.path == '/reset':
+                body = self._body(100)
+                if body:
+                    raise KokoroError('Reset accepts an empty object.', 400, 'invalid')
+                if self.server.resetting.is_set():
+                    raise KokoroError('Speech worker is restarting.', code='restarting')
+                self.server.resetting.set()
+                self._json(200, {'reset': True})
+                # The service manager restarts an empty, lazy process. Exiting
+                # also cancels native inference and releases all model memory.
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
+            if self.server.resetting.is_set():
+                raise KokoroError('Speech worker is restarting.', code='restarting')
             if self.path not in ('/audio', '/prepare'):
                 raise KokoroError('Endpoint does not exist.', 404, 'missing')
             body = self._body(MAX_AUDIO_BYTES if self.path == '/audio' else MAX_PREPARE_BYTES)
@@ -155,6 +174,14 @@ class WorkerHandler(BaseHTTPRequestHandler):
             if not {'language', field} <= set(body) or set(body) - {'language', field, 'voice'}:
                 raise KokoroError('Request fields are invalid.', 400, 'invalid')
             if self.path == '/audio':
+                if self.server.background_only:
+                    item = self.server.engine.item(body['language'], body['text'], body.get('voice'))
+                    cached = self.server.engine.cached(self.server.engine.key(item))
+                    if cached is None:
+                        self.server.preparation.prepare(body['language'], [body['text']], body.get('voice'), priority=True)
+                        raise KokoroError('Audio is being prepared.', code='preparing')
+                    self._send(200, cached, 'audio/wav', {'X-TTS-Engine': 'kokoro', 'X-TTS-Cache': 'HIT'})
+                    return
                 content, metadata = self.server.engine.audio(body['language'], body['text'], body.get('voice'))
                 self._send(200, content, 'audio/wav', {
                     'X-TTS-Engine': 'kokoro', 'X-TTS-Cache': 'HIT' if metadata['cache_hit'] else 'MISS',

@@ -493,7 +493,7 @@ class PreparationQueue:
             return {'pending': len(self._queue), 'active': self._active is not None,
                     'completed': self._completed, 'failed': self._failed}
 
-    def prepare(self, language, texts, voice=None):
+    def prepare(self, language, texts, voice=None, *, priority=False):
         if not isinstance(texts, list) or not 0 <= len(texts) <= 400:
             raise KokoroError('Prepare accepts at most 400 text items.', 400, 'invalid')
         # Validate every entry before scheduling any of them.
@@ -508,10 +508,18 @@ class PreparationQueue:
                     cached += 1
                 elif key in self._keys:
                     pending += 1
+                    if priority:
+                        for queued in tuple(self._queue):
+                            if queued[0] == key:
+                                self._queue.remove(queued); self._queue.appendleft(queued); break
                 elif len(self._queue) + (self._active is not None) >= self.engine.config.queue_size:
                     failed += 1
                 else:
-                    self._queue.append((key, item)); self._keys.add(key); accepted += 1
+                    if priority:
+                        self._queue.appendleft((key, item))
+                    else:
+                        self._queue.append((key, item))
+                    self._keys.add(key); accepted += 1
             self._condition.notify()
         return {'accepted': accepted, 'cached': cached, 'pending': pending, 'failed': failed, 'count': len(texts)}
 

@@ -668,3 +668,12 @@ app = Celery('tasks', broker='redis://localhost:6379')
 ## 许可证
 
 MIT License
+
+
+### Kokoro 中英文朗读
+
+英语管理员配置的“中英文朗读 → 启用Kokoro朗读”统一控制中英文默写及英语日常朗读。`config.json` 的 `kokoro_enabled` 必须是JSON布尔值，默认false；服务端每次请求读取，无需重启。关停时停止预生成并退出已加载worker，systemd重新启动为空闲轻量进程；原缓存保留。开关损坏/worker不可用时继续Piper/设备朗读。
+
+网站侧在 `.env` 配置 `DICTATION_KOKORO_URL=http://127.0.0.1:8877`。仅配置地址不会绕过管理员开关。独立依赖、已校验FP16模型与声音安装在 `/opt/english-reciter-kokoro/`；worker环境与服务模板见 `docs/kokoro-onnx-experiment.md` 及 `deploy/systemd/english-reciter-kokoro.service`。不向网站venv安装模型依赖，模型不进入Gunicorn。
+
+2核2GB主机实测受控单worker可完成生成，但MISS需13–34秒；因此部署 `KOKORO_BACKGROUND_ONLY=1`：后台串行生成，命中缓存直接播放，尚未就绪立即使用原朗读。资源限制MemoryHigh320MiB/MemoryMax480MiB/SwapMax1800MiB/CPU70%/Nice15；一次受控测试峰memory321.55MiB/swap904MiB、无OOM，48次health均200。该结果不代表并发容量保证。

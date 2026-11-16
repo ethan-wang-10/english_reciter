@@ -32,13 +32,18 @@
     let homeMode = 'lessons', mistakeItems = [], mistakeSelections = new Set(), mistakeExpanded = new Set();
     let mistakeLoading = false, mistakeLoaded = false, mistakeDeleting = false, mistakeSequence = 0;
     let mistakeStatus = '', mistakeStatusError = false;
-    let audioFetch = null, playerAudio = null, audioUrl = '', cachedAudio = null, fetchTimer = null;
-    let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesChecked = false;
+    let audioFetch = null, playerAudio = null, audioUrl = '', fetchTimer = null;
+    let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesPromise = null, capabilitiesSequence = 0;
     let prepareSnapshot = [], prepareInFlight = '', lastPrepared = '', lastPreparedAt = 0;
 
     function prepareAudio(words) {
         const texts = Array.from(new Set(words.map((word) => word.spoken_text || word.text).filter((text) => typeof text === 'string' && text.trim()))).slice(0, 400);
         prepareSnapshot = texts;
+        if (!active || !current(capture()) || !texts.length) return;
+        void checkAudioCapabilities();
+    }
+    function submitAudioPreparation() {
+        const texts = prepareSnapshot.slice();
         if (!active || !current(capture()) || !audioCapabilities.prepare || !texts.length) return;
         const signature = JSON.stringify(texts);
         if (prepareInFlight === signature || lastPrepared === signature && Date.now() - lastPreparedAt < 5000) return;
@@ -46,19 +51,28 @@
         void request('/audio/prepare', { method: 'POST', body: { texts } }).then(() => {
             if (!current(ctx)) return;
             lastPrepared = signature; lastPreparedAt = Date.now();
-        }).catch(() => { /* Optional preparation never changes the saved draft or playback state. */ }).finally(() => {
+        }).catch(() => { /* Preparation never changes saved work or starts playback. */ }).finally(() => {
             if (current(ctx) && prepareInFlight === signature) prepareInFlight = '';
         });
     }
     function checkAudioCapabilities() {
-        if (capabilitiesChecked || !current(capture())) return;
-        capabilitiesChecked = true;
-        const ctx = capture();
-        void request('/audio/capabilities').then((result) => {
-            if (!current(ctx)) return;
+        if (!current(capture())) return Promise.resolve(null);
+        if (capabilitiesPromise) return capabilitiesPromise;
+        const ctx = capture(), sequence = ++capabilitiesSequence;
+        const pending = request('/audio/capabilities').then((result) => {
+            if (!current(ctx) || sequence !== capabilitiesSequence) return null;
             audioCapabilities = { kokoro: result?.kokoro === true, prepare: result?.prepare === true };
-            if (active && prepareSnapshot.length) prepareAudio(prepareSnapshot.map((text) => ({ text, spoken_text: text })));
-        }).catch(() => { /* Existing server and device playback remain available. */ });
+            if (active) {
+
+                submitAudioPreparation();
+            }
+            return audioCapabilities;
+        }).catch(() => {
+            if (current(ctx) && sequence === capabilitiesSequence) audioCapabilities = { kokoro: false, prepare: false };
+            return null;
+        }).finally(() => { if (current(ctx) && capabilitiesPromise === pending) capabilitiesPromise = null; });
+        capabilitiesPromise = pending;
+        return pending;
     }
 
     function visible() { return active && el('english-dictation-section').classList.contains('active') && !el('english-dictation-section').hidden; }
@@ -986,7 +1000,7 @@
         }
         function fallback() {
             if (!valid() || fallbackStarted) return;
-            fallbackStarted = true; completed = 0; cachedAudio = null;
+            fallbackStarted = true; completed = 0;
             clearTimeout(repeatTimer); clearTimeout(watchdog); repeatTimer = null; watchdog = null; releaseAudio();
             const chosen = mode === 'player' ? run.voiceSnapshot || selectedVoice(run.voiceExplicit ? run.voiceURI : '', run.voicePreference)
                 : selectedVoice(voiceChosen ? el('english-dictation-voice').value : '', savedVoice);
@@ -1037,7 +1051,6 @@
             playOne();
         }
         async function fetchAudio() {
-            if (cachedAudio?.student === ctx.student && cachedAudio.token === ctx.token && cachedAudio.text === text) { playBlob(cachedAudio.blob); return; }
             const controller = new AbortController(); audioFetch = controller;
             fetchTimer = setTimeout(() => { controller.abort(); if (valid() && audioFetch === controller) fallback(); }, 25000);
             try {
@@ -1053,7 +1066,6 @@
                 const blob = await response.blob();
                 if (!valid() || fallbackStarted) return;
                 if (!blob || !blob.size) throw new Error('Empty audio');
-                cachedAudio = { student: ctx.student, token: ctx.token, text, blob };
                 clearTimeout(fetchTimer); fetchTimer = null;
                 if (audioFetch === controller) audioFetch = null;
                 playBlob(blob);
@@ -1195,8 +1207,8 @@
     function backHome() { stopSpeech(); showView('home'); renderControls(); }
     function leaveView() { preserveDraft(); viewSequence += 1; active = false; stopSpeech(); cancelRequests(); showView('home'); }
     function reset() {
-        preserveDraft(); active = false; stopSpeech(); cancelRequests(); cachedAudio = null;
-        audioCapabilities = { kokoro: false, prepare: false }; capabilitiesChecked = false;
+        preserveDraft(); active = false; stopSpeech(); cancelRequests();
+        audioCapabilities = { kokoro: false, prepare: false }; capabilitiesPromise = null; capabilitiesSequence += 1;
         prepareSnapshot = []; prepareInFlight = ''; lastPrepared = ''; lastPreparedAt = 0;
         generation += 1; requestSequence += 1; lessonSequence += 1; viewSequence += 1;
         boundStudent = ''; boundToken = ''; boundHostGeneration = undefined; loaded = false; loading = false; saving = false;

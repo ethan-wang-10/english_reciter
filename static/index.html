@@ -1387,6 +1387,20 @@
                         <button type="button" id="admin-save-article-ai" class="btn btn-secondary admin-config-save">保存 AI 文章分词开关</button>
                     </div>
 
+                    <h3 class="admin-subtitle">中英文朗读</h3>
+                    <div class="admin-config-section">
+                        <p class="admin-hint" id="admin-kokoro-status" role="status" aria-live="polite">加载中…</p>
+                        <div class="form-group admin-config-group">
+                            <label class="admin-toggle" for="admin-kokoro-enabled">
+                                <input type="checkbox" id="admin-kokoro-enabled" disabled />
+                                启用 Kokoro 朗读
+                            </label>
+                            <p class="admin-hint">统一控制英语、语文的服务器朗读。关闭或服务不可用时沿用原有语音；保存后，用户下一次朗读即可生效。</p>
+                        </div>
+                        <button type="button" id="admin-save-kokoro" class="btn btn-primary admin-config-save" disabled>保存朗读设置</button>
+                        <button type="button" id="admin-refresh-kokoro" class="btn btn-secondary admin-config-save">刷新状态</button>
+                    </div>
+
                     <h3 class="admin-subtitle">内置词库 CSV 增量上传</h3>
                     <div class="admin-config-section">
                         <p class="admin-hint">上传本地的 <code>words.csv</code>（UTF-8）。与服务器合并：不会删除服务器上已有词条；英文相同（忽略大小写）时以上传为准；新词按上传顺序追加在末尾。</p>
@@ -1576,12 +1590,12 @@
     </div>
     
     <script src="/static/assets/js/performance.cabc7fdc8aff1192.js" defer></script>
-    <script src="/static/assets/js/app.d154ed24acc99bf2.js" defer></script>
+    <script src="/static/assets/js/app.9e01ae1beb52446b.js" defer></script>
     <script src="/static/assets/js/english-dictation-host.10c6b22669f3fff1.js" defer></script>
-    <script src="/static/assets/js/english-dictation.d4940260f218b8d2.js" defer></script>
+    <script src="/static/assets/js/english-dictation.9200ba0ad0687f20.js" defer></script>
     <script src="/static/assets/js/exam-preparation.630db8337157ce1e.js" defer></script>
     <script src="/static/assets/js/chat-sidebar.8edef40ea8fe6819.js" defer></script>
     <script src="/static/assets/js/textbook.0528bf065ba0644e.js" defer></script>
-    <script src="/static/assets/js/admin.ce6f48c3ba42f871.js" defer></script>
+    <script src="/static/assets/js/admin.f22efa826d1e93d5.js" defer></script>
 </body>
 </html>

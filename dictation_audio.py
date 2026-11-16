@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 import wave
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, current_app, has_app_context, jsonify, request
 
 from subject_dictation import DictationError, _word
 
@@ -53,13 +53,31 @@ def _worker(path, payload=None, *, timeout=1.5, maximum=100_000):
         return None
 
 
+def enabled():
+    """Read the shared administrator switch for every request, never an env flag."""
+    if not has_app_context():
+        return False
+    reader = current_app.config.get('KOKORO_ENABLED_READER')
+    try:
+        return callable(reader) and reader() is True
+    except Exception:
+        return False
+
+
+def reset_worker():
+    """Best effort after persisting off; a failed reset never re-enables speech."""
+    return _worker('/reset', {}, timeout=1.0) is not None
+
+
 def capabilities():
+    if not enabled():
+        return {'kokoro': False, 'prepare': False}
     result = _worker('/health', timeout=.6)
-    if result:
+    if result and enabled():
         try:
             health = json.loads(result[0])
-            enabled = isinstance(health, dict) and health.get('enabled') is True and health.get('ready') is True
-            return {'kokoro': enabled, 'prepare': enabled}
+            ready = isinstance(health, dict) and health.get('enabled') is True and health.get('ready') is True
+            return {'kokoro': ready, 'prepare': ready}
         except (ValueError, TypeError, RecursionError):
             pass
     return {'kokoro': False, 'prepare': False}
@@ -67,8 +85,10 @@ def capabilities():
 
 def kokoro_audio(text, language):
     """Return a complete validated WAV or None, preserving the caller's fallback."""
+    if not enabled():
+        return None
     result = _worker('/audio', {'text': text, 'language': language}, timeout=15, maximum=MAX_WAV_BYTES)
-    if not result:
+    if not result or not enabled():
         return None
     content, headers = result
     if headers.get_content_type() not in ('audio/wav', 'audio/x-wav'):
@@ -96,6 +116,7 @@ def audio_response(content, hit=False):
 
 def register_dictation_audio_routes(app, services):
     routes = Blueprint('dictation_audio', __name__)
+    app.config['KOKORO_ENABLED_READER'] = lambda: getattr(services, 'kokoro_enabled', lambda: False)()
 
     @routes.errorhandler(DictationError)
     def invalid(error):
@@ -128,11 +149,13 @@ def register_dictation_audio_routes(app, services):
                 or len(body['texts']) > count):
             raise DictationError('请提交有效的朗读清单。')
         texts = list(dict.fromkeys(_word({'text': text}, max_text=limit, max_spoken=limit)['text'] for text in body['texts']))
-        if not _origin():
+        if not enabled() or not _origin():
             return jsonify({'enabled': False, 'accepted': 0, 'cached': 0, 'pending': 0, 'failed': 0, 'count': len(texts)})
         if not services._rate_allow(f'tts_prepare:{username}', 10):
             raise DictationError('朗读内容正在准备中，请稍后再试。', 429)
         result = _worker('/prepare', {'language': language, 'texts': texts})
+        if not enabled():
+            return jsonify({'enabled': False, 'accepted': 0, 'cached': 0, 'pending': 0, 'failed': len(texts), 'count': len(texts)})
         try:
             value = json.loads(result[0]) if result else None
             fields = ('accepted', 'cached', 'pending', 'failed', 'count')

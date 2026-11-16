@@ -164,3 +164,122 @@ test('pending feedback cannot advance a replacement review session', async (t) =
     assert.equal(ui.index(), 0);
     assert.equal(ui.state.shown, 0);
 });
+
+
+const settleDailyTts = () => new Promise(setImmediate);
+
+function dailyTtsUI({ parent = false } = {}) {
+    const state = { calls: [], capabilities: { piper: false, kokoro: false }, spoken: [], audios: [], played: [], urls: new Map(), revoked: [], focused: 0, logins: 0 };
+    const timers = new Map(); let clock = 0, timerId = 0;
+    const button = { disabled: false, dataset: {}, attributes: {}, classes: new Set(['btn-speak']),
+        setAttribute(name, value) { this.attributes[name] = String(value); }, removeAttribute(name) { delete this.attributes[name]; } };
+    button.classList = { contains: (name) => button.classes.has(name), add: (name) => button.classes.add(name), remove: (name) => button.classes.delete(name) };
+    const storage = new Map([['token', parent ? 'parent-token' : 'alice-token'], ['username', parent ? 'alice_parent' : 'alice']]);
+    if (parent) { storage.set('session_is_parent', '1'); storage.set('session_child_username', 'alice'); }
+    const synthesis = { getVoices: () => [{ name: 'English device', lang: 'en-US' }], cancel() {}, resume() {},
+        speak(utterance) { state.spoken.push(utterance); utterance.onstart?.(); } };
+    class Audio {
+        constructor(url) { this.src = url; state.audios.push(this); }
+        play() { state.played.push(this); this.paused = false; return Promise.resolve(); }
+        pause() { this.paused = true; }
+        removeAttribute(name) { if (name === 'src') this.src = ''; }
+        load() {}
+    }
+    class ObjectURL extends URL {
+        static createObjectURL(blob) { assert.ok(blob instanceof Blob); const url = 'blob:daily-tts-' + (state.urls.size + state.revoked.length + 1); state.urls.set(url, blob); return url; }
+        static revokeObjectURL(url) { state.urls.delete(url); state.revoked.push(url); }
+    }
+    const jsonResponse = (data, status = 200) => ({ status, ok: status >= 200 && status < 300, text: async () => JSON.stringify(data) });
+    const audioResponse = (status = 200) => ({ status, ok: status >= 200 && status < 300,
+        headers: { get: () => 'audio/wav' }, blob: async () => new Blob(['RIFF-server-recording-'.repeat(20)], { type: 'audio/wav' }) });
+    const context = vm.createContext({
+        window: { location: { search: '' }, speechSynthesis: synthesis },
+        document: { querySelectorAll: (selector) => selector === '.btn-speak' ? [button] : [], getElementById: () => null },
+        localStorage: { getItem: (key) => storage.get(key) || null },
+        URL: ObjectURL, URLSearchParams, Blob, AbortController, Audio, SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
+        console, performance,
+        setTimeout(callback, delay = 0) { const id = ++timerId; timers.set(id, { at: clock + Number(delay), callback }); return id; },
+        clearTimeout(id) { timers.delete(id); },
+        async fetch(url, options = {}) {
+            const call = { url, method: options.method || 'GET', headers: options.headers || {}, signal: options.signal,
+                body: options.body ? JSON.parse(options.body) : null };
+            state.calls.push(call);
+            if (url === '/api/tts/capabilities') return state.capabilityFetch ? state.capabilityFetch(call) : jsonResponse(state.capabilities, state.capabilityStatus || 200);
+            if (url === '/api/words/speak-audio') return state.audioFetch ? state.audioFetch(call) : audioResponse(state.audioStatus || 200);
+            assert.equal(url, '/api/words/speak', 'Speech never calls unrelated learning or mutation routes');
+            return jsonResponse({ ok: true });
+        },
+        focusWordCapture() { state.focused += 1; },
+        showLoginPage() { state.logins += 1; },
+    });
+    for (const part of ['core.js', 'api.js', 'review-input.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, 'static/js/app', part), 'utf8'), context);
+    context.clearAccountSession = () => { vm.runInContext("token = null; username = ''; accountSessionGeneration += 1", context); };
+    context.showLoginPage = () => { state.logins += 1; context.stopSpeakPlayback(); context.endTtsSpeakUi(); };
+    return { state, context, button, jsonResponse,
+        async flush() { await settleDailyTts(); await settleDailyTts(); },
+        async tick(milliseconds) {
+            const target = clock + milliseconds;
+            for (let count = 0; count < 100; count += 1) {
+                const next = [...timers].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+                if (!next) { clock = target; await this.flush(); return; }
+                clock = next[1].at; timers.delete(next[0]); next[1].callback(); await this.flush();
+            }
+            throw new Error('Daily speech timers did not settle');
+        },
+    };
+}
+
+test('daily English pronunciation checks the current provider each time and ignores a prefetched blob after the admin toggle', { timeout: 3000 }, async () => {
+    const ui = dailyTtsUI(); let completed = 0, started = 0;
+    const staleBlob = new Blob(['RIFF-old-kokoro-'.repeat(20)], { type: 'audio/wav' });
+    const speak = () => ui.context.speakEnglishPreferred('Read the book.', () => { completed += 1; }, ui.button,
+        { piperBlob: staleBlob, onPlaybackStart: () => { started += 1; } });
+    assert.equal(await speak(), true); await ui.tick(0);
+    assert.equal(ui.state.spoken.length, 1); assert.equal(ui.state.played.length, 0); ui.state.spoken.at(-1).onend();
+    for (const capabilities of [{ piper: false, kokoro: true }, { piper: true, kokoro: false }]) {
+        ui.state.capabilities = capabilities;
+        assert.equal(await speak(), true);
+        const request = ui.state.calls.at(-1); assert.equal(request.url, '/api/words/speak-audio'); assert.equal(request.method, 'POST');
+        assert.deepEqual(request.body, { text: 'Read the book.' }); assert.equal(request.headers.Authorization, 'Bearer alice-token');
+        const audio = ui.state.played.at(-1); const playedBlob = ui.state.urls.get(audio.src);
+        assert.notStrictEqual(playedBlob, staleBlob); assert.match(await playedBlob.text(), /server-recording/);
+        audio.onended();
+    }
+    ui.state.capabilities = { piper: false, kokoro: false }; assert.equal(await speak(), true); await ui.tick(0);
+    assert.equal(ui.state.spoken.length, 2); ui.state.spoken.at(-1).onend();
+    const capabilities = ui.state.calls.filter((call) => call.url === '/api/tts/capabilities');
+    assert.equal(capabilities.length, 4); assert.ok(capabilities.every((call) => call.method === 'GET' && call.signal && call.headers.Authorization === 'Bearer alice-token'));
+    assert.equal(ui.state.calls.filter((call) => call.url === '/api/words/speak-audio').length, 2);
+    assert.equal(completed, 4); assert.equal(started, 4); assert.equal(ui.button.disabled, false); assert.equal(ui.state.urls.size, 0);
+});
+
+test('daily English capability deadlines, cancellation and authorization failure cannot trigger stale audio or bypass the parent restriction', { timeout: 3000 }, async () => {
+    const ui = dailyTtsUI(); let resolve; let completed = 0;
+    ui.state.capabilityFetch = () => new Promise((yes) => { resolve = yes; });
+    const pending = ui.context.speakEnglishPreferred('First phrase.', () => { completed += 1; }, ui.button);
+    await ui.flush(); await ui.tick(999); assert.equal(ui.state.spoken.length, 0);
+    await ui.tick(1); assert.equal(await pending, true); await ui.tick(0);
+    assert.equal(ui.state.calls[0].signal.aborted, true); assert.equal(ui.state.spoken.length, 1);
+    resolve(ui.jsonResponse({ piper: false, kokoro: true })); await ui.flush();
+    assert.equal(ui.state.played.length, 0); assert.equal(ui.state.spoken.length, 1); ui.state.spoken[0].onend(); assert.equal(completed, 1);
+    const canceled = ui.context.speakEnglishPreferred('Canceled phrase.', () => { completed += 1; }, ui.button); await ui.flush();
+    const aborted = ui.state.calls.at(-1); ui.context.stopSpeakPlayback(); assert.equal(aborted.signal.aborted, true);
+    resolve(ui.jsonResponse({ piper: true, kokoro: false })); assert.equal(await canceled, false); await ui.tick(2000);
+    assert.equal(ui.state.played.length, 0); assert.equal(ui.state.spoken.length, 1); assert.equal(completed, 1);
+    const switched = ui.context.speakEnglishPreferred('Old account phrase.', () => { completed += 1; }, ui.button); await ui.flush();
+    vm.runInContext("token = 'bob-token'; username = 'bob'; accountSessionGeneration += 1", ui.context);
+    resolve(ui.jsonResponse({ piper: true, kokoro: true })); assert.equal(await switched, false); await ui.tick(2000);
+    assert.equal(ui.state.played.length, 0); assert.equal(ui.state.spoken.length, 1); assert.equal(completed, 1);
+    for (const status of [401, 403]) {
+        const denied = dailyTtsUI(); denied.state.capabilityStatus = status;
+        assert.equal(await denied.context.speakEnglishPreferred('Private phrase.', () => { completed += 1; }, denied.button), false);
+        await denied.tick(2000); assert.equal(denied.state.spoken.length, 0); assert.equal(denied.state.played.length, 0);
+        assert.equal(denied.state.calls.some((call) => call.url === '/api/words/speak'), false); assert.equal(denied.button.disabled, false);
+        assert.equal(denied.state.logins, status === 401 ? 1 : 0, 'Capability requests preserve the existing host session-expiry behavior');
+    }
+    const parent = dailyTtsUI({ parent: true }); parent.state.capabilities = { piper: true, kokoro: true }; parent.state.audioStatus = 403;
+    assert.equal(await parent.context.speakEnglishPreferred('Child word.', () => { completed += 1; }, parent.button), false); await parent.tick(2000);
+    assert.equal(parent.state.calls.at(-1).headers.Authorization, 'Bearer parent-token');
+    assert.equal(parent.state.spoken.length, 0); assert.equal(parent.state.played.length, 0); assert.equal(parent.state.calls.some((call) => call.url === '/api/words/speak'), false);
+    assert.equal(completed, 1);
+});

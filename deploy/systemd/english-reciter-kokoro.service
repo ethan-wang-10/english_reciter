@@ -1,0 +1,27 @@
+[Unit]
+Description=English Reciter Kokoro CPU audio preparation
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/data/english_reciter
+EnvironmentFile=/opt/english-reciter-kokoro/worker.env
+ExecStart=/opt/english-reciter-kokoro/venv/bin/python /data/english_reciter/scripts/kokoro_worker.py --port 8877
+Restart=always
+RestartSec=5
+Nice=15
+CPUQuota=70%
+MemoryHigh=320M
+MemoryMax=480M
+MemorySwapMax=1800M
+TasksMax=64
+OOMPolicy=stop
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/english-reciter-kokoro/cache
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

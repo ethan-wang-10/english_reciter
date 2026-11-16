@@ -838,6 +838,7 @@ async function speakEnglishViaPiperApi(text, onEnd, gen, onPlaybackError) {
     }
     if (ttsFetchAbort === ac) ttsFetchAbort = null;
     if (gen !== undefined && gen !== ttsPlaybackGeneration) return false;
+    if (response.status === 401 || response.status === 403) return null;
     if (!response.ok) return false;
     const ct = response.headers.get('content-type') || '';
     if (!ct.includes('audio') && !ct.includes('octet-stream')) return false;
@@ -852,7 +853,32 @@ async function speakEnglishViaPiperApi(text, onEnd, gen, onPlaybackError) {
     return playPiperBlob(blob, onEnd, gen, onPlaybackError);
 }
 
-/** 优先 Piper，其次 Web Speech，最后服务端 say（仅服务器本机扬声器）
+function currentTtsServerGate(gen) {
+    const accountContext = captureAccountContext();
+    if (!token || !isAccountContextCurrent(accountContext)) return Promise.resolve(false);
+    const ac = new AbortController(); ttsFetchAbort = ac;
+    return new Promise((resolve) => {
+        let settled = false;
+        let timeout;
+        const finish = (allowed) => {
+            if (settled) return;
+            settled = true; clearTimeout(timeout);
+            if (ttsFetchAbort === ac) ttsFetchAbort = null;
+            if (typeof allowed === 'boolean' && gen === ttsPlaybackGeneration && isAccountContextCurrent(accountContext)) serverPiperAvailable = allowed;
+            resolve(allowed);
+        };
+        timeout = setTimeout(() => { finish(false); ac.abort(); }, 1000);
+        ac.signal.addEventListener('abort', () => finish(null), { once: true });
+        void apiRequest('/tts/capabilities', { signal: ac.signal }).then((data) => {
+            if (gen !== ttsPlaybackGeneration || !isAccountContextCurrent(accountContext)) { finish(null); return; }
+            finish(!!data && (data.piper === true || data.kokoro === true));
+        }).catch((error) => {
+            finish(error?.status === 401 || error?.status === 403 || gen !== ttsPlaybackGeneration || !isAccountContextCurrent(accountContext) ? null : false);
+        });
+    });
+}
+
+/** 优先当前启用的服务器语音，其次 Web Speech，最后服务端 say（仅服务器本机扬声器）
  * @param {string} text
  * @param {(() => void) | undefined} onEnd
  * @param {HTMLElement | null | undefined} triggerButton 触发朗读的 .btn-speak，用于加载态
@@ -873,18 +899,13 @@ async function speakEnglishPreferred(text, onEnd, triggerButton, opts = {}) {
         endTtsSpeakUi();
         baseDone();
     };
-    if (serverPiperAvailable) {
-        const pre = opts && opts.piperBlob;
-        if (pre && pre.size > 100) {
-            const okPre = await playPiperBlob(pre, done, myGen, opts.onPlaybackError);
-            if (myGen !== ttsPlaybackGeneration) return false;
-            if (okPre) {
-                if (typeof opts.onPlaybackStart === 'function') opts.onPlaybackStart();
-                return true;
-            }
-        }
+    const allowed = await currentTtsServerGate(myGen);
+    if (myGen !== ttsPlaybackGeneration) return false;
+    if (allowed === null) { endTtsSpeakUi(); return false; }
+    if (allowed) {
         const ok = await speakEnglishViaPiperApi(raw, done, myGen, opts.onPlaybackError);
         if (myGen !== ttsPlaybackGeneration) return false;
+        if (ok === null) { endTtsSpeakUi(); return false; }
         if (ok) {
             if (typeof opts.onPlaybackStart === 'function') opts.onPlaybackStart();
             return true;
@@ -925,7 +946,7 @@ async function refreshTtsCapabilities(accountContext = captureAccountContext()) 
     try {
         const data = await apiRequest('/tts/capabilities');
         if (!isAccountContextCurrent(accountContext)) return;
-        serverPiperAvailable = data && data.piper === true;
+        serverPiperAvailable = !!data && (data.piper === true || data.kokoro === true);
     } catch (_) {
         if (isAccountContextCurrent(accountContext)) serverPiperAvailable = false;
     }

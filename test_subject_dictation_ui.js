@@ -272,7 +272,22 @@ function dictationUI({ storage = new Map(), isParent = false, voices, capabiliti
     }
     state.audioResponse = audioResponse;
     const fetchAudio = async (url, options = {}) => {
-        assert.equal(url, '/api/subjects/chinese/dictation/audio', 'Only the dedicated Chinese speech endpoint should be fetched directly');
+        if (url === '/api/subjects/chinese/dictation/audio/capabilities') {
+            const call = { url: prefix + '/audio/capabilities', rawUrl: url, raw: true, method: options.method || 'GET',
+                headers: options.headers || {}, signal: options.signal, credentials: options.credentials, cache: options.cache,
+                username: state.session.username,
+                student: state.session.account?.is_parent ? state.session.account.child_username : state.session.account?.username || state.session.username };
+            state.calls.push(call);
+            if (state.capabilityFetch) return state.capabilityFetch(call);
+            try {
+                const result = state.routes[call.url] ? await state.routes[call.url](call) : state.defaultReply(call);
+                return { status: 200, ok: true, json: async () => clone(result) };
+            } catch (error) {
+                if (error.status) return { status: error.status, ok: false, json: async () => ({ error: error.message }) };
+                throw error;
+            }
+        }
+        assert.equal(url, '/api/subjects/chinese/dictation/audio', 'Only Chinese dictation speech and capability endpoints should be fetched directly');
         const call = { url, method: options.method || 'GET', headers: options.headers || {}, body: options.body ? JSON.parse(options.body) : null, signal: options.signal, credentials: options.credentials };
         state.audioRequests.push(call);
         return state.audioFetch ? state.audioFetch(call) : audioResponse(state.audioStatus || 200);
@@ -916,12 +931,16 @@ test('correcting one Mandarin mistake source preserves other sources, original l
 });
 
 
-test('Chinese speech remains immediate device Mandarin when optional server capabilities are disabled, pending or unavailable', { timeout: 3000 }, async () => {
+test('Chinese speech uses device Mandarin when fresh capabilities are disabled, unavailable or exceed the short lookup deadline', { timeout: 3000 }, async () => {
     for (const mode of ['disabled', 'pending', 'failure']) {
         const ui = dictationUI(); const gate = deferred();
         if (mode === 'pending') ui.state.routes[prefix + '/audio/capabilities'] = () => gate.promise;
         if (mode === 'failure') ui.state.routes[prefix + '/audio/capabilities'] = () => { throw new Error('optional capabilities unavailable'); };
         await ui.openLesson(); await ui.start(); await ui.field('dictation-play').fire('click');
+        if (mode === 'pending') {
+            await ui.tick(1499); assert.equal(ui.state.spoken.length, 0, 'Playback waits briefly for a fresh admin setting');
+            await ui.tick(1);
+        }
         assert.equal(ui.state.spoken.length, 1, mode);
         assert.equal(ui.state.spoken[0].text, '潮水'); assert.equal(ui.state.spoken[0].voice.lang, 'zh-CN');
         assert.equal(ui.state.audioRequests.length, 0);
@@ -1051,13 +1070,116 @@ test('Chinese server capabilities stay account-scoped and a late old capability 
     const ui = dictationUI(); const gate = deferred();
     ui.state.routes[prefix + '/audio/capabilities'] = () => gate.promise;
     await ui.openLesson(); await ui.start(); await ui.api.open();
-    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/audio/capabilities' && call.student === 'alice').length, 1);
+    assert.ok(ui.state.calls.some((call) => call.url === prefix + '/audio/capabilities' && call.student === 'alice'));
     ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
     delete ui.state.routes[prefix + '/audio/capabilities']; await ui.openLesson(); await ui.type('dictation-words', '小明词语'); await ui.start();
     gate.resolve({ kokoro: true, prepare: true }); await ui.flush();
-    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/audio/capabilities').length, 2);
+    assert.ok(ui.state.calls.some((call) => call.url === prefix + '/audio/capabilities' && call.student === 'bob'));
     assert.equal(ui.state.calls.some((call) => call.url === prefix + '/audio/prepare'), false);
     assert.equal(ui.state.audioRequests.length, 0); assert.equal(ui.state.spoken.length, 0);
     await ui.field('dictation-play').fire('click');
     assert.equal(ui.state.spoken[0].text, '小明词语'); assert.equal(ui.state.audioRequests.length, 0);
+});
+
+
+test('Chinese playback observes the current admin off-on-off setting on every manual replay without logging out', async () => {
+    const ui = dictationUI(); await ui.openLesson(); await ui.start();
+    const capabilityCalls = () => ui.state.calls.filter((call) => call.raw && call.url === prefix + '/audio/capabilities').length;
+    let before = capabilityCalls();
+    await ui.field('dictation-play').fire('click');
+    assert.ok(capabilityCalls() > before, 'The first click checks current capabilities even after opening and preparing the run');
+    assert.equal(ui.state.spoken.length, 1); assert.equal(ui.state.audioRequests.length, 0);
+    await ui.finishItem(); assert.equal(ui.state.spoken.length, 2);
+    ui.state.capabilities = { kokoro: true, prepare: true }; before = capabilityCalls();
+    await ui.field('dictation-play').fire('click');
+    assert.ok(capabilityCalls() > before); assert.equal(ui.state.audioRequests.length, 1);
+    assert.deepEqual(ui.state.audioRequests[0].body, { text: '潮水' });
+    const checked = capabilityCalls(), audio = ui.state.currentAudio;
+    await ui.finishItem();
+    assert.equal(capabilityCalls(), checked, 'The two repetitions in one listening action share one capability decision');
+    assert.equal(ui.state.audioPlayed.length, 2); assert.strictEqual(ui.state.audioPlayed[1].audio, audio);
+    ui.state.capabilities = { kokoro: false, prepare: false }; before = capabilityCalls();
+    await ui.field('dictation-play').fire('click');
+    assert.ok(capabilityCalls() > before);
+    assert.equal(ui.state.audioRequests.length, 1, 'Turning off cannot replay an earlier Kokoro blob');
+    assert.equal(ui.state.spoken.length, 3); await ui.finishItem(); assert.equal(ui.state.spoken.length, 4);
+    assert.equal(ui.state.calls.every((call) => call.student === 'alice'), true);
+    assert.match(ui.field('dictation-position').textContent, /1/);
+});
+
+test('Chinese capability timeouts, stale replies and canceled lookups cannot switch or duplicate a listening action', { timeout: 3000 }, async () => {
+    const ui = dictationUI(); await ui.openLesson(); await ui.start();
+    const gate = deferred(); ui.state.routes[prefix + '/audio/capabilities'] = () => gate.promise;
+    await ui.field('dictation-play').fire('click');
+    const lookup = ui.state.calls.findLast((call) => call.url === prefix + '/audio/capabilities');
+    assert.equal(lookup.raw, true); assert.equal(lookup.method, 'GET'); assert.equal(lookup.headers.Authorization, 'Bearer alice-token');
+    assert.equal(lookup.credentials, 'same-origin'); assert.equal(lookup.cache, 'no-store');
+    await ui.tick(1499); assert.equal(ui.state.spoken.length, 0); assert.equal(ui.state.audioRequests.length, 0);
+    await ui.tick(1); assert.equal(ui.state.spoken.length, 1); assert.equal(lookup.signal.aborted, true);
+    gate.resolve({ kokoro: true, prepare: true }); await ui.flush();
+    assert.equal(ui.state.audioRequests.length, 0, 'A late enabled result cannot start server audio over the fallback');
+    assert.equal(ui.state.spoken.length, 1); await ui.finishItem(); assert.equal(ui.state.spoken.length, 2);
+    delete ui.state.routes[prefix + '/audio/capabilities']; await ui.field('dictation-play').fire('click');
+    assert.equal(ui.state.audioRequests.length, 0); assert.equal(ui.state.spoken.length, 3, 'A stale true result cannot override the next fresh false result');
+    ui.api.leaveView(); await ui.api.open(); await ui.field('dictation-resume').fire('click');
+    const canceled = deferred(); ui.state.routes[prefix + '/audio/capabilities'] = () => canceled.promise;
+    await ui.field('dictation-play').fire('click');
+    const pending = ui.state.calls.findLast((call) => call.url === prefix + '/audio/capabilities'); const spoken = ui.state.spoken.length;
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    assert.equal(pending.signal.aborted, true);
+    canceled.resolve({ kokoro: true, prepare: true }); await ui.tick(2000); await ui.flush();
+    assert.equal(ui.state.audioRequests.length, 0); assert.equal(ui.state.spoken.length, spoken);
+    assert.equal(ui.field('dictation-player').hidden, true); assert.equal(ui.state.objectUrls.size, 0);
+    const slowJSON = dictationUI(); await slowJSON.openLesson(); await slowJSON.start(); const jsonGate = deferred();
+    slowJSON.state.capabilityFetch = () => ({ status: 200, ok: true, json: () => jsonGate.promise });
+    await slowJSON.field('dictation-play').fire('click'); await slowJSON.tick(1500);
+    assert.equal(slowJSON.state.spoken.length, 1, 'The short capability deadline also includes reading its JSON body');
+    jsonGate.resolve({ kokoro: true, prepare: true }); await slowJSON.flush();
+    assert.equal(slowJSON.state.spoken.length, 1); assert.equal(slowJSON.state.audioRequests.length, 0);
+});
+
+test('Chinese expired authorization during the fresh capability check requires login and never starts device or server speech', async () => {
+    for (const status of [401, 403]) {
+        const ui = dictationUI(); await ui.openLesson(); await ui.start();
+        ui.state.routes[prefix + '/audio/capabilities'] = () => { throw Object.assign(new Error('session expired'), { status }); };
+        await ui.field('dictation-play').fire('click'); await ui.tick(2000);
+        assert.equal(ui.state.spoken.length, 0); assert.equal(ui.state.audioPlayed.length, 0); assert.equal(ui.state.audioRequests.length, 0);
+        assert.equal(ui.field('dictation-next').disabled, true); assert.match(ui.field('dictation-message').textContent, /登录/);
+        delete ui.state.routes[prefix + '/audio/capabilities']; await ui.field('dictation-play').fire('click');
+        assert.equal(ui.state.spoken[0].text, '潮水'); assert.equal(ui.state.audioRequests.length, 0);
+    }
+});
+
+test('Chinese word previews and unsaved correction previews also read the latest admin setting', async () => {
+    const ui = dictationUI({ words: ['重庆'] }); await ui.openLesson();
+    const preview = () => ui.field('dictation-word-preview').querySelectorAll('button').find((button) => button.getAttribute('aria-label') === '试听 重庆');
+    await preview().fire('click'); assert.equal(ui.state.spoken.length, 1); assert.equal(ui.state.audioRequests.length, 0); await ui.finishSpeech();
+    ui.state.capabilities = { kokoro: true, prepare: true };
+    await preview().fire('click'); assert.equal(ui.state.audioRequests.length, 1); await ui.finishAudio();
+    const editor = await editChinesePronunciation(ui, '重庆'); editor.input.value = 'chóng qìng'; await editor.input.fire('input');
+    ui.state.capabilities = { kokoro: false, prepare: false }; await editor.button('preview').fire('click');
+    assert.equal(ui.state.spoken.at(-1).text, 'chóng qìng'); assert.equal(ui.state.audioRequests.length, 1); await ui.finishSpeech();
+    ui.state.capabilities = { kokoro: true, prepare: true }; await editor.button('preview').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'chóng qìng' }); assert.equal(ui.state.audioRequests.length, 2);
+    assert.equal(ui.field('dictation-words').value, '重庆'); assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+});
+
+
+test('Chinese saving and starting refresh preparation capabilities after admin toggles without blocking the learner', async () => {
+    const ui = dictationUI(); await ui.openLesson();
+    const prepared = () => ui.state.calls.filter((call) => call.url === prefix + '/audio/prepare');
+    await ui.type('dictation-words', '第一词语'); await ui.field('dictation-save').fire('click');
+    assert.equal(prepared().length, 0);
+    ui.state.capabilities = { kokoro: true, prepare: true };
+    await ui.type('dictation-words', '第二词语'); await ui.field('dictation-save').fire('click');
+    assert.deepEqual(prepared().at(-1)?.body, { texts: ['第二词语'] }, 'A fresh enabled capability result prewarms the newly saved content');
+    const before = prepared().length;
+    ui.state.capabilities = { kokoro: false, prepare: false };
+    await ui.type('dictation-words', '第三词语'); await ui.field('dictation-save').fire('click');
+    assert.equal(prepared().length, before, 'An old enabled result cannot enqueue after the current admin setting is off');
+    assert.equal(ui.field('dictation-save').disabled, false);
+    await ui.start(); assert.equal(ui.field('dictation-player').hidden, false); assert.equal(prepared().length, before);
+    await ui.field('dictation-player-exit').fire('click'); ui.state.capabilities = { kokoro: true, prepare: true };
+    await ui.start(); assert.deepEqual(prepared().at(-1)?.body, { texts: ['第三词语'] });
+    assert.equal(ui.field('dictation-player').hidden, false); assert.equal(ui.state.audioRequests.length, 0); assert.equal(ui.state.spoken.length, 0);
 });

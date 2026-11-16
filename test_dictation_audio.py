@@ -29,7 +29,7 @@ def headers(kind='application/json', cache='MISS'):
 @pytest.fixture
 def browser(tmp_path, monkeypatch):
     monkeypatch.delenv('DICTATION_KOKORO_URL', raising=False)
-    state = SimpleNamespace(rate=[], allowed=True, piper=[], wav=wav())
+    state = SimpleNamespace(rate=[], allowed=True, piper=[], wav=wav(), kokoro_enabled=False)
     def authenticated(function):
         @wraps(function)
         def wrapped(*args, **kwargs):
@@ -45,7 +45,7 @@ def browser(tmp_path, monkeypatch):
         state.piper.append(text); return state.wav
     services = SimpleNamespace(token_required=authenticated, DATA_DIR=tmp_path/'users',
         _rate_allow=rate, _RATE_MAX_TTS_AUDIO=90, piper_runtime_ready=lambda: True,
-        piper_synthesize_wav=piper)
+        piper_synthesize_wav=piper, kokoro_enabled=lambda: state.kokoro_enabled)
     app = Flask(__name__); app.config['TESTING'] = True
     audio.register_dictation_audio_routes(app, services)
     register_english_dictation_routes(app, services)
@@ -85,6 +85,7 @@ def test_both_languages_require_shared_authentication_for_capabilities_preparati
 
 
 def test_ready_worker_preserves_full_corrected_text_and_parent_identity_and_skips_piper(browser, monkeypatch):
+    browser.state.kokoro_enabled = True
     calls = []
     def worker(path, payload=None, **kwargs):
         calls.append((path,payload))
@@ -105,6 +106,7 @@ def test_ready_worker_preserves_full_corrected_text_and_parent_identity_and_skip
 @pytest.mark.parametrize('result', [None, (b'not a wav',headers('audio/wav')),
     (b'RIFF'+b'\0'*100,headers('audio/wav')), (wav()[:-8],headers('audio/wav')), (wav(),headers('application/json'))])
 def test_unavailable_or_incomplete_kokoro_audio_falls_back_without_losing_the_sentence(browser,monkeypatch,result):
+    browser.state.kokoro_enabled = True
     monkeypatch.setattr(audio,'_worker',lambda *_args,**_kwargs:result)
     text="Don't run, please."
     response=browser.client.post('/api/subjects/english/dictation/audio',headers=browser.headers,json={'text':text})
@@ -115,6 +117,7 @@ def test_unavailable_or_incomplete_kokoro_audio_falls_back_without_losing_the_se
 
 
 def test_prepare_is_bounded_normalizes_exact_text_and_returns_only_counts(browser,monkeypatch):
+    browser.state.kokoro_enabled = True
     monkeypatch.setenv('DICTATION_KOKORO_URL','http://127.0.0.1:8877')
     calls=[]
     def worker(path,payload=None,**kwargs):
@@ -132,6 +135,7 @@ def test_prepare_is_bounded_normalizes_exact_text_and_returns_only_counts(browse
 
 
 def test_preparation_worker_failure_does_not_claim_success_or_change_saved_lists(browser,monkeypatch):
+    browser.state.kokoro_enabled = True
     monkeypatch.setenv('DICTATION_KOKORO_URL','http://127.0.0.1:8877')
     monkeypatch.setattr(audio,'_worker',lambda *_args,**_kwargs:None)
     response=browser.client.post('/api/subjects/english/dictation/audio/prepare',headers=browser.headers,json={'texts':['apple']})

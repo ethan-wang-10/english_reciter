@@ -111,7 +111,7 @@ from performance_store import (
 from learning_sqlite_store import LearningSQLiteStore, learning_store_revision
 from import_job_store import ImportJobStore, ImportLeaseLost, ImportOutcomeUnknown
 from rate_limit_store import RateLimitStore
-from storage_utils import PersistentStateLoadError
+from storage_utils import PersistentStateLoadError, interprocess_file_lock
 from exam_preparation_routes import register_exam_preparation_routes
 
 try:
@@ -503,15 +503,43 @@ _deepseek_key_cache_ts: float = 0.0
 _deepseek_key_cache_val: str = ""
 
 
-def _load_app_config() -> dict:
-    if not _APP_CONFIG_FILE.exists():
-        return {}
+def _read_app_config_strict() -> dict:
     try:
         with open(_APP_CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning("读取 config.json 失败: %s", e)
+            def unique(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError('Duplicate configuration key')
+                    result[key] = value
+                return result
+            value = json.load(f, object_pairs_hook=unique)
+        if not isinstance(value, dict):
+            raise ValueError('Invalid configuration root')
+        if 'kokoro_enabled' in value and type(value['kokoro_enabled']) is not bool:
+            raise ValueError('Invalid Kokoro configuration flag')
+        return value
+    except FileNotFoundError:
         return {}
+    except (OSError, ValueError, TypeError, RecursionError):
+        raise PersistentStateLoadError('Application configuration is unreadable') from None
+
+
+def _load_app_config() -> dict:
+    try:
+        return _read_app_config_strict()
+    except PersistentStateLoadError:
+        logger.warning("读取 config.json 失败，保留原文件")
+        return {}
+
+
+def kokoro_enabled() -> bool:
+    # Read on every request so all Gunicorn workers observe one administrator
+    # setting immediately. Environment variables never override this switch.
+    try:
+        return _read_app_config_strict().get('kokoro_enabled') is True
+    except PersistentStateLoadError:
+        return False
 
 
 def _save_app_config(data: dict) -> None:
@@ -519,6 +547,8 @@ def _save_app_config(data: dict) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, _APP_CONFIG_FILE)
     except Exception:
         try:
@@ -3869,6 +3899,7 @@ def _auth_session_payload(login_username: str) -> dict:
 @token_required
 def bootstrap(username):
     """首屏聚合数据：用一条请求替代多条关键请求，降低首次打开失败概率。"""
+    from dictation_audio import capabilities as kokoro_capabilities
     try:
         login = getattr(g, 'login_username', username)
         session_payload = _auth_session_payload(login)
@@ -3914,6 +3945,7 @@ def bootstrap(username):
             "article_ai_extract_enabled": _article_ai_extract_enabled(),
             "tts_capabilities": {
                 "piper": listening_available,
+                "kokoro": kokoro_capabilities()['kokoro'],
             },
         }), 200
     except PersistentStateLoadError:
@@ -4265,9 +4297,9 @@ def _spelling_fallback_word_payload(word: Any) -> dict:
 @app.route('/api/tts/capabilities')
 def tts_capabilities():
     """前端是否可优先使用 Piper：需设置 PIPER_MODEL 且 piper 在 PATH 中。"""
-    if piper_runtime_ready is None:
-        return jsonify({'piper': False}), 200
-    return jsonify({'piper': bool(piper_runtime_ready())}), 200
+    from dictation_audio import capabilities
+    piper = bool(piper_runtime_ready and piper_runtime_ready())
+    return jsonify({'piper': piper, 'kokoro': capabilities()['kokoro']}), 200
 
 
 
@@ -6390,11 +6422,23 @@ def admin_delete_user(username):
     return jsonify({'username': username, 'message': '用户已删除'}), 200
 
 
+def _kokoro_admin_status(cfg):
+    from dictation_audio import capabilities
+    enabled = cfg.get('kokoro_enabled') is True
+    ready = capabilities()['kokoro'] if enabled else False
+    return {'kokoro_enabled': enabled, 'kokoro_service_ready': ready,
+            'kokoro_status': 'ready' if ready else 'unavailable' if enabled else 'disabled'}
+
+
 @app.route('/api/admin/config', methods=['GET'])
 @admin_required
 def admin_get_config():
     """读取 config.json（敏感字段脱敏显示）。"""
-    cfg = _load_app_config()
+    try:
+        cfg = _read_app_config_strict()
+    except PersistentStateLoadError:
+        return jsonify({'error': '配置文件暂时无法读取，原文件已保留，请修复后重试。',
+                        'kokoro_enabled': False, 'kokoro_service_ready': False, 'kokoro_status': 'config_error'}), 503
     raw = str(cfg.get("deepseek_api_key", "") or "").strip()
     key_plain = _decrypt_deepseek_from_config(raw) if raw else ""
     if raw and raw.startswith(_DEEPSEEK_ENC_PREFIX) and not key_plain:
@@ -6411,6 +6455,7 @@ def admin_get_config():
         "deepseek_api_key_set": bool(raw),
         "deepseek_api_key_preview": preview,
         "article_ai_extract_enabled": bool(cfg.get("article_ai_extract_enabled", False)),
+        **_kokoro_admin_status(cfg),
     }), 200
 
 
@@ -6418,31 +6463,38 @@ def admin_get_config():
 @admin_required
 def admin_update_config():
     """更新 config.json 中的运行时配置（deepseek_api_key、article_ai_extract_enabled 等）。"""
-    data = request.get_json(silent=True) or {}
-    cfg = _load_app_config()
-    changed = False
-    if "deepseek_api_key" in data:
-        new_key = str(data["deepseek_api_key"] or "").strip()
-        if new_key:
-            try:
-                cfg["deepseek_api_key"] = _encrypt_deepseek_for_config(new_key)
-            except RuntimeError as e:
-                return jsonify({"error": str(e)}), 400
-        else:
-            cfg["deepseek_api_key"] = ""
-        changed = True
-    if "article_ai_extract_enabled" in data:
-        cfg["article_ai_extract_enabled"] = bool(data["article_ai_extract_enabled"])
-        changed = True
-    if not changed:
+    data = request.get_json(silent=True)
+    fields = {'deepseek_api_key', 'article_ai_extract_enabled', 'kokoro_enabled'}
+    if not isinstance(data, dict) or not data or set(data) - fields:
         return jsonify({"error": "没有可更新的字段"}), 400
+    if 'kokoro_enabled' in data and type(data['kokoro_enabled']) is not bool:
+        return jsonify({'error': 'kokoro_enabled 必须为 true 或 false。'}), 400
     try:
-        _save_app_config(cfg)
+        with interprocess_file_lock(_APP_CONFIG_FILE.with_suffix('.settings.lock')):
+            cfg = _read_app_config_strict()
+            if "deepseek_api_key" in data:
+                new_key = str(data["deepseek_api_key"] or "").strip()
+                cfg["deepseek_api_key"] = _encrypt_deepseek_for_config(new_key) if new_key else ''
+            if "article_ai_extract_enabled" in data:
+                cfg["article_ai_extract_enabled"] = bool(data["article_ai_extract_enabled"])
+            if 'kokoro_enabled' in data:
+                cfg['kokoro_enabled'] = data['kokoro_enabled']
+            _save_app_config(cfg)
+    except PersistentStateLoadError:
+        return jsonify({'error': '配置文件暂时无法读取，原文件已保留，无法覆盖保存。'}), 503
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         logger.error("保存 config.json 失败: %s", e)
         return jsonify({"error": "保存失败"}), 500
     logger.info("管理员更新了 config.json")
-    return jsonify({"message": "配置已保存"}), 200
+    if data.get('kokoro_enabled') is False:
+        from dictation_audio import reset_worker
+        try:
+            reset_worker()
+        except Exception:
+            logger.warning('Kokoro worker关停请求未完成，管理员开关已保持关闭')
+    return jsonify({"message": "配置已保存", **_kokoro_admin_status(cfg)}), 200
 
 
 @app.route('/api/admin/system-broadcast', methods=['GET'])
