@@ -75,6 +75,10 @@
 #english-dictation-section .english-dictation-text-button:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 4px; }
 #english-dictation-section .english-dictation-text-button:disabled { opacity: .5; cursor: default; }
 #english-dictation-section .english-dictation-editor-heading { margin-bottom: 20px; }
+#english-dictation-section .english-dictation-lesson-heading { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+#english-dictation-section #english-dictation-editor > .english-dictation-editor-heading > div { min-width: 0; }
+#english-dictation-section .english-dictation-lesson-heading > h3 { min-width: 0; overflow-wrap: anywhere; }
+#english-dictation-section .english-dictation-lesson-heading > button { flex-shrink: 0; }
 #english-dictation-section .english-dictation-editor-heading h3 { font-size: 22px; line-height: 1.65; font-weight: 800; }
 #english-dictation-section .english-dictation-editor-heading > span { color: var(--muted); font-size: 11px; white-space: nowrap; }
 #english-dictation-section .english-dictation-field-label { font-size: 13px; }
