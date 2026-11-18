@@ -22,6 +22,7 @@
     let books = [], lessons = [], summaries = new Map(), expandedUnits = new Set(), initializedBooks = new Set();
     let bookId = '', lesson = null, wordlist = null, raw = '', conflict = null;
     let pendingSpoken = new Map(), spokenEditor = null;
+    const practiceSelections = new Map();
     let mistakeSpokenPending = new Map(), mistakeSpokenSaving = false;
     const backupMemory = new Map();
     const VOICE_KEY = 'itorange-english-dictation-voice';
@@ -181,6 +182,36 @@
     function unchanged(words) {
         return !!wordlist && JSON.stringify(words) === JSON.stringify(cloneWords(wordlist.words || []));
     }
+    function practiceSelection(words) {
+        const key = JSON.stringify([bookId, lesson?.id]);
+        if (!practiceSelections.has(key)) practiceSelections.set(key, new Map());
+        const choices = practiceSelections.get(key);
+        const present = new Set(words.map((word) => word.text));
+        for (const text of choices.keys()) if (!present.has(text)) choices.delete(text);
+        for (const word of words) if (!choices.has(word.text)) choices.set(word.text, true);
+        return choices;
+    }
+    function selectedPracticeWords(words) {
+        const choices = practiceSelection(words);
+        return words.filter((word) => choices.get(word.text));
+    }
+    function renderPracticeControls() {
+        const blocked = loading || saving || mistakeSpokenSaving || directAddBusy || !!conflict || !wordlist;
+        let words = [];
+        let valid = true;
+        try { words = wordlist ? parseWords(raw).words : []; }
+        catch (_) { valid = false; }
+        const count = valid && wordlist ? selectedPracticeWords(words).length : 0;
+        el('english-dictation-selection-count').textContent = valid
+            ? `已选 ${count} / ${words.length} 条默写内容` : '请先修正上方清单内容';
+        el('english-dictation-select-all').disabled = blocked || !valid || !words.length;
+        el('english-dictation-clear-selection').disabled = blocked || !valid || !count;
+        el('english-dictation-start-selected').disabled = blocked || !valid || !count;
+        el('english-dictation-start').disabled = blocked || !valid || !count;
+        for (const input of el('english-dictation-word-preview').querySelectorAll('input[data-action="select-word"]')) {
+            input.disabled = blocked;
+        }
+    }
     function removeBackup() {
         if (!boundStudent || !bookId || !lesson) return;
         backupMemory.set(backupKey(), null);
@@ -333,6 +364,7 @@
         }
         refreshCatalog.hidden = !catalogUpdated; refreshCatalog.disabled = blocked;
         for (const control of el('english-dictation-word-preview').querySelectorAll('button, input')) control.disabled = blocked || !!conflict;
+        renderPracticeControls();
         el('english-dictation-resume').disabled = directAddBusy;
         el('english-dictation-end-run').disabled = directAddBusy;
         renderMistakeControls();
@@ -480,12 +512,25 @@
         container.replaceChildren();
         try {
             const result = parseWords(raw);
+            const choices = wordlist ? practiceSelection(result.words) : new Map();
             el('english-dictation-word-count').textContent = `${result.words.length} 条不同内容${result.duplicates ? `，已合并 ${result.duplicates} 个重复项` : ''} · 每份清单最多 400 条`;
             for (const word of result.words) {
                 const ctx = capture(true);
                 const chip = node('div', '', 'english-dictation-word-chip');
+                const choice = node('label', '', 'english-dictation-word-choice');
+                const checkbox = node('input'); checkbox.type = 'checkbox';
+                checkbox.dataset.action = 'select-word'; checkbox.dataset.word = word.text;
+                checkbox.checked = choices.get(word.text);
+                checkbox.setAttribute('aria-label', `默写 ${word.text}`);
                 const label = node('span', word.text);
                 if (word.spoken_text !== word.text) label.appendChild(node('small', `朗读：${word.spoken_text}`));
+                choice.append(checkbox, label);
+                checkbox.addEventListener('change', () => {
+                    if (!visible() || loading || saving || mistakeSpokenSaving || directAddBusy || conflict || !current(ctx)
+                            || !container.contains(chip)) return;
+                    practiceSelection(parseWords(raw).words).set(word.text, checkbox.checked);
+                    renderPracticeControls();
+                });
                 const play = node('button', '试听');
                 play.type = 'button';
                 play.setAttribute('aria-label', `试听 ${word.text}`);
@@ -493,11 +538,12 @@
                     if (!visible() || loading || saving || !current(ctx)) return;
                     speakWords(word, 1, 'preview');
                 });
-                chip.append(label, play, spokenButton(word));
+                chip.append(choice, play, spokenButton(word));
                 const form = spokenForm(word); if (form) chip.appendChild(form);
                 container.appendChild(chip);
             }
         } catch (error) { el('english-dictation-word-count').textContent = error.message; }
+        renderPracticeControls();
     }
     function unitLabel(unit) {
         const label = node('span', '', 'english-dictation-unit-label');
@@ -1215,16 +1261,25 @@
         prepareAudio(snapshot);
         message(); showView('player'); renderPlayer();
     }
-    async function start() {
-        if (loading || saving || directAddBusy || !wordlist || conflict || !visible()) return;
+    async function startPractice(saveFirst) {
+        if (loading || saving || directAddBusy || mistakeSpokenSaving || !wordlist || conflict || !visible()) return;
+        let selected;
+        try { selected = selectedPracticeWords(parseWords(raw).words); }
+        catch (error) { preserveDraft(); message(error.message, true); return; }
+        if (!selected.length) { message('请先勾选至少一条需要默写的内容。', true); return; }
         const ctx = capture(true), startingView = viewSequence;
-        if (!await save() || !current(ctx) || startingView !== viewSequence || !visible()) return;
+        const chosen = new Set(selected.map((word) => word.text));
+        if (saveFirst) {
+            if (!await save() || !current(ctx) || startingView !== viewSequence || !visible()) return;
+            selected = wordlist.words.filter((word) => chosen.has(word.text));
+        } else preserveDraft();
+        if (!selected.length) { message('所选内容已变化，请重新勾选后开始。', true); return; }
         const source = { book_id: bookId, lesson_id: lesson.id, title: lesson.title, number: lesson.number, unit: lesson.unit };
-        const words = cloneWords(wordlist.words).map((word) => ({ ...word, sources: cloneSources([source]) }));
-        if (!words.length) { message('先录入至少一条，再开始默写。', true); return; }
+        const words = cloneWords(selected).map((word) => ({ ...word, sources: cloneSources([source]) }));
         makeRun(words, { ...playbackSettings(), number: lesson.number, title: sourceName(source), kind: 'lesson',
             book_id: source.book_id, lesson_id: source.lesson_id });
     }
+    function start() { return startPractice(true); }
     function playCurrent() {
         if (run && !run.completed && !speaking) speakWords(run.words[run.index], run.repetitions, 'player');
     }
@@ -1339,6 +1394,7 @@
         books = []; lessons = []; summaries = new Map(); expandedUnits = new Set(); initializedBooks = new Set();
         bookId = ''; lesson = null; wordlist = null; raw = ''; conflict = null; run = null; voiceChosen = !!savedVoice;
         pendingSpoken = new Map(); spokenEditor = null; mistakeSpokenPending = new Map(); mistakeSpokenSaving = false;
+        practiceSelections.clear();
         mistakeSequence += 1; homeMode = 'lessons'; mistakeItems = []; mistakeSelections = new Set(); mistakeExpanded = new Set();
         mistakeLoading = false; mistakeLoaded = false; mistakeDeleting = false; mistakeStatus = ''; mistakeStatusError = false;
         el('english-dictation-book').replaceChildren(); el('english-dictation-lessons').replaceChildren();
@@ -1418,6 +1474,18 @@
     });
     el('english-dictation-save').addEventListener('click', save);
     el('english-dictation-start').addEventListener('click', start);
+    el('english-dictation-start-selected').addEventListener('click', () => startPractice(false));
+    function selectPractice(all) {
+        if (loading || saving || directAddBusy || mistakeSpokenSaving || conflict || !wordlist || !visible()) return;
+        try {
+            const words = parseWords(raw).words;
+            const choices = practiceSelection(words);
+            for (const word of words) choices.set(word.text, all);
+            renderWords();
+        } catch (error) { message(error.message, true); }
+    }
+    el('english-dictation-select-all').addEventListener('click', () => selectPractice(true));
+    el('english-dictation-clear-selection').addEventListener('click', () => selectPractice(false));
     el('english-dictation-copy-local').addEventListener('click', copyLocal);
     el('english-dictation-load-cloud').addEventListener('click', inspectCloud);
     el('english-dictation-keep-cloud').addEventListener('click', () => { if (conflict) el('english-dictation-discard-confirm').hidden = false; });

@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/static/assets/css/style.5a475613d811f533.css">
     <link rel="stylesheet" href="/static/assets/css/exam-preparation.1b272a86e5061bea.css">
     <link rel="stylesheet" href="/static/assets/css/subject-switch.4a8cdd20b9fb56be.css">
-    <link rel="stylesheet" href="/static/assets/css/english-dictation.77a2bdc7a5004ee2.css">
+    <link rel="stylesheet" href="/static/assets/css/english-dictation.3ab0c73bab284c03.css">
 </head>
 <body>
     <div id="app">
@@ -469,8 +469,9 @@
                                     <div id="english-dictation-conflict" class="english-dictation-conflict" role="alert" hidden><strong>这份清单已有更新</strong><p>本机未保存的内容仍保留着。可以先复制自己的这一份，再查看云端清单内容。</p><div><button id="english-dictation-copy-local" class="english-dictation-button english-dictation-button-light" type="button">复制本机清单内容</button><button id="english-dictation-load-cloud" class="english-dictation-button english-dictation-button-light" type="button">查看云端清单内容</button></div><pre id="english-dictation-cloud-preview" hidden></pre><button id="english-dictation-keep-cloud" class="english-dictation-button english-dictation-button-light" type="button">使用云端这一份</button><div id="english-dictation-discard-confirm" hidden><p>确认后会放弃本机尚未保存的修改，请先复制需要保留的内容。</p><button id="english-dictation-confirm-cloud" class="english-dictation-button" type="button">确认放弃本机修改，使用云端稿</button></div></div>
                                     <label class="english-dictation-field-label" for="english-dictation-words">要默写的单词或句子</label><textarea id="english-dictation-words" rows="7" maxlength="440000" spellcheck="false" placeholder="apple&#10;beautiful&#10;Where is my schoolbag?"></textarea><p id="english-dictation-word-count" class="english-dictation-note" role="status"></p>
                                     <p class="english-dictation-note">每行一条，可混合单词、短语和完整句子。空格、逗号、句号和竖线都保留在本条中；请保留句子的大小写和标点。每条最多 500 个字符，每份清单最多 400 条。</p><p class="english-dictation-note">每条内容可点“修正读音”，试听后保存，默写原文不变；保存读音会同时保存当前清单。错题本里的读音可单独修正。</p>
-                                    <div id="english-dictation-word-preview" class="english-dictation-word-preview"></div>
-                                    <div class="english-dictation-editor-actions"><button id="english-dictation-save" class="english-dictation-button english-dictation-button-light" type="button">保存清单内容</button><button id="english-dictation-start" class="english-dictation-button" type="button">保存并开始默写</button></div><p class="english-dictation-note">条目会保存在当前学生所选课本的清单里。开始后会隐藏清单内容，请在纸上书写。</p>
+                                    <div class="english-dictation-practice-selection"><span id="english-dictation-selection-count" class="english-dictation-note" role="status" aria-live="polite">已选 0 / 0 条默写内容</span><button id="english-dictation-select-all" class="english-dictation-text-button" type="button">全选</button><button id="english-dictation-clear-selection" class="english-dictation-text-button" type="button">清空选择</button></div>
+                                    <div id="english-dictation-word-preview" class="english-dictation-word-preview" role="group" aria-label="选择本次默写内容"></div>
+                                    <div class="english-dictation-editor-actions"><button id="english-dictation-save" class="english-dictation-button english-dictation-button-light" type="button">保存清单内容</button><button id="english-dictation-start-selected" class="english-dictation-button english-dictation-button-light" type="button">开始默写</button><button id="english-dictation-start" class="english-dictation-button" type="button">保存并开始默写</button></div><p class="english-dictation-note">只默写上方勾选的内容。“开始默写”不保存本次编辑；“保存并开始默写”先保存整份清单，再默写勾选项。新增内容默认勾选。开始后会隐藏清单，请在纸上书写。</p>
                                 </div>
                             </div>
                         </div>
@@ -1598,7 +1599,7 @@
     <script src="/static/assets/js/performance.cabc7fdc8aff1192.js" defer></script>
     <script src="/static/assets/js/app.9e01ae1beb52446b.js" defer></script>
     <script src="/static/assets/js/english-dictation-host.10c6b22669f3fff1.js" defer></script>
-    <script src="/static/assets/js/english-dictation.7972c0a8fae9da1d.js" defer></script>
+    <script src="/static/assets/js/english-dictation.4fa6aa745e7863c9.js" defer></script>
     <script src="/static/assets/js/exam-preparation.630db8337157ce1e.js" defer></script>
     <script src="/static/assets/js/chat-sidebar.8edef40ea8fe6819.js" defer></script>
     <script src="/static/assets/js/textbook.0528bf065ba0644e.js" defer></script>

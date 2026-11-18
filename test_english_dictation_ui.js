@@ -1251,3 +1251,170 @@ test('direct-add textbook selection keeps Unit labels and clears old choices whe
     await ui.field('english-dictation-mistakes-add').fire('click');
     assert.deepEqual(ui.field('english-dictation-mistakes-add-words').querySelectorAll('input').map((input) => input.value), ['apple', 'Where is my schoolbag?']);
 });
+
+function dictationSelectionInputs(ui) {
+    return ui.field('english-dictation-word-preview').querySelectorAll('input')
+        .filter((input) => input.dataset.action === 'select-word');
+}
+
+async function chooseDictationEntries(ui, entries) {
+    for (const input of dictationSelectionInputs(ui)) {
+        input.checked = entries.includes(input.dataset.word);
+        await input.fire('change');
+    }
+}
+
+test('direct English dictation freezes only selected draft entries without saving or discarding the draft', async () => {
+    const storage = new Map();
+    const ui = englishDictationUI({ storage, words: ['old word', 'already learned'] });
+    await ui.api.open();
+    const raw = 'old word\nalready learned\nA newly added sentence.';
+    await ui.type('english-dictation-words', raw);
+    await chooseDictationEntries(ui, ['A newly added sentence.']);
+    await ui.type('english-dictation-repetitions', '1', 'change');
+    await ui.field('english-dictation-start-selected').fire('click');
+    assert.equal(ui.field('english-dictation-player').hidden, false);
+    assert.equal(ui.field('english-dictation-position').textContent, '第 1 条 / 共 1 条');
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 0);
+    assert.deepEqual(ui.state.wordlists.get('default-list').words.map((word) => word.text), ['old word', 'already learned']);
+    assert.equal(ui.state.wordlists.get('default-list').revision, 1);
+    const draft = JSON.parse(storage.get(`itorange-english-dictation-draft:alice:${bookId}:default-list`));
+    assert.equal(draft.raw, raw);
+    await ui.field('english-dictation-play').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'A newly added sentence.' });
+    await ui.finishItem(); await ui.field('english-dictation-next').fire('click');
+    assert.equal(ui.field('english-dictation-review-list').querySelectorAll('label').length, 1);
+    await ui.field('english-dictation-finish-back').fire('click');
+    assert.equal(ui.field('english-dictation-words').value, raw);
+    assert.deepEqual(dictationSelectionInputs(ui).filter((input) => input.checked).map((input) => input.dataset.word), ['A newly added sentence.']);
+});
+
+test('save-and-start saves the entire English list while practicing only its selected subset', async () => {
+    const ui = englishDictationUI({ words: ['old word', 'known phrase'] }); await ui.api.open();
+    await ui.type('english-dictation-words', 'old word\nknown phrase\nnew phrase');
+    await chooseDictationEntries(ui, ['new phrase']);
+    await ui.start();
+    const saves = ui.state.calls.filter((call) => call.method === 'PUT');
+    assert.equal(saves.length, 1);
+    assert.deepEqual(saves[0].body.words.map((word) => word.text), ['old word', 'known phrase', 'new phrase']);
+    assert.equal(ui.state.wordlists.get('default-list').revision, 2);
+    assert.equal(ui.field('english-dictation-position').textContent, '第 1 条 / 共 1 条');
+    await ui.field('english-dictation-play').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'new phrase' });
+});
+
+test('an empty English dictation selection disables both starts and cannot accidentally save a draft', async () => {
+    const ui = englishDictationUI(); await ui.api.open();
+    await ui.type('english-dictation-words', 'apple\nWhere is my schoolbag?\nnew word');
+    await ui.field('english-dictation-clear-selection').fire('click');
+    assert.ok(dictationSelectionInputs(ui).every((input) => !input.checked));
+    assert.equal(ui.field('english-dictation-start-selected').disabled, true);
+    assert.equal(ui.field('english-dictation-start').disabled, true);
+    assert.equal(ui.field('english-dictation-save').disabled, false);
+    await ui.field('english-dictation-start-selected').fire('click'); await ui.start();
+    assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+    assert.equal(ui.field('english-dictation-player').hidden, true);
+    await ui.field('english-dictation-select-all').fire('click');
+    assert.ok(dictationSelectionInputs(ui).every((input) => input.checked));
+    assert.equal(ui.field('english-dictation-start-selected').disabled, false);
+    assert.equal(ui.field('english-dictation-start').disabled, false);
+});
+
+test('appending English entries selects new text while retaining deselected existing words through reordering', async () => {
+    const ui = englishDictationUI({ words: ['old word', 'still learning'] }); await ui.api.open();
+    assert.ok(dictationSelectionInputs(ui).every((input) => input.checked));
+    await chooseDictationEntries(ui, ['still learning']);
+    await ui.type('english-dictation-words', 'still learning\nold word\nNew sentence.\nNew sentence.');
+    const checks = dictationSelectionInputs(ui);
+    assert.deepEqual(checks.map((input) => [input.dataset.word, input.checked]), [
+        ['still learning', true], ['old word', false], ['New sentence.', true],
+    ]);
+    assert.equal(checks.length, 3, 'Repeated text has one selectable preview row');
+    assert.equal(checks[0].getAttribute('aria-label'), '默写 still learning');
+    assert.match(ui.field('english-dictation-selection-count').textContent, /2/);
+    await ui.type('english-dictation-words', 'New sentence.\nold word');
+    assert.deepEqual(dictationSelectionInputs(ui).map((input) => [input.dataset.word, input.checked]), [
+        ['New sentence.', true], ['old word', false],
+    ]);
+});
+
+test('English preview rerenders and saved pronunciation corrections retain each existing checkbox choice', async () => {
+    const ui = englishDictationUI({ words: ['read', 'known word'] }); await ui.api.open();
+    await chooseDictationEntries(ui, ['read']);
+    const editor = await editEnglishPronunciation(ui, 'read');
+    editor.input.value = 'red'; await editor.input.fire('input'); await editor.button('save').fire('click');
+    assert.deepEqual(dictationSelectionInputs(ui).map((input) => [input.dataset.word, input.checked]), [
+        ['read', true], ['known word', false],
+    ]);
+    assert.equal(ui.state.wordlists.get('default-list').words[0].spoken_text, 'red');
+    const priorSaves = ui.state.calls.filter((call) => call.method === 'PUT').length;
+    await ui.field('english-dictation-start-selected').fire('click');
+    await ui.field('english-dictation-play').fire('click');
+    assert.deepEqual(ui.state.audioRequests.at(-1).body, { text: 'red' });
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, priorSaves);
+});
+
+test('English selections stay local to each list and cannot cross a student reset', async () => {
+    const ui = englishDictationUI({ words: ['shared phrase', 'first only'] });
+    ui.state.wordlists.set('custom-2', { book_id: bookId, lesson_id: 'custom-2',
+        words: ['shared phrase', 'second only'].map((text) => ({ text, spoken_text: text })), word_count: 2, revision: 1 });
+    await ui.api.open(); await chooseDictationEntries(ui, ['first only']);
+    await ui.chooseList('custom-2');
+    assert.ok(dictationSelectionInputs(ui).every((input) => input.checked));
+    await chooseDictationEntries(ui, ['shared phrase']);
+    await ui.chooseList('default-list');
+    assert.deepEqual(dictationSelectionInputs(ui).filter((input) => input.checked).map((input) => input.dataset.word), ['first only']);
+    await ui.chooseList('custom-2');
+    assert.deepEqual(dictationSelectionInputs(ui).filter((input) => input.checked).map((input) => input.dataset.word), ['shared phrase']);
+    ui.api.reset();
+    ui.state.session = { token: 'bob-token', username: 'bob', student: 'bob', isParent: false, generation: 2 };
+    const bobWords = ['shared phrase', 'second only'].map((text) => ({ text, spoken_text: text }));
+    ui.state.wordlistsByStudent.set('bob', new Map([[bookId, new Map([['default-list', {
+        book_id: bookId, lesson_id: 'default-list', words: bobWords, word_count: 2, revision: 1,
+    }]])]]));
+    await ui.api.open();
+    assert.deepEqual(dictationSelectionInputs(ui).map((input) => [input.dataset.word, input.checked]), [
+        ['shared phrase', true], ['second only', true],
+    ]);
+    assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+});
+
+test('failed English save-and-start keeps selected entries and never opens the player', async () => {
+    const ui = englishDictationUI({ words: ['old word'] }); await ui.api.open();
+    await ui.type('english-dictation-words', 'old word\nnew word');
+    await chooseDictationEntries(ui, ['new word']);
+    ui.state.routes[wordPath()] = (call) => {
+        if (call.method === 'PUT') throw new Error('暂时无法保存');
+        return ui.state.defaultReply(call);
+    };
+    await ui.start();
+    assert.equal(ui.field('english-dictation-player').hidden, true);
+    assert.deepEqual(dictationSelectionInputs(ui).map((input) => [input.dataset.word, input.checked]), [
+        ['old word', false], ['new word', true],
+    ]);
+    assert.match(ui.field('english-dictation-message').textContent, /保存/);
+    assert.equal(ui.field('english-dictation-words').value, 'old word\nnew word');
+    assert.equal(ui.state.wordlists.get('default-list').revision, 1);
+    assert.equal(ui.field('english-dictation-start-selected').disabled, false);
+    await ui.field('english-dictation-start-selected').fire('click');
+    assert.equal(ui.field('english-dictation-player').hidden, false);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 1, 'Retrying practice directly never repeats the failed cloud write');
+});
+
+test('English practice selections remain scoped to their textbook when identical words appear in another book', async () => {
+    const ui = englishDictationUI({ books: englishBooks(), words: ['shared phrase', 'legacy only'] });
+    ui.state.wordlistsByBook.set(textbookId, new Map([['unit-01', textbookList('unit-01', ['shared phrase', 'unit only'], 1)]]));
+    await ui.api.open(); await ui.chooseList('unit-01');
+    await chooseDictationEntries(ui, ['unit only']);
+    await ui.chooseBook(bookId);
+    assert.ok(dictationSelectionInputs(ui).every((input) => input.checked));
+    await chooseDictationEntries(ui, ['shared phrase']);
+    await ui.chooseBook(textbookId); await ui.chooseList('unit-01');
+    assert.deepEqual(dictationSelectionInputs(ui).map((input) => [input.dataset.word, input.checked]), [
+        ['shared phrase', false], ['unit only', true],
+    ]);
+    await ui.chooseBook(bookId);
+    assert.deepEqual(dictationSelectionInputs(ui).map((input) => [input.dataset.word, input.checked]), [
+        ['shared phrase', true], ['legacy only', false],
+    ]);
+});
