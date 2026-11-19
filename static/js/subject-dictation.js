@@ -16,10 +16,11 @@
         lesson_id: source.lesson_id, title: source.title, number: source.number }));
     const cloneWords = (words) => words.map((word) => ({ text: word.text, spoken_text: word.spoken_text || word.text,
         ...(word.sources ? { sources: cloneSources(word.sources) } : {}) }));
-    let generation = 0, requestSequence = 0, lessonSequence = 0;
+    let generation = 0, requestSequence = 0, lessonSequence = 0, answerSequence = 0, viewSequence = 0;
     let boundStudent = '', boundToken = '', active = false, loaded = false, loading = false, saving = false;
     let books = [], lessons = [], summaries = new Map(), expandedUnits = new Set();
     let bookId = '', lesson = null, wordlist = null, raw = '', conflict = null;
+    let practiceSelections = new Map();
     let run = null, voices = [], speechEpoch = 0, speaking = false, speechMode = '', utterance = null;
     let repeatTimer = null, watchdog = null, suppressSpaceUp = false;
     let homeMode = 'lessons', mistakeItems = [], mistakeSelections = new Set(), mistakeExpanded = new Set();
@@ -172,6 +173,30 @@
     function unchanged(words) {
         return !!wordlist && JSON.stringify(words) === JSON.stringify(cloneWords(wordlist.words || []));
     }
+    function practiceSelection(words) {
+        const key = JSON.stringify([bookId, lesson?.id]);
+        if (!practiceSelections.has(key)) practiceSelections.set(key, new Map());
+        const choices = practiceSelections.get(key), present = new Set(words.map((word) => word.text));
+        for (const text of choices.keys()) if (!present.has(text)) choices.delete(text);
+        for (const word of words) if (!choices.has(word.text)) choices.set(word.text, true);
+        return choices;
+    }
+    function selectedPracticeWords(words) {
+        const choices = practiceSelection(words);
+        return words.filter((word) => choices.get(word.text));
+    }
+    function renderPracticeControls() {
+        const blocked = loading || saving || mistakeDeleting || directAdd.loading || directAdd.saving || !!conflict || !wordlist;
+        let words = [], valid = true;
+        try { words = wordlist ? parseWords(raw).words : []; } catch (_) { valid = false; }
+        const count = valid && wordlist ? selectedPracticeWords(words).length : 0;
+        el('dictation-selection-count').textContent = valid ? `已选 ${count} / ${words.length} 个词语` : '请先修正词表内容';
+        el('dictation-select-all').disabled = blocked || !valid || !words.length;
+        el('dictation-clear-selection').disabled = blocked || !valid || !count;
+        el('dictation-start-selected').disabled = blocked || !valid || !count;
+        el('dictation-start').disabled = blocked || !valid || !count;
+        for (const input of el('dictation-word-preview').querySelectorAll('input[data-action="select-word"]')) input.disabled = blocked;
+    }
     function removeBackup() {
         if (!boundStudent || !bookId || !lesson) return;
         try { localStorage.removeItem(backupKey()); } catch (_) { /* Cloud saving still works without local storage. */ }
@@ -212,6 +237,8 @@
             : `还有一轮默写未结束：第 ${run.index + 1} 个／共 ${run.words.length} 个。`;
     }
     function showView(name) {
+        viewSequence += 1;
+        if (name !== 'player') clearAnswer();
         el('dictation-home').hidden = name !== 'home';
         el('dictation-player').hidden = name !== 'player';
         el('dictation-finish').hidden = name !== 'finish';
@@ -233,6 +260,7 @@
         el('dictation-keep-cloud').disabled = saving || loading;
         el('dictation-confirm-cloud').disabled = saving || loading;
         for (const control of el('dictation-panel').querySelectorAll('[data-pronunciation-control]')) control.disabled = blocked || !!conflict;
+        renderPracticeControls();
         renderMistakeControls();
     }
     function editKey(edit) { return JSON.stringify([edit.kind, edit.book, edit.lessonId, edit.text]); }
@@ -354,12 +382,24 @@
         container.replaceChildren();
         try {
             const result = parseWords(raw);
+            const choices = wordlist ? practiceSelection(result.words) : new Map();
             if (pronunciationEdit?.kind === 'wordlist' && (!editCurrent(pronunciationEdit) || !result.words.some((word) => word.text === pronunciationEdit.text))) pronunciationEdit = null;
             el('dictation-word-count').textContent = `${result.words.length} 个不同词语${result.duplicates ? `，已合并 ${result.duplicates} 个重复项` : ''} · 每课最多 200 个`;
             for (const word of result.words) {
+                const ctx = capture(true);
                 const chip = node('div', '', 'dictation-word-chip');
+                const choice = node('label', '', 'dictation-word-choice');
+                const checkbox = node('input'); checkbox.type = 'checkbox';
+                checkbox.dataset.action = 'select-word'; checkbox.dataset.word = word.text;
+                checkbox.checked = choices.get(word.text);
+                checkbox.setAttribute('aria-label', `默写 ${word.text}`);
                 const label = node('span', word.text);
                 if (word.spoken_text !== word.text) label.appendChild(node('small', `朗读：${word.spoken_text}`));
+                choice.append(checkbox, label);
+                checkbox.addEventListener('change', () => {
+                    if (!active || loading || saving || mistakeDeleting || directAdd.loading || directAdd.saving || conflict || !current(ctx) || !container.contains(chip)) return;
+                    practiceSelection(parseWords(raw).words).set(word.text, checkbox.checked); renderPracticeControls();
+                });
                 const play = node('button', '试听');
                 play.type = 'button';
                 play.setAttribute('aria-label', `试听 ${word.text}`);
@@ -367,12 +407,13 @@
                     if (!active || loading || saving || !signedIn()) return;
                     speakWords(word, 1, 'preview');
                 });
-                chip.append(label, play, pronunciationButton(word, 'wordlist'));
+                chip.append(choice, play, pronunciationButton(word, 'wordlist'));
                 const form = pronunciationForm(word, 'wordlist');
                 if (form) { chip.classList.add('dictation-word-chip-editing'); chip.appendChild(form); }
                 container.appendChild(chip);
             }
         } catch (error) { el('dictation-word-count').textContent = error.message; }
+        renderPracticeControls();
     }
     function renderDirectory() {
         const container = el('dictation-lessons');
@@ -922,18 +963,99 @@
         if (interruptedPlayer && run) { run.read = false; run.status = '播放已暂停，点播放重听本词'; }
         try { window.speechSynthesis?.cancel(); } catch (_) { /* No speech queue. */ }
     }
+    function clearAnswer() {
+        answerSequence += 1;
+        if (run) { run.answerVisible = false; run.answerBusy = false; run.answerStatus = ''; run.answerError = false; }
+        el('dictation-answer').hidden = true;
+        el('dictation-answer-text').textContent = '';
+        el('dictation-answer-status').textContent = '';
+        el('dictation-answer-show').setAttribute('aria-expanded', 'false');
+    }
+    function currentAnswerSaved() {
+        const word = run?.words[run.index];
+        return !!word?.sources?.length && word.sources.every((source) => run.savedMistakes.has(sourceKey(source, word)));
+    }
+    function renderAnswer() {
+        const shown = !!run?.answerVisible && !run.completed && !el('dictation-player').hidden;
+        el('dictation-answer').hidden = !shown;
+        el('dictation-answer-show').setAttribute('aria-expanded', String(shown));
+        el('dictation-answer-text').textContent = shown ? run.words[run.index].text : '';
+        const saved = currentAnswerSaved();
+        el('dictation-answer-add').disabled = !shown || run.answerBusy || saved;
+        el('dictation-answer-add').textContent = run?.answerBusy ? '正在加入…' : saved ? '已加入错题本' : run?.answerError ? '重试加入错题本' : '加入错题本';
+        el('dictation-answer-skip').disabled = !!run?.answerBusy;
+        el('dictation-answer-status').textContent = shown ? run.answerStatus || (saved ? '这个词已加入错题本，原有读音会保留。' : '点击“加入错题本”才会保存，查看答案不会自动加入。') : '';
+        el('dictation-answer-status').classList.toggle('dictation-status-error', !!run?.answerError);
+    }
+    function showAnswer() {
+        if (!run || run.completed || run.answerBusy || !playbackVisible() || el('dictation-player').hidden || !current(capture())) return;
+        stopSpeech(); run.visited.add(run.index); run.answerViewed.add(run.index);
+        run.answerVisible = true; run.status = '已暂停在本词，可对照后选择是否加入错题本';
+        renderPlayer();
+    }
+    function hideAnswer() {
+        if (!run || run.answerBusy) return;
+        clearAnswer(); renderPlayer();
+    }
+    async function addCurrentMistake() {
+        if (!run?.answerVisible || run.completed || run.answerBusy || currentAnswerSaved() || !playbackVisible() || el('dictation-player').hidden || !current(capture())) return;
+        const ctx = capture(), target = run, index = run.index, sequence = ++answerSequence;
+        const word = cloneWords([run.words[index]])[0], groups = new Map();
+        for (const source of word.sources || []) {
+            if (target.savedMistakes.has(sourceKey(source, word))) continue;
+            const key = JSON.stringify([source.book_id, source.lesson_id]);
+            if (!groups.has(key)) groups.set(key, { book_id: source.book_id, lesson_id: source.lesson_id,
+                words: [{ text: word.text, spoken_text: word.spoken_text || word.text }] });
+        }
+        const items = Array.from(groups.values());
+        if (!items.length) { target.answerError = true; target.answerStatus = '本词缺少课文来源，尚未加入。请回对应课文重新开始。'; renderAnswer(); return; }
+        const attached = () => current(ctx) && active && run === target && target.index === index && sequence === answerSequence
+            && !target.completed && !el('dictation-player').hidden;
+        target.answerBusy = true; target.answerError = false; target.answerStatus = '正在加入错题本…'; renderPlayer();
+        try {
+            const result = await request('/mistakes', { method: 'POST', body: { preserve_existing: true, items } });
+            if (!attached()) return;
+            if (!Number.isInteger(result.added_count) || !Number.isInteger(result.existing_count) || result.added_count < 0 || result.existing_count < 0
+                    || result.added_count + result.existing_count !== items.length) throw new Error('保存结果未确认，请重试；不会重复加入。');
+            for (const source of word.sources) target.savedMistakes.add(sourceKey(source, word));
+            target.answerStatus = `已加入错题本：新增 ${result.added_count} 条，已有 ${result.existing_count} 条。`;
+            if (items.some((item) => item.book_id === bookId)) mistakeLoaded = false;
+        } catch (error) {
+            if (!attached()) return;
+            target.answerError = true; target.answerStatus = `${error.message || '暂时未能加入。'} 请点击“重试加入错题本”。`;
+        } finally { if (attached()) { target.answerBusy = false; renderPlayer(); } }
+    }
+    function jumpToWord() {
+        if (!run || run.completed || run.answerBusy || !playbackVisible() || el('dictation-player').hidden || !current(capture())) return;
+        const value = String(el('dictation-jump-index').value).trim(), position = Number(value);
+        if (!/^\d+$/u.test(value) || !Number.isSafeInteger(position) || position < 1 || position > run.words.length) {
+            message(`请输入 1～${run.words.length} 之间的词语序号。`, true); return;
+        }
+        stopSpeech(); clearAnswer(); run.index = position - 1; run.read = false;
+        run.status = `已跳到第 ${position} 个，点播放开始`; message(); renderPlayer();
+    }
     function renderPlayer() {
         if (!run) return;
         el('dictation-player-title').textContent = run.kind === 'mistakes' ? '错词复习' : run.number ? `第 ${run.number} 课 · 生词默写` : '生词默写';
         el('dictation-position').textContent = `第 ${run.index + 1} 个 / 共 ${run.words.length} 个`;
         el('dictation-progress').max = run.words.length;
-        el('dictation-progress').value = run.index;
+        el('dictation-progress').value = run.heard.size;
         el('dictation-play-status').textContent = run.status || (run.read ? '写好后，继续下一个' : '准备好后，点播放');
         el('dictation-player-settings').textContent = `正常语速 · 每词 ${run.repetitions} 遍${run.shuffled ? ' · 已打乱顺序' : ''}`;
+        el('dictation-player-instruction').textContent = run.answerVisible ? '按空格先收起答案，留在本词；想继续也可以点“下一个”。' : '在纸上写好后，按空格或点“下一个”。';
         el('dictation-play').textContent = run.read ? '再听一遍' : '播放本词';
-        el('dictation-play').disabled = speaking;
-        el('dictation-next').disabled = speaking || !run.read;
+        el('dictation-play').disabled = speaking || run.answerBusy;
+        el('dictation-next').disabled = speaking || run.answerBusy || !(run.read || run.answerViewed.has(run.index));
         el('dictation-next').textContent = run.index === run.words.length - 1 ? '完成并对照' : '下一个';
+        el('dictation-answer-show').disabled = !!run.answerBusy;
+        el('dictation-jump-index').max = run.words.length;
+        if (el('dictation-jump-index').dataset.runIndex !== String(run.index)) {
+            el('dictation-jump-index').value = String(run.index + 1);
+            el('dictation-jump-index').dataset.runIndex = String(run.index);
+        }
+        el('dictation-jump-index').disabled = !!run.answerBusy;
+        el('dictation-jump-go').disabled = !!run.answerBusy;
+        renderAnswer();
     }
     function playbackVisible() { return active && !el('dictation-panel').hidden && !document.hidden; }
     function speakWords(word, repetitions, mode) {
@@ -1084,7 +1206,7 @@
         void chooseCurrentVoiceRoute();
     }
     function makeRun(words, settings) {
-        stopSpeech();
+        stopSpeech(); clearAnswer();
         let snapshot = cloneWords(words);
         if (settings.shuffled) {
             for (let i = snapshot.length - 1; i > 0; i -= 1) {
@@ -1093,33 +1215,50 @@
             }
         }
         run = { ...settings, voiceSnapshot: settings.voiceSnapshot || (settings.voiceURI ? voices.find((voice) => (voice.voiceURI || voice.name) === settings.voiceURI) : null),
-            words: snapshot, index: 0, read: false, heard: new Set(), checked: new Set(),
+            words: snapshot, index: 0, read: false, heard: new Set(), visited: new Set(), answerViewed: new Set(), checked: new Set(),
+            answerVisible: false, answerBusy: false, answerStatus: '', answerError: false,
             savedMistakes: new Set(settings.savedMistakes || []), mistakeSaveBusy: false, saveError: false, saveMessage: '',
             completed: false, status: '准备好后，点播放' };
+        el('dictation-jump-index').value = '1'; el('dictation-jump-index').dataset.runIndex = '0';
         prepareAudio(snapshot);
         message(); showView('player'); renderPlayer();
     }
-    async function start() {
-        if (loading || saving || directAdd.loading || directAdd.saving || !wordlist || conflict) return;
-        const ctx = capture(true);
-        if (!await save() || !current(ctx)) return;
+    async function startPractice(saveFirst) {
+        if (loading || saving || directAdd.loading || directAdd.saving || !wordlist || conflict || !active || !current(capture(true))) return;
+        const ctx = capture(true), startingView = viewSequence;
+        let words;
+        try { words = selectedPracticeWords(parseWords(raw).words); }
+        catch (error) { message(error.message, true); return; }
+        if (!words.length) { message('先勾选至少一个词语，再开始默写。', true); return; }
+        const selectedTexts = new Set(words.map((word) => word.text));
+        if (saveFirst) {
+            if (!await save() || !current(ctx) || !active || viewSequence !== startingView || el('dictation-home').hidden || !playbackVisible()) return;
+            words = wordlist.words.filter((word) => selectedTexts.has(word.text));
+        } else {
+            preserveDraft();
+            if (!current(ctx)) return;
+        }
         const source = { book_id: bookId, lesson_id: lesson.id, title: lesson.title, number: lesson.number };
-        const words = cloneWords(wordlist.words).map((word) => ({ ...word, sources: cloneSources([source]) }));
+        words = cloneWords(words).map((word) => ({ ...word, sources: cloneSources([source]) }));
         if (!words.length) { message('先录入至少一个词语，再开始默写。', true); return; }
         makeRun(words, { ...playbackSettings(), number: lesson.number, title: lesson.title, kind: 'lesson',
             book_id: source.book_id, lesson_id: source.lesson_id });
     }
+    function start() { return startPractice(true); }
     function playCurrent() {
-        if (run && !run.completed && !speaking) speakWords(run.words[run.index], run.repetitions, 'player');
+        if (!run || run.completed || speaking || run.answerBusy || !playbackVisible() || el('dictation-player').hidden || !current(capture())) return;
+        clearAnswer(); run.visited.add(run.index);
+        speakWords(run.words[run.index], run.repetitions, 'player');
     }
     function next() {
-        if (!run || run.completed || speaking || !run.read || !active || !current(capture())) return;
+        if (!run || run.completed || speaking || run.answerBusy || !(run.read || run.answerViewed.has(run.index)) || !active || !current(capture())) return;
         if (run.index === run.words.length - 1) { finish(false); return; }
+        clearAnswer();
         run.index += 1; run.read = false; run.status = '正在准备下一词…';
         renderPlayer(); playCurrent();
     }
     function finish(early) {
-        if (!run || !current(capture())) return;
+        if (!run || run.answerBusy || !current(capture())) return;
         stopSpeech(); run.completed = true; run.early = !!early;
         renderFinish(); message(); showView('finish');
     }
@@ -1153,7 +1292,7 @@
     }
     function renderFinish() {
         if (!run) return;
-        el('dictation-finish-label').textContent = `${run.title}${run.kind === 'mistakes' ? ` · ${run.lessonCount} 篇课文` : ''} · ${run.words.length} 个词语${run.early ? '，本轮已提前结束；未听完的词语仅供对照，不能标错' : ''}。`;
+        el('dictation-finish-label').textContent = `${run.title}${run.kind === 'mistakes' ? ` · ${run.lessonCount} 篇课文` : ''} · 已完整听读 ${run.heard.size} / ${run.words.length} 个词语${run.early ? '，本轮已提前结束' : ''}${run.heard.size < run.words.length ? '；未练或未听完的词仅供对照，不能标错' : ''}。`;
         const list = el('dictation-review-list'); list.replaceChildren();
         for (const [index, word] of run.words.entries()) {
             const label = node('label', '', 'dictation-review-word');
@@ -1170,7 +1309,8 @@
             });
             const text = node('span', word.text);
             text.appendChild(node('small', (word.sources || []).map(sourceName).join('、'), 'dictation-review-origin'));
-            if (!heard) text.appendChild(node('small', '未听完，不能标错', 'dictation-review-origin'));
+            if (!heard) text.appendChild(node('small', !run.visited.has(index) ? '未练／已跳过，不能标错'
+                : run.answerViewed.has(index) ? '已查看答案，未听完，不能标错' : '未听完，不能标错', 'dictation-review-origin'));
             label.append(checkbox, text); list.appendChild(label);
         }
         renderFinishControls();
@@ -1220,7 +1360,7 @@
         boundStudent = ''; boundToken = ''; loaded = false; loading = false; saving = false;
         resetDirectAdd();
         books = []; lessons = []; summaries = new Map(); expandedUnits = new Set();
-        bookId = ''; lesson = null; wordlist = null; raw = ''; conflict = null; run = null;
+        bookId = ''; lesson = null; wordlist = null; raw = ''; conflict = null; run = null; practiceSelections = new Map();
         pronunciationEdit = null; pronunciationDrafts = new Map();
         mistakeSequence += 1; homeMode = 'lessons'; mistakeItems = []; mistakeSelections = new Set(); mistakeExpanded = new Set();
         mistakeLoading = false; mistakeLoaded = false; mistakeDeleting = false; mistakeStatus = ''; mistakeStatusError = false;
@@ -1300,6 +1440,16 @@
     });
     el('dictation-save').addEventListener('click', save);
     el('dictation-start').addEventListener('click', start);
+    el('dictation-start-selected').addEventListener('click', () => startPractice(false));
+    for (const [id, selected] of [['dictation-select-all', true], ['dictation-clear-selection', false]]) {
+        el(id).addEventListener('click', () => {
+            if (!active || loading || saving || mistakeDeleting || directAdd.loading || directAdd.saving || conflict || !wordlist || !current(capture(true))) return;
+            try {
+                const words = parseWords(raw).words, choices = practiceSelection(words);
+                words.forEach((word) => choices.set(word.text, selected)); renderWords();
+            } catch (error) { message(error.message, true); }
+        });
+    }
     el('dictation-copy-local').addEventListener('click', copyLocal);
     el('dictation-load-cloud').addEventListener('click', inspectCloud);
     el('dictation-keep-cloud').addEventListener('click', () => { if (conflict) el('dictation-discard-confirm').hidden = false; });
@@ -1315,6 +1465,10 @@
     el('dictation-refresh-voices').addEventListener('click', () => { detectVoices(); message(voices.length ? '普通话语音已就绪，可以试听或开始默写。' : '暂未检测到普通话语音，请先在设备中添加语音。', !voices.length); });
     el('dictation-play').addEventListener('click', playCurrent);
     el('dictation-next').addEventListener('click', next);
+    el('dictation-answer-show').addEventListener('click', showAnswer);
+    el('dictation-answer-add').addEventListener('click', addCurrentMistake);
+    el('dictation-answer-skip').addEventListener('click', hideAnswer);
+    el('dictation-jump-go').addEventListener('click', jumpToWord);
     el('dictation-player-exit').addEventListener('click', backHome);
     el('dictation-resume').addEventListener('click', () => {
         if (!run || !current(capture())) return;
@@ -1340,7 +1494,9 @@
     document.addEventListener('keydown', (event) => {
         if (!spaceTarget(event)) return;
         event.preventDefault(); event.stopPropagation(); suppressSpaceUp = true;
-        if (event.repeat || speaking) return;
+        if (event.repeat || run.answerBusy) return;
+        if (run.answerVisible) { hideAnswer(); return; }
+        if (speaking) return;
         if (run.read) next(); else playCurrent();
     }, true);
     document.addEventListener('keyup', (event) => {

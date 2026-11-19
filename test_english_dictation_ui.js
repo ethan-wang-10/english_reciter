@@ -1418,3 +1418,156 @@ test('English practice selections remain scoped to their textbook when identical
         ['shared phrase', true], ['legacy only', false],
     ]);
 });
+
+async function jumpEnglish(ui, index) {
+    await ui.type('english-dictation-jump-index', String(index));
+    await ui.field('english-dictation-jump-go').fire('click');
+}
+
+test('English current-answer reveal pauses speech, shows only this item and requires an explicit notebook action', async () => {
+    const ui = englishDictationUI({ words: ['apple', 'The second secret sentence.'] });
+    await ui.api.open(); await ui.start();
+    assert.equal(ui.field('english-dictation-answer').hidden, true);
+    assert.equal(ui.field('english-dictation-answer-text').textContent, '');
+    assert.doesNotMatch(ui.visibleText(), /apple|The second secret sentence/);
+    await ui.field('english-dictation-play').fire('click');
+    const audio = ui.state.currentAudio, late = audio.onended;
+    await ui.field('english-dictation-answer-show').fire('click');
+    assert.equal(audio.paused, true);
+    assert.equal(ui.field('english-dictation-answer-text').textContent, 'apple');
+    assert.match(ui.field('english-dictation-player-instruction').textContent, /空格先收起答案，留在本条/);
+    assert.doesNotMatch(ui.visibleText(), /The second secret sentence/);
+    late(); await ui.tick(1000);
+    assert.equal(ui.state.audioPlayed.length, 1);
+    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/mistakes').length, 0);
+    await ui.space();
+    assert.equal(ui.field('english-dictation-answer').hidden, true);
+    assert.match(ui.field('english-dictation-position').textContent, /第 1 条/);
+    assert.equal(ui.field('english-dictation-player-instruction').textContent, '在纸上写好后，按空格或点“下一条”。');
+    assert.equal(ui.state.audioPlayed.length, 1, 'Space closes the answer without playing or skipping');
+    await ui.field('english-dictation-answer-show').fire('click');
+    await ui.field('english-dictation-answer-skip').fire('click');
+    assert.equal(ui.field('english-dictation-answer-text').textContent, '');
+    await ui.field('english-dictation-next').fire('click');
+    assert.match(ui.field('english-dictation-position').textContent, /第 2 条/);
+    assert.equal(ui.field('english-dictation-answer').hidden, true);
+    await ui.finishItem(); await ui.field('english-dictation-next').fire('click');
+    assert.match(ui.field('english-dictation-finish-label').textContent, /共 2 条，已完整听过 1 条/);
+    const labels = ui.field('english-dictation-review-list').querySelectorAll('label');
+    assert.match(labels[0].textContent, /已查看答案，未听完/);
+    assert.equal(labels[0].querySelector('input').disabled, true);
+    assert.equal(labels[1].querySelector('input').disabled, false);
+});
+
+test('English jumps stop repeat timers, wait for manual play and never count skipped entries as heard', async () => {
+    const ui = englishDictationUI({ words: ['first', 'second', 'third', 'fourth'] });
+    await ui.api.open(); await ui.start(); await ui.field('english-dictation-play').fire('click');
+    const oldEnd = ui.state.currentAudio.onended;
+    await ui.finishAudio();
+    await jumpEnglish(ui, 3); oldEnd(); await ui.tick(2000);
+    assert.equal(ui.state.audioPlayed.length, 1, 'The canceled repeat cannot read the old or target item');
+    assert.match(ui.field('english-dictation-position').textContent, /第 3 条/);
+    assert.equal(ui.field('english-dictation-progress').value, 0);
+    assert.equal((await ui.space(ui.field('english-dictation-jump-index'))).defaultPrevented, false);
+    await ui.field('english-dictation-play').fire('click'); await ui.finishItem();
+    assert.equal(ui.field('english-dictation-progress').value, 1);
+    await ui.field('english-dictation-next').fire('click');
+    assert.equal(ui.state.audioRequests.at(-1).body.text, 'fourth');
+    const interrupted = ui.state.currentAudio;
+    await jumpEnglish(ui, 2); await ui.tick(2000); assert.equal(interrupted.paused, true);
+    const requests = ui.state.audioRequests.length;
+    assert.match(ui.field('english-dictation-position').textContent, /第 2 条/);
+    assert.equal(ui.field('english-dictation-progress').value, 1);
+    assert.equal(ui.state.audioRequests.length, requests);
+    await ui.field('english-dictation-player-exit').fire('click'); await ui.field('english-dictation-end-run').fire('click');
+    const labels = ui.field('english-dictation-review-list').querySelectorAll('label');
+    assert.match(labels[1].textContent, /未练／已跳过/);
+    assert.deepEqual(labels.map((row) => row.querySelector('input').disabled), [true, true, false, true]);
+    assert.match(ui.field('english-dictation-finish-label').textContent, /已完整听过 1 条/);
+});
+
+test('a parent explicitly adds a merged current answer to every frozen source without replacing existing corrected speech', async () => {
+    const phrase = 'A shared sentence.';
+    const ui = englishDictationUI({ isParent: true, mistakes: [
+        { lesson_id: 'default-list', words: [{ text: phrase, spoken_text: 'snapshot reading' }] },
+        { lesson_id: 'custom-2', words: [{ text: phrase, spoken_text: 'snapshot reading' }] },
+    ] });
+    await ui.api.open(); await ui.openMistakes(); await ui.chooseMistakeLessons(['default-list', 'custom-2']);
+    await ui.field('english-dictation-mistakes-start').fire('click'); await ui.field('english-dictation-answer-show').fire('click');
+    ui.state.seedMistakes([{ lesson_id: 'default-list', words: [{ text: phrase, spoken_text: 'newer corrected reading' }] }]);
+    const gate = deferred(); ui.state.routes[prefix + '/mistakes'] = async (call) => { await gate.promise; return ui.state.defaultReply(call); };
+    const pending = ui.field('english-dictation-answer-add').fire('click'); await ui.flush();
+    assert.equal(ui.field('english-dictation-jump-go').disabled, true);
+    assert.equal(ui.field('english-dictation-next').disabled, true);
+    assert.equal(ui.field('english-dictation-play').disabled, true);
+    await ui.field('english-dictation-answer-add').fire('click'); await ui.space();
+    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/mistakes').length, 1);
+    gate.resolve(); await pending;
+    const post = ui.state.calls.find((call) => call.url === prefix + '/mistakes');
+    assert.equal(post.body.preserve_existing, true);
+    assert.deepEqual(post.body.items.map((item) => item.lesson_id), ['default-list', 'custom-2']);
+    assert.ok(post.body.items.every((item) => item.words[0].text === phrase && item.words[0].spoken_text === 'snapshot reading'));
+    assert.equal(ui.state.mistakeGroups()[0].words[0].spoken_text, 'newer corrected reading');
+    assert.equal(ui.field('english-dictation-answer-add').disabled, true);
+    await ui.field('english-dictation-answer-add').fire('click');
+    assert.equal(ui.state.calls.filter((call) => call.url === prefix + '/mistakes').length, 1);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PUT').length, 0);
+    assert.equal(ui.state.audioRequests.length, 0);
+});
+
+test('current-answer save failures keep the visible answer for retry and late acknowledgements cannot mark another item or account', async () => {
+    const ui = englishDictationUI({ words: ['first private answer', 'second private answer'] });
+    await ui.api.open(); await ui.start(); await ui.field('english-dictation-answer-show').fire('click');
+    ui.state.routes[prefix + '/mistakes'] = () => { throw Object.assign(new Error('暂时无法加入'), { status: 503 }); };
+    await ui.field('english-dictation-answer-add').fire('click');
+    assert.equal(ui.field('english-dictation-answer').hidden, false);
+    assert.match(ui.field('english-dictation-answer-status').textContent, /保留.*重试/);
+    const gate = deferred(); ui.state.routes[prefix + '/mistakes'] = () => gate.promise;
+    const pending = ui.field('english-dictation-answer-add').fire('click'); await ui.flush();
+    const request = ui.state.calls.filter((call) => call.url === prefix + '/mistakes').at(-1);
+    ui.api.leaveView(); assert.equal(request.signal.aborted, true);
+    await ui.api.open(); await ui.field('english-dictation-resume').fire('click');
+    await jumpEnglish(ui, 2); await ui.field('english-dictation-answer-show').fire('click');
+    gate.resolve({ added_count: 1, existing_count: 0 }); await pending;
+    assert.equal(ui.field('english-dictation-answer-text').textContent, 'second private answer');
+    assert.equal(ui.field('english-dictation-answer-add').disabled, false);
+    const stale = deferred(); ui.state.routes[prefix + '/mistakes'] = () => stale.promise;
+    const saving = ui.field('english-dictation-answer-add').fire('click'); await ui.flush();
+    ui.api.reset(); ui.state.session = { token: 'bob-token', username: 'bob', student: 'bob', isParent: false, generation: 2 }; await ui.api.open();
+    stale.resolve({ added_count: 1, existing_count: 0 }); await saving;
+    assert.equal(ui.field('english-dictation-answer-text').textContent, '');
+    assert.equal(ui.field('english-dictation-answer-status').textContent, '');
+    assert.doesNotMatch(ui.visibleText(), /private answer/);
+});
+
+test('English jump numbers follow the shuffled round rather than the original list and invalid positions keep the current item', async () => {
+    const ui = englishDictationUI({ words: ['first source item', 'second source item', 'third source item'] });
+    await ui.api.open(); ui.field('english-dictation-shuffle').checked = true;
+    vm.runInContext('Math.random = () => 0', ui.context);
+    await ui.start(); await jumpEnglish(ui, 3);
+    assert.equal(ui.state.audioRequests.length, 0);
+    await ui.field('english-dictation-play').fire('click');
+    assert.equal(ui.state.audioRequests.at(-1).body.text, 'first source item');
+    await jumpEnglish(ui, 0);
+    assert.match(ui.field('english-dictation-position').textContent, /第 3 条/);
+    assert.match(ui.field('english-dictation-message').textContent, /1～3/);
+    await ui.field('english-dictation-answer-show').fire('click');
+    assert.equal(ui.field('english-dictation-answer-text').textContent, 'first source item');
+    await ui.field('english-dictation-play').fire('click');
+    assert.equal(ui.field('english-dictation-answer').hidden, true);
+    assert.equal(ui.field('english-dictation-answer-text').textContent, '');
+});
+
+test('a typed jump target survives audio status updates after focus moves to the jump button', async () => {
+    const ui = englishDictationUI({ words: ['one', 'two', 'three'] });
+    await ui.api.open(); await ui.start(); await ui.field('english-dictation-play').fire('click');
+    ui.field('english-dictation-jump-index').focus(); await ui.type('english-dictation-jump-index', '3');
+    ui.field('english-dictation-jump-go').focus();
+    await ui.finishAudio(); await ui.tick(700); await ui.finishAudio();
+    assert.equal(ui.field('english-dictation-jump-index').value, '3');
+    await ui.field('english-dictation-jump-go').fire('click');
+    assert.match(ui.field('english-dictation-position').textContent, /第 3 条/);
+    assert.equal(ui.state.audioRequests.length, 1, 'Jumping never autoplays the target');
+    await ui.field('english-dictation-player-exit').fire('click'); await ui.start();
+    assert.equal(ui.field('english-dictation-jump-index').value, '1', 'A new round starts with its own position');
+});

@@ -38,6 +38,7 @@
     let audioFetch = null, playerAudio = null, audioUrl = '', fetchTimer = null;
     let audioCapabilities = { kokoro: false, prepare: false }, capabilitiesPromise = null, capabilitiesSequence = 0;
     let prepareSnapshot = [], prepareInFlight = '', lastPrepared = '', lastPreparedAt = 0;
+    let answerSequence = 0;
 
     function prepareAudio(words) {
         const texts = Array.from(new Set(words.map((word) => word.spoken_text || word.text).filter((text) => typeof text === 'string' && text.trim()))).slice(0, 400);
@@ -1123,13 +1124,85 @@
         el('english-dictation-player-title').textContent = run.kind === 'mistakes' ? '英语错题复习' : '英语纸笔默写';
         el('english-dictation-position').textContent = `第 ${run.index + 1} 条 / 共 ${run.words.length} 条`;
         el('english-dictation-progress').max = run.words.length;
-        el('english-dictation-progress').value = run.index;
+        el('english-dictation-progress').value = run.heard.size;
         el('english-dictation-play-status').textContent = run.status || (run.read ? '写好后，继续下一条' : '准备好后，点播放');
+        el('english-dictation-player-instruction').textContent = run.answerVisible
+            ? '按空格先收起答案，留在本条；想继续也可以点“下一条”。' : '在纸上写好后，按空格或点“下一条”。';
         el('english-dictation-player-settings').textContent = `正常语速 · 每条 ${run.repetitions} 遍${run.shuffled ? ' · 已打乱顺序' : ''}`;
         el('english-dictation-play').textContent = run.read ? '再听一遍' : '播放本项';
-        el('english-dictation-play').disabled = speaking;
-        el('english-dictation-next').disabled = speaking || !run.read;
+        el('english-dictation-play').disabled = speaking || run.answerBusy;
+        el('english-dictation-next').disabled = speaking || run.answerBusy || !run.read && !run.answerViewed.has(run.index);
         el('english-dictation-next').textContent = run.index === run.words.length - 1 ? '完成并对照' : '下一条';
+        el('english-dictation-player-exit').disabled = !!run.answerBusy;
+        const jump = el('english-dictation-jump-index'); jump.min = '1'; jump.max = String(run.words.length);
+        if (jump.dataset.runIndex !== String(run.index)) { jump.value = String(run.index + 1); jump.dataset.runIndex = String(run.index); }
+        jump.disabled = !!run.answerBusy; el('english-dictation-jump-go').disabled = !!run.answerBusy;
+        el('english-dictation-answer-show').disabled = !!run.answerBusy;
+        el('english-dictation-answer-show').textContent = run.answerVisible ? '收起当前答案' : '查看当前答案';
+        el('english-dictation-answer-show').setAttribute('aria-expanded', String(!!run.answerVisible));
+        renderCurrentAnswer();
+    }
+    function clearCurrentAnswer() {
+        answerSequence += 1;
+        if (run) { run.answerVisible = false; run.answerBusy = false; run.answerMessage = ''; run.answerError = false; }
+        el('english-dictation-answer').hidden = true; el('english-dictation-answer-text').textContent = '';
+        el('english-dictation-answer-status').textContent = '';
+    }
+    function renderCurrentAnswer() {
+        const shown = !!run && run.answerVisible && !run.completed;
+        el('english-dictation-answer').hidden = !shown;
+        el('english-dictation-answer-text').textContent = shown ? run.words[run.index].text : '';
+        const status = el('english-dictation-answer-status'); status.textContent = shown ? run.answerMessage : '';
+        status.classList.toggle('english-dictation-status-error', !!run?.answerError);
+        const word = run?.words[run.index], sources = word?.sources || [];
+        const saved = !!sources.length && sources.every((source) => run.savedMistakes.has(sourceKey(source, word)));
+        el('english-dictation-answer-add').disabled = !shown || !!run.answerBusy || saved;
+        el('english-dictation-answer-add').textContent = run?.answerBusy ? '正在加入…' : saved ? '已加入错题本' : run?.answerError ? '重试加入错题本' : '加入错题本';
+        el('english-dictation-answer-skip').disabled = !shown || !!run.answerBusy;
+        el('english-dictation-answer-skip').textContent = saved ? '收起答案' : '暂不加入';
+    }
+    function showCurrentAnswer() {
+        if (!run || run.completed || run.answerBusy || !visible() || !current(capture())) return;
+        if (run.answerVisible) { clearCurrentAnswer(); renderPlayer(); return; }
+        stopSpeech(); answerSequence += 1; run.answerVisible = true; run.answerViewed.add(run.index);
+        run.answerMessage = '这条需要加入错题本吗？只有点击“加入错题本”才会保存。'; run.answerError = false;
+        renderPlayer();
+    }
+    async function addCurrentAnswer() {
+        if (!run || run.completed || run.answerBusy || !run.answerVisible || !visible() || !current(capture())) return;
+        const target = run, index = run.index, ctx = capture(), view = viewSequence, action = answerSequence;
+        const word = run.words[index], groups = new Map();
+        for (const source of word.sources || []) {
+            if (run.savedMistakes.has(sourceKey(source, word))) continue;
+            const key = JSON.stringify([source.book_id, source.lesson_id]);
+            if (!groups.has(key)) groups.set(key, { book_id: source.book_id, lesson_id: source.lesson_id, words: [{ text: word.text, spoken_text: word.spoken_text || word.text }] });
+        }
+        const items = Array.from(groups.values());
+        if (!items.length && word.sources?.length && word.sources.every((source) => run.savedMistakes.has(sourceKey(source, word)))) return;
+        if (!items.length) { run.answerError = true; run.answerMessage = '这条内容没有可新增的课文来源，或已经加入错题本。'; renderPlayer(); return; }
+        if (items.length > 100) { run.answerError = true; run.answerMessage = '这条内容的来源较多，请回错题本分清单添加。'; renderPlayer(); return; }
+        const valid = () => current(ctx) && visible() && run === target && !target.completed && target.index === index && view === viewSequence && action === answerSequence;
+        run.answerBusy = true; run.answerError = false; run.answerMessage = '正在加入错题本…'; renderPlayer();
+        try {
+            const result = await request('/mistakes', { method: 'POST', body: { preserve_existing: true, items } });
+            if (!valid()) return;
+            if (!Number.isInteger(result.added_count) || !Number.isInteger(result.existing_count) || result.added_count < 0 || result.existing_count < 0
+                    || result.added_count + result.existing_count !== items.length) throw new Error('加入结果未确认，请重试。');
+            for (const source of word.sources || []) target.savedMistakes.add(sourceKey(source, word));
+            target.answerMessage = `已加入错题本：新增 ${result.added_count} 条，已有 ${result.existing_count} 条；已有读音保持不变。`;
+            if (items.some((item) => item.book_id === bookId)) mistakeLoaded = false;
+        } catch (error) {
+            if (!valid()) return;
+            target.answerError = true; target.answerMessage = `${error.message || '暂时未能加入错题本。'} 当前答案保留着，请重试。`;
+        } finally { if (valid()) { target.answerBusy = false; renderPlayer(); } }
+    }
+    function jumpToItem() {
+        if (!run || run.completed || run.answerBusy || !visible() || !current(capture())) return;
+        const target = Number(el('english-dictation-jump-index').value);
+        if (!Number.isInteger(target) || target < 1 || target > run.words.length) { message(`请填写 1～${run.words.length} 之间的条目序号。`, true); return; }
+        stopSpeech(); clearCurrentAnswer(); run.index = target - 1; run.read = false;
+        el('english-dictation-jump-index').value = String(target);
+        run.status = `已到第 ${target} 条，准备好后点播放`; message(); renderPlayer();
     }
     function speakWords(word, repetitions, mode) {
         if (!visible() || !current(capture()) || (mode === 'player' && (!run || run.completed || el('english-dictation-player').hidden))) return;
@@ -1248,6 +1321,7 @@
     }
     function makeRun(words, settings) {
         stopSpeech();
+        el('english-dictation-jump-index').dataset.runIndex = '';
         let snapshot = cloneWords(words);
         if (settings.shuffled) {
             for (let i = snapshot.length - 1; i > 0; i -= 1) {
@@ -1255,7 +1329,9 @@
                 [snapshot[i], snapshot[j]] = [snapshot[j], snapshot[i]];
             }
         }
-        run = { ...settings, words: snapshot, index: 0, read: false, heard: new Set(), checked: new Set(),
+        clearCurrentAnswer();
+        run = { ...settings, words: snapshot, index: 0, read: false, heard: new Set(), visited: new Set(), answerViewed: new Set(), checked: new Set(),
+            answerVisible: false, answerBusy: false, answerMessage: '', answerError: false,
             savedMistakes: new Set(settings.savedMistakes || []), mistakeSaveBusy: false, saveError: false, saveMessage: '',
             completed: false, status: '准备好后，点播放' };
         prepareAudio(snapshot);
@@ -1281,17 +1357,21 @@
     }
     function start() { return startPractice(true); }
     function playCurrent() {
-        if (run && !run.completed && !speaking) speakWords(run.words[run.index], run.repetitions, 'player');
+        if (run && !run.completed && !run.answerBusy && !speaking && visible() && current(capture())) {
+            clearCurrentAnswer(); run.visited.add(run.index); speakWords(run.words[run.index], run.repetitions, 'player');
+        }
     }
     function next() {
-        if (!run || run.completed || speaking || !run.read || !active || !current(capture())) return;
+        if (!run || run.completed || run.answerBusy || speaking || !run.read && !run.answerViewed.has(run.index) || !active || !current(capture())) return;
         if (run.index === run.words.length - 1) { finish(false); return; }
+        clearCurrentAnswer();
         run.index += 1; run.read = false; run.status = '正在准备下一项…';
         renderPlayer(); playCurrent();
     }
     function finish(early) {
         if (!run || !current(capture())) return;
-        stopSpeech(); run.completed = true; run.early = !!early;
+        if (run.answerBusy) return;
+        stopSpeech(); clearCurrentAnswer(); run.completed = true; run.early = !!early;
         renderFinish(); message(); showView('finish');
     }
     function selectedReviewWords() {
@@ -1324,7 +1404,7 @@
     }
     function renderFinish() {
         if (!run) return;
-        el('english-dictation-finish-label').textContent = `${run.title}${run.kind === 'mistakes' ? ` · ${run.lessonCount} 份清单` : ''} · ${run.words.length} 条${run.early ? '，本轮已提前结束；未听完的条目仅供对照，不能标错' : ''}。`;
+        el('english-dictation-finish-label').textContent = `${run.title}${run.kind === 'mistakes' ? ` · ${run.lessonCount} 份清单` : ''} · 本轮共 ${run.words.length} 条，已完整听过 ${run.heard.size} 条${run.early ? '，本轮已提前结束' : ''}。未练或未听完的条目已标明，仅供对照。`;
         const list = el('english-dictation-review-list'); list.replaceChildren();
         for (const [index, word] of run.words.entries()) {
             const label = node('label', '', 'english-dictation-review-word');
@@ -1341,7 +1421,8 @@
             });
             const text = node('span', word.text);
             text.appendChild(node('small', (word.sources || []).map(sourceName).join('、'), 'english-dictation-review-origin'));
-            if (!heard) text.appendChild(node('small', '未听完，不能标错', 'english-dictation-review-origin'));
+            if (!heard) text.appendChild(node('small', run.answerViewed.has(index) ? '已查看答案，未听完；不能在本轮勾选标错'
+                : run.visited.has(index) ? '未听完，不能标错' : '未练／已跳过，不能在本轮勾选标错', 'english-dictation-review-origin'));
             label.append(checkbox, text); list.appendChild(label);
         }
         renderFinishControls();
@@ -1382,10 +1463,12 @@
             voiceExplicit: run.voiceExplicit, voiceSnapshot: run.voiceSnapshot, voicePreference: run.voicePreference ? { ...run.voicePreference } : null,
             kind: run.kind, book_id: run.book_id, lesson_id: run.lesson_id, lessonCount: run.lessonCount, savedMistakes: run.savedMistakes });
     }
-    function backHome() { stopSpeech(); showView('home'); renderControls(); }
-    function leaveView() { preserveDraft(); clearDirectAdd(); viewSequence += 1; active = false; stopSpeech(); cancelRequests(); showView('home'); }
+    function backHome() { if (run?.answerBusy) return; stopSpeech(); clearCurrentAnswer(); showView('home'); renderControls(); }
+    function leaveView() { preserveDraft(); clearDirectAdd(); clearCurrentAnswer(); viewSequence += 1; active = false; stopSpeech(); cancelRequests(); showView('home'); }
     function reset() {
         clearDirectAdd();
+        clearCurrentAnswer();
+        el('english-dictation-jump-index').dataset.runIndex = '';
         preserveDraft(); active = false; stopSpeech(); cancelRequests();
         audioCapabilities = { kokoro: false, prepare: false }; capabilitiesPromise = null; capabilitiesSequence += 1;
         prepareSnapshot = []; prepareInFlight = ''; lastPrepared = ''; lastPreparedAt = 0;
@@ -1412,7 +1495,7 @@
         if (boundStudent !== learner() || boundToken !== session().token || boundHostGeneration !== session().generation) {
             reset(); boundStudent = learner(); boundToken = session().token; boundHostGeneration = session().generation;
         }
-        clearDirectAdd(); stopSpeech(); viewSequence += 1; active = true; showView('home'); renderMode(); detectVoices();
+        clearDirectAdd(); clearCurrentAnswer(); stopSpeech(); viewSequence += 1; active = true; showView('home'); renderMode(); detectVoices();
         checkAudioCapabilities();
         if (loaded || loading) { if (loaded && homeMode === 'mistakes') await loadMistakes(); return; }
         const ctx = capture(), sequence = ++requestSequence;
@@ -1494,6 +1577,10 @@
     el('english-dictation-refresh-voices').addEventListener('click', () => { detectVoices(); message(voices.length ? '设备英语备用语音已就绪，可以试听或开始默写。' : '设备暂时没有英语备用语音，仍可尝试正常英语朗读。'); });
     el('english-dictation-play').addEventListener('click', playCurrent);
     el('english-dictation-next').addEventListener('click', next);
+    el('english-dictation-answer-show').addEventListener('click', showCurrentAnswer);
+    el('english-dictation-answer-add').addEventListener('click', addCurrentAnswer);
+    el('english-dictation-answer-skip').addEventListener('click', () => { if (!run?.answerBusy) { clearCurrentAnswer(); renderPlayer(); } });
+    el('english-dictation-jump-go').addEventListener('click', jumpToItem);
     el('english-dictation-player-exit').addEventListener('click', backHome);
     el('english-dictation-resume').addEventListener('click', () => {
         if (!run || !current(capture())) return;
@@ -1518,7 +1605,9 @@
     document.addEventListener('keydown', (event) => {
         if (!spaceTarget(event)) return;
         event.preventDefault(); event.stopPropagation(); suppressSpaceUp = true;
-        if (event.repeat || speaking) return;
+        if (event.repeat || run.answerBusy) return;
+        if (run.answerVisible) { clearCurrentAnswer(); renderPlayer(); return; }
+        if (speaking) return;
         if (run.read) next(); else playCurrent();
     }, true);
     document.addEventListener('keyup', (event) => {

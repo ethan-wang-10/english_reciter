@@ -390,6 +390,254 @@ test('lesson groups start collapsed, saved words load per lesson, and linked par
     assert.equal(ui.field('dictation-words').value, '');
 });
 
+function practiceCheckbox(ui, text) {
+    const input = ui.field('dictation-word-preview').querySelectorAll('input[data-action="select-word"]').find((item) => item.dataset.word === text);
+    assert.ok(input, 'Missing practice checkbox: ' + text);
+    return input;
+}
+
+test('Chinese selection precedes editing and the title action practices chosen draft words without saving the whole lesson', async () => {
+    const ui = dictationUI(); await ui.openLesson();
+    const editor = ui.field('dictation-editor');
+    assert.ok(ui.field('dictation-lesson-title').parentElement.contains(ui.field('dictation-start-selected')));
+    assert.ok(editor.children.indexOf(ui.field('dictation-word-preview')) < editor.children.indexOf(ui.field('dictation-words')));
+    assert.match(ui.field('dictation-selection-count').textContent, /2 \/ 2/);
+    const omitted = practiceCheckbox(ui, '繁星'); omitted.checked = false; await omitted.fire('change');
+    await ui.type('dictation-words', '潮水｜潮水的潮\n繁星\n薄｜单薄的薄');
+    assert.equal(practiceCheckbox(ui, '繁星').checked, false);
+    assert.equal(practiceCheckbox(ui, '薄').checked, true, 'New words are selected without changing existing choices');
+    await ui.field('dictation-start-selected').fire('click');
+    assert.equal(ui.field('dictation-player').hidden, false);
+    assert.match(ui.field('dictation-position').textContent, /共 2 个/);
+    assert.equal(ui.state.calls.some((call) => call.method === 'PUT'), false);
+    assert.deepEqual(ui.state.wordlists.get('lesson-01').words.map((word) => word.text), ['潮水', '繁星']);
+    assert.ok([...ui.storage.values()].some((value) => value.includes('单薄的薄')), 'The unsaved full list remains recoverable');
+    await ui.field('dictation-play').fire('click');
+    assert.equal(ui.state.spoken.at(-1).text, '潮水的潮');
+});
+
+test('saving then starting keeps every lesson word while practicing only the selected entries', async () => {
+    const ui = dictationUI(); await ui.openLesson();
+    await ui.type('dictation-words', '潮水 繁星 薄雾');
+    const omitted = practiceCheckbox(ui, '繁星'); omitted.checked = false; await omitted.fire('change');
+    await ui.start();
+    const saved = ui.state.calls.find((call) => call.method === 'PUT');
+    assert.deepEqual(saved.body.words.map((word) => word.text), ['潮水', '繁星', '薄雾']);
+    assert.deepEqual(ui.state.wordlists.get('lesson-01').words.map((word) => word.text), ['潮水', '繁星', '薄雾']);
+    assert.match(ui.field('dictation-position').textContent, /共 2 个/);
+    await ui.type('dictation-jump-index', '2'); await ui.field('dictation-jump-go').fire('click');
+    await ui.field('dictation-answer-show').fire('click');
+    assert.equal(ui.field('dictation-answer-text').textContent, '薄雾');
+});
+
+test('practice choices stay lesson-scoped, forget removed words and reset for another student', async () => {
+    const ui = dictationUI(); await ui.openLesson();
+    const first = practiceCheckbox(ui, '潮水'); first.checked = false; await first.fire('change');
+    await ui.type('dictation-words', '潮水｜潮水的潮\n繁星');
+    assert.equal(practiceCheckbox(ui, '潮水').checked, false, 'A pronunciation edit keeps the choice for the same written word');
+    await ui.chooseLesson(2); await ui.type('dictation-words', '潮水 星光');
+    assert.equal(practiceCheckbox(ui, '潮水').checked, true);
+    await ui.chooseLesson(1);
+    assert.equal(practiceCheckbox(ui, '潮水').checked, false);
+    await ui.type('dictation-words', '繁星'); await ui.type('dictation-words', '潮水 繁星');
+    assert.equal(practiceCheckbox(ui, '潮水').checked, true, 'A removed and newly added word gets the default choice');
+    await ui.field('dictation-clear-selection').fire('click');
+    assert.equal(ui.field('dictation-start-selected').disabled, true);
+    assert.equal(ui.field('dictation-start').disabled, true);
+    await ui.field('dictation-select-all').fire('click');
+    assert.match(ui.field('dictation-selection-count').textContent, /2 \/ 2/);
+    practiceCheckbox(ui, '潮水').checked = false; await practiceCheckbox(ui, '潮水').fire('change');
+    ui.api.reset();
+    ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    await ui.openLesson();
+    assert.equal(practiceCheckbox(ui, '潮水').checked, true);
+});
+
+test('only the current answer is revealed and adding it explicitly uses the parent child and frozen pronunciation source', async () => {
+    const ui = dictationUI({ isParent: true, words: [{ text: '薄', spoken_text: '单薄的薄' }, '繁星'],
+        mistakes: [{ lesson_id: 'lesson-01', words: [{ text: '薄', spoken_text: '薄雾的薄' }] }] });
+    await ui.openLesson(); await ui.start();
+    assert.equal(ui.field('dictation-answer').hidden, true);
+    assert.equal(ui.field('dictation-answer-text').textContent, '');
+    await ui.field('dictation-play').fire('click');
+    const staleEnd = ui.state.currentUtterance.onend;
+    await ui.field('dictation-answer-show').fire('click');
+    assert.equal(ui.state.currentUtterance, null, 'Viewing an answer stops speech');
+    assert.equal(ui.field('dictation-answer-text').textContent, '薄');
+    assert.equal(ui.visibleText(ui.field('dictation-player')).includes('繁星'), false);
+    staleEnd(); await ui.tick(1000);
+    assert.equal(ui.state.spoken.length, 1, 'Viewing does not complete a reading or schedule another repetition');
+    assert.equal(ui.state.calls.some((call) => call.method === 'POST' && call.url === prefix + '/mistakes'), false);
+    await ui.field('dictation-answer-skip').fire('click');
+    assert.equal(ui.field('dictation-answer').hidden, true);
+    assert.match(ui.field('dictation-position').textContent, /第 1 个/);
+
+    await ui.field('dictation-player-exit').fire('click'); await ui.chooseLesson(2);
+    await ui.field('dictation-resume').fire('click'); await ui.field('dictation-answer-show').fire('click');
+    await ui.field('dictation-answer-add').fire('click');
+    const call = ui.state.calls.findLast((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.equal(call.student, 'alice'); assert.equal(call.username, 'alice_parent');
+    assert.deepEqual(call.body, { preserve_existing: true, items: [{ book_id: bookId, lesson_id: 'lesson-01',
+        words: [{ text: '薄', spoken_text: '单薄的薄' }] }] });
+    assert.equal(ui.state.mistakeGroups()[0].words[0].spoken_text, '薄雾的薄', 'The existing corrected reading survives an older run snapshot');
+    assert.equal(ui.field('dictation-answer-add').disabled, true);
+    await ui.field('dictation-answer-add').fire('click');
+    assert.equal(ui.state.calls.filter((call) => call.method === 'POST' && call.url === prefix + '/mistakes').length, 1);
+    assert.match(ui.field('dictation-position').textContent, /第 1 个/);
+});
+
+test('answer failures retain the current word for retry and a late addition cannot annotate another word', async () => {
+    const ui = dictationUI(); await ui.openLesson(); await ui.start();
+    await ui.field('dictation-answer-show').fire('click');
+    ui.state.routes[prefix + '/mistakes'] = () => { throw new Error('网络暂时中断'); };
+    await ui.field('dictation-answer-add').fire('click');
+    assert.equal(ui.field('dictation-answer-text').textContent, '潮水');
+    assert.match(ui.field('dictation-answer-status').textContent, /网络暂时中断.*重试/);
+    assert.match(ui.field('dictation-answer-add').textContent, /重试/);
+    const gate = deferred(); let sent;
+    ui.state.routes[prefix + '/mistakes'] = (call) => { sent = call; return gate.promise; };
+    const saving = ui.field('dictation-answer-add').fire('click'); await ui.flush();
+    for (const id of ['dictation-answer-add', 'dictation-answer-skip', 'dictation-play', 'dictation-next', 'dictation-jump-index', 'dictation-jump-go']) assert.equal(ui.field(id).disabled, true, id);
+    await ui.field('dictation-answer-add').fire('click');
+    await ui.type('dictation-jump-index', '2'); await ui.field('dictation-jump-go').fire('click');
+    assert.match(ui.field('dictation-position').textContent, /第 1 个/);
+    assert.equal(ui.state.calls.filter((call) => call.method === 'POST' && call.url === prefix + '/mistakes').length, 2);
+    await ui.field('dictation-player-exit').fire('click'); await ui.field('dictation-resume').fire('click');
+    await ui.type('dictation-jump-index', '2'); await ui.field('dictation-jump-go').fire('click');
+    gate.resolve(ui.state.defaultReply(sent)); await saving;
+    assert.match(ui.field('dictation-position').textContent, /第 2 个/);
+    assert.equal(ui.field('dictation-answer').hidden, true);
+    assert.equal(ui.field('dictation-answer-status').textContent, '');
+    await ui.field('dictation-answer-show').fire('click');
+    assert.equal(ui.field('dictation-answer-text').textContent, '繁星');
+    assert.equal(ui.field('dictation-answer-add').disabled, false);
+    assert.doesNotMatch(ui.field('dictation-answer-status').textContent, /已加入错题本：/);
+});
+
+test('a shared answer retains both frozen lesson sources and requires acknowledgement of every source', async () => {
+    const ui = dictationUI({ mistakes: [
+        { lesson_id: 'lesson-01', words: [{ text: '薄', spoken_text: '单薄的薄' }] },
+        { lesson_id: 'lesson-02', words: [{ text: '薄', spoken_text: '单薄的薄' }] },
+    ] });
+    await ui.openLesson(); await ui.openMistakes(); await ui.chooseMistakeLessons(['lesson-01', 'lesson-02']);
+    await ui.field('dictation-mistakes-start').fire('click'); await ui.field('dictation-answer-show').fire('click');
+    assert.match(ui.field('dictation-position').textContent, /共 1 个/);
+    ui.state.routes[prefix + '/mistakes'] = () => ({ added_count: 0, existing_count: 1 });
+    await ui.field('dictation-answer-add').fire('click');
+    assert.equal(ui.field('dictation-answer-add').disabled, false);
+    assert.match(ui.field('dictation-answer-status').textContent, /保存结果未确认/);
+    const sent = ui.state.calls.findLast((call) => call.method === 'POST' && call.url === prefix + '/mistakes');
+    assert.equal(sent.body.preserve_existing, true);
+    assert.deepEqual(sent.body.items.map((item) => [item.book_id, item.lesson_id, item.words]), [
+        [bookId, 'lesson-01', [{ text: '薄', spoken_text: '单薄的薄' }]],
+        [bookId, 'lesson-02', [{ text: '薄', spoken_text: '单薄的薄' }]],
+    ]);
+    delete ui.state.routes[prefix + '/mistakes'];
+    await ui.field('dictation-answer-add').fire('click');
+    assert.equal(ui.field('dictation-answer-add').disabled, true);
+    assert.match(ui.field('dictation-answer-status').textContent, /已有 2 条/);
+});
+
+test('answer viewing Space stays on the same word and explicit Next skips it without marking it fully heard', async () => {
+    const ui = dictationUI(); await ui.openLesson(); await ui.start();
+    await ui.field('dictation-answer-show').fire('click');
+    assert.match(ui.field('dictation-player-instruction').textContent, /空格先收起答案/);
+    await ui.space();
+    assert.equal(ui.field('dictation-answer').hidden, true);
+    assert.match(ui.field('dictation-position').textContent, /第 1 个/);
+    assert.equal(ui.state.spoken.length, 0);
+    await ui.field('dictation-answer-show').fire('click');
+    await ui.field('dictation-next').fire('click');
+    assert.match(ui.field('dictation-position').textContent, /第 2 个/);
+    assert.equal(ui.field('dictation-answer').hidden, true);
+    await ui.field('dictation-player-exit').fire('click'); await ui.field('dictation-end-run').fire('click');
+    const first = ui.field('dictation-review-list').querySelectorAll('label')[0];
+    assert.equal(first.querySelector('input').disabled, true);
+    assert.match(first.textContent, /已查看答案，未听完/);
+    assert.equal(ui.state.calls.some((call) => call.method === 'POST' && call.url === prefix + '/mistakes'), false);
+});
+
+test('jumping cancels repetitions, preserves completed words and identifies skipped words at the final comparison', async () => {
+    const ui = dictationUI({ words: ['潮水', '繁星', '薄雾'] }); await ui.openLesson(); await ui.start();
+    await ui.field('dictation-play').fire('click'); await ui.finishSpeech();
+    await ui.type('dictation-jump-index', '3'); await ui.field('dictation-jump-go').fire('click');
+    await ui.tick(1000);
+    assert.equal(ui.state.spoken.length, 1, 'The old scheduled second reading has been canceled');
+    assert.match(ui.field('dictation-position').textContent, /第 3 个/);
+    assert.equal(ui.field('dictation-progress').value, 0);
+    assert.equal(ui.field('dictation-next').disabled, true);
+    assert.equal(ui.field('dictation-answer').hidden, true);
+    await ui.field('dictation-play').fire('click'); await ui.finishSpeech(); await ui.tick(700); await ui.finishSpeech();
+    assert.equal(ui.field('dictation-progress').value, 1);
+    await ui.field('dictation-next').fire('click');
+    assert.match(ui.field('dictation-finish-label').textContent, /1 \/ 3/);
+    const labels = ui.field('dictation-review-list').querySelectorAll('label');
+    assert.match(labels[0].textContent, /未听完/);
+    assert.match(labels[1].textContent, /未练／已跳过/);
+    assert.deepEqual(labels.map((label) => label.querySelector('input').disabled), [true, true, false]);
+    await ui.field('dictation-retry-all').fire('click');
+    assert.match(ui.field('dictation-position').textContent, /第 1 个/);
+});
+
+test('a pending save may finish after leaving but cannot launch dictation in the reopened view', async () => {
+    const ui = dictationUI(); await ui.openLesson(); await ui.type('dictation-words', '潮水 繁星 薄雾');
+    const gate = deferred(); let sent;
+    ui.state.routes[wordPath()] = (call) => {
+        if (call.method === 'PUT') { sent = call; return gate.promise; }
+        return ui.state.defaultReply(call);
+    };
+    const starting = ui.field('dictation-start').fire('click'); await ui.flush();
+    assert.ok(sent);
+    ui.api.leaveView(); await ui.api.open();
+    gate.resolve(ui.state.defaultReply(sent)); await starting;
+    assert.equal(ui.field('dictation-player').hidden, true);
+    assert.equal(ui.field('dictation-home').hidden, false);
+    assert.equal(ui.field('dictation-resume-banner').hidden, true);
+    assert.deepEqual(ui.state.wordlists.get('lesson-01').words.map((word) => word.text), ['潮水', '繁星', '薄雾']);
+    assert.equal(ui.state.spoken.length, 0);
+});
+
+test('an answer addition acknowledged after account reset cannot reveal or mark the old student word', async () => {
+    const ui = dictationUI(); await ui.openLesson(); await ui.start(); await ui.field('dictation-answer-show').fire('click');
+    const gate = deferred(); let sent;
+    ui.state.routes[prefix + '/mistakes'] = (call) => { sent = call; return gate.promise; };
+    const pending = ui.field('dictation-answer-add').fire('click'); await ui.flush();
+    ui.api.reset();
+    ui.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    await ui.openLesson();
+    gate.resolve(ui.state.defaultReply(sent)); await pending;
+    assert.equal(sent.student, 'alice');
+    assert.equal(ui.field('dictation-player').hidden, true);
+    assert.equal(ui.field('dictation-answer').hidden, true);
+    assert.equal(ui.field('dictation-answer-text').textContent, '');
+    assert.equal(ui.field('dictation-answer-status').textContent, '');
+    assert.equal(ui.state.mistakeGroups(bookId, 'bob').length, 0);
+});
+
+test('jumping aborts pending server audio and releases playing WAVs without stale playback continuing', async () => {
+    const ui = dictationUI({ capabilities: { kokoro: true, prepare: true } }); await ui.openLesson(); await ui.start();
+    const gate = deferred(); ui.state.audioFetch = () => gate.promise;
+    await ui.field('dictation-play').fire('click');
+    const pendingAudio = ui.state.audioRequests.at(-1);
+    assert.ok(pendingAudio);
+    await ui.type('dictation-jump-index', '2'); await ui.field('dictation-jump-go').fire('click');
+    assert.equal(pendingAudio.signal.aborted, true);
+    gate.resolve(ui.state.audioResponse()); await ui.flush(); await ui.tick(30000);
+    assert.equal(ui.state.audioPlayed.length, 0); assert.equal(ui.state.spoken.length, 0);
+    assert.match(ui.field('dictation-position').textContent, /第 2 个/);
+    delete ui.state.audioFetch;
+    await ui.field('dictation-play').fire('click');
+    const audio = ui.state.currentAudio, staleEnd = audio.onended;
+    assert.ok(audio);
+    await ui.type('dictation-jump-index', '1'); await ui.field('dictation-jump-go').fire('click');
+    assert.equal(audio.paused, true); assert.ok(ui.state.revoked.length);
+    staleEnd(); await ui.tick(1000);
+    assert.equal(ui.state.audioPlayed.length, 1);
+    assert.equal(ui.field('dictation-progress').value, 0);
+    assert.equal(ui.field('dictation-next').disabled, true);
+    assert.match(ui.field('dictation-position').textContent, /第 1 个/);
+});
+
 test('start hides the answers and waits for the first play or Space, which never skips word one', async () => {
     const ui = dictationUI();
     await ui.openLesson(); await ui.start();
