@@ -31,6 +31,8 @@ GUIDANCE_FIELDS = frozenset((
     'slots', 'notes', 'details', 'ownDetail', 'sentence', 'paragraph', 'endingOkay',
 ))
 GUIDANCE_PARTS = ('begin', 'middle', 'end')
+COACHING_PARTS = ('source', 'activity', 'moment', 'feeling')
+COACHING_COMPARISON_IDS = {'action', 'dialogue', 'reaction'}
 GUIDANCE_IDS = {
     'theme': {'fun', 'mixup', 'together'},
     'structure': {'total', 'sequence', 'final'},
@@ -76,6 +78,15 @@ def initial_guidance():
     }
 
 
+def initial_coaching():
+    return {
+        'version': 1,
+        'material': {'step': 0, 'source': '', 'activity': '', 'moment': '', 'feeling': ''},
+        'comparison': {'choices': [], 'reason': ''},
+        'evidence': {part: {'before': '', 'after': '', 'reason': ''} for part in ('structure', 'language')},
+    }
+
+
 def initial_data(lesson=None):
     result = {
         'stage': 0, 'mode': 'material',
@@ -91,6 +102,8 @@ def initial_data(lesson=None):
     if lesson and 'guidance' in lesson:
         result['guidance'] = initial_guidance()
         result['outline'] = [{'id': 'p_full', 'content': '', 'purpose': '整篇初稿（开头—重点—结尾）', 'focus': True}]
+    if lesson and 'coaching' in lesson:
+        result['coaching'] = initial_coaching()
     return result
 
 
@@ -141,14 +154,44 @@ def validate_guidance(value, configuration=None):
     return deepcopy(value)
 
 
+def validate_coaching(value, configuration=None):
+    _object(value, ('version', 'material', 'comparison', 'evidence'))
+    if type(value['version']) is not int or value['version'] != 1:
+        raise WritingError('写作辅助版本无效。')
+    material = _object(value['material'], ('step', *COACHING_PARTS))
+    if type(material['step']) is not int or not 0 <= material['step'] <= 4:
+        raise WritingError('素材回想步骤无效。')
+    if not isinstance(material['source'], str) or material['source'] not in ('', 'personal', 'scenario'):
+        raise WritingError('请选择自己的经历或给定情境。')
+    for field in ('activity', 'moment', 'feeling'):
+        _string(material[field])
+    comparison = _object(value['comparison'], ('choices', 'reason'))
+    allowed = ({item['id'] for item in configuration['comparison']['options']}
+               if configuration is not None else COACHING_COMPARISON_IDS)
+    _selected(comparison['choices'], allowed)
+    _string(comparison['reason'])
+    _object(value['evidence'], ('structure', 'language'))
+    for evidence in value['evidence'].values():
+        _object(evidence, ('before', 'after', 'reason'))
+        _string(evidence['before'], 6000)
+        _string(evidence['after'], 6000)
+        _string(evidence['reason'])
+    return deepcopy(value)
+
+
 def validate_data(value, lesson=None):
     """Validate storage shape and bounds; do not judge a student's writing."""
-    if not isinstance(value, dict) or set(value) not in (DATA_FIELDS, DATA_FIELDS | {'guidance'}):
+    if not isinstance(value, dict) or set(value) not in (
+            DATA_FIELDS, DATA_FIELDS | {'guidance'}, DATA_FIELDS | {'guidance', 'coaching'}):
         raise WritingError('作文草稿格式无效，请刷新页面后重试。')
     if 'guidance' in value:
         if lesson is not None and 'guidance' not in lesson:
             raise WritingError('这份旧版练习不能切换为新版引导，请另开一次练习。')
         validate_guidance(value['guidance'], lesson.get('guidance') if lesson else None)
+    if 'coaching' in value:
+        if lesson is not None and 'coaching' not in lesson:
+            raise WritingError('这份旧版练习不能加入新版辅助，请另开一次练习。')
+        validate_coaching(value['coaching'], lesson.get('coaching') if lesson else None)
     if type(value['stage']) is not int or not 0 <= value['stage'] <= 5:
         raise WritingError('练习步骤无效。')
     if value['mode'] not in ('material', 'personal') or value['review_round'] not in ('structure', 'language'):
@@ -284,6 +327,64 @@ def _guidance_configuration(value):
             raise ValueError('Invalid suggested input limit')
 
 
+def _coaching_configuration(value):
+    _object(value, ('version', 'material', 'comparison', 'evidence'))
+    if type(value['version']) is not int or value['version'] != 1:
+        raise ValueError('Invalid coaching configuration version')
+
+    def text(value, maximum=2000):
+        _string(value, maximum)
+        if not value.strip() or '\x00' in value:
+            raise ValueError('Empty or invalid coaching text')
+
+    material = _object(value['material'], ('title', 'steps', 'sources', 'suggestions'))
+    text(material['title'])
+    if not isinstance(material['steps'], list) or len(material['steps']) != 4:
+        raise ValueError('Material recall requires four questions')
+    for field, step in zip(COACHING_PARTS, material['steps']):
+        _object(step, ('id', 'question', 'help'))
+        if step['id'] != field:
+            raise ValueError('Invalid material question order')
+        text(step['question']); text(step['help'])
+    if not isinstance(material['sources'], list) or len(material['sources']) != 2:
+        raise ValueError('Material recall requires personal and scenario sources')
+    sources = set()
+    for source in material['sources']:
+        _object(source, ('id', 'label', 'help'))
+        if not isinstance(source['id'], str) or source['id'] not in ('personal', 'scenario') or source['id'] in sources:
+            raise ValueError('Invalid material source')
+        sources.add(source['id']); text(source['label']); text(source['help'])
+    _object(material['suggestions'], ('personal', 'scenario'))
+    for suggestions in material['suggestions'].values():
+        _object(suggestions, ('activity', 'moment', 'feeling'))
+        for items in suggestions.values():
+            if not isinstance(items, list) or not 1 <= len(items) <= 12:
+                raise ValueError('Invalid material suggestions')
+            for suggestion in items:
+                text(suggestion)
+    comparison = _object(value['comparison'], ('title', 'question', 'description', 'plain', 'options', 'prompt'))
+    for field in ('title', 'question', 'description', 'plain', 'prompt'):
+        text(comparison[field])
+    if not isinstance(comparison['options'], list) or not 2 <= len(comparison['options']) <= 10:
+        raise ValueError('Detail comparison requires several options')
+    identifiers = set()
+    for option in comparison['options']:
+        _object(option, ('id', 'text', 'detail', 'why'))
+        identifier = option['id']
+        if (not isinstance(identifier, str) or not re.fullmatch(r'[a-z][a-z0-9_-]{0,63}', identifier)
+                or identifier in identifiers):
+            raise ValueError('Invalid detail comparison ID')
+        identifiers.add(identifier)
+        for field in ('text', 'detail', 'why'):
+            text(option[field])
+    evidence = _object(value['evidence'], ('title', 'description', 'rounds'))
+    text(evidence['title']); text(evidence['description'])
+    _object(evidence['rounds'], ('structure', 'language'))
+    for round in evidence['rounds'].values():
+        _object(round, ('question', 'help'))
+        text(round['question']); text(round['help'])
+
+
 def validate_lesson(lesson):
     try:
         if (not isinstance(lesson, dict) or not isinstance(lesson.get('id'), str)
@@ -307,6 +408,10 @@ def validate_lesson(lesson):
             if lesson['version'] < 2:
                 raise ValueError('Nine-question guidance requires a new lesson version')
             _guidance_configuration(lesson['guidance'])
+        if 'coaching' in lesson:
+            if lesson['version'] < 3 or 'guidance' not in lesson:
+                raise ValueError('Coaching requires a version three guided lesson')
+            _coaching_configuration(lesson['coaching'])
         if len(_encode(lesson).encode('utf-8')) > 200_000:
             raise ValueError('Lesson too large')
     except (ValueError, TypeError) as error:
@@ -333,7 +438,7 @@ def load_lessons(directory):
 def lesson_summary(lesson):
     summary = {key: deepcopy(lesson[key]) for key in ('id', 'version', 'title', 'grade', 'description', 'goal', 'time_hint') if key in lesson}
     if 'guidance' in lesson:
-        summary['flow_version'] = lesson['guidance']['version']
+        summary['flow_version'] = 2 if 'coaching' in lesson else lesson['guidance']['version']
     return summary
 
 
@@ -373,6 +478,32 @@ def _completion_missing(data):
     for field in ('structure', 'language'):
         if not data['revision_notes'][field].strip() and not data['no_change'][field]:
             missing.append('revision_notes.' + field)
+    if 'coaching' in data:
+        coaching = data['coaching']
+        for field in COACHING_PARTS:
+            if not coaching['material'][field].strip():
+                missing.append('coaching.material.' + field)
+        if not coaching['comparison']['choices']:
+            missing.append('coaching.comparison.choices')
+        for round in ('structure', 'language'):
+            if not data['no_change'][round]:
+                for field in ('before', 'after', 'reason'):
+                    if not coaching['evidence'][round][field].strip():
+                        missing.append('coaching.evidence.' + round + '.' + field)
+                for field, manuscript in (
+                    ('before', 'paragraphs' if round == 'structure' else 'structure_paragraphs'),
+                    ('after', 'structure_paragraphs' if round == 'structure' else 'final_paragraphs'),
+                ):
+                    quote = coaching['evidence'][round][field].strip()
+                    paragraphs = data[manuscript]
+                    order = [card['id'] for card in data['outline'] if card['id'] in paragraphs]
+                    order += sorted(set(paragraphs) - set(order))
+                    text = '\n\n'.join(paragraphs[key] for key in order if paragraphs[key].strip())
+                    # This is a factual quotation check, not a judgment of
+                    # writing quality. Incomplete or detached evidence remains
+                    # saveable; only completing a work requires actual excerpts.
+                    if quote and quote not in text:
+                        missing.append('coaching.evidence.' + round + '.' + field)
     if not data['reflection']['learned'].strip():
         missing.append('reflection.learned')
     return missing
@@ -449,7 +580,7 @@ class WritingStore:
         try:
             lesson = validate_lesson(_decode(row['lesson_json']))
             data = validate_data(_decode(row['data_json']), lesson)
-            if 'guidance' in lesson and 'guidance' not in data:
+            if any(field in lesson and field not in data for field in ('guidance', 'coaching')):
                 raise WritingError('写作引导记录不完整。')
             return lesson, data
         except (WritingError, KeyError, TypeError, ValueError) as error:
@@ -514,8 +645,10 @@ class WritingStore:
             row = self._row(connection, attempt_id)
             self._check_write(row, base_revision)
             lesson, previous = self._stored(row)
-            if isinstance(data, dict) and 'guidance' not in data and 'guidance' in previous:
-                data = {**data, 'guidance': deepcopy(previous['guidance'])}
+            if isinstance(data, dict):
+                for field in ('guidance', 'coaching'):
+                    if field not in data and field in previous:
+                        data = {**data, field: deepcopy(previous[field])}
             data = validate_data(data, lesson)
             if label is not None and (not isinstance(label, str) or not label.strip() or len(label) > 80):
                 raise WritingError('保存版本的名称无效。')
@@ -545,7 +678,7 @@ class WritingStore:
                 raise WritingError('版本不存在。', 404)
             try:
                 data = validate_data(_decode(row['data_json']), lesson)
-                if 'guidance' in lesson and 'guidance' not in data:
+                if any(field in lesson and field not in data for field in ('guidance', 'coaching')):
                     raise WritingError('写作引导版本不完整。')
             except WritingError as error:
                 raise WritingError('作文版本暂时无法读取，原稿已保留。', 503) from error
@@ -582,7 +715,7 @@ class WritingStore:
             now, revision = china_now_iso(timespec='microseconds'), row['revision'] + 1
             try:
                 restored = validate_data(_decode(version['data_json']), lesson)
-                if 'guidance' in lesson and 'guidance' not in restored:
+                if any(field in lesson and field not in restored for field in ('guidance', 'coaching')):
                     raise WritingError('写作引导版本不完整。')
             except WritingError as error:
                 raise WritingError('作文版本暂时无法恢复，原稿已保留。', 503) from error
@@ -624,8 +757,10 @@ def register_subject_writing_routes(app, services):
     def flow_access(username, attempt_id):
         learning_store = store(username)
         result = learning_store.get(attempt_id)
-        if ('guidance' in result['attempt']['lesson_snapshot']
-                and request.headers.get('X-Writing-Flow') != 'guided-v1'):
+        snapshot = result['attempt']['lesson_snapshot']
+        capability = request.headers.get('X-Writing-Flow')
+        if (('coaching' in snapshot and capability != 'guided-v2')
+                or ('guidance' in snapshot and capability not in ('guided-v1', 'guided-v2'))):
             raise WritingError('这份练习使用新版写作引导，请刷新页面后重新打开。原稿会保留。',
                                409, code='upgrade_required')
         return learning_store, result
@@ -663,7 +798,7 @@ def register_subject_writing_routes(app, services):
     @services.parent_forbidden
     def start(username):
         data = body(('lesson_id',), ('flow_version',))
-        if 'flow_version' in data and (type(data['flow_version']) is not int or data['flow_version'] != 1):
+        if 'flow_version' in data and (type(data['flow_version']) is not int or data['flow_version'] not in (1, 2)):
             raise WritingError('写作引导版本无效，请刷新后再试。')
         _valid_id(data['lesson_id'], LESSON_ID, '练习题目不存在。')
         lesson = next((item for item in lessons() if item['id'] == data['lesson_id']), None)
@@ -672,10 +807,15 @@ def register_subject_writing_routes(app, services):
         if 'flow_version' in data:
             if 'guidance' not in lesson:
                 raise WritingError('这道题暂未提供新版写作引导，请选择已有练习方式。')
+            if data['flow_version'] == 2:
+                if 'coaching' not in lesson:
+                    raise WritingError('这道题暂未提供新版写作辅助，请选择已有练习方式。')
+            else:
+                lesson = {key: value for key, value in lesson.items() if key != 'coaching'}
         elif 'guidance' in lesson:
             # An already-open classic client can still create a complete classic
             # attempt. Its immutable snapshot never pretends to support nine steps.
-            lesson = {key: value for key, value in lesson.items() if key != 'guidance'}
+            lesson = {key: value for key, value in lesson.items() if key not in ('guidance', 'coaching')}
         return jsonify({'attempt': store(username).start(lesson), 'read_only': False}), 201
 
     @routes.get('/attempts/<attempt_id>')

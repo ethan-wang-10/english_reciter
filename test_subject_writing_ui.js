@@ -7,7 +7,12 @@ const { webcrypto } = require('node:crypto');
 
 const html = fs.readFileSync(path.join(__dirname, 'static/subject.html'), 'utf8');
 const source = fs.readFileSync(path.join(__dirname, 'static/js/subject-writing.js'), 'utf8');
-const GUIDED_LESSON = JSON.parse(fs.readFileSync(path.join(__dirname, 'subject_content/chinese/writing/lesson-01-game.json'), 'utf8'));
+const COACHED_LESSON = JSON.parse(fs.readFileSync(path.join(__dirname, 'subject_content/chinese/writing/lesson-01-game.json'), 'utf8'));
+// Saved guided-v1 attempts keep their original lesson and must remain usable when
+// the catalogue moves on to a newer teaching flow.
+const GUIDED_LESSON = JSON.parse(JSON.stringify(COACHED_LESSON));
+GUIDED_LESSON.version = 2;
+delete GUIDED_LESSON.coaching;
 const prefix = '/subjects/chinese/writing';
 const settle = () => new Promise(setImmediate);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -158,6 +163,17 @@ function writingUI({ storage = new Map(), isParent = false, seed = [], lesson: r
                 details: [], ownDetail: '', sentence: '', paragraph: '', endingOkay: false,
             };
         }
+        if (state.lesson.coaching) {
+            data.coaching = {
+                version: 1,
+                material: { step: 0, source: '', activity: '', moment: '', feeling: '' },
+                comparison: { choices: [], reason: '' },
+                evidence: {
+                    structure: { before: '', after: '', reason: '' },
+                    language: { before: '', after: '', reason: '' },
+                },
+            };
+        }
         return data;
     }
     function makeAttempt(data = freshData(), suffix = String(state.attempts.size + 1)) {
@@ -175,16 +191,24 @@ function writingUI({ storage = new Map(), isParent = false, seed = [], lesson: r
         const relative = call.url.slice(prefix.length);
         if (relative === '/lessons') {
             const item = Object.fromEntries(['id', 'version', 'title', 'grade', 'description', 'goal', 'time_hint'].filter((key) => key in state.lesson).map((key) => [key, clone(state.lesson[key])]));
-            if (state.lesson.guidance) item.flow_version = state.lesson.guidance.version;
+            if (state.lesson.coaching) item.flow_version = 2;
+            else if (state.lesson.guidance) item.flow_version = state.lesson.guidance.version;
             return { items: [item], count: 1 };
         }
         if (relative === '/lessons/' + state.lesson.id) return { lesson: clone(state.lesson) };
         if (relative === '/attempts' && call.method === 'GET') return { items: [...state.attempts.values()].filter((attempt) => attempt.status !== 'abandoned').map((attempt) => ({ id: attempt.id, lesson_id: attempt.lesson_id, title: attempt.lesson_snapshot.title, lesson_title: attempt.lesson_snapshot.title, stage: attempt.data.stage, revision: attempt.revision, status: attempt.status, updated_at: attempt.updated_at, completed_at: attempt.completed_at })), count: state.attempts.size, read_only: state.session.account.is_parent };
         if (relative === '/attempts' && call.method === 'POST') {
-            const guided = call.body.flow_version === 1;
+            const guided = [1, 2].includes(call.body.flow_version);
             if (guided) assert.equal(state.lesson.guidance?.version, 1);
             const attempt = makeAttempt(guided ? freshData() : emptyData());
             if (!guided) delete attempt.lesson_snapshot.guidance;
+            if (call.body.flow_version !== 2) {
+                delete attempt.lesson_snapshot.coaching;
+                delete attempt.data.coaching;
+            }
+            const initialVersion = state.versions.get(attempt.id)[0];
+            initialVersion.data = clone(attempt.data);
+            initialVersion.lesson_snapshot = clone(attempt.lesson_snapshot);
             return payload(attempt);
         }
         const match = relative.match(/^\/attempts\/(writing_[a-f0-9]{32})(?:\/(.*))?$/); assert.ok(match, 'Unexpected writing route: ' + call.url);
@@ -704,6 +728,45 @@ async function openGuided(step = 0, { data = guidedData(step), ...options } = {}
     return { ui, attempt };
 }
 
+function coachedData(step = 0, filled = false) {
+    const data = guidedData(step, filled);
+    data.coaching = {
+        version: 1,
+        material: { step: filled ? 4 : 0, source: '', activity: '', moment: '', feeling: '' },
+        comparison: { choices: [], reason: '' },
+        evidence: {
+            structure: { before: '', after: '', reason: '' },
+            language: { before: '', after: '', reason: '' },
+        },
+    };
+    if (filled) {
+        Object.assign(data.coaching.material, {
+            source: 'personal', activity: '课间我和同桌在座位旁玩猜词。',
+            moment: '我比画兔子，他猜成了青蛙。', feeling: '先惊讶，后来忍不住笑。',
+        });
+        data.coaching.comparison = { choices: ['action', 'reaction'], reason: '我能看见手指的位置和他猜错后的反应。' };
+    }
+    return data;
+}
+
+async function openCoached(step = 0, { data = coachedData(step), ...options } = {}) {
+    const ui = writingUI({ lesson: COACHED_LESSON, ...options });
+    const attempt = ui.makeAttempt(data);
+    await ui.api.openAttempt(attempt.id);
+    return { ui, attempt };
+}
+
+function revisionData(round = 'structure') {
+    const data = coachedData(8, true);
+    data.stage = 4; data.review_round = round; data.structure_started = true;
+    data.structure_paragraphs = { ...data.paragraphs };
+    if (round === 'language') {
+        data.language_started = true;
+        data.final_paragraphs = { ...data.paragraphs };
+    }
+    return data;
+}
+
 async function guidedNav(ui, step) {
     const node = ui.field('writing-guided-step-' + step);
     assert.ok(node, 'Missing guided navigation step ' + step);
@@ -720,7 +783,7 @@ test('the real version-two lesson negotiates its guided flow while old summaries
     await ui.field('writing-lessons').querySelector('button').fire('click');
     const start = ui.state.calls.find((call) => call.method === 'POST' && call.url.endsWith('/attempts'));
     assert.equal(start.body.flow_version, 1);
-    assert.equal(start.headers['X-Writing-Flow'], 'guided-v1');
+    assert.equal(start.headers['X-Writing-Flow'], 'guided-v2');
     assert.ok(ui.field('writing-guided-customTheme'));
     const current = [...ui.state.attempts.values()][0];
     assert.equal(current.data.outline[0].id, 'p_full');
@@ -729,7 +792,7 @@ test('the real version-two lesson negotiates its guided flow while old summaries
     await ui.timers();
     const guidedSaves = ui.state.calls.filter((call) => call.method === 'PATCH');
     assert.ok(guidedSaves.length > 0);
-    assert.ok(guidedSaves.every((call) => call.headers['X-Writing-Flow'] === 'guided-v1'));
+    assert.ok(guidedSaves.every((call) => call.headers['X-Writing-Flow'] === 'guided-v2'));
 
     const old = writingUI({ lesson: GUIDED_LESSON });
     old.state.routes[prefix + '/lessons'] = () => ({ items: [{ id: GUIDED_LESSON.id, title: GUIDED_LESSON.title }], count: 1 });
@@ -739,6 +802,271 @@ test('the real version-two lesson negotiates its guided flow while old summaries
     assert.equal(classic.data.guidance, undefined);
     assert.equal(classic.lesson_snapshot.guidance, undefined);
     assert.ok(old.field('writing-plan-situation'));
+});
+
+test('the version-three catalogue creates the enhanced flow without changing saved guided-v1 work', async () => {
+    assert.equal(COACHED_LESSON.version, 3);
+    assert.equal(COACHED_LESSON.guidance.version, 1);
+    assert.equal(COACHED_LESSON.coaching.version, 1);
+    const ui = writingUI({ lesson: COACHED_LESSON });
+    await ui.api.open();
+    await ui.field('writing-lessons').querySelector('button').fire('click');
+    const request = ui.state.calls.find((call) => call.method === 'POST' && call.url.endsWith('/attempts'));
+    assert.equal(request.body.flow_version, 2);
+    assert.equal(request.headers['X-Writing-Flow'], 'guided-v2');
+    const fresh = [...ui.state.attempts.values()][0];
+    assert.equal(fresh.data.coaching.version, 1);
+    assert.deepEqual(fresh.data.coaching.comparison.choices, []);
+
+    const old = writingUI({ lesson: COACHED_LESSON });
+    const previous = old.makeAttempt(guidedData(5, true));
+    previous.lesson_snapshot = clone(GUIDED_LESSON);
+    await old.api.openAttempt(previous.id);
+    assert.ok(old.field('writing-guided-sentence'));
+    assert.equal(previous.data.coaching, undefined);
+    assert.equal(previous.lesson_snapshot.coaching, undefined);
+    await old.type('writing-guided-sentence', '旧稿仍然按原来的九问继续写。');
+    await old.timers();
+    assert.equal(previous.data.guidance.sentence, '旧稿仍然按原来的九问继续写。');
+    assert.equal(previous.data.coaching, undefined, 'Opening an old draft must not force new teaching tasks into it');
+});
+
+test('material recall unfolds one small question at a time before showing theme references beside the learner own words', async () => {
+    const { ui, attempt } = await openCoached();
+    assert.equal(ui.field('writing-stage-title').textContent, '主旨立意 · 先回想素材');
+    assert.match(ui.field('writing-stage-goal').textContent, /一次只想一小问/);
+    assert.ok(ui.field('writing-material-source-personal'));
+    assert.equal(ui.field('writing-material-activity'), null);
+    assert.equal(ui.field('writing-guided-customTheme'), null);
+    assert.equal(ui.field('writing-next').disabled, true);
+    await ui.field('writing-material-source-personal').fire('click');
+    await ui.field('writing-material-next').fire('click');
+    assert.ok(ui.field('writing-material-activity'));
+    assert.equal(ui.field('writing-material-moment'), null);
+    await ui.type('writing-material-activity', '课间我和小林在教室里玩猜词。');
+    await ui.field('writing-material-next').fire('click');
+    assert.equal(ui.field('writing-material-activity'), null);
+    assert.ok(ui.field('writing-material-moment'));
+    await ui.type('writing-material-moment', '我比画兔子，他猜成青蛙。');
+    await ui.field('writing-material-next').fire('click');
+    assert.equal(ui.field('writing-material-moment'), null);
+    assert.ok(ui.field('writing-material-feeling'));
+    await ui.type('writing-material-feeling', '我先惊讶，接着忍不住笑。');
+    await ui.field('writing-material-next').fire('click');
+    assert.equal(ui.field('writing-stage-title').textContent, COACHED_LESSON.guidance.steps[0].question);
+    assert.equal(ui.field('writing-stage-goal').textContent, COACHED_LESSON.guidance.steps[0].description);
+    assert.equal(ui.field('writing-material-feeling'), null);
+    assert.ok(ui.field('writing-guided-theme-mixup'));
+    assert.ok(ui.field('writing-guided-customTheme'), 'References and the learner own description share the same question page');
+    await ui.field('writing-guided-theme-mixup').fire('click');
+    await ui.type('writing-guided-customTheme', '我想写同伴配合时的意外和快乐。');
+    await ui.timers();
+    assert.equal(ui.field('writing-guided-adopted-theme').textContent, '我想写同伴配合时的意外和快乐。');
+    assert.deepEqual(attempt.data.coaching.material, {
+        step: 4, source: 'personal', activity: '课间我和小林在教室里玩猜词。',
+        moment: '我比画兔子，他猜成青蛙。', feeling: '我先惊讶，接着忍不住笑。',
+    });
+    assert.equal(attempt.data.paragraphs.p_full || '', '', 'Recalling material must not generate a draft');
+});
+
+test('looking back at material keeps confirmed work available while a changed source preserves later writing for review', async () => {
+    const data = coachedData(0, true);
+    data.structure_started = data.language_started = true;
+    data.structure_paragraphs = { p_full: '学生后来自己写过的内容修改稿。' };
+    data.final_paragraphs = { p_full: '学生后来自己写过的表达修改稿。' };
+    const { ui, attempt } = await openCoached(0, { data });
+    await ui.field('writing-material-edit-source').fire('click');
+    await ui.timers();
+    assert.deepEqual(attempt.data.guidance.review, [], 'Opening an earlier question is not itself a material change');
+    assert.equal(ui.field('writing-guided-review-structure').disabled, false,
+        'Looking back at a material question cannot invalidate nine already-confirmed answers');
+    await ui.field('writing-guided-review-structure').fire('click');
+    assert.equal(ui.field('writing-paragraph-p_full').value, data.structure_paragraphs.p_full,
+        'The learner can return to the saved revision without answering the material questions again');
+    assert.deepEqual(attempt.data.guidance.review, []);
+    await guidedNav(ui, 0);
+    await ui.field('writing-material-source-scenario').fire('click');
+    await ui.timers();
+    assert.equal(attempt.data.coaching.material.source, 'scenario');
+    assert.equal(attempt.data.coaching.material.activity, data.coaching.material.activity);
+    assert.equal(attempt.data.guidance.paragraph, data.guidance.paragraph);
+    assert.deepEqual(attempt.data.paragraphs, data.paragraphs);
+    assert.deepEqual(attempt.data.structure_paragraphs, data.structure_paragraphs);
+    assert.deepEqual(attempt.data.final_paragraphs, data.final_paragraphs);
+    assert.deepEqual([...attempt.data.guidance.review].sort((a, b) => a - b), Array.from({ length: 9 }, (_, i) => i));
+    assert.equal(attempt.data.guidance.endingOkay, false);
+});
+
+test('material suggestions follow the chosen source and append only to the current recollection', async () => {
+    const data = coachedData(0, true);
+    data.coaching.material.step = 1;
+    data.coaching.material.activity = '上次课间我和小林玩';
+    data.guidance.customTheme = '我想写两个人一起尝试的快乐。';
+    const { ui, attempt } = await openCoached(0, { data });
+    const firstPersonal = COACHED_LESSON.coaching.material.suggestions.personal.activity[0];
+    assert.equal(ui.field('writing-material-suggestion-activity-0').dataset.value, firstPersonal);
+    await ui.field('writing-material-suggestion-activity-0').fire('click');
+    await ui.field('writing-material-suggestion-activity-0').fire('click');
+    assert.equal(ui.field('writing-material-activity').value, data.coaching.material.activity + '，' + firstPersonal);
+    await ui.field('writing-material-prev').fire('click');
+    await ui.field('writing-material-source-scenario').fire('click');
+    await ui.field('writing-material-next').fire('click');
+    const firstScenario = COACHED_LESSON.coaching.material.suggestions.scenario.activity[0];
+    assert.equal(ui.field('writing-material-suggestion-activity-0').dataset.value, firstScenario);
+    assert.equal(ui.field('writing-material-activity').value, data.coaching.material.activity + '，' + firstPersonal,
+        'Switching the source does not substitute the scenario for a remembered event');
+    await ui.timers();
+    assert.equal(attempt.data.guidance.customTheme, data.guidance.customTheme);
+    assert.equal(attempt.data.guidance.paragraph, data.guidance.paragraph);
+    assert.deepEqual(attempt.data.paragraphs, data.paragraphs);
+});
+
+test('a personal event stays visible in later questions and can advance using own material without selecting the scenario', async () => {
+    const data = coachedData(2, true);
+    Object.assign(data.coaching.material, { activity: '我和小林在走廊跳绳。', moment: '绳子绊住鞋子，我们停下重新来。', feeling: '有点着急，成功后很开心。' });
+    data.guidance.slots = { begin: [], middle: [], end: [] };
+    data.guidance.notes = { begin: '下课后我和小林到走廊跳绳。', middle: '', end: '' };
+    data.paragraphs.p_full = '我已经用自己的跳绳经历写下的初稿。';
+    const { ui, attempt } = await openCoached(2, { data });
+    const context = ui.field('writing-material-context').textContent;
+    assert.ok(context.includes(data.coaching.material.activity));
+    assert.ok(context.includes(data.coaching.material.moment));
+    assert.ok(context.includes(data.coaching.material.feeling));
+    assert.match(context, /只是写法例子，可以不选/);
+    await ui.field('writing-next').fire('click');
+    assert.ok(ui.field('writing-guided-note-middle'));
+    await ui.type('writing-guided-note-middle', '我想写两个人怎样重新配合好。');
+    await ui.field('writing-next').fire('click');
+    assert.ok(ui.field('writing-guided-note-end'));
+    assert.deepEqual(attempt.data.guidance.slots, { begin: [], middle: [], end: [] });
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    assert.deepEqual(attempt.data.coaching.material, data.coaching.material);
+});
+
+test('detail comparison accepts several reasoned choices without grading or inserting the reference sentences', async () => {
+    const data = coachedData(5, true);
+    data.coaching.comparison = { choices: [], reason: '' };
+    data.guidance.sentence = '';
+    const { ui, attempt } = await openCoached(5, { data });
+    assert.ok(ui.field('writing-guided-sentence'));
+    assert.ok(ui.field('writing-comparison-reason'));
+    const extraDetails = ui.field('writing-coaching-detail-keywords');
+    assert.ok(extraDetails, 'The older keyword cards remain available when needed');
+    assert.equal(extraDetails.open, false, 'The optional keyword cards start folded to keep comparison choices clear');
+    assert.equal(ui.field('writing-guided-detail-ears').closest('details'), extraDetails);
+    await ui.field('writing-comparison-action').fire('click');
+    await ui.field('writing-comparison-reaction').fire('click');
+    await ui.timers();
+    assert.deepEqual(attempt.data.coaching.comparison.choices, ['action', 'reaction']);
+    assert.equal(ui.field('writing-guided-sentence').value, '');
+    assert.equal(ui.field('writing-next').disabled, true, 'Reference selections cannot stand in for the learner own sentence');
+    assert.doesNotMatch(ui.field('writing-stage-content').textContent, /回答正确|回答错误|标准答案：|正确答案是/);
+    await ui.field('writing-comparison-action').fire('click');
+    await ui.field('writing-comparison-dialogue').fire('click');
+    await ui.type('writing-guided-sentence', '我举着手指等答案，小林忽然喊出“青蛙”。');
+    assert.equal(ui.field('writing-next').disabled, false, 'Explaining a comparison choice is optional');
+    await ui.field('writing-next').fire('click');
+    assert.deepEqual([...attempt.data.coaching.comparison.choices].sort(), ['dialogue', 'reaction']);
+    assert.equal(attempt.data.coaching.comparison.reason, '');
+    assert.equal(attempt.data.guidance.sentence, '我举着手指等答案，小林忽然喊出“青蛙”。');
+    assert.equal(attempt.data.guidance.paragraph, data.guidance.paragraph, 'An existing learner paragraph is not replaced by a comparison option');
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    const availableDetails = ui.field('writing-stage-content').querySelector('.writing-guided-related').textContent;
+    for (const id of ['dialogue', 'reaction']) {
+        const selected = COACHED_LESSON.coaching.comparison.options.find((option) => option.id === id);
+        assert.ok(availableDetails.includes(selected.text), 'The next paragraph keeps the selected writing reference visible');
+    }
+    assert.equal(availableDetails.includes(COACHED_LESSON.coaching.comparison.options.find((option) => option.id === 'action').text), false);
+});
+
+test('both revision rounds save exact change evidence while the learner edits the article separately', async () => {
+    const data = revisionData();
+    const original = data.paragraphs.p_full;
+    const contentDraft = original.replace('我比画兔子', '我把两根手指竖在头顶，比画兔子');
+    const expressionDraft = contentDraft.replace('我们都笑了', '我笑得手指都放不下来');
+    const { ui, attempt } = await openCoached(8, { data });
+    assert.match(ui.field('writing-evidence-previous-text').textContent, /我比画兔子/);
+    await ui.type('writing-evidence-before', '我比画兔子');
+    await ui.type('writing-evidence-after', '我把两根手指竖在头顶，比画兔子');
+    await ui.type('writing-evidence-reason', '让读者看见我到底怎样比画。');
+    assert.equal(ui.field('writing-paragraph-p_full').value, original, 'The evidence card cannot rewrite the article');
+    await ui.field('writing-next').fire('click');
+    assert.equal(attempt.data.review_round, 'structure', 'The claimed new fragment must actually be in the edited draft');
+    assert.match(ui.field('writing-message').textContent, /改句|正文/);
+    await ui.type('writing-paragraph-p_full', contentDraft);
+    await ui.type('writing-evidence-before', '初稿里没有出现过的原句');
+    await ui.field('writing-next').fire('click');
+    assert.equal(attempt.data.review_round, 'structure', 'A before fragment must also be traceable in the previous article');
+    assert.match(ui.field('writing-message').textContent, /原句|原稿/);
+    await ui.type('writing-evidence-before', '我比画兔子');
+    assert.equal(ui.field('writing-next').disabled, false);
+    await ui.field('writing-next').fire('click');
+    assert.equal(attempt.data.review_round, 'language');
+    assert.equal(ui.field('writing-paragraph-p_full').value, contentDraft);
+    await ui.type('writing-evidence-before', '我们都笑了');
+    await ui.type('writing-evidence-after', '我笑得手指都放不下来');
+    await ui.type('writing-evidence-reason', '用具体反应表现快乐，读者更容易感受到。');
+    assert.equal(ui.field('writing-paragraph-p_full').value, contentDraft);
+    await ui.type('writing-paragraph-p_full', expressionDraft);
+    await ui.field('writing-next').fire('click');
+    assert.equal(attempt.data.stage, 5);
+    assert.deepEqual(attempt.data.coaching.evidence, {
+        structure: { before: '我比画兔子', after: '我把两根手指竖在头顶，比画兔子', reason: '让读者看见我到底怎样比画。' },
+        language: { before: '我们都笑了', after: '我笑得手指都放不下来', reason: '用具体反应表现快乐，读者更容易感受到。' },
+    });
+    assert.equal(attempt.data.revision_notes.structure, attempt.data.coaching.evidence.structure.reason);
+    assert.equal(attempt.data.revision_notes.language, attempt.data.coaching.evidence.language.reason);
+    assert.equal(attempt.data.paragraphs.p_full, original);
+    assert.equal(attempt.data.structure_paragraphs.p_full, contentDraft);
+    assert.equal(attempt.data.final_paragraphs.p_full, expressionDraft);
+    const contentVersion = ui.state.versions.get(attempt.id).find((version) => version.label === '内容修改稿');
+    const expressionVersion = ui.state.versions.get(attempt.id).find((version) => version.label === '修改稿');
+    assert.deepEqual(contentVersion.data.coaching.evidence.structure, attempt.data.coaching.evidence.structure);
+    assert.deepEqual(expressionVersion.data.coaching.evidence, attempt.data.coaching.evidence);
+});
+
+test('checking that no change is needed permits both rounds without inventing edits or evidence', async () => {
+    const data = revisionData();
+    const { ui, attempt } = await openCoached(8, { data });
+    await ui.field('writing-next').fire('click');
+    assert.equal(attempt.data.review_round, 'structure');
+    assert.equal(writes(ui).some((call) => call.url.endsWith('/checkpoints')), false);
+    for (const round of ['structure', 'language']) {
+        const checkbox = ui.field('writing-no-change');
+        checkbox.checked = true; await checkbox.fire('change');
+        assert.equal(ui.field('writing-next').disabled, false);
+        await ui.field('writing-next').fire('click');
+        assert.equal(attempt.data.no_change[round], true);
+        assert.deepEqual(attempt.data.coaching.evidence[round], { before: '', after: '', reason: '' });
+    }
+    assert.equal(attempt.data.stage, 5);
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    assert.equal(attempt.data.final_paragraphs.p_full, data.paragraphs.p_full);
+});
+
+test('enhanced history previews and restores material, comparison and both evidence rounds together', async () => {
+    const data = revisionData('language');
+    data.coaching.evidence = {
+        structure: { before: '我比画兔子', after: '我比画兔子', reason: '历史版本的内容修改理由。' },
+        language: { before: '我们都笑了', after: '我们都笑了', reason: '历史版本的表达修改理由。' },
+    };
+    const { ui, attempt } = await openCoached(8, { data });
+    attempt.data.coaching.material.moment = '后来换用的另一件事。';
+    attempt.data.coaching.comparison.reason = '后来才写的比较理由。';
+    attempt.data.coaching.evidence.structure.reason = '后来才写的内容理由。';
+    attempt.data.coaching.evidence.language.reason = '后来才写的表达理由。';
+    attempt.revision = 7;
+    await ui.api.openAttempt(attempt.id);
+    await ui.field('writing-history-open').fire('click');
+    const preview = ui.field('writing-version-preview').textContent;
+    for (const text of [data.coaching.material.moment, data.coaching.comparison.reason,
+        data.coaching.evidence.structure.reason, data.coaching.evidence.language.reason]) assert.ok(preview.includes(text));
+    await ui.field('writing-version-restore').fire('click');
+    await ui.field('writing-version-restore-confirm').fire('click');
+    assert.deepEqual(attempt.data.coaching, data.coaching);
+    assert.equal(ui.field('writing-evidence-reason').value, data.coaching.evidence.language.reason);
+    assert.equal(ui.state.versions.get(attempt.id).length, 2);
+    assert.equal(attempt.revision, 8);
 });
 
 test('all nine questions can be visited freely without confirming answers or showing multiple question editors', async () => {
@@ -915,6 +1243,61 @@ test('a guided conflict keeps canonical draft and guided notes in the account-sc
     assert.equal(stale.field('writing-stage-content').textContent, '');
 });
 
+test('an enhanced-flow conflict preserves and exports material, comparison and both evidence rounds', async () => {
+    const data = coachedData(7, true);
+    data.coaching.evidence = {
+        structure: { before: '我做了动作。', after: '我竖起两根手指。', reason: '让读者看见手指的位置。' },
+        language: { before: '真好玩，真有趣。', after: '我笑得手指都放不下来。', reason: '用反应代替重复评价。' },
+    };
+    const { ui, attempt } = await openCoached(7, { data });
+    ui.state.routes[prefix + '/attempts/' + attempt.id] = (call) => {
+        if (call.method === 'PATCH') throw Object.assign(new Error('另一页面已更新'), { status: 409, code: 'conflict', current_revision: 9 });
+        return ui.state.defaultReply(call);
+    };
+    await ui.type('writing-guided-draft', '新版流程中尚未同步的学生原文。');
+    await ui.timers();
+    assert.equal(ui.field('writing-conflict').hidden, false);
+    const backup = JSON.parse(ui.storage.get(`itorange-writing-draft:alice:${attempt.id}`));
+    assert.deepEqual(backup.data.coaching, data.coaching);
+    assert.equal(backup.data.paragraphs.p_full, '新版流程中尚未同步的学生原文。');
+    await ui.field('writing-copy-draft').fire('click');
+    for (const text of [data.coaching.material.activity, data.coaching.material.moment, data.coaching.material.feeling,
+        data.coaching.comparison.reason, ...Object.values(data.coaching.evidence).flatMap(Object.values)]) {
+        assert.ok(ui.state.clipboard.includes(text), 'Conflict copying must include the student-owned teaching notes: ' + text);
+    }
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PATCH').length, 1);
+});
+
+test('an enhanced-flow local backup can recover all teaching notes without leaking through a late account response', async () => {
+    const data = coachedData(7, true);
+    data.coaching.evidence.structure = { before: '原来的内容。', after: '本机记录的内容修改。', reason: '交代了猜错的原因。' };
+    const first = await openCoached(7, { data });
+    first.ui.state.routes[prefix + '/attempts/' + first.attempt.id] = (call) => {
+        if (call.method === 'PATCH') throw new Error('连接暂时中断');
+        return first.ui.state.defaultReply(call);
+    };
+    await first.ui.type('writing-guided-draft', '断网后学生继续写的整篇初稿。');
+    await first.ui.timers();
+    const recovered = await openCoached(7, { data, storage: first.ui.storage });
+    assert.equal(recovered.ui.field('writing-local-recovery').hidden, false);
+    await recovered.ui.field('writing-recover-local').fire('click');
+    assert.equal(recovered.ui.field('writing-guided-draft').value, '断网后学生继续写的整篇初稿。');
+    await recovered.ui.timers();
+    assert.deepEqual(recovered.attempt.data.coaching, data.coaching);
+
+    const gate = deferred();
+    const stale = writingUI({ lesson: COACHED_LESSON });
+    const old = stale.makeAttempt(data);
+    stale.state.routes[prefix + '/attempts/' + old.id] = () => gate.promise;
+    const opening = stale.api.openAttempt(old.id); await stale.flush();
+    stale.api.reset();
+    stale.state.session = { token: 'bob-token', username: 'bob', subject: 'chinese', account: { username: 'bob', is_parent: false } };
+    gate.resolve({ attempt: clone(old), versions: [], read_only: false }); await opening;
+    assert.equal(stale.field('writing-editor').hidden, true);
+    assert.equal(stale.field('writing-stage-content').textContent, '');
+    assert.equal(writes(stale).length, 0);
+});
+
 test('a parent may navigate all guided questions and help without confirming or modifying the student work', async () => {
     const { ui, attempt } = await openGuided(0, { data: guidedData(0, true), isParent: true });
     const original = clone(attempt.data);
@@ -928,6 +1311,67 @@ test('a parent may navigate all guided questions and help without confirming or 
     await ui.timers();
     assert.equal(writes(ui).length, 0);
     assert.deepEqual(attempt.data, original);
+});
+
+test('parent viewing protects the new source, comparison and revision-evidence controls from writing', async () => {
+    const source = await openCoached(0, { data: coachedData(0, true), isParent: true });
+    const sourceData = clone(source.attempt.data);
+    await source.ui.field('writing-material-edit-source').fire('click');
+    assert.equal(source.ui.field('writing-material-source-scenario').disabled, true);
+    await source.ui.field('writing-material-source-scenario').fire('click');
+    await guidedNav(source.ui, 5);
+    assert.equal(source.ui.field('writing-comparison-dialogue').disabled, true);
+    assert.equal(source.ui.field('writing-comparison-reason').disabled, true);
+    await source.ui.field('writing-comparison-dialogue').fire('click');
+    await source.ui.type('writing-comparison-reason', '家长触发的比较理由');
+    await source.ui.timers();
+    assert.equal(writes(source.ui).length, 0);
+    assert.deepEqual(source.attempt.data, sourceData);
+
+    const revision = await openCoached(8, { data: revisionData(), isParent: true });
+    const revisionDataBefore = clone(revision.attempt.data);
+    for (const part of ['before', 'after', 'reason']) {
+        assert.equal(revision.ui.field('writing-evidence-' + part).disabled, true);
+        await revision.ui.type('writing-evidence-' + part, '家长触发的修改证据');
+    }
+    await revision.ui.timers();
+    assert.equal(writes(revision.ui).length, 0);
+    assert.deepEqual(revision.attempt.data, revisionDataBefore);
+});
+
+test('an evidence save in flight preserves later edits and locks its fields during a round checkpoint', async () => {
+    const data = revisionData();
+    const current = data.paragraphs.p_full.replace('我比画兔子', '我举起手指比画兔子');
+    const { ui, attempt } = await openCoached(8, { data });
+    await ui.type('writing-paragraph-p_full', current);
+    await ui.type('writing-evidence-before', '我比画兔子');
+    await ui.type('writing-evidence-after', '我举起手指比画兔子');
+    const saveGate = deferred(); let firstSave;
+    ui.state.routes[prefix + '/attempts/' + attempt.id] = (call) => {
+        if (call.method === 'PATCH' && !firstSave) { firstSave = call; return saveGate.promise; }
+        return ui.state.defaultReply(call);
+    };
+    await ui.type('writing-evidence-reason', '先写下的一点理由。'); await ui.timers();
+    await ui.type('writing-evidence-reason', '等候保存时补充：读者可以看见手指的动作。'); await ui.timers();
+    assert.equal(ui.state.calls.filter((call) => call.method === 'PATCH').length, 1);
+    saveGate.resolve(ui.state.defaultReply(firstSave)); await ui.flush(); await ui.timers();
+    const saves = ui.state.calls.filter((call) => call.method === 'PATCH');
+    assert.deepEqual(saves.map((call) => call.body.base_revision), [1, 2]);
+    assert.equal(attempt.data.coaching.evidence.structure.reason, '等候保存时补充：读者可以看见手指的动作。');
+    assert.equal(ui.field('writing-evidence-reason').value, '等候保存时补充：读者可以看见手指的动作。');
+
+    const checkpointGate = deferred(); let checkpoint;
+    ui.state.routes[prefix + '/attempts/' + attempt.id + '/checkpoints'] = (call) => { checkpoint = call; return checkpointGate.promise; };
+    await ui.field('writing-next').fire('click');
+    assert.ok(checkpoint);
+    assert.equal(checkpoint.body.data.coaching.evidence.structure.reason, '等候保存时补充：读者可以看见手指的动作。');
+    for (const part of ['before', 'after', 'reason']) {
+        assert.equal(ui.field('writing-evidence-' + part).disabled, true);
+        await ui.type('writing-evidence-' + part, '确认途中不应被接受的新证据');
+    }
+    checkpointGate.resolve(ui.state.defaultReply(checkpoint)); await ui.flush();
+    assert.equal(attempt.data.review_round, 'language');
+    assert.deepEqual(attempt.data.coaching.evidence.structure, checkpoint.body.data.coaching.evidence.structure);
 });
 
 test('nine confirmed guided questions feed the existing two revision rounds and immutable completed work', async () => {
@@ -1075,7 +1519,7 @@ test('abandonment can be cancelled without posting and then removes only the cho
     await confirmAbandon(ui, controls);
     const call = ui.state.calls.find((call) => call.url.endsWith('/abandon'));
     assert.deepEqual(call.body, { base_revision: 1 });
-    assert.equal(call.headers['X-Writing-Flow'], 'guided-v1');
+    assert.equal(call.headers['X-Writing-Flow'], 'guided-v2');
     assert.equal(first.status, 'abandoned'); assert.deepEqual(first.data, original);
     assert.deepEqual(ui.state.versions.get(first.id), originalVersions, 'The original text and versions remain saved');
     assert.equal(ui.field('writing-attempt-list').querySelector(`[data-attempt-id="${first.id}"]`), null);

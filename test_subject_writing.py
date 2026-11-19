@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from flask import Flask, g, jsonify, request
 import pytest
 
-from subject_writing import WritingError, WritingStore, initial_data, initial_guidance, register_subject_writing_routes, validate_data, validate_lesson
+from subject_writing import WritingError, WritingStore, initial_data, initial_guidance, initial_coaching, register_subject_writing_routes, validate_data, validate_lesson
 
 
 PREFIX = '/api/subjects/chinese/writing'
@@ -428,8 +428,16 @@ def test_completed_writing_joins_chinese_records_without_a_score_or_math_leak(br
     assert not (browser.data_dir / 'alice/subjects/math').exists()
 
 
-def guided_lesson():
+def coached_lesson():
     return json.loads((Path(__file__).resolve().parent / 'subject_content/chinese/writing/lesson-01-game.json').read_text())
+
+
+def guided_lesson():
+    # Keep the pre-coaching nine-question fixture to exercise stored v2 drafts.
+    value = coached_lesson()
+    value.pop('coaching')
+    value['version'] = 2
+    return value
 
 
 @pytest.fixture
@@ -463,8 +471,8 @@ def guided_complete_data():
 
 
 def test_published_lesson_has_nine_question_configuration_and_commented_original_examples():
-    lesson = validate_lesson(guided_lesson())
-    assert lesson['version'] == 2
+    lesson = validate_lesson(coached_lesson())
+    assert lesson['version'] == 3
     assert [stage['id'] for stage in lesson['stages']] == ['planning', 'outline', 'focus', 'draft', 'revise', 'reflect']
     config = lesson['guidance']
     assert config['version'] == 1 and [step['id'] for step in config['steps']] == list(range(9))
@@ -472,6 +480,10 @@ def test_published_lesson_has_nine_question_configuration_and_commented_original
     assert {item['id'] for item in config['examples']} == {'total', 'sequence'}
     assert all(len(item['paragraphs']) == 3 and all(part['text'] and part['hint'] for part in item['paragraphs']) for item in config['examples'])
     assert '自己的游戏' in config['transfer']['hint']
+    assert lesson['coaching']['version'] == 1
+    assert [step['id'] for step in lesson['coaching']['material']['steps']] == ['source', 'activity', 'moment', 'feeling']
+    assert {option['id'] for option in lesson['coaching']['comparison']['options']} == {'action', 'dialogue', 'reaction'}
+    assert 'correct' not in lesson['coaching']['comparison']
 
 
 def test_new_guided_attempt_starts_empty_and_uses_one_canonical_full_draft(guided_browser):
@@ -497,7 +509,7 @@ def test_already_open_classic_client_can_still_start_and_complete_the_current_le
     assert complete.status_code == 200 and 'guidance' not in complete.json['attempt']['data']
 
 
-@pytest.mark.parametrize('flow', [None, True, False, 0, 2, '1', {}, []])
+@pytest.mark.parametrize('flow', [None, True, False, 0, 3, '1', {}, []])
 def test_invalid_flow_negotiation_is_rejected_before_creating_a_student_database(guided_browser, flow):
     response = guided_browser.client.post(PREFIX + '/attempts', headers=guided_browser.headers,
                                           json={'lesson_id': LESSON_ID, 'flow_version': flow})
@@ -510,7 +522,7 @@ def test_guided_flow_is_not_silently_added_to_a_legacy_lesson(browser):
     assert response.status_code == 400 and not browser.data_dir.exists()
 
 
-@pytest.mark.parametrize('capability', [None, 'legacy', 'guided-v2'])
+@pytest.mark.parametrize('capability', [None, 'legacy', 'guided-v3'])
 def test_guided_attempt_routes_require_the_capability_without_changing_saved_work(guided_browser, capability):
     # The explicit POST flow version itself declares creation capability.
     auth = {'Authorization': 'Bearer alice-token'}
@@ -979,3 +991,284 @@ def test_failed_abandon_snapshot_rolls_back_status_revision_and_keeps_the_draft(
         store.abandon(attempt['id'], 1)
     assert error.value.status == 503 and store.get(attempt['id']) == before
     assert [item['id'] for item in store.list_attempts()] == [attempt['id']]
+
+
+@pytest.fixture
+def coached_browser(browser):
+    browser.lesson_path.write_text(json.dumps(coached_lesson(), ensure_ascii=False))
+    browser.headers = {**browser.headers, 'X-Writing-Flow': 'guided-v2'}
+    return browser
+
+
+def start_coached(browser):
+    response = browser.client.post(PREFIX + '/attempts', headers=browser.headers,
+                                   json={'lesson_id': LESSON_ID, 'flow_version': 2})
+    assert response.status_code == 201, response.json
+    return response.json['attempt']
+
+
+def coached_complete_data():
+    data = guided_complete_data()
+    data['coaching'] = initial_coaching()
+    data['coaching']['material'].update(step=4, source='personal', activity='我和同桌在课间跳绳。',
+                                         moment='我终于跳过了绳圈。', feeling='紧张后觉得很开心。')
+    data['coaching']['comparison']['choices'] = ['reaction']
+    data['structure_paragraphs']['p_full'] = data['paragraphs']['p_full'].replace('我竖起手指', '我把两根手指竖在头顶')
+    data['final_paragraphs'] = deepcopy(data['structure_paragraphs'])
+    data['coaching']['evidence']['structure'].update(
+        before='我竖起手指', after='我把两根手指竖在头顶', reason='补上手指的位置，读者更容易看清我怎样比画。')
+    return data
+
+
+def test_coaching_creation_negotiates_three_compatible_flows_without_changing_old_snapshots(coached_browser):
+    summaries = coached_browser.client.get(PREFIX + '/lessons', headers=coached_browser.headers).json['items']
+    assert summaries[0]['flow_version'] == 2
+    classic = start(coached_browser)
+    guided = start_guided(coached_browser)
+    coached = start_coached(coached_browser)
+    assert classic['data'] == initial_data() and 'guidance' not in classic['lesson_snapshot'] and 'coaching' not in classic['lesson_snapshot']
+    assert guided['data'] == initial_data(guided_lesson()) and 'coaching' not in guided['lesson_snapshot']
+    assert coached['lesson_snapshot'] == coached_lesson()
+    assert coached['data']['coaching'] == initial_coaching()
+    store = WritingStore(database(coached_browser))
+    for attempt in (classic, guided, coached):
+        endpoint = PREFIX + '/attempts/' + attempt['id']
+        assert coached_browser.client.get(endpoint, headers=coached_browser.headers).json['attempt'] == attempt
+        initial = store.get(attempt['id'])['versions'][0]
+        assert store.get_version(attempt['id'], initial['id'])['data'] == attempt['data']
+    old = deepcopy(guided)
+    coached_browser.lesson_path.write_text(json.dumps({**coached_lesson(), 'title': '更新的教学文字'}))
+    assert store.get(guided['id'])['attempt'] == old
+
+
+@pytest.mark.parametrize('capability', [None, 'guided-v1', 'guided-v3'])
+def test_coached_attempt_all_private_routes_require_v2_capability(coached_browser, capability):
+    attempt = start_coached(coached_browser)
+    endpoint = PREFIX + '/attempts/' + attempt['id']
+    store = WritingStore(database(coached_browser)); before = store.get(attempt['id'])
+    version = before['versions'][0]['id']
+    headers = {'Authorization': 'Bearer alice-token'}
+    if capability is not None:
+        headers['X-Writing-Flow'] = capability
+    for method, suffix, payload in (
+        ('get', '', None),
+        ('patch', '', {'base_revision': 1, 'data': coached_complete_data()}),
+        ('post', '/checkpoints', {'base_revision': 1, 'data': coached_complete_data(), 'label': '旧页面不可写'}),
+        ('post', '/complete', {'base_revision': 1, 'data': coached_complete_data()}),
+        ('get', '/versions/' + version, None),
+        ('post', '/restore', {'base_revision': 1, 'version_id': version}),
+        ('post', '/abandon', {'base_revision': 1}),
+    ):
+        response = getattr(coached_browser.client, method)(endpoint + suffix, headers=headers, json=payload)
+        assert response.status_code == 409 and response.json['code'] == 'upgrade_required'
+        assert store.get(attempt['id']) == before
+
+
+@pytest.mark.parametrize('flow', [None, 1])
+def test_coaching_cannot_be_injected_into_existing_classic_or_guided_attempt(coached_browser, flow):
+    attempt = start(coached_browser) if flow is None else start_guided(coached_browser)
+    data = deepcopy(attempt['data'])
+    data['guidance'] = initial_guidance()
+    data['coaching'] = initial_coaching()
+    response = coached_browser.client.patch(PREFIX + '/attempts/' + attempt['id'], headers=coached_browser.headers,
+                                            json={'base_revision': 1, 'data': data})
+    assert response.status_code == 400
+    assert WritingStore(database(coached_browser)).get(attempt['id'])['attempt'] == attempt
+
+
+def test_flow_two_is_not_added_to_an_old_nine_question_lesson(guided_browser):
+    response = guided_browser.client.post(PREFIX + '/attempts', headers=guided_browser.headers,
+                                          json={'lesson_id': LESSON_ID, 'flow_version': 2})
+    assert response.status_code == 400 and not guided_browser.data_dir.exists()
+
+
+@pytest.mark.parametrize('mutation', [
+    lambda value: value.update(version=True),
+    lambda value: value.update(version=2),
+    lambda value: value['material'].update(step=True),
+    lambda value: value['material'].update(step=5),
+    lambda value: value['material'].update(source='invented'),
+    lambda value: value['material'].update(activity='字' * 2001),
+    lambda value: value['material'].update(moment=None),
+    lambda value: value['material'].update(extra='unknown'),
+    lambda value: value['comparison'].update(choices=['missing']),
+    lambda value: value['comparison'].update(choices=['action', 'action']),
+    lambda value: value['comparison'].update(reason='字' * 2001),
+    lambda value: value['evidence']['structure'].update(before='字' * 6001),
+    lambda value: value['evidence']['language'].update(after=None),
+    lambda value: value['evidence']['language'].update(reason='字' * 2001),
+    lambda value: value['evidence'].update(other={}),
+    lambda value: value.pop('comparison'),
+])
+def test_malformed_coaching_preserves_all_saved_work(coached_browser, mutation):
+    attempt = start_coached(coached_browser)
+    state = deepcopy(attempt['data']); mutation(state['coaching'])
+    response = coached_browser.client.patch(PREFIX + '/attempts/' + attempt['id'], headers=coached_browser.headers,
+                                            json={'base_revision': 1, 'data': state})
+    assert response.status_code == 400
+    assert WritingStore(database(coached_browser)).get(attempt['id'])['attempt'] == attempt
+
+
+def test_partial_coaching_long_text_checkpoints_omission_and_restore_are_lossless(coached_browser):
+    attempt = start_coached(coached_browser); store = WritingStore(database(coached_browser))
+    data = deepcopy(attempt['data'])
+    data['coaching']['material'].update(activity='a' * 2000, moment='记得的一刻\n还没写完。')
+    data['coaching']['comparison'].update(reason='b' * 2000)
+    data['coaching']['evidence']['structure'].update(before='c' * 6000, after='d' * 6000, reason='e' * 2000)
+    data['paragraphs']['p_full'] = '只写了一点正文，不应被素材或修改记录替换。'
+    first = store.save(attempt['id'], 1, data, label='不完整的素材和证据')
+    version = first['versions'][0]['id']
+    assert first['attempt']['data'] == data
+    omission = deepcopy(data); omission.pop('coaching'); omission.pop('guidance')
+    omission['paragraphs']['p_full'] = '正文接着写；仍不自动拼入辅助文字。'
+    saved = store.save(attempt['id'], 2, omission, label='兼容保存')
+    assert saved['attempt']['data']['coaching'] == data['coaching']
+    assert saved['attempt']['data']['guidance'] == data['guidance']
+    assert saved['attempt']['data']['paragraphs'] == omission['paragraphs']
+    assert store.get_version(attempt['id'], saved['versions'][0]['id'])['data'] == saved['attempt']['data']
+    restored = store.restore(attempt['id'], 3, version)
+    assert restored['attempt']['data'] == data
+    before = next(entry for entry in restored['versions'] if entry['label'] == '恢复前的草稿')
+    assert store.get_version(attempt['id'], before['id'])['data'] == saved['attempt']['data']
+
+
+@pytest.mark.parametrize('mutation,missing', [
+    (lambda data: data['coaching']['material'].update(source=''), 'coaching.material.source'),
+    (lambda data: data['coaching']['material'].update(activity=' '), 'coaching.material.activity'),
+    (lambda data: data['coaching']['material'].update(moment=''), 'coaching.material.moment'),
+    (lambda data: data['coaching']['material'].update(feeling=''), 'coaching.material.feeling'),
+    (lambda data: data['coaching']['comparison'].update(choices=[]), 'coaching.comparison.choices'),
+    (lambda data: data['coaching']['evidence']['structure'].update(before=''), 'coaching.evidence.structure.before'),
+    (lambda data: data['coaching']['evidence']['structure'].update(after=''), 'coaching.evidence.structure.after'),
+    (lambda data: data['coaching']['evidence']['structure'].update(reason=''), 'coaching.evidence.structure.reason'),
+])
+def test_coached_completion_requires_work_but_incomplete_drafts_remain_saveable(coached_browser, mutation, missing):
+    attempt = start_coached(coached_browser)
+    data = coached_complete_data(); mutation(data)
+    endpoint = PREFIX + '/attempts/' + attempt['id']
+    saved = coached_browser.client.patch(endpoint, headers=coached_browser.headers, json={'base_revision': 1, 'data': data})
+    assert saved.status_code == 200
+    response = coached_browser.client.post(endpoint + '/complete', headers=coached_browser.headers,
+                                           json={'base_revision': 2, 'data': data})
+    assert response.status_code == 400 and response.json['code'] == 'incomplete'
+    assert missing in response.json['missing']
+    assert WritingStore(database(coached_browser)).get(attempt['id'])['attempt'] == saved.json['attempt']
+
+
+@pytest.mark.parametrize('choices', [['action'], ['dialogue'], ['reaction'], ['action', 'reaction']])
+def test_coached_completion_has_no_single_correct_detail_and_allows_no_change(coached_browser, choices):
+    attempt = start_coached(coached_browser)
+    data = coached_complete_data()
+    data['coaching']['comparison'].update(choices=choices, reason='')
+    data['coaching']['evidence'] = initial_coaching()['evidence']
+    data['no_change'] = {'structure': True, 'language': True}
+    data['revision_notes'] = {'structure': '', 'language': ''}
+    result = coached_browser.client.post(PREFIX + '/attempts/' + attempt['id'] + '/complete', headers=coached_browser.headers,
+                                         json={'base_revision': 1, 'data': data})
+    assert result.status_code == 200 and result.json['attempt']['data'] == data
+    assert 'score' not in result.json['attempt']
+
+
+@pytest.mark.parametrize('round,field', [('structure', 'before'), ('structure', 'after'),
+                                        ('language', 'before'), ('language', 'after')])
+def test_coaching_evidence_must_quote_the_corresponding_manuscript_only_on_completion(coached_browser, round, field):
+    attempt = start_coached(coached_browser); store = WritingStore(database(coached_browser))
+    data = coached_complete_data()
+    data['no_change']['language'] = False
+    data['revision_notes']['language'] = '修改了句子。'
+    data['coaching']['evidence']['language'] = {
+        'before': '我把两根手指竖在头顶', 'after': '我把两根手指竖在头顶', 'reason': '检查了这一处表达。'}
+    data['coaching']['evidence'][round][field] = '在对应原稿或改稿里不存在的文字'
+    saved = store.save(attempt['id'], 1, data, label='还在修改的证据')
+    assert saved['attempt']['data'] == data
+    version = saved['versions'][0]['id']
+    assert store.get_version(attempt['id'], version)['data'] == data
+    with pytest.raises(WritingError) as error:
+        store.save(attempt['id'], 2, data, complete=True)
+    assert error.value.details['code'] == 'incomplete'
+    assert 'coaching.evidence.' + round + '.' + field in error.value.details['missing']
+    assert store.get(attempt['id'])['attempt'] == saved['attempt']
+
+
+def test_coaching_accepts_trimmed_cross_paragraph_quotations_without_grading_whether_the_edit_is_better(coached_browser):
+    attempt = start_coached(coached_browser); data = coached_complete_data()
+    data['outline'].append({'id': 'p_end', 'content': '结尾', 'purpose': '结束', 'focus': False})
+    for field in ('paragraphs', 'structure_paragraphs', 'final_paragraphs'):
+        data[field]['p_full'] = '我们一起玩。'
+        data[field]['p_end'] = '铃响了，我们回到座位。'
+    data['coaching']['evidence']['structure'].update(
+        before='  一起玩。\n\n铃响了  ', after='  一起玩。\n\n铃响了  ', reason='检查后保留了两句之间的安排。')
+    # Identical before/after is not automatically marked wrong; quality and
+    # whether to change a sentence remain the student's own judgment.
+    result = coached_browser.client.post(PREFIX + '/attempts/' + attempt['id'] + '/complete', headers=coached_browser.headers,
+                                         json={'base_revision': 1, 'data': data})
+    assert result.status_code == 200 and result.json['attempt']['data'] == data
+
+
+def test_coaching_parent_is_read_only_and_other_students_cannot_read_versions(coached_browser):
+    attempt = start_coached(coached_browser)
+    endpoint = PREFIX + '/attempts/' + attempt['id']
+    parent = {'Authorization': 'Bearer parent-token', 'X-Writing-Flow': 'guided-v2'}
+    other = {'Authorization': 'Bearer bob-token', 'X-Writing-Flow': 'guided-v2'}
+    opened = coached_browser.client.get(endpoint, headers=parent)
+    assert opened.status_code == 200 and opened.json['read_only'] is True
+    version = opened.json['versions'][0]['id']
+    assert coached_browser.client.get(endpoint + '/versions/' + version, headers=parent).json['version']['data'] == attempt['data']
+    assert coached_browser.client.get(endpoint + '/versions/' + version, headers=other).status_code == 404
+    assert coached_browser.client.patch(endpoint, headers=parent, json={'base_revision': 1, 'data': coached_complete_data()}).status_code == 403
+    assert coached_browser.client.post(PREFIX + '/attempts', headers=parent, json={'lesson_id': LESSON_ID, 'flow_version': 2}).status_code == 403
+    assert not (coached_browser.data_dir / 'bob').exists()
+
+
+def test_coaching_omission_and_full_save_conflict_preserve_one_atomic_revision(coached_browser):
+    attempt = start_coached(coached_browser); store = WritingStore(database(coached_browser))
+    full = deepcopy(attempt['data']); full['coaching']['material']['activity'] = '完整保存的新材料'
+    omitted = deepcopy(attempt['data']); omitted.pop('coaching'); omitted['paragraphs']['p_full'] = '省略辅助状态的正文'
+    def save(data):
+        try:
+            return store.save(attempt['id'], 1, data)['attempt']
+        except WritingError as error:
+            assert error.status == 409 and error.details['code'] == 'conflict'
+            return None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(save, [full, omitted]))
+    winners = [result for result in results if result]
+    assert len(winners) == 1 and winners[0]['revision'] == 2
+    assert winners[0]['data'] in (full, {**omitted, 'coaching': attempt['data']['coaching']})
+    assert store.get(attempt['id'])['attempt'] == winners[0]
+
+
+def test_coaching_snapshot_survives_configuration_updates_and_corrupt_versions_cannot_restore(coached_browser):
+    import sqlite3
+    attempt = start_coached(coached_browser); store = WritingStore(database(coached_browser))
+    state = deepcopy(attempt['data']); state['coaching']['comparison']['choices'] = ['reaction']
+    saved = store.save(attempt['id'], 1, state, label='记住反应细节')
+    version = saved['versions'][0]['id']
+    changed = coached_lesson(); changed['coaching']['comparison']['options'][-1]['id'] = 'different'
+    coached_browser.lesson_path.write_text(json.dumps(changed, ensure_ascii=False))
+    assert store.get(attempt['id'])['attempt']['lesson_snapshot'] == coached_lesson()
+    assert store.get_version(attempt['id'], version)['data'] == state
+    bad = deepcopy(state); bad.pop('coaching')
+    with sqlite3.connect(database(coached_browser)) as connection:
+        connection.execute('UPDATE writing_versions SET data_json=? WHERE id=?', (json.dumps(bad), version))
+    before = store.get(attempt['id'])
+    for read in (lambda: store.get_version(attempt['id'], version), lambda: store.restore(attempt['id'], 2, version)):
+        with pytest.raises(WritingError) as error:
+            read()
+        assert error.value.status == 503
+        assert store.get(attempt['id']) == before
+
+
+@pytest.mark.parametrize('mutation', [
+    lambda lesson: lesson['coaching'].update(version=True),
+    lambda lesson: lesson.update(version=2),
+    lambda lesson: lesson['coaching']['material']['steps'].reverse(),
+    lambda lesson: lesson['coaching']['comparison']['options'][1].update(id='action'),
+    lambda lesson: lesson['coaching']['comparison'].update(plain=''),
+    lambda lesson: lesson['coaching']['evidence']['rounds'].pop('language'),
+])
+def test_invalid_coaching_configuration_is_rejected_without_creating_student_state(coached_browser, mutation):
+    content = coached_lesson(); mutation(content)
+    coached_browser.lesson_path.write_text(json.dumps(content, ensure_ascii=False))
+    response = coached_browser.client.get(PREFIX + '/lessons', headers=coached_browser.headers)
+    assert response.status_code == 503 and not coached_browser.data_dir.exists()

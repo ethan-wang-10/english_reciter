@@ -10,7 +10,7 @@
     const portal = () => window.subjectPortal;
     const session = () => portal()?.getSession() || {};
     const student = (value = session()) => value.account?.is_parent ? value.account.child_username : value.account?.username || value.username;
-    const request = (path, options = {}) => portal().apiRequest(PREFIX + path, { ...options, headers: { ...(options.headers || {}), 'X-Writing-Flow': 'guided-v1' } });
+    const request = (path, options = {}) => portal().apiRequest(PREFIX + path, { ...options, headers: { ...(options.headers || {}), 'X-Writing-Flow': 'guided-v2' } });
     let generation = 0;
     let viewRequest = 0;
     let attempt = null;
@@ -73,7 +73,17 @@
             && object(value.no_change) && ['structure', 'language'].every((key) => typeof value.no_change[key] === 'boolean')
             && ['structure', 'language'].includes(value.review_round)
             && typeof value.structure_started === 'boolean' && typeof value.language_started === 'boolean'
-            && (value.guidance === undefined || validGuidance(value.guidance));
+            && (value.guidance === undefined || validGuidance(value.guidance))
+            && (value.coaching === undefined || validCoaching(value.coaching));
+    }
+    function validCoaching(value) {
+        const object = (item) => !!item && typeof item === 'object' && !Array.isArray(item);
+        return object(value) && value.version === 1 && object(value.material) && Number.isInteger(value.material.step)
+            && value.material.step >= 0 && value.material.step <= 4 && ['', 'personal', 'scenario'].includes(value.material.source)
+            && ['activity', 'moment', 'feeling'].every((key) => typeof value.material[key] === 'string')
+            && object(value.comparison) && Array.isArray(value.comparison.choices) && value.comparison.choices.every((id) => typeof id === 'string')
+            && typeof value.comparison.reason === 'string' && object(value.evidence)
+            && ['structure', 'language'].every((round) => object(value.evidence[round]) && ['before', 'after', 'reason'].every((key) => typeof value.evidence[round][key] === 'string'));
     }
     function sameState(left, right) {
         const ordered = (value) => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object'
@@ -376,7 +386,7 @@
                 ? key === 'structure_paragraphs' ? '通读全文，调整内容和顺序' : '通读全文，检查表达和字词'
                 : focusOnly ? '把这一刻写给读者看' : '用自己的话写这一段';
             field(section, label, data[key][card.id], (value) => {
-                data[key][card.id] = value; count.textContent = `${value.length} 字`;
+                data[key][card.id] = value; count.textContent = `${value.length} 字`; updateCoachingEvidence();
             }, { id: 'writing-paragraph-' + card.id, rows: wholeRevision ? 9 : focusOnly ? 6 : 5, maxLength: 6000,
                 help: wholeRevision ? '这里是整篇文章。一次改一两处，已经清楚的地方可以保留。'
                     : card.focus ? '选有用的动作、对话、观察或想法，不必每种都写。' : '简要交代也可以，不用每段写得一样长。' });
@@ -420,8 +430,11 @@
             data.checks[round] = checked ? [...new Set([...data.checks[round], id])] : data.checks[round].filter((value) => value !== id);
         }, 'writing-check-' + id);
         parent.appendChild(review);
-        field(parent, '这轮我改了哪里？为什么？', data.revision_notes[round], (value) => { data.revision_notes[round] = value; }, { id: 'writing-revision-note', rows: 2, help: '说清一处修改即可。检查后没有需要修改的地方，可以选下面这一项。' });
-        check(parent, '本轮检查后不用修改', data.no_change[round], (value) => { data.no_change[round] = value; }, 'writing-no-change');
+        if (isCoached()) renderCoachingEvidence(parent, round);
+        else {
+            field(parent, '这轮我改了哪里？为什么？', data.revision_notes[round], (value) => { data.revision_notes[round] = value; }, { id: 'writing-revision-note', rows: 2, help: '说清一处修改即可。检查后没有需要修改的地方，可以选下面这一项。' });
+            check(parent, '本轮检查后不用修改', data.no_change[round], (value) => { data.no_change[round] = value; }, 'writing-no-change');
+        }
         if (round === 'structure' && data.language_started) note('表达稿已经写过了。这里的修改会保留在内容稿中，稍后请再对照表达稿，不会自动覆盖它。', parent);
     }
     function comparison(parent, before, after) {
@@ -497,6 +510,7 @@
         if (viewStage === 4) {
             const round = data.review_round;
             if (!orderedText(data, round === 'structure' ? data.structure_paragraphs : data.final_paragraphs).trim()) return '这份稿子还没有文字，请先写一点内容。';
+            if (isCoached()) { const issue = coachingEvidenceIssue(round); if (issue) return issue; }
             if (!data.revision_notes[round].trim() && !data.no_change[round]) return '用一句话说说这轮改了哪里；如果检查后不用改，可以勾选“本轮检查后不用修改”。';
         }
         return '';
@@ -550,6 +564,10 @@
     async function finish() {
         if (!editable() || navigationBusy || abandonBusy) return;
         if (isGuided() && guidedPending() !== null) { const pending = guidedPending(); openGuidedStep(pending); message('还有问题需要确认或复核，文字都会保留。', true); return; }
+        if (isCoached()) for (const round of ['structure', 'language']) {
+            const issue = coachingEvidenceIssue(round);
+            if (issue) { viewStage = 4; data.stage = 4; data.review_round = round; guidedView = 'question'; changed(); renderStage(); message(issue, true); return; }
+        }
         if (!data.reflection.learned.trim()) return message('用一句话说说这次学会了什么，再保存作品。', true);
         const ctx = capture(); navigationBusy = true; completing = true; renderStage();
         try {
@@ -605,8 +623,8 @@
         try {
             if (editable() && sequence !== savedSequence) await flush();
             let flow = lessonFlows.get(id);
-            if (flow === undefined) { const loaded = await request('/lessons/' + encodeURIComponent(id)); flow = loaded.lesson?.guidance?.version === 1 ? 1 : 0; }
-            const result = await request('/attempts', apiOptions({ lesson_id: id, ...(flow === 1 ? { flow_version: 1 } : {}) }));
+            if (flow === undefined) { const loaded = await request('/lessons/' + encodeURIComponent(id)); flow = loaded.lesson?.coaching?.version === 1 ? 2 : loaded.lesson?.guidance?.version === 1 ? 1 : 0; }
+            const result = await request('/attempts', apiOptions({ lesson_id: id, ...(flow === 1 || flow === 2 ? { flow_version: flow } : {}) }));
             if (!current(ctx, false) || requestId !== viewRequest) return;
             applyAttempt(result); message('可以先写关键词，慢慢把想法安排清楚。');
         } catch (error) { if (current(ctx, false) && requestId === viewRequest) message(error.message || '开始练习失败，请重试。', true); }
@@ -625,7 +643,7 @@
             if (!current(ctx, false) || requestId !== viewRequest) return;
             const list = el('writing-lessons'); list.replaceChildren();
             for (const item of lessons.items || []) {
-                lessonFlows.set(item.id, item.flow_version === 1 ? 1 : 0);
+                lessonFlows.set(item.id, [1, 2].includes(item.flow_version) ? item.flow_version : 0);
                 const card = node('article', '', 'writing-lesson-card');
                 const info = node('div');
                 info.append(node('span', '第 1 题 · 搭框架到修改', 'writing-lesson-meta'), node('h3', item.title));
@@ -861,6 +879,174 @@
         }
     }
 
+    function isCoached(state = data) { return isGuided() && lesson?.coaching?.version === 1 && state?.coaching?.version === 1; }
+    function coachingMaterialReady(state = data) {
+        const value = state.coaching?.material;
+        return !!value && ['personal', 'scenario'].includes(value.source)
+            && ['activity', 'moment', 'feeling'].every((key) => value[key].trim());
+    }
+    function coachingMaterialEdited() { guidedEdited(0); changed(); }
+    function renderCoachingMaterial(parent) {
+        const value = data.coaching.material, config = lesson.coaching.material;
+        const keys = ['source', 'activity', 'moment', 'feeling'];
+        const names = { source: '素材来源', activity: '玩了什么', moment: '记得的一刻', feeling: '当时感受' };
+        const card = node('section', '', 'writing-coaching-card'); card.id = 'writing-material-question';
+        if (value.step === 4) {
+            card.appendChild(node('h4', '我的素材关键词'));
+            for (const key of keys) {
+                const summary = key === 'source' ? (config.sources.find((item) => item.id === value.source)?.label || '还没有选择') : value[key];
+                const row = node('div', '', 'writing-material-recap-row'); row.appendChild(node('p', `${names[key]}：${summary || '还可以再想想'}`));
+                const edit = button('回看', () => { value.step = keys.indexOf(key); if (editable()) changed(); renderStage(); }, { light: true, small: true });
+                edit.id = 'writing-material-edit-' + key; edit.setAttribute('aria-label', '回看' + names[key]); row.appendChild(edit); card.appendChild(row);
+            }
+            note(value.source === 'personal' ? '下面可以选一个方向，也可以自己说。只用符合真实经历的材料，不必编出没有发生过的细节。'
+                : '这是给定情境练习。下面可以选方向，也可以组合关键词说出自己的主旨，不必把情境说成亲身经历。', card);
+            parent.appendChild(card); return true;
+        }
+        const step = Math.max(0, Math.min(3, value.step)), key = keys[step];
+        const question = config.steps.find((item) => item.id === key) || {};
+        card.appendChild(node('span', `素材回想 ${step + 1} / 4`, 'writing-coaching-caption'));
+        card.appendChild(node('h4', question.question || names[key]));
+        if (question.help) note(question.help, card);
+        if (key === 'source') {
+            const options = node('div', '', 'writing-guided-options');
+            for (const item of config.sources) {
+                const choice = guidedChoice(options, item.id, item.label, value.source === item.id, () => {
+                    if (value.source !== item.id) { value.source = item.id; data.mode = item.id === 'personal' ? 'personal' : 'material'; coachingMaterialEdited(); }
+                    renderStage();
+                }, item.help || '', 'material-source');
+                choice.id = 'writing-material-source-' + item.id;
+            }
+            card.appendChild(options);
+        } else {
+            note(value.source === 'personal' ? '这些只是回忆方向，符合你的经历才选；也可以完全用自己的话。'
+                : '下面是给定情境的关键词，可选几项再补自己的话。', card);
+            const suggestions = config.suggestions?.[value.source]?.[key] || [];
+            const chips = node('div', '', 'writing-material-suggestions');
+            for (const [index, text] of suggestions.entries()) {
+                const choice = button('＋ ' + text, () => {
+                    if (!editable() || value[key].includes(text)) return;
+                    const combined = [value[key].trim(), text].filter(Boolean).join('，');
+                    if (combined.length > 2000) return message('素材关键词已经比较长，请先自己整理一下，原有文字都保留着。', true);
+                    value[key] = combined; coachingMaterialEdited(); renderStage();
+                }, { light: true, small: true, disabled: !editable() });
+                choice.id = `writing-material-suggestion-${key}-${index}`; choice.dataset.value = text; chips.appendChild(choice);
+            }
+            card.appendChild(chips);
+            field(card, '我的关键词或短句', value[key], (text) => {
+                value[key] = text; guidedEdited(0);
+                const next = el('writing-material-next'); if (next) next.disabled = !text.trim();
+            }, {
+                id: 'writing-material-' + key, rows: 2, maxLength: 2000, placeholder: '可以选提示再补充，也可以直接写。',
+                help: '只记录素材，不会替你填写主旨或正文。' });
+        }
+        const nav = node('div', '', 'writing-material-navigation');
+        const previous = button('上一小问', () => { value.step = Math.max(0, step - 1); if (editable()) changed(); renderStage(); }, { light: true, disabled: step === 0 });
+        previous.id = 'writing-material-prev'; nav.appendChild(previous);
+        const next = button(step === 3 ? '素材想好了，去定主旨' : '记下了，下一小问', () => {
+            if (!editable()) { value.step = Math.min(4, step + 1); renderStage(); return; }
+            if (key === 'source' ? !['personal', 'scenario'].includes(value.source) : !value[key].trim()) {
+                message('先选一个方向或记下几个关键词，再继续。', true); return;
+            }
+            value.step = Math.min(4, step + 1); changed(); message(); renderStage();
+        }, { disabled: editable() && (key === 'source' ? !value.source : !value[key].trim()) });
+        next.id = 'writing-material-next'; nav.appendChild(next); card.appendChild(nav); parent.appendChild(card);
+        return false;
+    }
+    function renderCoachingComparison(parent) {
+        const config = lesson.coaching.comparison, value = data.coaching.comparison;
+        const card = node('section', '', 'writing-coaching-card'); card.id = 'writing-comparison';
+        card.appendChild(node('h4', config.title || '先看看哪些细节有帮助'));
+        if (data.coaching.material.source === 'personal') note('下面是猜词情境的写法例子，不是你的经历。可以只借鉴写法，再回到自己的游戏写句子。', card);
+        if (config.description) note(config.description, card);
+        if (config.plain) card.appendChild(node('p', config.plain, 'writing-comparison-plain'));
+        note(config.question || '哪些短句让你看见具体动作、对话或反应？可以多选，没有唯一答案。', card);
+        const options = node('div', '', 'writing-guided-options');
+        for (const item of config.options || []) {
+            const choice = guidedChoice(options, item.id, item.text, value.choices.includes(item.id), () => {
+                value.choices = value.choices.includes(item.id) ? value.choices.filter((id) => id !== item.id) : [...value.choices, item.id];
+                guidedEdited(5); changed(); renderStage();
+            }, item.detail || '', 'coaching-comparison');
+            choice.id = 'writing-comparison-' + item.id;
+        }
+        card.appendChild(options);
+        field(card, '我注意到的作用或理由（选填）', value.reason, (text) => { value.reason = text; guidedEdited(5); }, {
+            id: 'writing-comparison-reason', rows: 2, help: config.prompt || '可以只说一点。参考不会自动写进你的句子。' });
+        const help = node('details', '', 'writing-hint'); help.appendChild(node('summary', '需要时再看：这些细节各帮了什么忙？'));
+        for (const item of config.options || []) if (item.why) note(`${item.detail || '细节'}：${item.why}`, help);
+        card.appendChild(help); parent.appendChild(card);
+    }
+    function coachingArticle(map) {
+        const ordered = data.outline.map((card) => card.id), extra = Object.keys(map || {}).filter((id) => !ordered.includes(id)).sort();
+        return [...ordered, ...extra].map((id) => map?.[id] || '').filter((text) => text.trim()).join('\n\n');
+    }
+    function coachingEvidenceIssue(round) {
+        if (!isCoached() || data.no_change[round]) return '';
+        const evidence = data.coaching.evidence[round];
+        if (!evidence.before.trim()) return '请从本轮之前的文章摘出一处原句或片段。';
+        if (!evidence.after.trim()) return '请记下这一处改后的真实文字。';
+        if (!evidence.reason.trim()) return '请用一句话说说这处修改为什么有帮助。';
+        const before = coachingArticle(round === 'structure' ? data.paragraphs : data.structure_paragraphs);
+        const after = coachingArticle(round === 'structure' ? data.structure_paragraphs : data.final_paragraphs);
+        if (!before.includes(evidence.before.trim())) return '原句还未在本轮之前的文章中找到，请先核对或从原稿摘取真实文字。';
+        if (!after.includes(evidence.after.trim())) return '改句还未在本轮正文中找到，请先核对正文；证据卡不会自动替换文章。';
+        return '';
+    }
+    function updateCoachingEvidence() {
+        if (!isCoached() || viewStage !== 4) return;
+        const round = data.review_round, previous = el('writing-evidence-previous-text'), currentText = el('writing-evidence-current-text');
+        if (previous) previous.textContent = coachingArticle(round === 'structure' ? data.paragraphs : data.structure_paragraphs) || '还没有文字。';
+        if (currentText) currentText.textContent = coachingArticle(round === 'structure' ? data.structure_paragraphs : data.final_paragraphs) || '还没有文字。';
+        const status = el('writing-evidence-status');
+        if (status) status.textContent = data.no_change[round] ? '本轮不用修改，原有文字与记录都保留。'
+            : coachingEvidenceIssue(round) || '已能在两份文章中找到这处修改，请再读一遍它是否表达了你的意思。';
+    }
+    function renderCoachingEvidence(parent, round) {
+        const config = lesson.coaching.evidence, value = data.coaching.evidence[round];
+        const card = node('section', '', 'writing-coaching-card'); card.id = 'writing-evidence'; card.dataset.round = round;
+        card.appendChild(node('h4', config.title || '留下这一处修改'));
+        note(config.rounds?.[round]?.question || config.description || '', card);
+        check(card, '本轮检查后不用修改', data.no_change[round], (checked) => { data.no_change[round] = checked; renderStage(); }, 'writing-no-change');
+        const article = node('details', '', 'writing-evidence-articles'); article.appendChild(node('summary', '对照本轮之前与当前的文章，摘取真实文字'));
+        const grid = node('div', '', 'writing-compare');
+        for (const [id, title] of [['previous', '本轮之前'], ['current', '当前正文']]) {
+            const section = node('section'); section.appendChild(node('h4', title)); const text = node('pre'); text.id = `writing-evidence-${id}-text`; section.appendChild(text); grid.appendChild(section);
+        }
+        article.appendChild(grid); card.appendChild(article);
+        if (!data.no_change[round]) {
+            note(config.rounds?.[round]?.help || '这里记录一处真实修改，不会自动替换正文。', card);
+            field(card, '改前：从本轮之前的文章摘一句或一个片段', value.before, (text) => { value.before = text; updateCoachingEvidence(); }, { id: 'writing-evidence-before', rows: 2, maxLength: 6000 });
+            field(card, '改后：对应的当前正文文字', value.after, (text) => { value.after = text; updateCoachingEvidence(); }, { id: 'writing-evidence-after', rows: 2, maxLength: 6000,
+                help: '这张卡和全文分别保存。请回上方正文手动修改，再核对这里的文字。' });
+            field(card, '为什么这样改？', value.reason, (text) => { value.reason = text; data.revision_notes[round] = text; updateCoachingEvidence(); }, { id: 'writing-evidence-reason', rows: 2,
+                help: '这一处说明同时记作本轮修改说明，不需要再写一遍。' });
+        } else note('已经清楚的地方可以保留，不用为了留下记录而强改。以前写过的修改卡也不会删除。', card);
+        const status = node('p', '', 'writing-evidence-status'); status.id = 'writing-evidence-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); card.appendChild(status);
+        parent.appendChild(card); updateCoachingEvidence();
+    }
+    function renderMaterialContext(parent) {
+        if (!isCoached()) return;
+        const value = data.coaching.material;
+        const card = node('div', '', 'writing-material-context'); card.id = 'writing-material-context';
+        card.appendChild(node('strong', value.source === 'personal' ? '我自己的素材' : '我用的练习情境'));
+        note([value.activity, value.moment, value.feeling].filter((text) => text.trim()).join('；') || '还可以回主旨页补充素材。', card);
+        if (value.source === 'personal') note('猜词、兔子和青蛙卡片只是写法例子，可以不选。请用自己实际记得的材料，不必编出不存在的细节。', card);
+        parent.appendChild(card);
+    }
+    function coachingExport(state) {
+        if (!isCoached(state)) return '';
+        const value = state.coaching;
+        const source = lesson.coaching.material.sources.find((item) => item.id === value.material.source)?.label || value.material.source;
+        return ['【素材回想】', `素材来源：${source}`, `玩了什么：${value.material.activity}`, `记得的一刻：${value.material.moment}`, `当时感受：${value.material.feeling}`,
+            '【短例比较：只作写法参考】', ...value.comparison.choices.map((id) => lesson.coaching.comparison.options.find((item) => item.id === id)?.text || id), value.comparison.reason,
+            ...['structure', 'language'].flatMap((round) => [`【${round === 'structure' ? '内容与顺序' : '表达与字词'}修改证据】`,
+                state.no_change[round] ? '本轮检查后不用修改' : '', `改前：${value.evidence[round].before}`, `改后：${value.evidence[round].after}`, `理由：${value.evidence[round].reason}`])].join('\n');
+    }
+    function renderCoachingSummary(parent, state) {
+        if (!isCoached(state)) return;
+        const text = node('div', coachingExport(state), 'writing-coaching-summary'); parent.appendChild(text);
+    }
+
     const GUIDED_TITLES = ['主旨立意', '文章结构', '安排开头', '中间重点', '安排结尾', '细节与句子', '写重点段', '连成全文', '点题回看'];
     const GUIDED_DEPENDENCIES = { 0: [1, 2, 3, 4, 5, 6, 7, 8], 1: [2, 3, 4, 6, 7, 8], 2: [7, 8], 3: [5, 6, 7, 8], 4: [7, 8], 5: [6, 7, 8], 6: [7, 8], 7: [8], 8: [] };
     function isGuided() { return !!lesson?.guidance && lesson.guidance.version === 1 && !!data?.guidance; }
@@ -880,16 +1066,17 @@
             ...(state.guidance.notes[key].trim() ? [state.guidance.notes[key].trim()] : [])];
     }
     function guidedDetails(state = data) {
-        return [...state.guidance.details.map((id) => guidedConfig().details.find((item) => item.id === id)?.text).filter(Boolean),
-            ...(state.guidance.ownDetail.trim() ? [state.guidance.ownDetail.trim()] : [])];
+        return [...new Set([...state.guidance.details.map((id) => guidedConfig().details.find((item) => item.id === id)?.text).filter(Boolean),
+            ...(isCoached(state) ? state.coaching.comparison.choices.map((id) => lesson.coaching.comparison.options.find((item) => item.id === id)?.text).filter(Boolean) : []),
+            ...(state.guidance.ownDetail.trim() ? [state.guidance.ownDetail.trim()] : [])])];
     }
     function guidedStageFor(step) { return step === 0 ? 0 : step <= 4 ? 1 : step <= 6 ? 2 : 3; }
     function guidedValid(step, state = data) {
         if (!state.guidance) return false;
-        if (step === 0) return !!guidedTheme(state);
+        if (step === 0) return !!guidedTheme(state) && (!isCoached(state) || coachingMaterialReady(state));
         if (step === 1) return guidedConfig().structures.some((item) => item.id === state.guidance.structure);
         if (step >= 2 && step <= 4) return guidedFrame(({ 2: 'begin', 3: 'middle', 4: 'end' })[step], state).length > 0;
-        if (step === 5) return !!state.guidance.sentence.trim();
+        if (step === 5) return !!state.guidance.sentence.trim() && (!isCoached(state) || state.coaching.comparison.choices.some((id) => lesson.coaching.comparison.options.some((item) => item.id === id)));
         if (step === 6) return !!state.guidance.paragraph.trim();
         if (step === 7) return !!state.paragraphs.p_full?.trim();
         return state.guidance.endingOkay;
@@ -907,10 +1094,12 @@
         return guidedSummary(index).trim() ? ['filled', '已填写，待确认', '•'] : ['empty', '未开始', '○'];
     }
     function guidedSummary(index, state = data) {
-        if (index === 0) return guidedTheme(state);
+        if (index === 0) return [isCoached(state) ? [lesson.coaching.material.sources.find((item) => item.id === state.coaching.material.source)?.label,
+            state.coaching.material.activity, state.coaching.material.moment, state.coaching.material.feeling].filter(Boolean).join('；') : '', guidedTheme(state)].filter(Boolean).join('\n');
         if (index === 1) return state.guidance.structure ? guidedStructure(state).name : '';
         if (index >= 2 && index <= 4) return guidedFrame(({ 2: 'begin', 3: 'middle', 4: 'end' })[index], state).join('；');
-        if (index === 5) return state.guidance.sentence || guidedDetails(state).join('、');
+        if (index === 5) return [state.guidance.sentence || guidedDetails(state).join('、'), isCoached(state) && state.coaching.comparison.choices.length
+            ? '已比较：' + state.coaching.comparison.choices.map((id) => lesson.coaching.comparison.options.find((item) => item.id === id)?.detail || id).join('、') : ''].filter(Boolean).join('\n');
         if (index === 6) return state.guidance.paragraph;
         if (index === 7) return state.paragraphs.p_full || '';
         return state.guidance.endingOkay ? '结尾已经回到主旨，或照应前文' : '';
@@ -998,7 +1187,7 @@
             handler();
             el(choice.id)?.focus?.({ preventScroll: true });
         });
-        parent.appendChild(choice);
+        parent.appendChild(choice); return choice;
     }
     function addGuidedHelpLink(parent, title) {
         const link = button(title || '需要一点帮助？', () => {
@@ -1030,7 +1219,9 @@
     }
     function renderGuidedQuestion(parent) {
         const value = guidance(); const config = guidedConfig();
+        if (isCoached() && guidedStep > 0) renderMaterialContext(parent);
         if (guidedStep === 0) {
+            if (isCoached() && !renderCoachingMaterial(parent)) return;
             const options = node('div', '', 'writing-guided-options');
             for (const theme of config.themes) guidedChoice(options, theme.id, theme.text, value.theme === theme.id, () => {
                 const previous = guidedTheme(); value.theme = theme.id;
@@ -1071,13 +1262,17 @@
                 help: '选项和自己写的材料可以并用，也可以不选卡片、只写自己的想法。这里先写关键词或短句。' });
             parent.appendChild(frame); addGuidedHelpLink(parent, '看看这一部分怎样写');
         } else if (guidedStep === 5) {
+            if (isCoached()) renderCoachingComparison(parent);
             const options = node('div', '', 'writing-guided-options');
             for (const item of config.details) guidedChoice(options, item.id, item.text, value.details.includes(item.id), () => {
                 value.details = value.details.includes(item.id) ? value.details.filter((id) => id !== item.id) : [...value.details, item.id];
                 guidedEdited(5); changed(); renderStage();
                 if (value.sentence.trim()) message('参考细节已调整，你写的句子保留着，可以按需要自己修改。');
             }, item.kind, 'detail');
-            parent.appendChild(options);
+            if (isCoached()) {
+                const extra = node('details', '', 'writing-hint'); extra.id = 'writing-coaching-detail-keywords';
+                extra.appendChild(node('summary', '需要时再选细节关键词')); extra.appendChild(options); parent.appendChild(extra);
+            } else parent.appendChild(options);
             guidedTextField(parent, '再加一个自己的细节关键词（可选）', 'ownDetail', { single: true, placeholder: '例如：皱着眉、急得直摆手。' });
             guidedTextField(parent, '把有用的细节写成一句自己的话', 'sentence', { maximum: 6000,
                 help: '可以组合参考细节，也可以完全自己写。改选卡片不会替你改写已经输入的句子。' });
@@ -1132,17 +1327,19 @@
         }
         if (state.guidance.sentence) { parent.appendChild(node('h4', '我写的句子')); note(state.guidance.sentence, parent); }
         if (state.guidance.paragraph) { parent.appendChild(node('h4', '我的重点段')); note(state.guidance.paragraph, parent); }
+        renderCoachingSummary(parent, state);
     }
     function guidanceExport(state) {
         return ['【主旨与结构】', guidedTheme(state), guidedStructure(state).name,
             ...[['begin', '开头'], ['middle', '中间'], ['end', '结尾']].map(([key, name]) => `${name}：${guidedFrame(key, state).join('；')}`),
             '【细节与句子】', guidedDetails(state).join('、'), state.guidance.sentence, '【重点段】', state.guidance.paragraph,
             '【确认情况】', state.guidance.confirmed.map((step) => guidedStepTitle(step)).join('、'),
-            '需要再复核：' + state.guidance.review.map((step) => guidedStepTitle(step)).join('、')].join('\n');
+            '需要再复核：' + state.guidance.review.map((step) => guidedStepTitle(step)).join('、'), coachingExport(state)].filter(Boolean).join('\n');
     }
     function renderGuidedSupport(parent) {
         parent.replaceChildren();
         const back = button('← 回到我的输入', () => { guidedView = 'question'; renderStage(); }, { light: true }); back.id = 'writing-guided-help-back'; parent.appendChild(back);
+        if (isCoached()) renderMaterialContext(parent);
         if (guidedView === 'recap') {
             parent.appendChild(node('h3', '已经填写的内容'));
             for (let index = 0; index < 9; index += 1) {
@@ -1208,6 +1405,10 @@
         el('writing-stage-title').textContent = guidedView === 'help' ? '当前问题的帮助' : guidedView === 'recap' ? '回看已填内容'
             : editingEnding && guidedStep === 7 ? '只改结尾，让它接住你的主旨。' : step.question || GUIDED_TITLES[guidedStep];
         el('writing-stage-goal').textContent = guidedView === 'question' ? step.description || step.phase || '' : '读完后回到自己的输入，文字都会保留。';
+        if (guidedView === 'question' && isCoached() && guidedStep === 0 && data.coaching.material.step < 4) {
+            el('writing-stage-title').textContent = '主旨立意 · 先回想素材';
+            el('writing-stage-goal').textContent = '先回想一件具体的事，一次只想一小问；素材记下后，再确定主旨。';
+        }
         el('writing-read-only').hidden = !readOnly;
         el('writing-read-only').textContent = session().account?.is_parent ? '家长查看模式：可以看过程和版本，正文由学生编辑。' : attempt.status === 'abandoned' ? '这份练习已放弃，已保存内容和版本仍可查看。' : '作品已保存，可以回看每一步。';
         renderGuidedSteps();
