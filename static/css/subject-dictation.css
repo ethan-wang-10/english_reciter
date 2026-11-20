@@ -87,24 +87,26 @@
 .dictation-conflict pre { white-space: pre-wrap; overflow-wrap: anywhere; background: white; border: 2px solid #f7e6a2; border-radius: 14px; padding: 14px; margin: 15px 0; font: inherit; }
 .dictation-conflict > button { margin-top: 14px; }
 .dictation-draft-copy { width: 100%; min-height: 120px; margin-top: 10px; }
-.dictation-player, .dictation-finish { background: white; border: 2px solid var(--line); border-radius: 26px; padding: 28px; box-shadow: var(--shadow); }
-.dictation-player-heading h2 { font-size: 23px; font-weight: 800; }
-.dictation-player > progress { width: 100%; height: 15px; accent-color: var(--accent); margin: 25px 0 22px; border-radius: 999px; border: 0; overflow: hidden; background: #eef1f4; }
+.dictation-player, .dictation-finish { background: white; border: 2px solid var(--line); border-radius: 26px; padding: 20px; box-shadow: var(--shadow); }
+.dictation-player-heading .eyebrow { display: none; }
+.dictation-player-heading h2 { font-size: 20px; font-weight: 800; }
+.dictation-player > progress { width: 100%; height: 6px; accent-color: var(--accent); margin: 12px 0 14px; border-radius: 999px; border: 0; overflow: hidden; background: #eef1f4; }
 .dictation-player > progress::-webkit-progress-bar { background: #eef1f4; border-radius: 999px; }
 .dictation-player > progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; }
-.dictation-player-card { padding: 34px; border: 2px solid var(--line); border-radius: 24px; text-align: center; background: linear-gradient(180deg, var(--accent-pale) 0%, white 70%); }
-.dictation-position { color: var(--muted); font-size: 15px; font-weight: 800; }
-.dictation-sound-mark { display: grid; place-items: center; width: 100px; height: 100px; margin: 25px auto; border: 2px solid var(--accent-line); border-radius: 30px; background: white; box-shadow: 0 6px 0 var(--accent-line); color: var(--accent); font-size: 47px; font-weight: 800; }
-.dictation-player-card h3 { font-size: 24px; font-weight: 800; line-height: 1.6; }
+.dictation-player-card { padding: 18px 22px; border: 2px solid var(--line); border-radius: 20px; text-align: center; background: linear-gradient(180deg, var(--accent-pale) 0%, white 70%); }
+.dictation-position { color: var(--muted); font-size: 13px; font-weight: 800; }
+.dictation-sound-mark { display: grid; place-items: center; width: 50px; height: 50px; margin: 10px auto 12px; border: 2px solid var(--accent-line); border-radius: 16px; background: white; box-shadow: 0 3px 0 var(--accent-line); color: var(--accent); font-size: 27px; font-weight: 800; }
+.dictation-player-card:has(> .dictation-answer:not([hidden])) > .dictation-sound-mark { display: none; }
+.dictation-player-card h3 { font-size: 18px; font-weight: 800; line-height: 1.5; }
 .dictation-player-card > p:not(.dictation-position) { margin-top: 10px; color: var(--muted); font-size: 13px; }
-.dictation-player-actions { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin: 28px auto 26px; }
-.dictation-player-actions > .dictation-button { min-width: 180px; min-height: 62px; font-size: 18px; padding: 17px 25px; border-radius: 20px; }
+.dictation-player-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin: 16px auto; }
+.dictation-player-actions > .dictation-button { min-width: 160px; min-height: 52px; font-size: 16px; padding: 12px 22px; border-radius: 17px; }
 .dictation-player-actions > .dictation-play { background: white; color: var(--accent-dark); border-color: var(--accent-line); box-shadow: 0 4px 0 var(--accent-line); }
 .dictation-player-actions > .dictation-play:active:not(:disabled) { box-shadow: none; }
-.dictation-answer { max-width: 580px; margin: 18px auto 24px; padding: 20px; border: 2px solid var(--accent-line); border-radius: 18px; background: white; }
+.dictation-answer { max-width: 580px; margin: 12px auto; padding: 14px 18px; border: 2px solid var(--accent-line); border-radius: 18px; background: white; }
 .dictation-answer-text { margin: 0 0 12px; color: var(--ink); font-size: 28px; font-weight: 800; overflow-wrap: anywhere; }
 .dictation-answer-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px 20px; margin-top: 16px; }
-.dictation-jump { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 24px; padding-top: 20px; border-top: 2px solid var(--line); }
+.dictation-jump { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 2px solid var(--line); }
 .dictation-jump > label { font-size: 12px; font-weight: 800; }
 .dictation-jump > input:not([type=checkbox]) { width: 88px; }
 .dictation-jump > .dictation-note { flex-basis: 100%; margin: 0; }
@@ -188,14 +190,14 @@
     .dictation-word-chip-editing { padding: 13px; }
     .dictation-pronunciation-actions { gap: 10px; }
     .dictation-pronunciation-actions .dictation-button { flex: 1 1 calc(50% - 10px); padding: 10px 9px; font-size: 11px; }
-    .dictation-player, .dictation-finish { padding: 23px 17px; border-radius: 24px; }
+    .dictation-player, .dictation-finish { padding: 16px 13px; border-radius: 20px; }
     .dictation-player-heading { align-items: flex-start; gap: 12px; }
-    .dictation-player-heading h2 { font-size: 20px; }
+    .dictation-player-heading h2 { font-size: 18px; }
     .dictation-player-heading .eyebrow { font-size: 10px; margin-bottom: 7px; }
     .dictation-player-heading button { font-size: 11px; white-space: nowrap; }
-    .dictation-player-card { padding: 27px 14px; border-radius: 21px; }
-    .dictation-sound-mark { width: 80px; height: 82px; font-size: 39px; border-radius: 25px; margin: 22px auto; }
-    .dictation-player-card h3 { font-size: 20px; }
+    .dictation-player-card { padding: 14px 11px; border-radius: 17px; }
+    .dictation-sound-mark { width: 42px; height: 42px; font-size: 23px; border-radius: 13px; margin: 8px auto 10px; }
+    .dictation-player-card h3 { font-size: 17px; }
     .dictation-player-actions { gap: 12px; }
     .dictation-player-actions > .dictation-button { min-width: 0; flex: 1; min-height: 57px; font-size: 16px; padding: 14px 10px; border-radius: 17px; }
     .dictation-key-hint { font-size: 10px !important; }

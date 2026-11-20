@@ -21,14 +21,14 @@
       "url": "/static/assets/css/style.5a475613d811f533.css"
     },
     "/static/css/subject-dictation.css": {
-      "bytes": 23701,
-      "sha256": "03158ba0e56f435740c0a3d3180a2f6893e3bbe94c78d559300bd94ded7d758d",
-      "url": "/static/assets/css/subject-dictation.03158ba0e56f4357.css"
+      "bytes": 23866,
+      "sha256": "2adc976c01135c89050fc9834f2ec0320f05d9202085e0d38c39eb8b9a7aa3b2",
+      "url": "/static/assets/css/subject-dictation.2adc976c01135c89.css"
     },
     "/static/css/subject-portal.css": {
-      "bytes": 29175,
-      "sha256": "a45fb9618be121c47b8723f1226940dbdfebe5b3c1734f4cfd7dbcfe43d1d0b7",
-      "url": "/static/assets/css/subject-portal.a45fb9618be121c4.css"
+      "bytes": 28458,
+      "sha256": "5ff0fabd09eda322f843c33f24238f08bbe19fa0ca6f2c5a141155ce698741f1",
+      "url": "/static/assets/css/subject-portal.5ff0fabd09eda322.css"
     },
     "/static/css/subject-practice.css": {
       "bytes": 7508,
