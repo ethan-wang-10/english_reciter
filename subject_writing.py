@@ -385,6 +385,27 @@ def _coaching_configuration(value):
         text(round['question']); text(round['help'])
 
 
+def _teaching_configuration(value):
+    """Optional lesson-specific wording; frozen with each student's exercise."""
+    _object(value, ('material_labels', 'personal_notice', 'comparison_notice', 'theme_placeholder',
+                    'completion_note', 'reflection_next', 'example_note', 'help'))
+    _object(value['material_labels'], COACHING_PARTS)
+    texts = [*value['material_labels'].values(), *(value[key] for key in (
+        'personal_notice', 'comparison_notice', 'theme_placeholder', 'completion_note', 'reflection_next', 'example_note'))]
+    if not isinstance(value['help'], list) or len(value['help']) != 9:
+        raise ValueError('Lesson-specific help requires nine questions')
+    for blocks in value['help']:
+        if not isinstance(blocks, list) or not 1 <= len(blocks) <= 6:
+            raise ValueError('Invalid lesson-specific help')
+        for block in blocks:
+            _object(block, ('title', 'text'))
+            texts.extend(block.values())
+    for text in texts:
+        _string(text)
+        if not text.strip() or '\x00' in text:
+            raise ValueError('Invalid lesson-specific teaching text')
+
+
 def validate_lesson(lesson):
     try:
         if (not isinstance(lesson, dict) or not isinstance(lesson.get('id'), str)
@@ -412,6 +433,8 @@ def validate_lesson(lesson):
             if lesson['version'] < 3 or 'guidance' not in lesson:
                 raise ValueError('Coaching requires a version three guided lesson')
             _coaching_configuration(lesson['coaching'])
+        if 'teaching' in lesson:
+            _teaching_configuration(lesson['teaching'])
         if len(_encode(lesson).encode('utf-8')) > 200_000:
             raise ValueError('Lesson too large')
     except (ValueError, TypeError) as error:

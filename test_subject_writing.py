@@ -1272,3 +1272,76 @@ def test_invalid_coaching_configuration_is_rejected_without_creating_student_sta
     coached_browser.lesson_path.write_text(json.dumps(content, ensure_ascii=False))
     response = coached_browser.client.get(PREFIX + '/lessons', headers=coached_browser.headers)
     assert response.status_code == 503 and not coached_browser.data_dir.exists()
+
+
+def mom_smiled_lesson():
+    return json.loads((Path(__file__).resolve().parent / 'subject_content/chinese/writing/lesson-02-mom-smiled.json').read_text())
+
+
+def test_mom_smiled_joins_catalogue_and_completes_with_its_own_choices_and_frozen_teaching(coached_browser):
+    browser = coached_browser
+    lesson = validate_lesson(mom_smiled_lesson())
+    path = browser.lesson_path.parent / 'lesson-02-mom-smiled.json'
+    path.write_text(json.dumps(lesson, ensure_ascii=False))
+    summaries = browser.client.get(PREFIX + '/lessons', headers=browser.headers).json['items']
+    assert [item['title'] for item in summaries] == ['一次有趣的课间游戏', '妈妈笑了']
+    response = browser.client.post(PREFIX + '/attempts', headers=browser.headers,
+                                   json={'lesson_id': lesson['id'], 'flow_version': 2})
+    assert response.status_code == 201
+    attempt = response.json['attempt']; endpoint = PREFIX + '/attempts/' + attempt['id']
+    assert attempt['data'] == initial_data(lesson) and not attempt['data']['paragraphs']
+    state = deepcopy(attempt['data'])
+    state.update(stage=5, structure_started=True, language_started=True, review_round='language')
+    state['guidance'].update(step=8, confirmed=list(range(9)), theme='collective', structure='result-first',
+                            sentence='我决定留下，拿起扫帚。', paragraph='我决定留下，拿起扫帚和同学一起打扫。', endingOkay=True)
+    state['guidance']['slots'] = {'begin': ['suspense'], 'middle': ['change'], 'end': ['echo']}
+    state['guidance']['details'] = ['thought', 'action', 'smile']
+    state['coaching']['material'].update(step=4, source='personal', activity='我原本约好去玩，老师却需要人手打扫。',
+                                         moment='我决定留下，和同学打扫教室。', feeling='妈妈知道后很欣慰，我也觉得开心。')
+    state['coaching']['comparison'] = {'choices': ['thought', 'reaction'], 'reason': ''}
+    state['paragraphs'] = {'p_full': '这次妈妈笑了。我决定留下，和同学打扫教室。回家后我把这件事告诉妈妈，她的笑让我很开心。'}
+    state['structure_paragraphs'] = deepcopy(state['paragraphs']); state['final_paragraphs'] = deepcopy(state['paragraphs'])
+    state['no_change'] = {'structure': True, 'language': True}
+    state['reflection']['learned'] = '妈妈的笑要有前面的行动作为依据。'
+    checkpoint = browser.client.post(endpoint + '/checkpoints', headers=browser.headers,
+                                      json={'base_revision': 1, 'data': state, 'label': '自己的提纲与重点'})
+    assert checkpoint.status_code == 200
+    saved = checkpoint.json['attempt']; version_id = checkpoint.json['versions'][0]['id']
+    updated = deepcopy(lesson); updated['version'] += 1
+    updated['teaching']['help'][0][0]['text'] = '后来更新的教学提示'
+    path.write_text(json.dumps(updated, ensure_ascii=False))
+    opened = browser.client.get(endpoint, headers=browser.headers).json['attempt']
+    assert opened == saved and opened['lesson_snapshot']['teaching'] == lesson['teaching']
+    historic = browser.client.get(endpoint + '/versions/' + version_id, headers=browser.headers).json['version']
+    assert historic['data'] == state
+    assert browser.client.get(endpoint, headers={'Authorization': 'Bearer bob-token', 'X-Writing-Flow': 'guided-v2'}).status_code == 404
+    assert browser.client.patch(endpoint, headers={'Authorization': 'Bearer parent-token', 'X-Writing-Flow': 'guided-v2'},
+                                 json={'base_revision': saved['revision'], 'data': state}).status_code == 403
+    complete = browser.client.post(endpoint + '/complete', headers=browser.headers,
+                                    json={'base_revision': saved['revision'], 'data': state})
+    assert complete.status_code == 200 and complete.json['attempt']['status'] == 'completed'
+    assert complete.json['attempt']['lesson_snapshot'] == lesson
+    for flow in (None, 1):
+        payload = {'lesson_id': lesson['id'], **({'flow_version': flow} if flow else {})}
+        old = browser.client.post(PREFIX + '/attempts', headers=browser.headers, json=payload)
+        assert old.status_code == 201
+        assert 'coaching' not in old.json['attempt']['data']
+        assert ('guidance' in old.json['attempt']['data']) is bool(flow)
+
+
+@pytest.mark.parametrize('mutation', [
+    lambda lesson: lesson['teaching']['material_labels'].pop('moment'),
+    lambda lesson: lesson['teaching'].update(help=[]),
+    lambda lesson: lesson['teaching']['help'][0][0].update(text=''),
+    lambda lesson: lesson['teaching'].update(personal_notice='字' * 2001),
+])
+def test_invalid_topic_specific_teaching_is_rejected_without_rewriting_an_existing_snapshot(coached_browser, mutation):
+    browser = coached_browser; lesson = mom_smiled_lesson()
+    path = browser.lesson_path.parent / 'lesson-02-mom-smiled.json'
+    path.write_text(json.dumps(lesson, ensure_ascii=False))
+    started = browser.client.post(PREFIX + '/attempts', headers=browser.headers,
+                                  json={'lesson_id': lesson['id'], 'flow_version': 2}).json['attempt']
+    changed = deepcopy(lesson); mutation(changed)
+    path.write_text(json.dumps(changed, ensure_ascii=False))
+    assert browser.client.get(PREFIX + '/lessons', headers=browser.headers).status_code == 503
+    assert browser.client.get(PREFIX + '/attempts/' + started['id'], headers=browser.headers).json['attempt'] == started

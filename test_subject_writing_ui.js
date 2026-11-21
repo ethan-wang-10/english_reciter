@@ -1621,3 +1621,68 @@ test('a previously abandoned attempt stays readonly even if an older response om
     await ui.type('writing-plan-situation', '不应写入已放弃的练习'); await ui.timers();
     assert.equal(ui.state.calls.some((call) => call.method === 'PATCH'), false);
 });
+
+const MOM_SMILED_LESSON = JSON.parse(fs.readFileSync(path.join(__dirname, 'subject_content/chinese/writing/lesson-02-mom-smiled.json'), 'utf8'));
+
+function momSmiledData(step = 0) {
+    const data = coachedData(step, true);
+    Object.assign(data.guidance, {
+        theme: 'collective', customTheme: '', structure: 'result-first',
+        slots: { begin: ['suspense'], middle: ['change'], end: ['echo'] },
+        notes: { begin: '这一次，妈妈笑了。', middle: '我犹豫后决定留下，和同学一起打扫。', end: '我把事情告诉妈妈，她欣慰地笑了。' },
+        details: ['thought', 'action'], ownDetail: '我想起教室还需要人手。',
+        sentence: '我决定留下，拿起扫帚。', paragraph: '我决定留下，拿起扫帚和同学一起打扫。',
+    });
+    data.coaching.material = { step: 4, source: 'personal', activity: '我原本约好去玩，老师却需要人手打扫。',
+        moment: '我犹豫后留下和同学打扫。', feeling: '妈妈听完很欣慰，我也觉得开心。' };
+    data.coaching.comparison = { choices: ['thought', 'action'], reason: '' };
+    data.paragraphs = { p_full: '这一次，妈妈笑了。我原本想去朋友家玩，后来决定留下打扫。回家后我把事情告诉妈妈，她欣慰地笑了。' };
+    return data;
+}
+
+test('two writing lessons have distinct catalogue positions and the new mother topic starts with an empty learner draft', async () => {
+    const ui = writingUI({ lesson: MOM_SMILED_LESSON });
+    const summary = (lesson) => ({ id: lesson.id, title: lesson.title, grade: lesson.grade, goal: lesson.goal, flow_version: 2 });
+    ui.state.routes[prefix + '/lessons'] = () => ({ items: [summary(COACHED_LESSON), summary(MOM_SMILED_LESSON)], count: 2 });
+    await ui.api.open();
+    assert.match(ui.field('writing-lessons').textContent, /第 1 题.*一次有趣的课间游戏.*第 2 题.*妈妈笑了/);
+    await ui.buttons('开始一次新练习')[1].fire('click');
+    const attempt = [...ui.state.attempts.values()][0];
+    assert.equal(attempt.lesson_id, MOM_SMILED_LESSON.id);
+    assert.deepEqual(attempt.data.paragraphs, {});
+    assert.equal(attempt.data.coaching.material.activity, '');
+    assert.match(ui.field('writing-material-question').textContent, /这份提纲|自己的经历/);
+    assert.doesNotMatch(ui.field('writing-stage-content').textContent, /兔子|青蛙|课间游戏/);
+    assert.equal(ui.state.calls.find((call) => call.method === 'POST' && call.url.endsWith('/attempts')).body.flow_version, 2);
+});
+
+test('mother lesson uses its own psychological choices, material labels, help and result-first example without replacing student prose', async () => {
+    const ui = writingUI({ lesson: MOM_SMILED_LESSON });
+    const data = momSmiledData(0), attempt = ui.makeAttempt(data);
+    await ui.api.openAttempt(attempt.id);
+    assert.match(ui.field('writing-material-question').textContent, /事情的起因|准备详写的地方/);
+    for (let step = 0; step < 9; step += 1) {
+        await guidedNav(ui, step);
+        await ui.field('writing-guided-help-open').fire('click');
+        const text = ui.field('writing-stage-content').textContent;
+        assert.doesNotMatch(text, /兔子|青蛙|猜词|课间游戏/, 'Help must come from this lesson, not the first game sample');
+        if (step === 7) {
+            assert.match(text, /对照原提纲|妈妈/);
+            await ui.buttons('再看看范文怎么安排')[0].fire('click');
+            await ui.buttons('我想阅读全文')[0].fire('click');
+            assert.match(ui.field('writing-stage-content').textContent, /不是因为我的学习成绩|为集体做事/);
+            assert.match(ui.field('writing-stage-content').textContent, /不是孩子已经写成的原稿/);
+        }
+        await ui.field('writing-guided-help-back').fire('click');
+    }
+    await guidedNav(ui, 5);
+    assert.ok(ui.field('writing-comparison-thought'));
+    await ui.field('writing-comparison-thought').fire('click');
+    await ui.field('writing-comparison-reaction').fire('click');
+    await ui.timers();
+    assert.ok(attempt.data.coaching.comparison.choices.includes('reaction'));
+    assert.equal(attempt.data.coaching.comparison.reason, '');
+    assert.equal(attempt.data.guidance.sentence, data.guidance.sentence);
+    assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
+    assert.match(ui.field('writing-material-context').textContent, /约好去玩|打扫/);
+});

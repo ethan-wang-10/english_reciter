@@ -101,9 +101,9 @@
       "url": "/static/assets/js/subject-sso.5564dee98f722338.js"
     },
     "/static/js/subject-writing.js": {
-      "bytes": 112598,
-      "sha256": "177db7f35c369ab6d63f933c4f47b3f9fea7ceab676503d7de9e61744df28d6c",
-      "url": "/static/assets/js/subject-writing.177db7f35c369ab6.js"
+      "bytes": 115227,
+      "sha256": "f8fe7dcb4233e13cf22cc6c2bd34bc9ddb4d04c333debb2dc9bc5538d4df4cb1",
+      "url": "/static/assets/js/subject-writing.f8fe7dcb4233e13c.js"
     },
     "/static/js/textbook.js": {
       "bytes": 49241,

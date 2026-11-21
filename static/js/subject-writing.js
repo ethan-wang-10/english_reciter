@@ -17,6 +17,8 @@
     let data = null;
     let versions = [];
     let lesson = null;
+    const teachingText = (key, fallback) => lesson?.teaching?.[key] || fallback;
+    const materialLabels = () => lesson?.teaching?.material_labels || { source: '素材来源', activity: '玩了什么', moment: '记得的一刻', feeling: '当时感受' };
     let readOnly = false;
     let viewStage = 0;
     let furthestStage = 0;
@@ -290,7 +292,12 @@
             note('这是材料练习，不要求把它当作自己真实发生的经历。', material);
             parent.appendChild(material);
         } else note('选一件自己记得清楚的小事。没有记住的细节可以先空着，不必编造。', parent);
-        const fields = [
+        const fields = lesson.teaching ? [
+            ['situation', '谁在什么时候，遇到了什么事？', '可沿用原提纲，先写关键词。'],
+            ['main_idea', '通过这件事，我想表达什么？', '想一想，人物的反应由哪些行动引起。'],
+            ['materials', '准备写哪些材料？哪些可以先不写？（选填）', '把真实的想法、动作或对话记下来。'],
+            ['ending', '事情怎样结束？怎样回应题目？（选填）', '让结尾接得上前面的事情。'],
+        ] : [
             ['situation', '谁和谁，什么时候，玩了什么？', '关键词或一句短句即可。'],
             ['main_idea', '你最想让读者觉得这次游戏怎样？为什么？', '别急着写长句，先说清“有趣在哪里”。'],
             ['materials', '准备写哪些材料？哪些可以先不写？（选填）', '把要用的动作、说的话或反应记下来。'],
@@ -325,7 +332,8 @@
     function outline(parent) {
         note('每段先写关键词，再想一想这一段的作用。把最值得展开的段落标上 ★。段数可以自己调整。', parent);
         const suggestions = node('datalist'); suggestions.id = 'writing-purpose-options';
-        for (const text of PURPOSES) { const option = node('option'); option.value = text; suggestions.appendChild(option); }
+        const purposes = lesson.teaching ? ['交代起因，带出选择', '写清自己的想法与行动', '回应题目，点明感受'] : PURPOSES;
+        for (const text of purposes) { const option = node('option'); option.value = text; suggestions.appendChild(option); }
         parent.appendChild(suggestions);
         const list = node('div', '', 'writing-outline-list');
         data.outline.forEach((card, index) => {
@@ -452,14 +460,14 @@
         if (attempt.status === 'completed') {
             const complete = node('div', '', 'writing-completion');
             complete.appendChild(node('h3', '这次练习完成了'));
-            note('提纲、初稿和修改过程都已保存。下次可以换一种游戏，再自己试着安排重点。', complete);
+            note(teachingText('completion_note', '提纲、初稿和修改过程都已保存。下次可以换一种游戏，再自己试着安排重点。'), complete);
             if (!session().account?.is_parent) complete.appendChild(button('同一题，再练一次', () => void startLesson(attempt.lesson_id)));
             parent.appendChild(complete);
         }
         note('看看两份文字。用一句话说清一处修改，以及它为什么更容易让读者看明白。', parent);
         comparison(parent, data.paragraphs, data.final_paragraphs);
         field(parent, '我这次学会了什么？', data.reflection.learned, (value) => { data.reflection.learned = value; }, { id: 'writing-reflection-learned', rows: 3, help: '可以从“我补上了……”“我删掉了……”“我调整了……”开始。' });
-        field(parent, '换一种游戏再写时，我想注意什么？（选填）', data.reflection.next_time, (value) => { data.reflection.next_time = value; }, { id: 'writing-reflection-next_time', rows: 2 });
+        field(parent, teachingText('reflection_next', '换一种游戏再写时，我想注意什么？（选填）'), data.reflection.next_time, (value) => { data.reflection.next_time = value; }, { id: 'writing-reflection-next_time', rows: 2 });
         articlePreview(parent, data.final_paragraphs, '阅读我的整篇作品');
     }
 
@@ -642,11 +650,11 @@
             const [lessons, attempts] = await Promise.all([request('/lessons'), request('/attempts')]);
             if (!current(ctx, false) || requestId !== viewRequest) return;
             const list = el('writing-lessons'); list.replaceChildren();
-            for (const item of lessons.items || []) {
+            for (const [index, item] of (lessons.items || []).entries()) {
                 lessonFlows.set(item.id, [1, 2].includes(item.flow_version) ? item.flow_version : 0);
                 const card = node('article', '', 'writing-lesson-card');
                 const info = node('div');
-                info.append(node('span', '第 1 题 · 搭框架到修改', 'writing-lesson-meta'), node('h3', item.title));
+                info.append(node('span', `第 ${index + 1} 题 · 搭框架到修改`, 'writing-lesson-meta'), node('h3', item.title));
                 note(item.goal || item.description || '把一件事按顺序安排清楚，把有趣的一刻写具体。', info);
                 note(item.time_hint || '可以分几次完成，每次专心练一小步。', info);
                 card.appendChild(info);
@@ -889,7 +897,7 @@
     function renderCoachingMaterial(parent) {
         const value = data.coaching.material, config = lesson.coaching.material;
         const keys = ['source', 'activity', 'moment', 'feeling'];
-        const names = { source: '素材来源', activity: '玩了什么', moment: '记得的一刻', feeling: '当时感受' };
+        const names = materialLabels();
         const card = node('section', '', 'writing-coaching-card'); card.id = 'writing-material-question';
         if (value.step === 4) {
             card.appendChild(node('h4', '我的素材关键词'));
@@ -957,7 +965,7 @@
         const config = lesson.coaching.comparison, value = data.coaching.comparison;
         const card = node('section', '', 'writing-coaching-card'); card.id = 'writing-comparison';
         card.appendChild(node('h4', config.title || '先看看哪些细节有帮助'));
-        if (data.coaching.material.source === 'personal') note('下面是猜词情境的写法例子，不是你的经历。可以只借鉴写法，再回到自己的游戏写句子。', card);
+        if (data.coaching.material.source === 'personal') note(teachingText('comparison_notice', '下面是猜词情境的写法例子，不是你的经历。可以只借鉴写法，再回到自己的游戏写句子。'), card);
         if (config.description) note(config.description, card);
         if (config.plain) card.appendChild(node('p', config.plain, 'writing-comparison-plain'));
         note(config.question || '哪些短句让你看见具体动作、对话或反应？可以多选，没有唯一答案。', card);
@@ -1030,14 +1038,15 @@
         const card = node('div', '', 'writing-material-context'); card.id = 'writing-material-context';
         card.appendChild(node('strong', value.source === 'personal' ? '我自己的素材' : '我用的练习情境'));
         note([value.activity, value.moment, value.feeling].filter((text) => text.trim()).join('；') || '还可以回主旨页补充素材。', card);
-        if (value.source === 'personal') note('猜词、兔子和青蛙卡片只是写法例子，可以不选。请用自己实际记得的材料，不必编出不存在的细节。', card);
+        if (value.source === 'personal') note(teachingText('personal_notice', '猜词、兔子和青蛙卡片只是写法例子，可以不选。请用自己实际记得的材料，不必编出不存在的细节。'), card);
         parent.appendChild(card);
     }
     function coachingExport(state) {
         if (!isCoached(state)) return '';
         const value = state.coaching;
         const source = lesson.coaching.material.sources.find((item) => item.id === value.material.source)?.label || value.material.source;
-        return ['【素材回想】', `素材来源：${source}`, `玩了什么：${value.material.activity}`, `记得的一刻：${value.material.moment}`, `当时感受：${value.material.feeling}`,
+        const labels = materialLabels();
+        return ['【素材回想】', `${labels.source}：${source}`, `${labels.activity}：${value.material.activity}`, `${labels.moment}：${value.material.moment}`, `${labels.feeling}：${value.material.feeling}`,
             '【短例比较：只作写法参考】', ...value.comparison.choices.map((id) => lesson.coaching.comparison.options.find((item) => item.id === id)?.text || id), value.comparison.reason,
             ...['structure', 'language'].flatMap((round) => [`【${round === 'structure' ? '内容与顺序' : '表达与字词'}修改证据】`,
                 state.no_change[round] ? '本轮检查后不用修改' : '', `改前：${value.evidence[round].before}`, `改后：${value.evidence[round].after}`, `理由：${value.evidence[round].reason}`])].join('\n');
@@ -1051,6 +1060,10 @@
     const GUIDED_DEPENDENCIES = { 0: [1, 2, 3, 4, 5, 6, 7, 8], 1: [2, 3, 4, 6, 7, 8], 2: [7, 8], 3: [5, 6, 7, 8], 4: [7, 8], 5: [6, 7, 8], 6: [7, 8], 7: [8], 8: [] };
     function isGuided() { return !!lesson?.guidance && lesson.guidance.version === 1 && !!data?.guidance; }
     function guidedConfig() { return lesson.guidance; }
+    function preferredGuidedExample() {
+        const examples = guidedConfig().examples || [];
+        return examples.find((item) => item.id === guidance().structure)?.id || examples[0]?.id || 'total';
+    }
     function guidance() { return data.guidance; }
     function guidedStepTitle(step) { return GUIDED_TITLES[step] || '主旨立意'; }
     function guidedTheme(state = data) {
@@ -1192,7 +1205,7 @@
     function addGuidedHelpLink(parent, title) {
         const link = button(title || '需要一点帮助？', () => {
             guidedView = 'help'; guidedFullExample = false; guidedHelpExamples = false;
-            guidedExample = guidedStep === 7 ? 'outline' : guidance().structure === 'sequence' ? 'sequence' : 'total';
+            guidedExample = guidedStep === 7 ? 'outline' : preferredGuidedExample();
             renderStage();
         }, { light: true });
         link.classList.add('writing-guided-help-link'); link.id = 'writing-guided-help-open'; parent.appendChild(link);
@@ -1231,7 +1244,7 @@
             }, '', 'theme');
             parent.appendChild(options);
             guidedTextField(parent, '改写成我自己的主旨（可选）', 'customTheme', { rows: 2,
-                placeholder: '用一句话说出，这次游戏给你什么感受。', help: '填写后采用自己的这句话；不填写时采用上面选择的方向。' });
+                placeholder: teachingText('theme_placeholder', '用一句话说出，这次游戏给你什么感受。'), help: '填写后采用自己的这句话；不填写时采用上面选择的方向。' });
             const adopted = node('p', '当前采用：', 'writing-guided-context');
             const text = node('strong', guidedTheme() || '还没有确定'); text.id = 'writing-guided-adopted-theme'; adopted.appendChild(text); parent.appendChild(adopted);
             addGuidedHelpLink(parent, '不太明白“主旨”？');
@@ -1357,28 +1370,42 @@
                 : '把句子读给自己听，检查重复是否必要、用词是否清楚，再看错别字和标点。已经清楚的句子可以保留。');
             return;
         }
-        if (guidedStep === 0) {
+        const topicHelp = lesson.teaching?.help?.[guidedStep];
+        if (topicHelp && !guidedHelpExamples && !(guidedStep === 7 && guidedExample === 'outline')) {
+            for (const block of topicHelp) method(block.title, block.text);
+            if (guidedStep === 5) note('我选的细节：' + (guidedDetails().join('、') || '可以只用自己记得的细节。'), parent);
+            if ([2, 3, 4, 6, 8].includes(guidedStep)) parent.appendChild(button('再看看这一部分的写法示例', () => {
+                guidedHelpExamples = true; guidedExample = preferredGuidedExample(); guidedFullExample = false; renderStage();
+            }, { light: true }));
+            return;
+        }
+        if (!topicHelp && guidedStep === 0) {
             method('主旨，就是想让读者感受到的意思', '给定情境：课间，我和同桌玩猜词。我比画兔子，同桌猜成青蛙，我们都笑了。铃响后，游戏结束。');
             note('写的事是“课间猜词”；想表达的意思可以是“游戏很有趣”，也可以是“猜错的误会带来快乐”。自己的主旨填写后会优先采用。', parent); return;
         }
-        if (guidedStep === 1) {
+        if (!topicHelp && guidedStep === 1) {
             for (const item of guidedConfig().structures) method(item.name, item.short);
             note('开头、中间、结尾是位置；总分总、分总是内容之间的关系。总分总的中间，也可以按事情顺序写。', parent); return;
         }
-        if (guidedStep === 5) {
+        if (!topicHelp && guidedStep === 5) {
             method('把参考细节，变成自己的一句话', '可以从“我把____”或“他一边____，一边____”开始，也可以不用句架，先把一个动作或反应说清楚。');
             note('你选的细节：' + (guidedDetails().join('、') || '也可以不选卡片，直接写自己的细节。'), parent); return;
         }
-        if (!guidedHelpExamples && (guidedStep === 8 || (guidedStep === 7 && editingEnding))) {
+        if (!topicHelp && !guidedHelpExamples && (guidedStep === 8 || (guidedStep === 7 && editingEnding))) {
             method('直接点题', '这场课间猜词游戏，真是又短又有趣。');
             method('回到一个细节', '回到座位时，我还想起他那声“青蛙”，嘴角又翘了起来。');
             method('照应开头的感受', '开头写“笑个不停”，结尾可以回到游戏留下的笑声。');
-            parent.appendChild(button('再看看范文怎样收尾', () => { guidedHelpExamples = true; guidedExample = guidance().structure === 'sequence' ? 'sequence' : 'total'; renderStage(); }, { light: true }));
+            parent.appendChild(button('再看看范文怎样收尾', () => { guidedHelpExamples = true; guidedExample = preferredGuidedExample(); renderStage(); }, { light: true }));
             return;
         }
         if (guidedStep === 7 && guidedExample === 'outline') {
             renderGuidanceSummary(parent);
-            parent.appendChild(button('再看看范文怎么安排', () => { guidedExample = 'total'; guidedFullExample = false; renderStage(); }, { light: true })); return;
+            if (lesson.teaching && Array.isArray(lesson.reference_outline)) {
+                const reference = node('details', '', 'writing-hint'); reference.appendChild(node('summary', '对照原提纲：一种安排'));
+                for (const item of lesson.reference_outline) note(`${item.focus ? '★ ' : ''}${item.content}（${item.purpose}）`, reference);
+                parent.appendChild(reference);
+            }
+            parent.appendChild(button('再看看范文怎么安排', () => { guidedExample = preferredGuidedExample(); guidedHelpExamples = !!lesson.teaching; guidedFullExample = false; renderStage(); }, { light: true })); return;
         }
         const examples = guidedConfig().examples || [];
         const tabs = node('div', '', 'writing-guided-example-tabs');
@@ -1388,7 +1415,8 @@
         }
         parent.appendChild(tabs);
         const selected = examples.find((item) => item.id === guidedExample) || examples[0];
-        const index = guidedHelpExamples || guidedStep === 4 ? 2 : guidedStep === 2 ? 0 : 1;
+        const index = guidedStep === 8 || guidedStep === 4 || (guidedStep === 7 && editingEnding) ? 2 : guidedStep === 2 ? 0 : 1;
+        if (lesson.teaching?.example_note) note(lesson.teaching.example_note, parent);
         const paragraphs = selected?.paragraphs || [];
         for (const part of guidedFullExample ? paragraphs : paragraphs.slice(index, index + 1)) {
             const section = node('section', '', 'writing-guided-example'); section.appendChild(node('span', part.role));
