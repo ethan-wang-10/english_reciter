@@ -32,6 +32,9 @@ GUIDANCE_FIELDS = frozenset((
 ))
 GUIDANCE_PARTS = ('begin', 'middle', 'end')
 COACHING_PARTS = ('source', 'activity', 'moment', 'feeling')
+WRITING_FLOW_FIELDS = ('guidance', 'coaching', 'paragraph_plan')
+WRITING_CAPABILITIES = ('guided-v1', 'guided-v2', 'guided-v3')
+MOM_SMILED_LESSON = 'grade4-mom-smiled'
 COACHING_COMPARISON_IDS = {'action', 'dialogue', 'reaction'}
 GUIDANCE_IDS = {
     'theme': {'fun', 'mixup', 'together'},
@@ -99,6 +102,13 @@ def initial_data(lesson=None):
         'reflection': {'learned': '', 'next_time': ''},
         'no_change': {'structure': False, 'language': False},
     }
+    if lesson and 'paragraph_plan' in lesson and 'guidance' not in lesson:
+        paragraphs = lesson['paragraph_plan']['paragraphs']
+        result['outline'] = [
+            {'id': part['id'], 'content': '', 'purpose': part['title'], 'focus': part['focus']}
+            for part in paragraphs
+        ]
+        result['paragraph_plan'] = {'theme': '', 'structure': '', 'selected': {part['id']: [] for part in paragraphs}}
     if lesson and 'guidance' in lesson:
         result['guidance'] = initial_guidance()
         result['outline'] = [{'id': 'p_full', 'content': '', 'purpose': '整篇初稿（开头—重点—结尾）', 'focus': True}]
@@ -179,10 +189,22 @@ def validate_coaching(value, configuration=None):
     return deepcopy(value)
 
 
+def _validate_paragraph_plan(value, configuration):
+    _object(value, ('theme', 'structure', 'selected'))
+    for field in ('theme', 'structure'):
+        allowed = {option['id'] for option in configuration[field + 's']}
+        if not isinstance(value[field], str) or value[field] not in {'', *allowed}:
+            raise WritingError('请选择有效的作文中心和写作顺序。')
+    paragraphs = configuration['paragraphs']
+    selected = _object(value['selected'], [part['id'] for part in paragraphs])
+    for part in paragraphs:
+        _selected(selected[part['id']], {option['id'] for option in part['options']})
+
+
 def validate_data(value, lesson=None):
     """Validate storage shape and bounds; do not judge a student's writing."""
     if not isinstance(value, dict) or set(value) not in (
-            DATA_FIELDS, DATA_FIELDS | {'guidance'}, DATA_FIELDS | {'guidance', 'coaching'}):
+            DATA_FIELDS, DATA_FIELDS | {'guidance'}, DATA_FIELDS | {'guidance', 'coaching'}, DATA_FIELDS | {'paragraph_plan'}):
         raise WritingError('作文草稿格式无效，请刷新页面后重试。')
     if 'guidance' in value:
         if lesson is not None and 'guidance' not in lesson:
@@ -192,6 +214,11 @@ def validate_data(value, lesson=None):
         if lesson is not None and 'coaching' not in lesson:
             raise WritingError('这份旧版练习不能加入新版辅助，请另开一次练习。')
         validate_coaching(value['coaching'], lesson.get('coaching') if lesson else None)
+    plan = lesson.get('paragraph_plan') if lesson else None
+    if 'paragraph_plan' in value:
+        if not plan or 'guidance' in lesson:
+            raise WritingError('这份练习没有分段提纲，请另开一次练习。')
+        _validate_paragraph_plan(value['paragraph_plan'], plan)
     if type(value['stage']) is not int or not 0 <= value['stage'] <= 5:
         raise WritingError('练习步骤无效。')
     if value['mode'] not in ('material', 'personal') or value['review_round'] not in ('structure', 'language'):
@@ -221,6 +248,8 @@ def validate_data(value, lesson=None):
         _string(card['purpose'])
         if type(card['focus']) is not bool:
             raise WritingError('重点段标记格式无效。')
+    if 'paragraph_plan' in value and [card['id'] for card in outline] != [part['id'] for part in plan['paragraphs']]:
+        raise WritingError('正文段落与提纲不一致，请刷新后重试。')
     for key in ('paragraphs', 'structure_paragraphs', 'final_paragraphs'):
         paragraphs = value[key]
         if not isinstance(paragraphs, dict) or len(paragraphs) > 32:
@@ -228,6 +257,8 @@ def validate_data(value, lesson=None):
         for identifier, text in paragraphs.items():
             if not isinstance(identifier, str) or not PARAGRAPH_ID.fullmatch(identifier):
                 raise WritingError('正文段落编号无效。')
+            if 'paragraph_plan' in value and identifier not in seen:
+                raise WritingError('正文段落与提纲不一致，请刷新后重试。')
             _string(text, 6000)
     _object(value['checks'], ('structure', 'language'))
     for keys in value['checks'].values():
@@ -406,6 +437,55 @@ def _teaching_configuration(value):
             raise ValueError('Invalid lesson-specific teaching text')
 
 
+def _paragraph_plan_configuration(value):
+    _object(value, ('themes', 'structures', 'paragraphs', 'recommended', 'sample'))
+
+    def teaching_text(value, *, optional=False):
+        _string(value, 400)
+        if (not optional and not value.strip()) or '\x00' in value:
+            raise ValueError('Invalid paragraph plan text')
+
+    def option_list(items, fields):
+        if not isinstance(items, list) or not 2 <= len(items) <= 8:
+            raise ValueError('Invalid paragraph plan options')
+        seen = set()
+        for item in items:
+            _object(item, ('id', *fields))
+            identifier = item['id']
+            if not isinstance(identifier, str) or not LESSON_ID.fullmatch(identifier) or identifier in seen:
+                raise ValueError('Invalid paragraph plan option ID')
+            seen.add(identifier)
+            for field in fields:
+                teaching_text(item[field], optional=field == 'example')
+
+    option_list(value['themes'], ('text',))
+    option_list(value['structures'], ('text', 'hint', 'example'))
+    paragraphs = value['paragraphs']
+    if not isinstance(paragraphs, list) or not 2 <= len(paragraphs) <= 8:
+        raise ValueError('Invalid paragraph plan length')
+    ids = set()
+    for part in paragraphs:
+        _object(part, ('id', 'title', 'prompt', 'focus', 'options'))
+        identifier = part['id']
+        if (not isinstance(identifier, str) or not re.fullmatch(r'p_[a-z0-9_-]{1,29}', identifier)
+                or identifier in ids or type(part['focus']) is not bool):
+            raise ValueError('Invalid paragraph plan section')
+        ids.add(identifier)
+        teaching_text(part['title'])
+        teaching_text(part['prompt'])
+        option_list(part['options'], ('text',))
+    recommended = value['recommended']
+    _validate_paragraph_plan(recommended, value)
+    if not recommended['theme'] or not recommended['structure'] or not all(recommended['selected'].values()):
+        raise ValueError('Incomplete recommended paragraph plan')
+    sample = _object(value['sample'], ('title', 'paragraphs'))
+    teaching_text(sample['title'])
+    if not isinstance(sample['paragraphs'], list) or len(sample['paragraphs']) != len(paragraphs):
+        raise ValueError('The model essay must follow the paragraph plan')
+    for paragraph in sample['paragraphs']:
+        teaching_text(paragraph)
+
+
 def validate_lesson(lesson):
     try:
         if (not isinstance(lesson, dict) or not isinstance(lesson.get('id'), str)
@@ -435,6 +515,8 @@ def validate_lesson(lesson):
             _coaching_configuration(lesson['coaching'])
         if 'teaching' in lesson:
             _teaching_configuration(lesson['teaching'])
+        if 'paragraph_plan' in lesson:
+            _paragraph_plan_configuration(lesson['paragraph_plan'])
         if len(_encode(lesson).encode('utf-8')) > 200_000:
             raise ValueError('Lesson too large')
     except (ValueError, TypeError) as error:
@@ -460,12 +542,24 @@ def load_lessons(directory):
 
 def lesson_summary(lesson):
     summary = {key: deepcopy(lesson[key]) for key in ('id', 'version', 'title', 'grade', 'description', 'goal', 'time_hint') if key in lesson}
-    if 'guidance' in lesson:
+    if 'paragraph_plan' in lesson:
+        summary['flow_version'] = 3
+    elif 'guidance' in lesson:
         summary['flow_version'] = 2 if 'coaching' in lesson else lesson['guidance']['version']
     return summary
 
 
+def _is_retired(lesson):
+    return lesson['id'] == MOM_SMILED_LESSON and 'paragraph_plan' not in lesson
+
+
 def _completion_missing(data):
+    if 'paragraph_plan' in data:
+        plan = data['paragraph_plan']
+        missing = ['paragraph_plan.' + field for field in ('theme', 'structure') if not plan[field]]
+        missing.extend('paragraph_plan.selected.' + key for key, choices in plan['selected'].items() if not choices)
+        missing.extend('paragraphs.' + key for key in plan['selected'] if not data['paragraphs'].get(key, '').strip())
+        return missing
     missing = []
     if 'guidance' in data:
         guidance = data['guidance']
@@ -603,7 +697,7 @@ class WritingStore:
         try:
             lesson = validate_lesson(_decode(row['lesson_json']))
             data = validate_data(_decode(row['data_json']), lesson)
-            if any(field in lesson and field not in data for field in ('guidance', 'coaching')):
+            if any(field in lesson and field not in data for field in WRITING_FLOW_FIELDS):
                 raise WritingError('写作引导记录不完整。')
             return lesson, data
         except (WritingError, KeyError, TypeError, ValueError) as error:
@@ -648,12 +742,19 @@ class WritingStore:
         if not self.path.is_file():
             return []
         with self._connection() as connection:
-            rows = connection.execute("SELECT * FROM writing_attempts WHERE status!='abandoned' ORDER BY updated_at DESC,id DESC LIMIT 200").fetchall()
+            rows = connection.execute("SELECT * FROM writing_attempts WHERE status!='abandoned' ORDER BY updated_at DESC,id DESC")
             result = []
             for row in rows:
                 lesson, data = self._stored(row)
-                result.append({**{key: row[key] for key in ('id', 'lesson_id', 'revision', 'status', 'created_at', 'updated_at', 'completed_at')},
-                               'title': lesson['title'], 'lesson_title': lesson['title'], 'stage': data['stage']})
+                if _is_retired(lesson):
+                    continue
+                entry = {**{key: row[key] for key in ('id', 'lesson_id', 'revision', 'status', 'created_at', 'updated_at', 'completed_at')},
+                         'title': lesson['title'], 'lesson_title': lesson['title'], 'stage': data['stage']}
+                if 'paragraph_plan' in data:
+                    entry['flow_version'] = 3
+                result.append(entry)
+                if len(result) == 200:
+                    break
             return result
 
     def get(self, attempt_id):
@@ -669,7 +770,7 @@ class WritingStore:
             self._check_write(row, base_revision)
             lesson, previous = self._stored(row)
             if isinstance(data, dict):
-                for field in ('guidance', 'coaching'):
+                for field in WRITING_FLOW_FIELDS:
                     if field not in data and field in previous:
                         data = {**data, field: deepcopy(previous[field])}
             data = validate_data(data, lesson)
@@ -701,7 +802,7 @@ class WritingStore:
                 raise WritingError('版本不存在。', 404)
             try:
                 data = validate_data(_decode(row['data_json']), lesson)
-                if any(field in lesson and field not in data for field in ('guidance', 'coaching')):
+                if any(field in lesson and field not in data for field in WRITING_FLOW_FIELDS):
                     raise WritingError('写作引导版本不完整。')
             except WritingError as error:
                 raise WritingError('作文版本暂时无法读取，原稿已保留。', 503) from error
@@ -738,7 +839,7 @@ class WritingStore:
             now, revision = china_now_iso(timespec='microseconds'), row['revision'] + 1
             try:
                 restored = validate_data(_decode(version['data_json']), lesson)
-                if any(field in lesson and field not in restored for field in ('guidance', 'coaching')):
+                if any(field in lesson and field not in restored for field in WRITING_FLOW_FIELDS):
                     raise WritingError('写作引导版本不完整。')
             except WritingError as error:
                 raise WritingError('作文版本暂时无法恢复，原稿已保留。', 503) from error
@@ -752,10 +853,18 @@ class WritingStore:
         if not self.path.is_file():
             return []
         with self._connection() as connection:
-            rows = connection.execute("SELECT * FROM writing_attempts WHERE status='completed' ORDER BY completed_at DESC,id DESC LIMIT 200").fetchall()
-            return [{'id': row['id'], 'kind': 'writing', 'paper_id': row['lesson_id'],
-                     'paper_title': '作文专项：' + _decode(row['lesson_json'])['title'],
-                     'submitted_at': row['completed_at'], 'status': 'completed'} for row in rows]
+            rows = connection.execute("SELECT id,lesson_id,lesson_json,completed_at FROM writing_attempts WHERE status='completed' ORDER BY completed_at DESC,id DESC")
+            records = []
+            for row in rows:
+                lesson = _decode(row['lesson_json'])
+                if _is_retired(lesson):
+                    continue
+                records.append({'id': row['id'], 'kind': 'writing', 'paper_id': row['lesson_id'],
+                                'paper_title': '作文专项：' + lesson['title'],
+                                'submitted_at': row['completed_at'], 'status': 'completed'})
+                if len(records) == 200:
+                    break
+            return records
 
 
 def register_subject_writing_routes(app, services):
@@ -782,8 +891,8 @@ def register_subject_writing_routes(app, services):
         result = learning_store.get(attempt_id)
         snapshot = result['attempt']['lesson_snapshot']
         capability = request.headers.get('X-Writing-Flow')
-        if (('coaching' in snapshot and capability != 'guided-v2')
-                or ('guidance' in snapshot and capability not in ('guided-v1', 'guided-v2'))):
+        required = 3 if 'paragraph_plan' in snapshot else 2 if 'coaching' in snapshot else 1 if 'guidance' in snapshot else 0
+        if required and capability not in WRITING_CAPABILITIES[required - 1:]:
             raise WritingError('这份练习使用新版写作引导，请刷新页面后重新打开。原稿会保留。',
                                409, code='upgrade_required')
         return learning_store, result
@@ -821,24 +930,20 @@ def register_subject_writing_routes(app, services):
     @services.parent_forbidden
     def start(username):
         data = body(('lesson_id',), ('flow_version',))
-        if 'flow_version' in data and (type(data['flow_version']) is not int or data['flow_version'] not in (1, 2)):
+        flow = data.get('flow_version', 0)
+        if 'flow_version' in data and (type(flow) is not int or flow not in (1, 2, 3)):
             raise WritingError('写作引导版本无效，请刷新后再试。')
         _valid_id(data['lesson_id'], LESSON_ID, '练习题目不存在。')
         lesson = next((item for item in lessons() if item['id'] == data['lesson_id']), None)
         if lesson is None:
             raise WritingError('练习题目不存在。', 404)
-        if 'flow_version' in data:
-            if 'guidance' not in lesson:
-                raise WritingError('这道题暂未提供新版写作引导，请选择已有练习方式。')
-            if data['flow_version'] == 2:
-                if 'coaching' not in lesson:
-                    raise WritingError('这道题暂未提供新版写作辅助，请选择已有练习方式。')
-            else:
-                lesson = {key: value for key, value in lesson.items() if key != 'coaching'}
-        elif 'guidance' in lesson:
-            # An already-open classic client can still create a complete classic
-            # attempt. Its immutable snapshot never pretends to support nine steps.
-            lesson = {key: value for key, value in lesson.items() if key not in ('guidance', 'coaching')}
+        if 'paragraph_plan' in lesson and flow != 3:
+            raise WritingError('这道题已改为分段写作，请刷新页面后开始新版练习。', 409, code='upgrade_required')
+        if flow and WRITING_FLOW_FIELDS[flow - 1] not in lesson:
+            raise WritingError('这道题暂未提供所选练习方式。')
+        # Each attempt stores only the flow in which it was started.
+        keep = ('paragraph_plan',) if flow == 3 else WRITING_FLOW_FIELDS[:flow]
+        lesson = {key: value for key, value in lesson.items() if key not in WRITING_FLOW_FIELDS or key in keep}
         return jsonify({'attempt': store(username).start(lesson), 'read_only': False}), 201
 
     @routes.get('/attempts/<attempt_id>')

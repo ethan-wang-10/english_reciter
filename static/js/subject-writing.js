@@ -10,7 +10,7 @@
     const portal = () => window.subjectPortal;
     const session = () => portal()?.getSession() || {};
     const student = (value = session()) => value.account?.is_parent ? value.account.child_username : value.account?.username || value.username;
-    const request = (path, options = {}) => portal().apiRequest(PREFIX + path, { ...options, headers: { ...(options.headers || {}), 'X-Writing-Flow': 'guided-v2' } });
+    const request = (path, options = {}) => portal().apiRequest(PREFIX + path, { ...options, headers: { ...(options.headers || {}), 'X-Writing-Flow': 'guided-v3' } });
     let generation = 0;
     let viewRequest = 0;
     let attempt = null;
@@ -76,7 +76,11 @@
             && ['structure', 'language'].includes(value.review_round)
             && typeof value.structure_started === 'boolean' && typeof value.language_started === 'boolean'
             && (value.guidance === undefined || validGuidance(value.guidance))
-            && (value.coaching === undefined || validCoaching(value.coaching));
+            && (value.coaching === undefined || validCoaching(value.coaching))
+            && (value.paragraph_plan === undefined || (strings(value.paragraph_plan, ['theme', 'structure'])
+                && object(value.paragraph_plan.selected)
+                && value.outline.every(({ id }) => Array.isArray(value.paragraph_plan.selected[id])
+                    && value.paragraph_plan.selected[id].every((choice) => typeof choice === 'string'))));
     }
     function validCoaching(value) {
         const object = (item) => !!item && typeof item === 'object' && !Array.isArray(item);
@@ -210,6 +214,7 @@
         input.autocomplete = 'off';
         if (options.placeholder) input.placeholder = options.placeholder;
         if (options.list) input.setAttribute('list', options.list);
+        if (options.describedBy) input.setAttribute('aria-describedby', options.describedBy);
         input.addEventListener('input', () => { if (!editable() || completing || guidanceConfirming || transitionBusy || abandonBusy) return; update(input.value); changed(); });
         input.addEventListener('blur', () => { if (editable() && !conflict) void flush().catch(() => {}); });
         wrapper.appendChild(input);
@@ -368,8 +373,10 @@
     function articlePreview(parent, map, title = '通读我现在的全文') {
         const details = node('details', '', 'writing-preview');
         details.appendChild(node('summary', title));
-        details.appendChild(node('div', orderedText(data, map) || '写下自己的段落后，全文会在这里连起来。', 'writing-article-preview'));
+        const article = node('div', orderedText(data, map) || '写下自己的段落后，全文会在这里连起来。', 'writing-article-preview');
+        details.appendChild(article);
         parent.appendChild(details);
+        return article;
     }
     function paragraphs(parent, key, focusOnly = false) {
         const wholeRevision = isGuided() && ['structure_paragraphs', 'final_paragraphs'].includes(key);
@@ -473,10 +480,14 @@
 
     function renderStage() {
         if (!attempt || !data) return;
+        const paragraphPlan = isParagraphPlan();
         const guided = isGuided();
+        el('writing-editor').classList.toggle('writing-paragraph-plan', paragraphPlan);
         el('writing-editor').classList.toggle('writing-guided', guided);
         el('writing-workspace')?.classList.toggle('writing-guided-workspace', guided);
         if (el('writing-guided-recap')) el('writing-guided-recap').hidden = !guided || viewStage > 3;
+        if (paragraphPlan) return renderParagraphPlanStage();
+        el('writing-prev').hidden = false;
         if (guided && viewStage <= 3) return renderGuidedStage();
         const guide = stageGuide();
         el('writing-title').textContent = lesson?.title || '一次有趣的课间游戏';
@@ -532,6 +543,7 @@
         const ctx = capture();
         try {
             let label = '';
+            if (isParagraphPlan() && viewStage === 0 && next === 3) label = '提纲';
             if (viewStage === 1 && next > 1) label = '提纲';
             if (viewStage === 3 && next > 3) {
                 label = '初稿';
@@ -550,6 +562,7 @@
     }
     async function nextStage() {
         if (!attempt || navigationBusy || abandonBusy) return;
+        if (isParagraphPlan()) return openParagraphPlanStage(3);
         if (isGuided() && guidedView !== 'question') { guidedView = 'question'; renderStage(); return; }
         if (isGuided() && viewStage <= 3) return confirmGuidedStep();
         if (localRecovery) return message('先决定继续本机草稿，还是使用云端这一份。', true);
@@ -571,17 +584,26 @@
     }
     async function finish() {
         if (!editable() || navigationBusy || abandonBusy) return;
-        if (isGuided() && guidedPending() !== null) { const pending = guidedPending(); openGuidedStep(pending); message('还有问题需要确认或复核，文字都会保留。', true); return; }
-        if (isCoached()) for (const round of ['structure', 'language']) {
-            const issue = coachingEvidenceIssue(round);
-            if (issue) { viewStage = 4; data.stage = 4; data.review_round = round; guidedView = 'question'; changed(); renderStage(); message(issue, true); return; }
+        if (isParagraphPlan()) {
+            const blank = lesson.paragraph_plan.paragraphs.find(({ id }) => !data.paragraphs[id]?.trim());
+            if (blank) {
+                message(`请先写完「${blank.title}」这一段。`, true);
+                el(`writing-paragraph-${blank.id}`)?.focus();
+                return;
+            }
+        } else {
+            if (isGuided() && guidedPending() !== null) { const pending = guidedPending(); openGuidedStep(pending); message('还有问题需要确认或复核，文字都会保留。', true); return; }
+            if (isCoached()) for (const round of ['structure', 'language']) {
+                const issue = coachingEvidenceIssue(round);
+                if (issue) { viewStage = 4; data.stage = 4; data.review_round = round; guidedView = 'question'; changed(); renderStage(); message(issue, true); return; }
+            }
+            if (!data.reflection.learned.trim()) return message('用一句话说说这次学会了什么，再保存作品。', true);
         }
-        if (!data.reflection.learned.trim()) return message('用一句话说说这次学会了什么，再保存作品。', true);
         const ctx = capture(); navigationBusy = true; completing = true; renderStage();
         try {
             await flush('', true);
             if (!current(ctx)) return;
-            readOnly = true; viewStage = 5; message('作品和修改过程已经保存。', false); renderStage();
+            readOnly = true; viewStage = 5; message(isParagraphPlan() ? '作品已保存。' : '作品和修改过程已经保存。', false); renderStage();
             void portal()?.refreshRecords?.();
         } catch (error) { if (current(ctx)) message(error.message || '作品还没有保存完成，请重试。', true); }
         finally { if (current(ctx)) { navigationBusy = false; completing = false; renderStage(); } }
@@ -631,10 +653,13 @@
         try {
             if (editable() && sequence !== savedSequence) await flush();
             let flow = lessonFlows.get(id);
-            if (flow === undefined) { const loaded = await request('/lessons/' + encodeURIComponent(id)); flow = loaded.lesson?.coaching?.version === 1 ? 2 : loaded.lesson?.guidance?.version === 1 ? 1 : 0; }
-            const result = await request('/attempts', apiOptions({ lesson_id: id, ...(flow === 1 || flow === 2 ? { flow_version: flow } : {}) }));
+            if (flow === undefined) {
+                const { lesson: topic } = await request('/lessons/' + encodeURIComponent(id));
+                flow = topic?.paragraph_plan ? 3 : topic?.coaching?.version === 1 ? 2 : topic?.guidance?.version === 1 ? 1 : 0;
+            }
+            const result = await request('/attempts', apiOptions({ lesson_id: id, ...(flow ? { flow_version: flow } : {}) }));
             if (!current(ctx, false) || requestId !== viewRequest) return;
-            applyAttempt(result); message('可以先写关键词，慢慢把想法安排清楚。');
+            applyAttempt(result); message(isParagraphPlan() ? '' : '可以先写关键词，慢慢把想法安排清楚。');
         } catch (error) { if (current(ctx, false) && requestId === viewRequest) message(error.message || '开始练习失败，请重试。', true); }
         finally { if (current(ctx, false)) navigationBusy = false; }
     }
@@ -651,7 +676,7 @@
             if (!current(ctx, false) || requestId !== viewRequest) return;
             const list = el('writing-lessons'); list.replaceChildren();
             for (const [index, item] of (lessons.items || []).entries()) {
-                lessonFlows.set(item.id, [1, 2].includes(item.flow_version) ? item.flow_version : 0);
+                lessonFlows.set(item.id, [1, 2, 3].includes(item.flow_version) ? item.flow_version : 0);
                 const card = node('article', '', 'writing-lesson-card');
                 const info = node('div');
                 info.append(node('span', `第 ${index + 1} 题 · 搭框架到修改`, 'writing-lesson-meta'), node('h3', item.title));
@@ -668,7 +693,9 @@
                 card.setAttribute('data-attempt-id', item.id);
                 const info = node('div'); info.appendChild(node('h4', item.title || item.lesson_title || '一次有趣的课间游戏'));
                 const savedStage = item.stage ?? item.data?.stage ?? 0;
-                note(`${item.status === 'completed' ? '已完成' : '进行中 · ' + (item.guidance_step !== undefined && savedStage <= 3 ? guidedStepTitle(item.guidance_step) : STAGES[savedStage])}${item.updated_at ? ' · ' + item.updated_at.replace('T', ' ').slice(0, 16) : ''}`, info);
+                const stageName = item.flow_version === 3 ? (savedStage === 0 ? '选提纲' : '分段写作')
+                    : item.guidance_step !== undefined && savedStage <= 3 ? guidedStepTitle(item.guidance_step) : STAGES[savedStage];
+                note(`${item.status === 'completed' ? '已完成' : '进行中 · ' + stageName}${item.updated_at ? ' · ' + item.updated_at.replace('T', ' ').slice(0, 16) : ''}`, info);
                 const actions = node('div'); actions.appendChild(button(item.status === 'completed' || session().account?.is_parent ? '查看作品与过程' : '继续练习', () => void openAttempt(item.id), { light: true }));
                 if (item.status === 'in_progress' && !session().account?.is_parent && !attempts.read_only) {
                     const abandon = button('放弃练习', () => requestAbandon(item, card, ctx), { light: true });
@@ -789,7 +816,10 @@
 
     function versionPreview(state) {
         const parent = el('writing-version-preview'); parent.replaceChildren();
-        if (state.guidance) {
+        if (isParagraphPlan(state)) {
+            parent.appendChild(node('h4', '提纲'));
+            for (const line of paragraphPlanSummary(state)) note(line, parent);
+        } else if (state.guidance) {
             renderGuidanceSummary(parent, state, '这版的主旨与提纲');
         } else {
             parent.appendChild(node('h4', '选材与想法'));
@@ -867,7 +897,9 @@
             }
         }
         const guidanceText = draft.guidance ? guidanceExport(draft) : '';
-        const text = [lesson?.title, guidanceText, `练习方式：${draft.mode === 'personal' ? '自己的真实经历' : '给定材料练习'}`,
+        const text = isParagraphPlan(draft) ? [lesson.title, '【提纲】', ...paragraphPlanSummary(draft),
+            '【正文】', orderedText(draft, draft.paragraphs)].join('\n\n')
+            : [lesson?.title, guidanceText, `练习方式：${draft.mode === 'personal' ? '自己的真实经历' : '给定材料练习'}`,
             '【选材与想法】', `谁在什么时候玩什么：${draft.planning.situation}`, `想表达的意思：${draft.planning.main_idea}`,
             `准备使用的材料：${draft.planning.materials}`, `准备怎样结尾：${draft.planning.ending}`,
             '【我的提纲】', ...draft.outline.map((card, i) => `${i + 1}${card.focus ? ' ★' : ''} ${card.content}\n作用：${card.purpose}`),
@@ -885,6 +917,163 @@
             field.value = text; field.readOnly = true; field.focus?.(); field.select?.();
             message('复制框已展开，请选中并复制内容后，再载入最新稿。');
         }
+    }
+
+    function isParagraphPlan(state = data) {
+        return !!lesson?.paragraph_plan && !!state?.paragraph_plan;
+    }
+    function planReady() {
+        const { theme, structure, selected } = data.paragraph_plan;
+        return !!theme && !!structure && lesson.paragraph_plan.paragraphs.every(({ id }) => selected[id]?.length);
+    }
+    function selectedPlanPoints(part, state = data) {
+        const selected = state.paragraph_plan.selected[part.id] || [];
+        return part.options.filter(({ id }) => selected.includes(id)).map(({ text }) => text);
+    }
+    function paragraphPlanSummary(state) {
+        const config = lesson.paragraph_plan;
+        const theme = config.themes.find(({ id }) => id === state.paragraph_plan.theme);
+        const structure = config.structures.find(({ id }) => id === state.paragraph_plan.structure);
+        return [theme && `中心　${theme.text}`, structure && `顺序　${structure.text}`,
+            ...config.paragraphs.map((part) => `${part.title}　${selectedPlanPoints(part, state).join('、') || '待选'}`)].filter(Boolean);
+    }
+    function openParagraphPlanStage(target) {
+        if (target === 3 && !planReady()) {
+            message('先选一个中心和写作顺序，再给每段选至少一项。', true);
+            return;
+        }
+        return moveStage(target, false);
+    }
+    function renderPlanOptions(parent, key, title, options, selected, choose) {
+        const group = node('fieldset', '', 'writing-plan-group');
+        group.appendChild(node('legend', title));
+        const choices = node('div', '', 'writing-plan-options');
+        for (const option of options) {
+            guidedChoice(choices, option.id, option.text, selected.includes(option.id), () => {
+                choose(option.id);
+                changed();
+                message();
+                renderStage();
+            }, '', `plan-${key}`);
+        }
+        group.appendChild(choices);
+        parent.appendChild(group);
+    }
+    function renderPlanBuilder(parent) {
+        const config = lesson.paragraph_plan;
+        const plan = data.paragraph_plan;
+        if (editable() && !planReady()) {
+            const recommend = button('用参考提纲补齐', () => {
+                if (!editable()) return;
+                const reference = config.recommended;
+                plan.theme ||= reference.theme;
+                plan.structure ||= reference.structure;
+                for (const { id } of config.paragraphs) {
+                    if (!plan.selected[id].length) plan.selected[id] = [...reference.selected[id]];
+                }
+                changed();
+                message();
+                renderStage();
+                el('writing-next').focus?.({ preventScroll: true });
+            }, { light: true, disabled: navigationBusy });
+            recommend.id = 'writing-plan-recommended';
+            parent.appendChild(recommend);
+        }
+        const groups = node('div', '', 'writing-plan-groups');
+        renderPlanOptions(groups, 'theme', '想表达的中心', config.themes, [plan.theme], (id) => { plan.theme = id; });
+        renderPlanOptions(groups, 'structure', '写作顺序', config.structures, [plan.structure], (id) => { plan.structure = id; });
+        for (const part of config.paragraphs) {
+            renderPlanOptions(groups, part.id, part.title, part.options, plan.selected[part.id], (id) => {
+                const choices = plan.selected[part.id];
+                plan.selected[part.id] = choices.includes(id) ? choices.filter((choice) => choice !== id) : [...choices, id];
+            });
+        }
+        parent.appendChild(groups);
+    }
+    function renderParagraphEditor(parent) {
+        const config = lesson.paragraph_plan;
+        const plan = data.paragraph_plan;
+        const theme = config.themes.find(({ id }) => id === plan.theme);
+        const structure = config.structures.find(({ id }) => id === plan.structure);
+        if (theme) note('我的中心　' + theme.text, parent, 'writing-plan-theme');
+        const sample = config.sample;
+        const sampleDetails = node('details', '', 'writing-plan-sample');
+        const characters = sample.paragraphs.join('').match(/\p{Script=Han}/gu)?.length || 0;
+        sampleDetails.appendChild(node('summary', `查看范文（${characters} 字）`));
+        sampleDetails.appendChild(node('h4', sample.title));
+        note('结果前置的写法示例。按自己记得的细节写。', sampleDetails);
+        for (const text of sample.paragraphs) sampleDetails.appendChild(node('p', text, 'writing-plan-sample-paragraph'));
+        parent.appendChild(sampleDetails);
+        const grid = node('div', '', 'writing-plan-rows');
+        const headings = node('div', '', 'writing-plan-row writing-plan-column-headings');
+        headings.append(node('h4', '提纲与提示'), node('h4', '分段正文'));
+        grid.appendChild(headings);
+        let fullText;
+        for (const [index, part] of config.paragraphs.entries()) {
+            const row = node('section', '', 'writing-plan-row');
+            const guide = node('div', '', 'writing-plan-prompt');
+            guide.id = `writing-plan-prompt-${part.id}`;
+            guide.appendChild(node('h4', part.title));
+            if (index === 0 && structure) note(structure.hint, guide);
+            const list = node('ul');
+            for (const point of selectedPlanPoints(part)) list.appendChild(node('li', point));
+            guide.appendChild(list);
+            note(part.prompt, guide);
+            if (index === 0 && structure?.example) {
+                const example = node('details');
+                example.appendChild(node('summary', '看看课件给的开头'));
+                note(structure.example, example);
+                guide.appendChild(example);
+            }
+            const editor = node('div', '', 'writing-plan-input');
+            field(editor, `第 ${index + 1} 段 · ${part.title}`, data.paragraphs[part.id], (value) => {
+                data.paragraphs[part.id] = value;
+                fullText.textContent = orderedText(data, data.paragraphs) || '写下自己的段落后，全文会在这里连起来。';
+            }, { id: `writing-paragraph-${part.id}`, describedBy: guide.id,
+                rows: part.focus ? 5 : 3, maxLength: 6000 });
+            row.append(guide, editor);
+            grid.appendChild(row);
+        }
+        parent.appendChild(grid);
+        fullText = articlePreview(parent, data.paragraphs, '通读全文');
+    }
+    function renderParagraphPlanStage() {
+        const writing = viewStage !== 0;
+        const done = attempt.status === 'completed';
+        const steps = el('writing-steps');
+        steps.classList.remove('writing-guided-steps');
+        steps.replaceChildren();
+        for (const [target, label] of [[0, '选提纲'], [3, '分段写作']]) {
+            const currentStep = writing === (target === 3);
+            const tab = button(label, () => openParagraphPlanStage(target), {
+                light: !currentStep, disabled: navigationBusy || (target === 3 && !planReady()),
+            });
+            tab.id = `writing-plan-step-${target}`;
+            if (currentStep) tab.setAttribute('aria-current', 'step');
+            steps.appendChild(tab);
+        }
+        el('writing-title').textContent = lesson.title;
+        el('writing-read-only').hidden = !readOnly;
+        el('writing-read-only').textContent = done ? '作品已保存' : '只读查看';
+        el('writing-stage-number').textContent = '';
+        el('writing-stage-title').textContent = writing ? (done ? '我的作文' : '对照提纲写正文') : '选好这篇文章的提纲';
+        el('writing-stage-goal').textContent = writing ? '' : '选一个中心和顺序，每段至少选一项要写的内容。';
+        el('writing-hints').parentElement.hidden = true;
+        const main = el('writing-stage-content');
+        main.replaceChildren();
+        if (writing) renderParagraphEditor(main);
+        else renderPlanBuilder(main);
+        el('writing-prev').hidden = !writing;
+        el('writing-prev').disabled = navigationBusy;
+        el('writing-prev').textContent = '返回提纲';
+        el('writing-next').hidden = writing;
+        el('writing-next').disabled = navigationBusy || !planReady();
+        el('writing-next').textContent = '开始分段写作';
+        el('writing-complete').hidden = !writing || !editable();
+        el('writing-complete').disabled = navigationBusy;
+        el('writing-complete').textContent = '保存作品，完成练习';
+        el('writing-save-exit').textContent = editable() ? '保存并退出' : '返回练习列表';
+        el('writing-save-exit').disabled = navigationBusy;
     }
 
     function isCoached(state = data) { return isGuided() && lesson?.coaching?.version === 1 && state?.coaching?.version === 1; }
@@ -1480,6 +1669,7 @@
 
     el('writing-next').addEventListener('click', () => void nextStage());
     el('writing-prev').addEventListener('click', () => {
+        if (isParagraphPlan()) { void openParagraphPlanStage(0); return; }
         if (isGuided()) {
             if (guidedView !== 'question') { guidedView = 'question'; renderStage(); return; }
             if (viewStage <= 3) { if (guidedStep > 0) openGuidedStep(guidedStep - 1); return; }

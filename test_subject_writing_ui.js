@@ -155,6 +155,12 @@ function writingUI({ storage = new Map(), isParent = false, seed = [], lesson: r
 
     function freshData() {
         const data = emptyData();
+        if (state.lesson.paragraph_plan) {
+            const parts = state.lesson.paragraph_plan.paragraphs;
+            data.outline = parts.map(({ id, title, focus }) => ({ id, content: '', purpose: title, focus }));
+            data.paragraph_plan = { theme: '', structure: '', selected: Object.fromEntries(parts.map(({ id }) => [id, []])) };
+            return data;
+        }
         if (state.lesson.guidance) {
             data.outline = [{ id: 'p_full', content: '', purpose: '整篇初稿（开头—重点—结尾）', focus: true }];
             data.guidance = {
@@ -191,13 +197,18 @@ function writingUI({ storage = new Map(), isParent = false, seed = [], lesson: r
         const relative = call.url.slice(prefix.length);
         if (relative === '/lessons') {
             const item = Object.fromEntries(['id', 'version', 'title', 'grade', 'description', 'goal', 'time_hint'].filter((key) => key in state.lesson).map((key) => [key, clone(state.lesson[key])]));
-            if (state.lesson.coaching) item.flow_version = 2;
+            if (state.lesson.paragraph_plan) item.flow_version = 3;
+            else if (state.lesson.coaching) item.flow_version = 2;
             else if (state.lesson.guidance) item.flow_version = state.lesson.guidance.version;
             return { items: [item], count: 1 };
         }
         if (relative === '/lessons/' + state.lesson.id) return { lesson: clone(state.lesson) };
         if (relative === '/attempts' && call.method === 'GET') return { items: [...state.attempts.values()].filter((attempt) => attempt.status !== 'abandoned').map((attempt) => ({ id: attempt.id, lesson_id: attempt.lesson_id, title: attempt.lesson_snapshot.title, lesson_title: attempt.lesson_snapshot.title, stage: attempt.data.stage, revision: attempt.revision, status: attempt.status, updated_at: attempt.updated_at, completed_at: attempt.completed_at })), count: state.attempts.size, read_only: state.session.account.is_parent };
         if (relative === '/attempts' && call.method === 'POST') {
+            if (call.body.flow_version === 3) {
+                assert.equal(call.body.lesson_id, state.lesson.id);
+                return payload(makeAttempt());
+            }
             const guided = [1, 2].includes(call.body.flow_version);
             if (guided) assert.equal(state.lesson.guidance?.version, 1);
             const attempt = makeAttempt(guided ? freshData() : emptyData());
@@ -783,7 +794,7 @@ test('the real version-two lesson negotiates its guided flow while old summaries
     await ui.field('writing-lessons').querySelector('button').fire('click');
     const start = ui.state.calls.find((call) => call.method === 'POST' && call.url.endsWith('/attempts'));
     assert.equal(start.body.flow_version, 1);
-    assert.equal(start.headers['X-Writing-Flow'], 'guided-v2');
+    assert.equal(start.headers['X-Writing-Flow'], 'guided-v3');
     assert.ok(ui.field('writing-guided-customTheme'));
     const current = [...ui.state.attempts.values()][0];
     assert.equal(current.data.outline[0].id, 'p_full');
@@ -792,7 +803,7 @@ test('the real version-two lesson negotiates its guided flow while old summaries
     await ui.timers();
     const guidedSaves = ui.state.calls.filter((call) => call.method === 'PATCH');
     assert.ok(guidedSaves.length > 0);
-    assert.ok(guidedSaves.every((call) => call.headers['X-Writing-Flow'] === 'guided-v2'));
+    assert.ok(guidedSaves.every((call) => call.headers['X-Writing-Flow'] === 'guided-v3'));
 
     const old = writingUI({ lesson: GUIDED_LESSON });
     old.state.routes[prefix + '/lessons'] = () => ({ items: [{ id: GUIDED_LESSON.id, title: GUIDED_LESSON.title }], count: 1 });
@@ -813,7 +824,7 @@ test('the version-three catalogue creates the enhanced flow without changing sav
     await ui.field('writing-lessons').querySelector('button').fire('click');
     const request = ui.state.calls.find((call) => call.method === 'POST' && call.url.endsWith('/attempts'));
     assert.equal(request.body.flow_version, 2);
-    assert.equal(request.headers['X-Writing-Flow'], 'guided-v2');
+    assert.equal(request.headers['X-Writing-Flow'], 'guided-v3');
     const fresh = [...ui.state.attempts.values()][0];
     assert.equal(fresh.data.coaching.version, 1);
     assert.deepEqual(fresh.data.coaching.comparison.choices, []);
@@ -1519,7 +1530,7 @@ test('abandonment can be cancelled without posting and then removes only the cho
     await confirmAbandon(ui, controls);
     const call = ui.state.calls.find((call) => call.url.endsWith('/abandon'));
     assert.deepEqual(call.body, { base_revision: 1 });
-    assert.equal(call.headers['X-Writing-Flow'], 'guided-v2');
+    assert.equal(call.headers['X-Writing-Flow'], 'guided-v3');
     assert.equal(first.status, 'abandoned'); assert.deepEqual(first.data, original);
     assert.deepEqual(ui.state.versions.get(first.id), originalVersions, 'The original text and versions remain saved');
     assert.equal(ui.field('writing-attempt-list').querySelector(`[data-attempt-id="${first.id}"]`), null);
@@ -1623,6 +1634,11 @@ test('a previously abandoned attempt stays readonly even if an older response om
 });
 
 const MOM_SMILED_LESSON = JSON.parse(fs.readFileSync(path.join(__dirname, 'subject_content/chinese/writing/lesson-02-mom-smiled.json'), 'utf8'));
+const PARAGRAPH_PLAN_LESSON = clone(MOM_SMILED_LESSON);
+delete PARAGRAPH_PLAN_LESSON.guidance;
+delete PARAGRAPH_PLAN_LESSON.coaching;
+delete MOM_SMILED_LESSON.paragraph_plan;
+MOM_SMILED_LESSON.version = 3;
 
 function momSmiledData(step = 0) {
     const data = coachedData(step, true);
@@ -1685,4 +1701,46 @@ test('mother lesson uses its own psychological choices, material labels, help an
     assert.equal(attempt.data.guidance.sentence, data.guidance.sentence);
     assert.equal(attempt.data.paragraphs.p_full, data.paragraphs.p_full);
     assert.match(ui.field('writing-material-context').textContent, /约好去玩|打扫/);
+});
+
+test('the new mother exercise goes from choices to paired paragraph editors and keeps writing when the outline changes', async () => {
+    const ui = writingUI({ lesson: PARAGRAPH_PLAN_LESSON });
+    await ui.api.open();
+    await ui.field('writing-lessons').querySelector('button').fire('click');
+    const attempt = [...ui.state.attempts.values()][0];
+    const content = ui.field('writing-stage-content');
+    assert.equal(content.querySelectorAll('input, textarea').length, 0);
+    assert.equal(ui.field('writing-next').disabled, true);
+    await ui.field('writing-guided-plan-theme-pride').fire('click');
+    await ui.field('writing-guided-plan-structure-sequence').fire('click');
+    await ui.field('writing-plan-recommended').fire('click');
+    await ui.field('writing-next').fire('click');
+    await ui.flush();
+    assert.equal(attempt.data.paragraph_plan.theme, 'pride');
+    const editors = content.querySelectorAll('textarea');
+    assert.equal(editors.length, 4);
+    assert.match(ui.field('writing-plan-prompt-p_opening').textContent, /从放学时/);
+    assert.match(ui.field('writing-plan-prompt-p_choice').textContent, /朋友家玩/);
+    assert.equal(ui.field('writing-paragraph-p_choice').getAttribute('aria-describedby'), 'writing-plan-prompt-p_choice');
+    const sample = content.querySelector('.writing-plan-sample');
+    assert.equal(sample.open, false);
+    assert.match(sample.textContent, /查看范文（349 字）/);
+    assert.ok(editors.every((editor) => editor.value === ''));
+    await ui.type('writing-paragraph-p_choice', '妈妈后来才知道我没去朋友家玩。');
+    await ui.field('writing-prev').fire('click');
+    await ui.flush();
+    await ui.field('writing-guided-plan-p_choice-friend').fire('click');
+    await ui.field('writing-next').fire('click');
+    await ui.flush();
+    assert.equal(ui.field('writing-paragraph-p_choice').value, '妈妈后来才知道我没去朋友家玩。');
+    assert.match(ui.field('writing-plan-prompt-p_choice').textContent, /跟朋友说清/);
+    await ui.field('writing-complete').fire('click');
+    assert.equal(attempt.status, 'in_progress');
+    for (const { id } of PARAGRAPH_PLAN_LESSON.paragraph_plan.paragraphs) {
+        if (id !== 'p_choice') await ui.type(`writing-paragraph-${id}`, '我自己写的内容。');
+    }
+    await ui.field('writing-complete').fire('click');
+    await ui.flush();
+    assert.equal(attempt.status, 'completed');
+    assert.equal(ui.field('writing-paragraph-p_choice').disabled, true);
 });

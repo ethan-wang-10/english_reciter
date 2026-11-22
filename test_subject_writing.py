@@ -522,7 +522,7 @@ def test_guided_flow_is_not_silently_added_to_a_legacy_lesson(browser):
     assert response.status_code == 400 and not browser.data_dir.exists()
 
 
-@pytest.mark.parametrize('capability', [None, 'legacy', 'guided-v3'])
+@pytest.mark.parametrize('capability', [None, 'legacy', 'guided-v99'])
 def test_guided_attempt_routes_require_the_capability_without_changing_saved_work(guided_browser, capability):
     # The explicit POST flow version itself declares creation capability.
     auth = {'Authorization': 'Bearer alice-token'}
@@ -1041,7 +1041,7 @@ def test_coaching_creation_negotiates_three_compatible_flows_without_changing_ol
     assert store.get(guided['id'])['attempt'] == old
 
 
-@pytest.mark.parametrize('capability', [None, 'guided-v1', 'guided-v3'])
+@pytest.mark.parametrize('capability', [None, 'guided-v1', 'guided-v99'])
 def test_coached_attempt_all_private_routes_require_v2_capability(coached_browser, capability):
     attempt = start_coached(coached_browser)
     endpoint = PREFIX + '/attempts/' + attempt['id']
@@ -1274,8 +1274,12 @@ def test_invalid_coaching_configuration_is_rejected_without_creating_student_sta
     assert response.status_code == 503 and not coached_browser.data_dir.exists()
 
 
-def mom_smiled_lesson():
-    return json.loads((Path(__file__).resolve().parent / 'subject_content/chinese/writing/lesson-02-mom-smiled.json').read_text())
+def mom_smiled_lesson(*, with_plan=False):
+    topic = json.loads((Path(__file__).resolve().parent / 'subject_content/chinese/writing/lesson-02-mom-smiled.json').read_text())
+    if not with_plan:
+        topic.pop('paragraph_plan')
+        topic['version'] = 3
+    return topic
 
 
 def test_mom_smiled_joins_catalogue_and_completes_with_its_own_choices_and_frozen_teaching(coached_browser):
@@ -1345,3 +1349,60 @@ def test_invalid_topic_specific_teaching_is_rejected_without_rewriting_an_existi
     path.write_text(json.dumps(changed, ensure_ascii=False))
     assert browser.client.get(PREFIX + '/lessons', headers=browser.headers).status_code == 503
     assert browser.client.get(PREFIX + '/attempts/' + started['id'], headers=browser.headers).json['attempt'] == started
+
+
+def test_paragraph_plan_saves_selections_and_partial_draft_and_completes_without_nine_step_requirements(coached_browser):
+    browser = coached_browser
+    topic = mom_smiled_lesson(with_plan=True)
+    path = browser.lesson_path.with_name('lesson-02-mom-smiled.json')
+    path.write_text(json.dumps(mom_smiled_lesson(), ensure_ascii=False))
+    old_attempt = browser.client.post(PREFIX + '/attempts', headers=browser.headers, json={'lesson_id': topic['id']}).json['attempt']
+    store = WritingStore(database(browser))
+    saved_original = store.save(old_attempt['id'], 1, complete_data(), complete=True)['attempt']
+    path.write_text(json.dumps(topic, ensure_ascii=False))
+    new = {**browser.headers, 'X-Writing-Flow': 'guided-v3'}
+    old = browser.headers
+    for headers in (old, new):
+        listing = browser.client.get(PREFIX + '/lessons', headers=headers).json['items']
+        assert [item['flow_version'] for item in listing] == [2, 3]
+    assert not browser.client.get(PREFIX + '/attempts', headers=new).json['items']
+    assert not store.records()
+    assert store.get(old_attempt['id'])['attempt'] == saved_original
+    for flow in ({}, {'flow_version': 1}, {'flow_version': 2}):
+        rejected = browser.client.post(PREFIX + '/attempts', headers=old, json={'lesson_id': topic['id'], **flow})
+        assert rejected.status_code == 409 and rejected.json['code'] == 'upgrade_required'
+    response = browser.client.post(PREFIX + '/attempts', headers=new, json={'lesson_id': topic['id'], 'flow_version': 3})
+    assert response.status_code == 201
+    attempt = response.json['attempt']
+    assert 'guidance' not in attempt['lesson_snapshot'] and 'coaching' not in attempt['data']
+    path = PREFIX + '/attempts/' + attempt['id']
+    assert browser.client.get(path, headers=old).status_code == 409
+    assert browser.client.get(path, headers={'Authorization': 'Bearer parent-token', 'X-Writing-Flow': 'guided-v3'}).json['read_only']
+    draft = deepcopy(attempt['data'])
+    draft.update(stage=3, paragraph_plan=deepcopy(topic['paragraph_plan']['recommended']))
+    draft['paragraphs']['p_choice'] = '老师要找同学留下打扫，可我和朋友已经约好了。'
+    saved = browser.client.post(path + '/checkpoints', headers=new, json={'base_revision': 1, 'data': draft, 'label': '提纲与开头'})
+    assert saved.status_code == 200
+    version = saved.json['versions'][0]['id']
+    assert browser.client.get(path + '/versions/' + version, headers=new).json['version']['data'] == draft
+    incomplete = browser.client.post(path + '/complete', headers=new, json={'base_revision': 2, 'data': draft})
+    assert incomplete.status_code == 400 and 'paragraphs.p_action' in incomplete.json['missing']
+    wrong = deepcopy(draft)
+    wrong['paragraph_plan']['selected']['p_choice'].append('smile')
+    assert browser.client.patch(path, headers=new, json={'base_revision': 2, 'data': wrong}).status_code == 400
+    restored = browser.client.post(path + '/restore', headers=new, json={'base_revision': 2, 'version_id': version})
+    assert restored.status_code == 200 and restored.json['attempt']['data'] == draft
+    for card in draft['outline']:
+        draft['paragraphs'].setdefault(card['id'], '我写好的' + card['purpose'])
+    completed = browser.client.post(path + '/complete', headers=new, json={'base_revision': 3, 'data': draft})
+    assert completed.status_code == 200 and completed.json['attempt']['status'] == 'completed'
+    assert completed.json['attempt']['data'] == draft
+    assert browser.client.get(PREFIX + '/attempts', headers=new).json['items'][0]['flow_version'] == 3
+    assert [record['id'] for record in store.records()] == [attempt['id']]
+
+
+def test_mom_smiled_reference_essay_is_between_300_and_400_characters():
+    sample = mom_smiled_lesson(with_plan=True)['paragraph_plan']['sample']['paragraphs']
+    body = ''.join(sample)
+    assert 300 <= sum('\u4e00' <= char <= '\u9fff' for char in body) <= 400
+    assert len(''.join(body.split())) <= 400

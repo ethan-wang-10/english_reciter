@@ -41,9 +41,9 @@
       "url": "/static/assets/css/subject-switch.4a8cdd20b9fb56be.css"
     },
     "/static/css/subject-writing.css": {
-      "bytes": 25738,
-      "sha256": "bf9d98a828ea9c87cc28dcfaa823144d8b0c45250e3f9bcefc7b9b430f8a1159",
-      "url": "/static/assets/css/subject-writing.bf9d98a828ea9c87.css"
+      "bytes": 29153,
+      "sha256": "078577dfba8f58c8f7ded00872ec45df439ba217bb73eeeacb55f3e7c4a5f73b",
+      "url": "/static/assets/css/subject-writing.078577dfba8f58c8.css"
     },
     "/static/js/admin.js": {
       "bytes": 46469,
@@ -101,9 +101,9 @@
       "url": "/static/assets/js/subject-sso.5564dee98f722338.js"
     },
     "/static/js/subject-writing.js": {
-      "bytes": 115227,
-      "sha256": "f8fe7dcb4233e13cf22cc6c2bd34bc9ddb4d04c333debb2dc9bc5538d4df4cb1",
-      "url": "/static/assets/js/subject-writing.f8fe7dcb4233e13c.js"
+      "bytes": 125968,
+      "sha256": "26c8ce674cb2b1053b2d80c59f41eee330d5c0bc535852bde15acf11ba402040",
+      "url": "/static/assets/js/subject-writing.26c8ce674cb2b105.js"
     },
     "/static/js/textbook.js": {
       "bytes": 49241,

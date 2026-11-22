@@ -13,3 +13,60 @@
 /* Coaching stays inside the existing question and revision pages. */
 .writing-coaching-card{margin:15px 0 22px;padding:20px;border:2px solid var(--accent-line);border-radius:19px;background:var(--canvas);min-width:0}.writing-coaching-card h4{margin:0 0 10px;font-size:16px;line-height:1.7;color:var(--ink)}.writing-coaching-card .writing-note{margin:9px 0 14px;font-size:12px}.writing-coaching-card .writing-guided-options{margin:13px 0 18px}.writing-coaching-caption{display:block;color:var(--accent-dark);font-size:11px;font-weight:750;margin-bottom:7px}.writing-material-suggestions{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0}.writing-material-suggestions .writing-button{border-radius:999px;min-height:38px;padding:7px 12px;font-size:12px;background:var(--surface)}.writing-material-navigation{display:flex;justify-content:space-between;gap:13px;flex-wrap:wrap;margin-top:19px}.writing-material-navigation .writing-button{font-size:12px}.writing-material-recap-row{display:flex;align-items:flex-start;gap:12px;margin:10px 0;padding:11px 0;border-bottom:1px solid var(--line)}.writing-material-recap-row p{flex:1;min-width:0;font-size:13px;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere}.writing-material-recap-row .writing-button{flex-shrink:0;min-height:34px;padding:5px 10px;font-size:11px}.writing-material-context{margin:6px 0 20px;padding:13px 16px;border-left:4px solid var(--accent-line);border-radius:0 13px 13px 0;background:var(--canvas)}.writing-material-context>strong{color:var(--accent-dark);font-size:12px}.writing-material-context .writing-note{font-size:12px;margin:6px 0;line-height:1.85}.writing-comparison-plain{padding:14px 16px;border:2px solid var(--line);border-radius:14px;background:var(--surface);font-size:14px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}.writing-evidence-articles{margin:16px 0}.writing-evidence-articles>summary{cursor:pointer;color:var(--accent-dark);font-size:12px;font-weight:650;line-height:1.9}.writing-evidence-articles pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:13px;line-height:1.9;max-height:260px;overflow:auto}.writing-evidence-status{margin:14px 0 0;padding:11px 14px;border-radius:13px;background:var(--accent-pale);color:var(--accent-dark);font-size:12px;line-height:1.9}.writing-coaching-summary{margin:16px 0;padding:15px 17px;border:2px solid var(--line);border-radius:15px;background:var(--canvas);white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.9}
 @media(max-width:760px){.writing-coaching-card{padding:17px 14px;border-radius:16px}.writing-coaching-card h4{font-size:15px}.writing-material-navigation{gap:10px}.writing-material-navigation .writing-button{font-size:11px;padding:10px 11px}.writing-material-suggestions{gap:8px}.writing-material-suggestions .writing-button{font-size:11px;min-height:37px;padding:7px 11px}.writing-material-context{padding:12px 13px}.writing-material-recap-row p{font-size:12px}.writing-evidence-articles pre{font-size:12px}.writing-comparison-plain{padding:12px 13px;font-size:13px}}
+
+.writing-paragraph-plan .writing-workspace { display: block; }
+.writing-paragraph-plan .writing-editor-heading h2 { font-size: 28px; }
+.writing-paragraph-plan .writing-steps { display: flex; flex-wrap: wrap; gap: 10px; }
+.writing-paragraph-plan .writing-stage-heading { padding-bottom: 14px; margin-bottom: 18px; }
+.writing-paragraph-plan #writing-stage-title { font-size: 24px; scroll-margin-top: 110px; }
+.writing-paragraph-plan #writing-stage-number:empty,
+.writing-paragraph-plan #writing-stage-goal:empty { display: none; }
+.writing-paragraph-plan #writing-stage-goal,
+.writing-paragraph-plan .writing-note { font-size: 18px; line-height: 1.7; }
+.writing-paragraph-plan .writing-button { font-size: 17px; min-height: 44px; }
+.writing-paragraph-plan .writing-editor-actions:has(#writing-prev[hidden]) { justify-content: flex-end; }
+.writing-plan-groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 24px;
+    margin-top: 18px;
+}
+.writing-plan-group { min-width: 0; margin: 0; padding: 0; border: 0; }
+.writing-plan-group legend { padding: 0; margin-bottom: 8px; font-size: 20px; font-weight: 800; }
+.writing-plan-options { display: grid; gap: 7px; }
+.writing-plan-options .writing-guided-option { width: 100%; min-height: 48px; font-size: 18px; line-height: 1.55; border-radius: 9px; }
+.writing-plan-row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 18px;
+    align-items: start;
+    padding: 16px 0;
+    border-top: 1px solid var(--line);
+}
+.writing-plan-column-headings { border: 0; padding: 0 0 10px; }
+.writing-plan-column-headings h4 { margin: 0; font-size: 19px; }
+.writing-plan-theme { margin: 0 0 18px; font-size: 19px; font-weight: 700; }
+.writing-plan-prompt { background: var(--canvas); padding: 14px 16px; border-radius: 10px; overflow-wrap: anywhere; }
+.writing-plan-prompt h4 { margin: 0 0 8px; font-size: 19px; }
+.writing-plan-prompt .writing-note { color: var(--ink); margin: 8px 0; }
+.writing-plan-prompt ul { margin: 8px 0; padding-left: 1.2em; font-size: 18px; line-height: 1.7; }
+.writing-plan-prompt ul:empty { display: none; }
+.writing-plan-prompt summary { cursor: pointer; color: var(--accent-dark); font-size: 17px; }
+.writing-plan-input .writing-field { margin: 0; }
+.writing-plan-input .writing-field > span { font-size: 19px; }
+.writing-plan-input textarea { width: 100%; font-size: 21px; line-height: 1.75; min-height: 8em; }
+.writing-plan-input textarea:disabled { color: var(--ink); opacity: 1; }
+.writing-paragraph-plan .writing-preview summary { font-size: 18px; }
+.writing-paragraph-plan .writing-article-preview { font-size: 21px; }
+.writing-plan-sample { margin-bottom: 20px; padding: 8px 0 12px; border-bottom: 1px solid var(--line); }
+.writing-plan-sample > summary { cursor: pointer; font-size: 18px; font-weight: 700; color: var(--accent-dark); }
+.writing-plan-sample h4 { margin: 12px 0 0; font-size: 21px; }
+.writing-plan-sample-paragraph { margin-top: 10px; max-width: 36em; font-size: 21px; line-height: 1.8; }
+
+@media (max-width: 760px) {
+    .writing-paragraph-plan .writing-main { padding: 18px 14px; }
+    .writing-paragraph-plan #writing-stage-title { scroll-margin-top: 82px; }
+    .writing-plan-groups, .writing-plan-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .writing-plan-column-headings { display: none; }
+    .writing-plan-prompt { padding: 12px; }
+}
