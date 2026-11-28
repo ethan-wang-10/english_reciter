@@ -1,0 +1,954 @@
+{
+  "id": "builtin-shanghai-grade7-term1-final",
+  "grade": 7,
+  "term": 1,
+  "name": "上海七年级上册英语 · U4-U6 期末自测（含听力）",
+  "scope": "U4-U6",
+  "edition": "上海教育出版社《义务教育教科书（五·四学制）英语 七年级上册》，按 2024 年审核通过封面及用户提供的教材目录编写。",
+  "description": "40 道固定题：10 道听力选择、12 道语法填空、8 道句型转换、10 道阅读选择。建议 50 分钟完成。",
+  "source_note": "单元主题和语法重点按所附教材目录核对。词汇为主题复习用词，试题、例句、短文和听力稿均为原创。学校考试范围以教师通知为准。",
+  "time_minutes": 50,
+  "source_file": "shanghai-grade7-term1-final-review.pdf",
+  "exam_file": "shanghai-grade7-term1-final.pdf",
+  "knowledge": {
+    "title": "上海七年级上册英语 U4-U6 期末知识点梳理",
+    "intro": "期末自测覆盖后半册 U4-U6。围绕智能家居、电影和山川河流，复习现在完成时、形容词的比较级与最高级，以及 (not) as ... as。练习读海报、听路线、找文中证据，再任选一个课本体裁自己写一段。",
+    "sections": [
+      {
+        "id": "u4",
+        "title": "U4 Smart home · 智能家居",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "device 设备，sensor 传感器，control 控制，connect ... to ... 将……连接到……，turn on / off 打开 / 关闭。",
+              "学会按功能记词，如 a door sensor（感应）、a smart light（照明）、a control panel（控制）。区分设备、触发条件和执行动作。",
+              "听辨 gate、light、phone、house 中的双元音，按教材录音跟读。"
+            ]
+          },
+          {
+            "title": "目录语法：现在完成时",
+            "items": [
+              "have / has + 过去分词。强调过去动作与现在的联系：We have turned off the lights. 现在灯已经关了。否定用 haven't / hasn't + 过去分词，疑问句把 Have / Has 提到主语前。",
+              "常用时间词：already 常用于肯定句，yet 常用于句末的疑问或否定句，ever 常用于经验类疑问句。We have already tested the alarm. / Have you tested it yet?",
+              "since + 起点，for + 一段时间，用于持续到现在的状态或活动：She has used the app since May. / She has used it for two months.",
+              "注意不规则过去分词：write → written，see → seen，be → been，go → gone。明确说昨天发生的动作通常用一般过去时：I tested the alarm yesterday."
+            ]
+          },
+          {
+            "title": "听说阅读与写作：智能设备如何工作",
+            "items": [
+              "听设备说明或读宣传页时，先明确遇到什么问题，再找触发条件和设备动作。读博客时找出作者举了哪些实例说明观点。",
+              "写 “My dream smart home” 短帖，可以按“一个生活问题 → 两个设备怎样解决 → 最有用的理由”来写。",
+              "示例：In my dream home, a sensor will turn on a small light when I open the door. It will help me find my keys."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u5",
+        "title": "U5 Films · 电影",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "release 上映或发行，screen 放映；屏幕，animation 动画，audience 观众，character 角色，review 评论，recommend 推荐。",
+              "构词练习：act → actor，direct → director，animate → animation。区分 a film guide（观影指南）和 a film review（影评）。",
+              "用 pack / back、town / down、coat / goat 听辨清浊辅音。"
+            ]
+          },
+          {
+            "title": "目录语法：形容词的比较级和最高级",
+            "items": [
+              "短形容词常加 -er / -est：shorter / shortest。以 e 结尾只加 -r / -st：safer / safest。重读闭音节且词尾只有一个辅音字母时常双写，如 bigger / biggest。辅音字母加 y 结尾常变 y 为 i，如 easier / easiest。",
+              "较长的形容词常用 more / most：more interesting / most interesting。不要同时写 more 和 -er。",
+              "两者比较常用比较级 + than。三者或以上在给定范围内选最突出的一项时常用 the + 最高级：This is the shortest film of the three.",
+              "不规则形式：good → better → best，bad → worse → worst。比较的是同一方面时，可以用 which is better 询问选择。"
+            ]
+          },
+          {
+            "title": "阅读与写作：读指南、写影评",
+            "items": [
+              "选电影时先读场次、时长、字幕和年龄提示。读报道或影评时分开记录客观资料与作者的看法。",
+              "写影评可以用“片名和类型 → 简短介绍 → 一个具体场景或技法 → 评价与推荐对象”。用细节说明评价。",
+              "示例：The film tells a simple story about two friends. The quiet final scene is more moving than the chase at the start."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u6",
+        "title": "U6 Mountains and rivers · 山川河流",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "mountain 山，river 河流，bank 河岸，flow 流动，scenery 风景，go hiking 徒步，protect the river 保护河流。",
+              "读地理材料时先圈出比较对象，再标出数值和单位。high 常描述高度，long 描述长度，wide 描述宽度。",
+              "语音复习：fan / van、sip / zip。用词典查 bank 的不同释义：river bank 是河岸，bank account 中的 bank 是银行。"
+            ]
+          },
+          {
+            "title": "目录语法：(not) as ... as",
+            "items": [
+              "as + 形容词原级 + as 表示两者在某一方面相同：The west path is as wide as the east path.",
+              "not as + 形容词原级 + as 表示前者在这一方面不及后者：The hill is not as high as the mountain. 也可改写成 The mountain is higher than the hill.",
+              "as 与 as 之间用原级：as long as，not as deep as。改写时检查主语顺序和实际比较结果。",
+              "复习旅行经历的表达：They have been to the river park before. 表示曾去过；They have gone to the river park. 表示已去了那里，尚未回来。"
+            ]
+          },
+          {
+            "title": "读地理短文，写旅行明信片",
+            "items": [
+              "阅读时可按“地理特征 → 对城市的作用 → 人们如何保护”整理信息。听露营或徒步安排时留意路线、距离、天气和须携带的物品。",
+              "明信片可写称呼、地点、一个亲眼看到的景象、一个比较句或感受，再加署名。",
+              "示例：Dear Mia, I walked along the river this morning. The old bridge is not as wide as the new one, but the view from it is lovely. See you soon, Lin."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "reading_passages": [
+    {
+      "id": "reading-home",
+      "title": "A Smarter Hall Light",
+      "text": "When Sam set up a motion sensor in the hall, he thought it would make life easier for his family. The lamp came on whenever someone walked past. After a week his mother said the lamp was often on in the middle of the day. Sam's grandmother had a different problem. She liked to turn on the lamp before she left her room, so she could see the step outside.\n\nSam did not buy another lamp. He changed the settings so the sensor turned on the light only when the hall was dark. He also kept the old wall switch beside his grandmother's door. During the next week he noted when the lamp came on and asked his grandmother to try the switch as usual. The lamp came on less often in daylight, and she could still turn it on before stepping outside.\n\nSam wrote about the change on the school blog: “At first I asked what the sensor could do. Next time I will ask who is going to use it.”"
+    },
+    {
+      "id": "reading-river",
+      "title": "Through a Camera, Along a River",
+      "text": "For the school film festival, Yara and her team made a short film about two parts of the Willow River. The upper part near the hills was not as wide as the stretch by the town. Near the hills, the team recorded water running over stones. By the town, they filmed people using a path built along the bank.\n\nAt first they planned to put music over the whole film. During a test showing, two classmates said they could see the difference between the places but could not imagine standing there. The team decided to play the original sound for twenty seconds in each place, with no music. At the festival, a viewer said, “I could hear the stream before I saw it. Then I heard footsteps in the town.”\n\nThe film was shorter than most of the others. In her review, Mei wrote that those quiet moments made the two places easier to remember."
+    }
+  ],
+  "questions": [
+    {
+      "id": "listen-01",
+      "type": "listening_choice",
+      "prompt": "Which device has the speaker tested?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The smart lamp."
+        },
+        {
+          "id": "b",
+          "text": "The door lock."
+        },
+        {
+          "id": "c",
+          "text": "The kitchen alarm."
+        },
+        {
+          "id": "d",
+          "text": "The bedroom fan."
+        }
+      ],
+      "answer": "c",
+      "explanation": "说话者还没测门边的灯，但已测过厨房报警器。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-01.wav",
+      "listening_text": "Have you tested the smart lamp by the door yet? Not yet. I have tested the alarm in the kitchen, though. It worked every time.",
+      "english": "Question 1",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-02",
+      "type": "listening_choice",
+      "prompt": "Why does the speaker choose the animation?",
+      "options": [
+        {
+          "id": "a",
+          "text": "It finishes before the speaker has to leave."
+        },
+        {
+          "id": "b",
+          "text": "It starts at four thirty."
+        },
+        {
+          "id": "c",
+          "text": "It has the longest running time."
+        },
+        {
+          "id": "d",
+          "text": "It was recommended by the club leader."
+        }
+      ],
+      "answer": "a",
+      "explanation": "动画 4:15 开始，40 分钟后即 4:55 结束。另一场要到 5:30 才结束。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-02.wav",
+      "listening_text": "At today's film club, the animation starts at four fifteen and lasts forty minutes. The science fiction film starts at four thirty and lasts an hour. I need to leave at five, so I'll watch the animation.",
+      "english": "Question 2",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-03",
+      "type": "listening_choice",
+      "prompt": "Why will the group take the blue trail?",
+      "options": [
+        {
+          "id": "a",
+          "text": "It is shorter."
+        },
+        {
+          "id": "b",
+          "text": "It has a steeper last part."
+        },
+        {
+          "id": "c",
+          "text": "It takes less time."
+        },
+        {
+          "id": "d",
+          "text": "It is easier to walk."
+        }
+      ],
+      "answer": "d",
+      "explanation": "蓝线虽然更长，但更容易走，适合第一次徒步。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-03.wav",
+      "listening_text": "The red trail is only two kilometres long, but the ground becomes very steep near the top. The blue trail is longer and takes more time. It is easier to walk, so it is a better choice for our first trip.",
+      "english": "Question 3",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-04",
+      "type": "listening_choice",
+      "prompt": "What happens if the room becomes too warm?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The windows open."
+        },
+        {
+          "id": "b",
+          "text": "The curtains close halfway."
+        },
+        {
+          "id": "c",
+          "text": "The curtains open all the way."
+        },
+        {
+          "id": "d",
+          "text": "The light sensor stops working."
+        }
+      ],
+      "answer": "b",
+      "explanation": "温度过高时，窗帘合上一半以遮阳。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-04.wav",
+      "listening_text": "Our curtains are connected to a light sensor. They open when the morning sun reaches the window. When the room becomes too warm, the curtains close halfway to give us some shade.",
+      "english": "Question 4",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-05",
+      "type": "listening_choice",
+      "prompt": "What does the speaker remember most clearly about the film?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The actors’ costumes."
+        },
+        {
+          "id": "b",
+          "text": "The opening scene."
+        },
+        {
+          "id": "c",
+          "text": "The use of music."
+        },
+        {
+          "id": "d",
+          "text": "The name of the director."
+        }
+      ],
+      "answer": "c",
+      "explanation": "what stays with me is the music 表明最让说话者印象深刻的是配乐的用法。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-05.wav",
+      "listening_text": "I have seen the new film twice. The actors are good, but what stays with me is the music. In the last scene, the music stops suddenly, and you can hear only the rain.",
+      "english": "Question 5",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-06",
+      "type": "listening_choice",
+      "prompt": "What does the speaker say about the Green River?",
+      "options": [
+        {
+          "id": "a",
+          "text": "It is wider at the bridge."
+        },
+        {
+          "id": "b",
+          "text": "It is the longer of the two rivers."
+        },
+        {
+          "id": "c",
+          "text": "It cannot carry boats."
+        },
+        {
+          "id": "d",
+          "text": "It runs under a different bridge."
+        }
+      ],
+      "answer": "b",
+      "explanation": "East River 在这里较宽，Green River 较长。题目问的是 Green River。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-06.wav",
+      "listening_text": "From this bridge you can see two rivers meet. The East River is wider here, but the Green River is longer. Boats can travel on both when the water is high enough.",
+      "english": "Question 6",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-07",
+      "type": "listening_choice",
+      "prompt": "Which show should you choose to ask the director a question?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The evening show on Saturday."
+        },
+        {
+          "id": "b",
+          "text": "The afternoon show on Saturday."
+        },
+        {
+          "id": "c",
+          "text": "The first show at either small cinema."
+        },
+        {
+          "id": "d",
+          "text": "Any show this week."
+        }
+      ],
+      "answer": "a",
+      "explanation": "导演会参加周六晚场，下午场没有她。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-07.wav",
+      "listening_text": "The film has already been shown at two small cinemas. This Saturday it will come to our town for the first time. If you want to ask the director questions, choose the evening show. She will not be at the afternoon one.",
+      "english": "Question 7",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-08",
+      "type": "listening_choice",
+      "prompt": "What did the class do on their recent visit?",
+      "options": [
+        {
+          "id": "a",
+          "text": "They measured the wind."
+        },
+        {
+          "id": "b",
+          "text": "They cleaned the river bank."
+        },
+        {
+          "id": "c",
+          "text": "They visited the park for the first time."
+        },
+        {
+          "id": "d",
+          "text": "They drew a map of the river."
+        }
+      ],
+      "answer": "d",
+      "explanation": "本周再次去公园时天气晴朗，学生在山顶画了河流地图。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-08.wav",
+      "listening_text": "Last winter our class visited Hill Park. It was windy, and we could hardly see the river. We have been there again this week. This time the sky was clear, and we drew a map of the river from the top of the hill.",
+      "english": "Question 8",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-09",
+      "type": "listening_choice",
+      "prompt": "Why do the grandparents keep the doorbell sound on?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The doorbell cannot take pictures."
+        },
+        {
+          "id": "b",
+          "text": "They have not connected the doorbell yet."
+        },
+        {
+          "id": "c",
+          "text": "Their phone is not always with them."
+        },
+        {
+          "id": "d",
+          "text": "They want to hear the phone from outside."
+        }
+      ],
+      "answer": "c",
+      "explanation": "他们不总随身带手机，保留门铃声能帮助他们及时知道有人来。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-09.wav",
+      "listening_text": "My grandparents have used a smart doorbell since March. It sends a picture to their phone when someone rings. They prefer to keep the sound on as well because they don't always have the phone with them.",
+      "english": "Question 9",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-10",
+      "type": "listening_choice",
+      "prompt": "What will the group get at the park gate?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A map."
+        },
+        {
+          "id": "b",
+          "text": "A bottle of water."
+        },
+        {
+          "id": "c",
+          "text": "A pair of walking shoes."
+        },
+        {
+          "id": "d",
+          "text": "A new meeting time."
+        }
+      ],
+      "answer": "a",
+      "explanation": "在公园门口会发纸质地图，饮用水和舒适的鞋需要自己准备。",
+      "audio_file": "shanghai-grade7-term1-final-v1/listen-10.wav",
+      "listening_text": "If you are joining our riverside walk, please bring water and wear comfortable shoes. There is no need to bring a printed map. We'll hand one out at the gate of River Park at half past nine.",
+      "english": "Question 10",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "fill-1",
+      "type": "fill_blank",
+      "prompt": "So far this week, our class ______ (test) the new door sensor twice.（用所给词的现在完成时填空）",
+      "answer": "has tested",
+      "accepted_answers": [
+        "has tested",
+        "have tested"
+      ],
+      "explanation": "so far 表示到目前为止。our class 作整体时用 has tested；英式英语把班级视作成员时也可用 have tested。",
+      "english": "Question 11",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-2",
+      "type": "fill_blank",
+      "prompt": "The students have already ______ (write) two reviews for the film club.（填所给词的适当形式）",
+      "answer": "written",
+      "accepted_answers": [
+        "written"
+      ],
+      "explanation": "have 后用过去分词。write 的过去分词是 written。",
+      "english": "Question 12",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-3",
+      "type": "fill_blank",
+      "prompt": "We have used this smart lock ______ last September.（用 since 或 for 填空）",
+      "answer": "since",
+      "accepted_answers": [
+        "since"
+      ],
+      "explanation": "last September 是时间起点，和 since 连用。",
+      "english": "Question 13",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-4",
+      "type": "fill_blank",
+      "prompt": "The device has worked well ______ nearly six months.（用 since 或 for 填空）",
+      "answer": "for",
+      "accepted_answers": [
+        "for"
+      ],
+      "explanation": "nearly six months 是一段时间，所以用 for。",
+      "english": "Question 14",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-5",
+      "type": "fill_blank",
+      "prompt": "I ______ (see) the film at our school yesterday.（填所给动词的适当时态）",
+      "answer": "saw",
+      "accepted_answers": [
+        "saw"
+      ],
+      "explanation": "yesterday 指过去的明确时间，这里用一般过去时。see 的过去式是 saw。",
+      "english": "Question 15",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-6",
+      "type": "fill_blank",
+      "prompt": "The film in Room A is ______ (funny) than the film in Room B.（填所给词的适当形式）",
+      "answer": "funnier",
+      "accepted_answers": [
+        "funnier"
+      ],
+      "explanation": "than 前用比较级。funny 变 y 为 i 再加 -er。",
+      "english": "Question 16",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-7",
+      "type": "fill_blank",
+      "prompt": "This is the ______ (short) film of the three on today’s programme.（填所给词的适当形式）",
+      "answer": "shortest",
+      "accepted_answers": [
+        "shortest"
+      ],
+      "explanation": "of the three 给出三部电影的比较范围。the 后用最高级 shortest。",
+      "english": "Question 17",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-8",
+      "type": "fill_blank",
+      "prompt": "The second film was ______ (interesting) than the first.（填所给词的适当形式）",
+      "answer": "more interesting",
+      "accepted_answers": [
+        "more interesting"
+      ],
+      "explanation": "interesting 的比较级用 more interesting，后面可用 than 引出另一对象。",
+      "english": "Question 18",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-9",
+      "type": "fill_blank",
+      "prompt": "Of all the films we watched, Mia thought this one was the ______ (good).（填所给词的适当形式）",
+      "answer": "best",
+      "accepted_answers": [
+        "best"
+      ],
+      "explanation": "在看过的所有电影里选最好的，用 good 的不规则最高级 best。",
+      "english": "Question 19",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-10",
+      "type": "fill_blank",
+      "prompt": "The river near our village is not as ______ (deep) as the river near the city.（填所给词的适当形式）",
+      "answer": "deep",
+      "accepted_answers": [
+        "deep"
+      ],
+      "explanation": "not as ... as 中间要用形容词原级 deep。",
+      "english": "Question 20",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-11",
+      "type": "fill_blank",
+      "prompt": "Both paths are two kilometres long. The east path is as ______ (long) as the west path.（填所给词的适当形式）",
+      "answer": "long",
+      "accepted_answers": [
+        "long"
+      ],
+      "explanation": "路程相同用 as long as，两个 as 中间用 long 原级。",
+      "english": "Question 21",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-12",
+      "type": "fill_blank",
+      "prompt": "I have ______ (be) to the river park three times, and I would like to go again.（填所给词的适当形式）",
+      "answer": "been",
+      "accepted_answers": [
+        "been"
+      ],
+      "explanation": "have been to 表示曾去过某地。这里要填 be 的过去分词 been。",
+      "english": "Question 22",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "rewrite-1",
+      "type": "rewrite",
+      "prompt": "The engineer has tested the alarm.（改为一般疑问句，保留其余信息）",
+      "answer": "Has the engineer tested the alarm?",
+      "accepted_answers": [
+        "Has the engineer tested the alarm?"
+      ],
+      "explanation": "把助动词 Has 提到句首，tested 仍用过去分词。",
+      "english": "Question 23",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-2",
+      "type": "rewrite",
+      "prompt": "They have already connected the lamp to the app.（改为否定句，将 already 换为 yet）",
+      "answer": "They have not connected the lamp to the app yet.",
+      "accepted_answers": [
+        "They have not connected the lamp to the app yet.",
+        "They haven't connected the lamp to the app yet."
+      ],
+      "explanation": "用 have not / haven't + 过去分词构成否定句，yet 放在句末。",
+      "english": "Question 24",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-3",
+      "type": "rewrite",
+      "prompt": "Mia began to use the smart light in May. She still uses it.（用 since 合为一句，以 Mia 开头）",
+      "answer": "Mia has used the smart light since May.",
+      "accepted_answers": [
+        "Mia has used the smart light since May.",
+        "Mia's used the smart light since May.",
+        "Mia has been using the smart light since May.",
+        "Mia's been using the smart light since May."
+      ],
+      "explanation": "动作从 May 持续到现在，用 has used 或 has been using，since 给出起点。",
+      "english": "Question 25",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-4",
+      "type": "rewrite",
+      "prompt": "Film A is 70 minutes long. Film B is 95 minutes long.（用 shorter than 合为一句，以 Film A 开头）",
+      "answer": "Film A is shorter than Film B.",
+      "accepted_answers": [
+        "Film A is shorter than Film B."
+      ],
+      "explanation": "70 分钟比 95 分钟短。用 shorter than 引出被比较的电影。",
+      "english": "Question 26",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-5",
+      "type": "rewrite",
+      "prompt": "No other film in the list is longer than The Blue Door.（用最高级改写，以 The Blue Door 开头）",
+      "answer": "The Blue Door is the longest film in the list.",
+      "accepted_answers": [
+        "The Blue Door is the longest film in the list.",
+        "The Blue Door is the longest film on the list."
+      ],
+      "explanation": "名单内没有其他电影比它长，可用 the longest 来概括。",
+      "english": "Question 27",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-6",
+      "type": "rewrite",
+      "prompt": "The North River is deeper than the West River.（用 not as ... as 改写，以 The West River 开头）",
+      "answer": "The West River is not as deep as the North River.",
+      "accepted_answers": [
+        "The West River is not as deep as the North River.",
+        "The West River isn't as deep as the North River."
+      ],
+      "explanation": "改写后主语换成水较浅的 West River，as 之间用 deep 原级。",
+      "english": "Question 28",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-7",
+      "type": "rewrite",
+      "prompt": "This hill is 600 metres high. That hill is also 600 metres high.（用 as ... as 合为一句，以 This hill 开头）",
+      "answer": "This hill is as high as that hill.",
+      "accepted_answers": [
+        "This hill is as high as that hill.",
+        "This hill is as high as that one."
+      ],
+      "explanation": "两座山丘一样高，两次 as 中间用 high。",
+      "english": "Question 29",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-8",
+      "type": "rewrite",
+      "prompt": "The river path is not as steep as the hill path.（用比较级改写，以 The hill path 开头）",
+      "answer": "The hill path is steeper than the river path.",
+      "accepted_answers": [
+        "The hill path is steeper than the river path."
+      ],
+      "explanation": "河边小路不及山路陡，换主语后用 steeper than。",
+      "english": "Question 30",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "reading-home-1",
+      "type": "reading_choice",
+      "prompt": "A Smarter Hall Light\n\nWhen Sam set up a motion sensor in the hall, he thought it would make life easier for his family. The lamp came on whenever someone walked past. After a week his mother said the lamp was often on in the middle of the day. Sam's grandmother had a different problem. She liked to turn on the lamp before she left her room, so she could see the step outside.\n\nSam did not buy another lamp. He changed the settings so the sensor turned on the light only when the hall was dark. He also kept the old wall switch beside his grandmother's door. During the next week he noted when the lamp came on and asked his grandmother to try the switch as usual. The lamp came on less often in daylight, and she could still turn it on before stepping outside.\n\nSam wrote about the change on the school blog: “At first I asked what the sensor could do. Next time I will ask who is going to use it.”\n\nWhat problem did Sam’s mother notice?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The lamp would not turn on at night."
+        },
+        {
+          "id": "b",
+          "text": "The lamp was often on in daylight."
+        },
+        {
+          "id": "c",
+          "text": "The hall had no wall switch."
+        },
+        {
+          "id": "d",
+          "text": "The sensor turned off the kitchen light."
+        }
+      ],
+      "answer": "b",
+      "explanation": "第一段中妈妈说灯在大白天也经常亮着。",
+      "passage_id": "reading-home",
+      "question_text": "What problem did Sam’s mother notice?",
+      "english": "Question 31",
+      "chinese": "What problem did Sam’s mother notice?"
+    },
+    {
+      "id": "reading-home-2",
+      "type": "reading_choice",
+      "prompt": "A Smarter Hall Light\n\nWhen Sam set up a motion sensor in the hall, he thought it would make life easier for his family. The lamp came on whenever someone walked past. After a week his mother said the lamp was often on in the middle of the day. Sam's grandmother had a different problem. She liked to turn on the lamp before she left her room, so she could see the step outside.\n\nSam did not buy another lamp. He changed the settings so the sensor turned on the light only when the hall was dark. He also kept the old wall switch beside his grandmother's door. During the next week he noted when the lamp came on and asked his grandmother to try the switch as usual. The lamp came on less often in daylight, and she could still turn it on before stepping outside.\n\nSam wrote about the change on the school blog: “At first I asked what the sensor could do. Next time I will ask who is going to use it.”\n\nWhy did Sam keep the old wall switch?",
+      "options": [
+        {
+          "id": "a",
+          "text": "He wanted the sensor to turn on other lamps."
+        },
+        {
+          "id": "b",
+          "text": "He needed it to test the room temperature."
+        },
+        {
+          "id": "c",
+          "text": "He wanted the lamp to stay on all day."
+        },
+        {
+          "id": "d",
+          "text": "His grandmother needed to turn on the lamp before entering the hall."
+        }
+      ],
+      "answer": "d",
+      "explanation": "奶奶需要在走出房门前照亮台阶，所以保留房门旁的开关。",
+      "passage_id": "reading-home",
+      "question_text": "Why did Sam keep the old wall switch?",
+      "english": "Question 32",
+      "chinese": "Why did Sam keep the old wall switch?"
+    },
+    {
+      "id": "reading-home-3",
+      "type": "reading_choice",
+      "prompt": "A Smarter Hall Light\n\nWhen Sam set up a motion sensor in the hall, he thought it would make life easier for his family. The lamp came on whenever someone walked past. After a week his mother said the lamp was often on in the middle of the day. Sam's grandmother had a different problem. She liked to turn on the lamp before she left her room, so she could see the step outside.\n\nSam did not buy another lamp. He changed the settings so the sensor turned on the light only when the hall was dark. He also kept the old wall switch beside his grandmother's door. During the next week he noted when the lamp came on and asked his grandmother to try the switch as usual. The lamp came on less often in daylight, and she could still turn it on before stepping outside.\n\nSam wrote about the change on the school blog: “At first I asked what the sensor could do. Next time I will ask who is going to use it.”\n\nWhat triggers the sensor after Sam changes its settings?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Someone passes it while the hall is dark."
+        },
+        {
+          "id": "b",
+          "text": "Someone opens any door in the house."
+        },
+        {
+          "id": "c",
+          "text": "Sunlight reaches the hall."
+        },
+        {
+          "id": "d",
+          "text": "Sam checks the blog."
+        }
+      ],
+      "answer": "a",
+      "explanation": "第二段说明设置加入了光线条件。有人经过且走廊较暗时，感应器才开灯。",
+      "passage_id": "reading-home",
+      "question_text": "What triggers the sensor after Sam changes its settings?",
+      "english": "Question 33",
+      "chinese": "What triggers the sensor after Sam changes its settings?"
+    },
+    {
+      "id": "reading-home-4",
+      "type": "reading_choice",
+      "prompt": "A Smarter Hall Light\n\nWhen Sam set up a motion sensor in the hall, he thought it would make life easier for his family. The lamp came on whenever someone walked past. After a week his mother said the lamp was often on in the middle of the day. Sam's grandmother had a different problem. She liked to turn on the lamp before she left her room, so she could see the step outside.\n\nSam did not buy another lamp. He changed the settings so the sensor turned on the light only when the hall was dark. He also kept the old wall switch beside his grandmother's door. During the next week he noted when the lamp came on and asked his grandmother to try the switch as usual. The lamp came on less often in daylight, and she could still turn it on before stepping outside.\n\nSam wrote about the change on the school blog: “At first I asked what the sensor could do. Next time I will ask who is going to use it.”\n\nHow did Sam check that his changes worked?",
+      "options": [
+        {
+          "id": "a",
+          "text": "He bought a new lamp to compare the light."
+        },
+        {
+          "id": "b",
+          "text": "He took the sensor out of the hall for a week."
+        },
+        {
+          "id": "c",
+          "text": "He observed the lamp and asked his grandmother to use the switch."
+        },
+        {
+          "id": "d",
+          "text": "He asked his mother to write a new set of instructions."
+        }
+      ],
+      "answer": "c",
+      "explanation": "Sam 用了一周观察灯什么时候亮，并请奶奶照常使用开关。这样分别检查了感应设置和手动开灯。",
+      "passage_id": "reading-home",
+      "question_text": "How did Sam check that his changes worked?",
+      "english": "Question 34",
+      "chinese": "How did Sam check that his changes worked?"
+    },
+    {
+      "id": "reading-home-5",
+      "type": "reading_choice",
+      "prompt": "A Smarter Hall Light\n\nWhen Sam set up a motion sensor in the hall, he thought it would make life easier for his family. The lamp came on whenever someone walked past. After a week his mother said the lamp was often on in the middle of the day. Sam's grandmother had a different problem. She liked to turn on the lamp before she left her room, so she could see the step outside.\n\nSam did not buy another lamp. He changed the settings so the sensor turned on the light only when the hall was dark. He also kept the old wall switch beside his grandmother's door. During the next week he noted when the lamp came on and asked his grandmother to try the switch as usual. The lamp came on less often in daylight, and she could still turn it on before stepping outside.\n\nSam wrote about the change on the school blog: “At first I asked what the sensor could do. Next time I will ask who is going to use it.”\n\nWhich idea best expresses what Sam learnt?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A newer device is always easier to use."
+        },
+        {
+          "id": "b",
+          "text": "A smart device should suit the people who use it."
+        },
+        {
+          "id": "c",
+          "text": "A larger lamp is the best way to light a hall."
+        },
+        {
+          "id": "d",
+          "text": "Every room needs the same settings."
+        }
+      ],
+      "answer": "b",
+      "explanation": "末句强调设计时要考虑使用者。摸清不同家人的需求后，他才找到合适的设置。",
+      "passage_id": "reading-home",
+      "question_text": "Which idea best expresses what Sam learnt?",
+      "english": "Question 35",
+      "chinese": "Which idea best expresses what Sam learnt?"
+    },
+    {
+      "id": "reading-river-1",
+      "type": "reading_choice",
+      "prompt": "Through a Camera, Along a River\n\nFor the school film festival, Yara and her team made a short film about two parts of the Willow River. The upper part near the hills was not as wide as the stretch by the town. Near the hills, the team recorded water running over stones. By the town, they filmed people using a path built along the bank.\n\nAt first they planned to put music over the whole film. During a test showing, two classmates said they could see the difference between the places but could not imagine standing there. The team decided to play the original sound for twenty seconds in each place, with no music. At the festival, a viewer said, “I could hear the stream before I saw it. Then I heard footsteps in the town.”\n\nThe film was shorter than most of the others. In her review, Mei wrote that those quiet moments made the two places easier to remember.\n\nHow does the part near the hills compare with the part by the town?",
+      "options": [
+        {
+          "id": "a",
+          "text": "It is narrower."
+        },
+        {
+          "id": "b",
+          "text": "It has a wider walking path."
+        },
+        {
+          "id": "c",
+          "text": "It is just as wide."
+        },
+        {
+          "id": "d",
+          "text": "It is deeper in every season."
+        }
+      ],
+      "answer": "a",
+      "explanation": "not as wide as 表示山边那段河没有镇边那段宽。",
+      "passage_id": "reading-river",
+      "question_text": "How does the part near the hills compare with the part by the town?",
+      "english": "Question 36",
+      "chinese": "How does the part near the hills compare with the part by the town?"
+    },
+    {
+      "id": "reading-river-2",
+      "type": "reading_choice",
+      "prompt": "Through a Camera, Along a River\n\nFor the school film festival, Yara and her team made a short film about two parts of the Willow River. The upper part near the hills was not as wide as the stretch by the town. Near the hills, the team recorded water running over stones. By the town, they filmed people using a path built along the bank.\n\nAt first they planned to put music over the whole film. During a test showing, two classmates said they could see the difference between the places but could not imagine standing there. The team decided to play the original sound for twenty seconds in each place, with no music. At the festival, a viewer said, “I could hear the stream before I saw it. Then I heard footsteps in the town.”\n\nThe film was shorter than most of the others. In her review, Mei wrote that those quiet moments made the two places easier to remember.\n\nWhere did the team record water running over stones?",
+      "options": [
+        {
+          "id": "a",
+          "text": "At the school festival."
+        },
+        {
+          "id": "b",
+          "text": "Along the town path."
+        },
+        {
+          "id": "c",
+          "text": "In the middle of the town."
+        },
+        {
+          "id": "d",
+          "text": "Near the hills."
+        }
+      ],
+      "answer": "d",
+      "explanation": "第一段明确说 near the hills，团队录下水流过石头的声音。",
+      "passage_id": "reading-river",
+      "question_text": "Where did the team record water running over stones?",
+      "english": "Question 37",
+      "chinese": "Where did the team record water running over stones?"
+    },
+    {
+      "id": "reading-river-3",
+      "type": "reading_choice",
+      "prompt": "Through a Camera, Along a River\n\nFor the school film festival, Yara and her team made a short film about two parts of the Willow River. The upper part near the hills was not as wide as the stretch by the town. Near the hills, the team recorded water running over stones. By the town, they filmed people using a path built along the bank.\n\nAt first they planned to put music over the whole film. During a test showing, two classmates said they could see the difference between the places but could not imagine standing there. The team decided to play the original sound for twenty seconds in each place, with no music. At the festival, a viewer said, “I could hear the stream before I saw it. Then I heard footsteps in the town.”\n\nThe film was shorter than most of the others. In her review, Mei wrote that those quiet moments made the two places easier to remember.\n\nWhy did the team keep some of the original sound?",
+      "options": [
+        {
+          "id": "a",
+          "text": "To make the two parts last the same amount of time."
+        },
+        {
+          "id": "b",
+          "text": "To help viewers imagine being in each place."
+        },
+        {
+          "id": "c",
+          "text": "To make the film longer than the others."
+        },
+        {
+          "id": "d",
+          "text": "To hide which part of the river they had visited."
+        }
+      ],
+      "answer": "b",
+      "explanation": "试看同学能看到区别，却难以想象置身现场，所以团队保留原声来增强临场感。",
+      "passage_id": "reading-river",
+      "question_text": "Why did the team keep some of the original sound?",
+      "english": "Question 38",
+      "chinese": "Why did the team keep some of the original sound?"
+    },
+    {
+      "id": "reading-river-4",
+      "type": "reading_choice",
+      "prompt": "Through a Camera, Along a River\n\nFor the school film festival, Yara and her team made a short film about two parts of the Willow River. The upper part near the hills was not as wide as the stretch by the town. Near the hills, the team recorded water running over stones. By the town, they filmed people using a path built along the bank.\n\nAt first they planned to put music over the whole film. During a test showing, two classmates said they could see the difference between the places but could not imagine standing there. The team decided to play the original sound for twenty seconds in each place, with no music. At the festival, a viewer said, “I could hear the stream before I saw it. Then I heard footsteps in the town.”\n\nThe film was shorter than most of the others. In her review, Mei wrote that those quiet moments made the two places easier to remember.\n\nWhich sounds did the festival viewer mention?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Wind and music."
+        },
+        {
+          "id": "b",
+          "text": "A bird and a boat."
+        },
+        {
+          "id": "c",
+          "text": "A stream and footsteps."
+        },
+        {
+          "id": "d",
+          "text": "Rain and a bell."
+        }
+      ],
+      "answer": "c",
+      "explanation": "观众提到先听到溪流声，随后听到镇上的脚步声。",
+      "passage_id": "reading-river",
+      "question_text": "Which sounds did the festival viewer mention?",
+      "english": "Question 39",
+      "chinese": "Which sounds did the festival viewer mention?"
+    },
+    {
+      "id": "reading-river-5",
+      "type": "reading_choice",
+      "prompt": "Through a Camera, Along a River\n\nFor the school film festival, Yara and her team made a short film about two parts of the Willow River. The upper part near the hills was not as wide as the stretch by the town. Near the hills, the team recorded water running over stones. By the town, they filmed people using a path built along the bank.\n\nAt first they planned to put music over the whole film. During a test showing, two classmates said they could see the difference between the places but could not imagine standing there. The team decided to play the original sound for twenty seconds in each place, with no music. At the festival, a viewer said, “I could hear the stream before I saw it. Then I heard footsteps in the town.”\n\nThe film was shorter than most of the others. In her review, Mei wrote that those quiet moments made the two places easier to remember.\n\nWhat did Mei think of the moments without music?",
+      "options": [
+        {
+          "id": "a",
+          "text": "They made both places seem the same."
+        },
+        {
+          "id": "b",
+          "text": "They were more suitable for a longer film."
+        },
+        {
+          "id": "c",
+          "text": "They left the ending unclear."
+        },
+        {
+          "id": "d",
+          "text": "They helped her remember the two places."
+        }
+      ],
+      "answer": "d",
+      "explanation": "最后一句指出这两段使两个地方更容易记住。",
+      "passage_id": "reading-river",
+      "question_text": "What did Mei think of the moments without music?",
+      "english": "Question 40",
+      "chinese": "What did Mei think of the moments without music?"
+    }
+  ]
+}

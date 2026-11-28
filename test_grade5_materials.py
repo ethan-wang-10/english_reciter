@@ -128,15 +128,14 @@ def test_grade5_choice_keys_and_reading_passages_match_the_published_questions(k
     assert max(letters.values()) - min(letters.values()) <= 2, letters
 
 
-def test_all_four_builtin_papers_remain_available_and_new_audio_paths_do_not_collide():
+def test_existing_builtin_papers_remain_available_and_audio_paths_do_not_collide():
     old = {'builtin-shanghai-grade4-u1-u4', 'builtin-shanghai-grade4-u5-u10-final'}
     new = {source(kind)['id'] for kind, _scope, _units in PAPERS}
     listed = {paper['id'] for paper in catalog.list_papers()}
-    assert listed == old | new
+    assert listed >= old | new
     assert len(new) == 2
     paths = [question['audio_file'] for paper_id in listed
              for question in catalog.questions(paper_id) if question['type'] == 'listening_choice']
-    assert len(paths) == 40
     assert len(set(paths)) == len(paths)
 
 

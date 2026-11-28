@@ -146,8 +146,8 @@ def test_grade_api_creates_reclassifies_and_preserves_older_clients(client):
     assert changed.get_json()['paper']['term'] == 2
     listed = client.get(root, headers=headers).get_json()
     assert listed['papers'][0]['grade'] == 6
-    assert {row['grade'] for row in listed['builtin_papers']} == {4, 5}
-    assert len(listed['builtin_papers']) == 4
+    assert {row['grade'] for row in listed['builtin_papers']} == {4, 5, 7}
+    assert len(listed['builtin_papers']) == 6
     assert all(row['term'] == 1 for row in listed['builtin_papers'])
     assert client.get(root, headers={'Authorization': 'Bearer bob'}).get_json()['papers'] == []
     assert client.put(url, headers={'Authorization': 'Bearer bob'}, json={'name': '越权修改', 'words': 'apple', 'grade': 2}).status_code == 404
@@ -315,6 +315,37 @@ def test_builtin_and_knowledge_are_selectable_by_students_and_parents_without_qu
         assert payload["exam_pdf_url"] == "/static/exam-preparation/shanghai-grade4-u1-u4-midterm-listening.pdf"
         assert "questions" not in payload and "questions" not in knowledge
         assert not (set(knowledge) & PRIVATE_FIELDS)
+
+
+@pytest.mark.parametrize('phase,sections,variants', [
+    ('midterm', ['starter', 'u1', 'u2', 'u3'], {'rewrite-5': "You needn't print the form."}),
+    ('final', ['u4', 'u5', 'u6'], {'rewrite-6': "The West River isn't as deep as the North River."}),
+])
+def test_grade7_papers_have_matching_guides_and_grade_sentence_variants(client, store, phase, sections, variants):
+    import builtin_exam_catalog as catalog
+
+    paper_id = f'builtin-shanghai-grade7-term1-{phase}'
+    headers = {'Authorization': 'Bearer alice'}
+    root = '/api/exam-preparation/papers'
+    listed = client.get(root, headers=headers).get_json()['builtin_papers']
+    paper = next(row for row in listed if row['id'] == paper_id)
+    assert (paper['grade'], paper['term'], paper['question_count'], paper['listening_count']) == (7, 1, 40, 10)
+    knowledge = client.get(f'{root}/{paper_id}/knowledge', headers=headers)
+    assert knowledge.status_code == 200
+    assert [section['id'] for section in knowledge.get_json()['knowledge']['sections']] == sections
+
+    started = client.post(f'{root}/{paper_id}/attempts', headers=headers, json={'supports_listening': True})
+    assert started.status_code == 201
+    attempt = started.get_json()['attempt']
+    assert_question_privacy(attempt['questions'])
+    answers = {
+        issued['id']: variants.get(source['id'], source['answer'])
+        for issued, source in zip(attempt['questions'], catalog.questions(paper_id), strict=True)
+    }
+    scored = client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=headers, json={'answers': answers})
+    assert scored.status_code == 200
+    assert scored.get_json()['result']['correct_count'] == 40
+    assert store.mistake_count(paper_id) == 0
 
 
 def test_builtin_routes_protect_editing_attempts_and_private_results(client):

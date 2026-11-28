@@ -1,0 +1,974 @@
+{
+  "id": "builtin-shanghai-grade7-term1-midterm",
+  "grade": 7,
+  "term": 1,
+  "name": "上海七年级上册英语 · Starter + U1-U3 期中自测（含听力）",
+  "scope": "Starter + U1-U3",
+  "edition": "上海教育出版社《义务教育教科书（五·四学制）英语 七年级上册》，按 2024 年审核通过封面及用户提供的教材目录编写。",
+  "description": "40 道固定题：10 道听力选择、12 道语法填空、8 道句型转换、10 道阅读选择。建议 50 分钟完成。",
+  "source_note": "单元主题和语法重点按所附教材目录核对。词汇为主题复习用词，试题、例句、短文和听力稿均为原创。学校考试范围以教师通知为准。",
+  "time_minutes": 50,
+  "source_file": "shanghai-grade7-term1-midterm-review.pdf",
+  "exam_file": "shanghai-grade7-term1-midterm.pdf",
+  "knowledge": {
+    "title": "上海七年级上册英语 Starter + U1-U3 期中知识点梳理",
+    "intro": "期中范围为 Starter 和 U1-U3。先复习询问数量及词典用法，再练习双宾语与宾语补足语、had better 与 need、物主词和名词所有格。结合尝试新事物、面对困难和职业三类语境做听读练习。",
+    "sections": [
+      {
+        "id": "starter",
+        "title": "Starter · English and English learning 英语与学习方法",
+        "blocks": [
+          {
+            "title": "目录重点：How many / How much",
+            "items": [
+              "How many + 可数名词复数：How many dictionaries are there on the desk?",
+              "How much + 不可数名词：How much time do you spend reading each day? 问价格也可用 How much：How much is the dictionary?",
+              "常见不可数名词：information、advice、homework。可说 a piece of advice、two pieces of information。"
+            ]
+          },
+          {
+            "title": "英式与美式用语",
+            "items": [
+              "学会识别常见对应词：flat / apartment（公寓）、lift / elevator（电梯）、film / movie（电影）。写作时按语境选词，拼写风格尽量一致。",
+              "查词典先核对词性和释义，再看例句里的搭配。查不规则词形时回到词条原形，例如用 go 查 went。",
+              "遇到 a piece of cake 这样的习语，先看上下文。The quiz was a piece of cake. 表示小测很容易。"
+            ]
+          },
+          {
+            "title": "语音和学习策略",
+            "items": [
+              "可用 ship / sheep、pen / pan 听辨元音。先听再跟读，注意元音长短和口形。",
+              "用自己的话记关键词，再遮住笔记复述。写下最容易混淆的词或句型，隔天重新测一次。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u1",
+        "title": "U1 Trying new things · 尝试新事物",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "curious about 对……好奇，join a club 加入社团，make a model 制作模型，give up 放弃，try again 再试一次。",
+              "构词练习：invent → invention / inventor，create → creative。看空前后的搭配，判断需要名词还是形容词。",
+              "语音复习：用 cut / cart、cot / caught 跟读教材录音。不同口音的后一组元音可能不同。"
+            ]
+          },
+          {
+            "title": "目录语法：双宾语 SVOO 与宾语补足语 SVOC",
+            "items": [
+              "SVOO：Our coach showed us a new tool. us 是动作的接受者，a new tool 指展示的东西。show / give / send 常可改写成“物 + to + 人”，buy / make 常见“物 + for + 人”。",
+              "SVOC：The news made her happy. happy 补充说明 her 的状态。We call our robot Lucky. Lucky 说明宾语的名称。",
+              "用“谁收到什么”和“宾语是谁或变得怎样”两种问法来区分。make us a model 用了双宾语，make us proud 用了宾补。"
+            ]
+          },
+          {
+            "title": "听说阅读与写作",
+            "items": [
+              "社团对话先听活动名称、地点和调整后的安排。读尝试新事物的故事时，标出第一次尝试、遇到的困难、改法和结果。",
+              "写一次亲身经历，可以用 Last month、At first、Then、In the end 串起经过。用一个具体行动说明自己学到了什么。",
+              "示例：At first, my paper bridge fell down. Then I folded the sides to make it stronger."
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u2",
+        "title": "U2 Strong mind · 坚强的心态",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "accept 接受，face a difficulty 面对困难，feel nervous 感到紧张，ask for help 寻求帮助，keep practising 坚持练习。",
+              "读词义时看上下文。例如 She has a strong mind. 里的 strong 描述一个人的意志。",
+              "语音复习：用 full / fool 听辨短元音和长元音；跟读 about 的首音节和 bird 的重读音节。"
+            ]
+          },
+          {
+            "title": "目录语法：had better 与 need",
+            "items": [
+              "had better + 动词原形给出较强的建议，常见缩写是 'd better。否定用 had better not + 动词原形：You had better not wait until Friday.",
+              "实义动词 need：She needs to practise. / She does not need to practise today. need 后有 to，第三人称单数按句型变化。",
+              "情态动词 need 常用于疑问或否定：Need I bring it? / You need not bring it. need not = needn't，后接原形，表示没有必要。"
+            ]
+          },
+          {
+            "title": "日记与阅读",
+            "items": [
+              "记一件有困难的事，可以按“发生了什么、当时的感受、采取的办法、学到什么”写。叙述过去的经历常用一般过去时。",
+              "示例：I felt nervous before the talk. I practised the first two lines with my friend, and it helped.",
+              "遇到问人物为何改变的问题，回到转折处找具体证据，再用自己的话概括。"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "u3",
+        "title": "U3 Jobs · 职业",
+        "blocks": [
+          {
+            "title": "主题词汇与搭配",
+            "items": [
+              "job duty 工作职责，qualification 任职资格，deliver meals 送餐，prepare meals 准备餐食，work in a team 团队协作。",
+              "构词练习：teach → teacher，drive → driver，design → designer。写职业介绍时用动词短语说明工作内容。",
+              "语音复习：听教材录音辨认 boy、near、hair、tour 中的元音组合。"
+            ]
+          },
+          {
+            "title": "目录语法：物主形容词、物主代词和名词所有格",
+            "items": [
+              "my / your / his / her / its / our / their 后面接名词。mine / yours / his / hers / ours / theirs 可独立使用。Her apron is blue. The blue apron is hers.",
+              "单数名词或不以 -s 结尾的复数名词加 's：the cook's hat、the children's bags。规则复数以 -s 结尾，只加撇号：the cooks' hats。",
+              "its 表示“它的”，it's 是 it is 或 it has 的缩写。whose 询问归属，区分 who's（who is / who has）。"
+            ]
+          },
+          {
+            "title": "从访谈到职业小短文",
+            "items": [
+              "听招聘或访谈时分开记录岗位、日常职责和需要的能力。阅读工作故事时找动作顺序，以及每一步怎样帮助别人。",
+              "写作可用“职业名称 → 两项职责 → 所需能力 → 为什么重要”的顺序。",
+              "示例：A library assistant helps readers find books and keeps the shelves in order. This job needs patience and care."
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "reading_passages": [
+    {
+      "id": "reading-bridge",
+      "title": "A Bridge That Would Not Stand",
+      "text": "On his first day in the engineering club, Ben wanted to show everyone that he could build a paper bridge. His bridge looked neat, but it bent as soon as he put an eraser on it. Ben was ready to throw it away. Mei asked him to put it aside and test just one change at a time.\n\nThey folded the sides of a new sheet upwards. This time the bridge held the eraser but bent under a second one. Ben wanted to add more paper. Mei suggested trying a shorter distance between the two supports first. They did that, and the bridge held three erasers. In his notebook Ben drew the three designs and wrote what he had changed.\n\nThe next week, a new member said, “Mine doesn't work either.” Ben opened his notebook and showed her the first drawing. “This one was mine,” he said. “Which thing would you like to change first?”"
+    },
+    {
+      "id": "reading-jobs",
+      "title": "Behind the Library Desk",
+      "text": "For Careers Week, Class Seven interviewed Eva, a library assistant. Some students thought her main job was stamping books. Eva took them to a trolley beside the desk. It held books that readers had returned. “A book in the wrong place can be as hard to find as a lost one,” she said. She showed the class how she checked the label on each book before putting it back.\n\nEva also told them about a reader who could describe a bird but did not know its name. Instead of guessing, Eva asked where the reader had seen it and what its tail looked like. Then she brought two field guides. The reader compared the pictures and found the right one.\n\nAfter the visit, the students wrote two useful qualifications on a card for their job display. One was being careful with details. The other was asking clear questions."
+    }
+  ],
+  "questions": [
+    {
+      "id": "listen-01",
+      "type": "listening_choice",
+      "prompt": "How much time does Lucy spend reading in English?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Ten minutes."
+        },
+        {
+          "id": "b",
+          "text": "Twenty minutes."
+        },
+        {
+          "id": "c",
+          "text": "Thirty minutes."
+        },
+        {
+          "id": "d",
+          "text": "Forty minutes."
+        }
+      ],
+      "answer": "b",
+      "explanation": "两次各 10 分钟，合计 20 分钟。问题问时长，所以用 How much time。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-01.wav",
+      "listening_text": "Lucy, how much time do you spend reading in English? About twenty minutes. I read for ten minutes on the bus and another ten after dinner.",
+      "english": "Question 1",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-02",
+      "type": "listening_choice",
+      "prompt": "What has changed about the bridge test?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The day."
+        },
+        {
+          "id": "b",
+          "text": "The activity."
+        },
+        {
+          "id": "c",
+          "text": "The students taking part."
+        },
+        {
+          "id": "d",
+          "text": "The place."
+        }
+      ],
+      "answer": "d",
+      "explanation": "日期仍是 Tuesday，新地点是 Room Twelve。注意 going to 提到的是原计划。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-02.wav",
+      "listening_text": "We were going to test our paper bridges in the school hall on Tuesday. The hall is being painted, so we will meet in Room Twelve on Tuesday as usual.",
+      "english": "Question 2",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-03",
+      "type": "listening_choice",
+      "prompt": "What helped the speaker prepare for the interview?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Making a card with key words."
+        },
+        {
+          "id": "b",
+          "text": "Reading the whole speech aloud."
+        },
+        {
+          "id": "c",
+          "text": "Listening to another interview."
+        },
+        {
+          "id": "d",
+          "text": "Writing the questions on the board."
+        }
+      ],
+      "answer": "a",
+      "explanation": "说话者制作了一张有三个关键词的小卡片，这帮助他记住要说什么。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-03.wav",
+      "listening_text": "I missed the first question when I practised for the interview. Instead of starting again from the beginning, I made a small card with three key words. That helped me remember what to say.",
+      "english": "Question 3",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-04",
+      "type": "listening_choice",
+      "prompt": "What will the other speaker lend to the student?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A cookery book."
+        },
+        {
+          "id": "b",
+          "text": "A club card."
+        },
+        {
+          "id": "c",
+          "text": "An apron."
+        },
+        {
+          "id": "d",
+          "text": "A hat."
+        }
+      ],
+      "answer": "c",
+      "explanation": "mine 指代 my apron。借出的是围裙，学生自己的围裙在家。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-04.wav",
+      "listening_text": "Do I need to bring a new apron for the cooking club? No. I can lend you mine. Yours is still at home, isn't it?",
+      "english": "Question 4",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-05",
+      "type": "listening_choice",
+      "prompt": "Who showed the children how to fold the paper?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Leo's sister."
+        },
+        {
+          "id": "b",
+          "text": "Leo's father."
+        },
+        {
+          "id": "c",
+          "text": "The youngest child."
+        },
+        {
+          "id": "d",
+          "text": "Leo."
+        }
+      ],
+      "answer": "a",
+      "explanation": "his sister showed them how to fold it。Leo 给了纸，他的爸爸负责拍照。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-05.wav",
+      "listening_text": "The younger children wanted to learn how to make a kite. Leo gave them some paper, and his sister showed them how to fold it. Leo's father took photos when the kites were ready.",
+      "english": "Question 5",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-06",
+      "type": "listening_choice",
+      "prompt": "What information should students add to the job descriptions?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The dates of the interviews."
+        },
+        {
+          "id": "b",
+          "text": "An example of each worker’s duties."
+        },
+        {
+          "id": "c",
+          "text": "The names of more workplaces."
+        },
+        {
+          "id": "d",
+          "text": "The workers’ favourite school subjects."
+        }
+      ],
+      "answer": "b",
+      "explanation": "老师要求先加上每名从业者的一项具体职责，再署名提交。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-06.wav",
+      "listening_text": "Please don't send your job descriptions yet. You had better read them again and add one example of what each worker does. Then put your names at the top and send them before Friday.",
+      "english": "Question 6",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-07",
+      "type": "listening_choice",
+      "prompt": "Which word pair did the speaker find today?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Autumn and fall."
+        },
+        {
+          "id": "b",
+          "text": "Film and movie."
+        },
+        {
+          "id": "c",
+          "text": "Flat and apartment."
+        },
+        {
+          "id": "d",
+          "text": "Lift and elevator."
+        }
+      ],
+      "answer": "d",
+      "explanation": "昨天学的是 flat / apartment，今天读故事发现的是 lift / elevator。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-07.wav",
+      "listening_text": "A flat is called an apartment in American English. I learnt that yesterday. Today I found another pair while reading a story: a lift can also be called an elevator.",
+      "english": "Question 7",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-08",
+      "type": "listening_choice",
+      "prompt": "How did the friend help June?",
+      "options": [
+        {
+          "id": "a",
+          "text": "He gave her a finished poster."
+        },
+        {
+          "id": "b",
+          "text": "He asked her to join a new club."
+        },
+        {
+          "id": "c",
+          "text": "He showed her a different way to mix colours."
+        },
+        {
+          "id": "d",
+          "text": "He painted the whole poster."
+        }
+      ],
+      "answer": "c",
+      "explanation": "他示范了另一种调色方法，June 自己完成海报。重点听 show 和 who finished。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-08.wav",
+      "listening_text": "At first June wanted to leave the art club because her first poster did not look right. Her friend did not finish it for her. He showed her a different way to mix colours. June tried it and finished the poster herself.",
+      "english": "Question 8",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-09",
+      "type": "listening_choice",
+      "prompt": "What does the repairer usually check first?",
+      "options": [
+        {
+          "id": "a",
+          "text": "The seat."
+        },
+        {
+          "id": "b",
+          "text": "The brakes."
+        },
+        {
+          "id": "c",
+          "text": "The lights."
+        },
+        {
+          "id": "d",
+          "text": "The wheels."
+        }
+      ],
+      "answer": "b",
+      "explanation": "维修师先检查刹车，后面提到安全也是为了说明这一步的理由。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-09.wav",
+      "listening_text": "I'm a bicycle repairer. Most people think I spend the whole day fixing wheels. I do fix wheels, but the first thing I usually do is check the brakes. A good repair starts with checking that the bicycle is safe.",
+      "english": "Question 9",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "listen-10",
+      "type": "listening_choice",
+      "prompt": "What will the group with green cards do first?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Wash the vegetables."
+        },
+        {
+          "id": "b",
+          "text": "Put the cards away."
+        },
+        {
+          "id": "c",
+          "text": "Cook the vegetables."
+        },
+        {
+          "id": "d",
+          "text": "Read the recipe and count the bowls."
+        }
+      ],
+      "answer": "d",
+      "explanation": "绿卡组先读菜谱并数碗，蓝卡组先洗菜。十分钟后才交换工作。",
+      "audio_file": "shanghai-grade7-term1-midterm-v1/listen-10.wav",
+      "listening_text": "The young cooks will practise in two groups. The group with blue cards will wash the vegetables first. The group with green cards will read the recipe and count the bowls. After ten minutes, the two groups will change jobs.",
+      "english": "Question 10",
+      "chinese": "听力选择"
+    },
+    {
+      "id": "fill-1",
+      "type": "fill_blank",
+      "prompt": "How ______ dictionary entries did you check before class?（用 many 或 much 填空）",
+      "answer": "many",
+      "accepted_answers": [
+        "many"
+      ],
+      "explanation": "entries 是 entry 的复数。询问可数名词的数量用 how many。",
+      "english": "Question 11",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-2",
+      "type": "fill_blank",
+      "prompt": "How ______ information did you find in the notice?（用 many 或 much 填空）",
+      "answer": "much",
+      "accepted_answers": [
+        "much"
+      ],
+      "explanation": "information 通常不可数，询问多少信息用 how much。",
+      "english": "Question 12",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-3",
+      "type": "fill_blank",
+      "prompt": "The club leader gave a safety card ______ every new member.（填一个介词）",
+      "answer": "to",
+      "accepted_answers": [
+        "to"
+      ],
+      "explanation": "give someone something 可改为 give something to someone。",
+      "english": "Question 13",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-4",
+      "type": "fill_blank",
+      "prompt": "We made a model bridge ______ our science teacher as a thank-you gift.（填一个介词）",
+      "answer": "for",
+      "accepted_answers": [
+        "for"
+      ],
+      "explanation": "表示“为某人制作某物”用 make something for someone。",
+      "english": "Question 14",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-5",
+      "type": "fill_blank",
+      "prompt": "Seeing their bridge hold three books made the club members ______ (pride) of their work.（填所给词的适当形式）",
+      "answer": "proud",
+      "accepted_answers": [
+        "proud"
+      ],
+      "explanation": "proud of their work 作宾语补足语，说明成员看见结果后的感受。be proud of 表示为……感到自豪。",
+      "english": "Question 15",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-6",
+      "type": "fill_blank",
+      "prompt": "Our club needs a ______ (design) to draw plans for the new model.（填所给词的适当形式）",
+      "answer": "designer",
+      "accepted_answers": [
+        "designer"
+      ],
+      "explanation": "a 后需单数可数名词，to draw plans 说明这里指负责画设计图的人。",
+      "english": "Question 16",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-7",
+      "type": "fill_blank",
+      "prompt": "You had better ______ (check) the date before you send the form.（填所给词的适当形式）",
+      "answer": "check",
+      "accepted_answers": [
+        "check"
+      ],
+      "explanation": "had better 后接动词原形。",
+      "english": "Question 17",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-8",
+      "type": "fill_blank",
+      "prompt": "You need not ______ (wait) for me after the meeting.（填所给词的适当形式）",
+      "answer": "wait",
+      "accepted_answers": [
+        "wait"
+      ],
+      "explanation": "need not 中 need 为情态动词，后接原形。",
+      "english": "Question 18",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-9",
+      "type": "fill_blank",
+      "prompt": "Everyone needs ______ (bring) a notebook to the workshop.（填所给词的适当形式）",
+      "answer": "to bring",
+      "accepted_answers": [
+        "to bring"
+      ],
+      "explanation": "此处 needs 是实义动词，后面用 to bring。",
+      "english": "Question 19",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-10",
+      "type": "fill_blank",
+      "prompt": "Nora left ______ (she) ID card in the workshop.（填所给词的适当形式）",
+      "answer": "her",
+      "accepted_answers": [
+        "her"
+      ],
+      "explanation": "空后有名词短语 ID card，需要物主形容词 her。",
+      "english": "Question 20",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-11",
+      "type": "fill_blank",
+      "prompt": "Our group has two blue aprons. These blue aprons are ______ (we).（填所给词的适当形式）",
+      "answer": "ours",
+      "accepted_answers": [
+        "ours"
+      ],
+      "explanation": "ours 代替 our blue aprons，可独立使用。",
+      "english": "Question 21",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "fill-12",
+      "type": "fill_blank",
+      "prompt": "There are two cooks in the kitchen. Both ______ (cook) coats are hanging by the door.（用名词所有格填空）",
+      "answer": "cooks'",
+      "accepted_answers": [
+        "cooks'"
+      ],
+      "explanation": "两个厨师用复数 cooks。以 -s 结尾的规则复数所有格只在词尾加撇号。",
+      "english": "Question 22",
+      "chinese": "语法填空"
+    },
+    {
+      "id": "rewrite-1",
+      "type": "rewrite",
+      "prompt": "We need three dictionaries for the project.（用 How many 对数量提问）",
+      "answer": "How many dictionaries do we need for the project?",
+      "accepted_answers": [
+        "How many dictionaries do we need for the project?"
+      ],
+      "explanation": "How many 后接 dictionaries，主语 we 和实义动词 need 构成疑问句时用 do。",
+      "english": "Question 23",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-2",
+      "type": "rewrite",
+      "prompt": "Our guide showed the map to us.（改用双宾语结构，保留原意）",
+      "answer": "Our guide showed us the map.",
+      "accepted_answers": [
+        "Our guide showed us the map."
+      ],
+      "explanation": "双宾语的语序是 showed + us（人）+ the map（物）。",
+      "english": "Question 24",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-3",
+      "type": "rewrite",
+      "prompt": "Lisa made her brother a paper kite.（用 for 改写，保留原意）",
+      "answer": "Lisa made a paper kite for her brother.",
+      "accepted_answers": [
+        "Lisa made a paper kite for her brother."
+      ],
+      "explanation": "make a paper kite for her brother 表示“给她弟弟做了一只纸风筝”。",
+      "english": "Question 25",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-4",
+      "type": "rewrite",
+      "prompt": "It is better for you not to use this tool alone.（用 You had better 开头改写为建议）",
+      "answer": "You had better not use this tool alone.",
+      "accepted_answers": [
+        "You had better not use this tool alone.",
+        "You'd better not use this tool alone."
+      ],
+      "explanation": "否定的建议用 had better not + use。",
+      "english": "Question 26",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-5",
+      "type": "rewrite",
+      "prompt": "It is not necessary for you to print the form.（用情态动词 need 改写）",
+      "answer": "You need not print the form.",
+      "accepted_answers": [
+        "You need not print the form.",
+        "You needn't print the form."
+      ],
+      "explanation": "need 作情态动词时，否定用 need not / needn't + 原形。",
+      "english": "Question 27",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-6",
+      "type": "rewrite",
+      "prompt": "This is my notebook.（用 mine 改写，并以 This notebook 开头）",
+      "answer": "This notebook is mine.",
+      "accepted_answers": [
+        "This notebook is mine."
+      ],
+      "explanation": "mine 等于 my notebook，把所属物放在主语位置。",
+      "english": "Question 28",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-7",
+      "type": "rewrite",
+      "prompt": "The red helmets belong to the bike repairers.（用名词所有格改写，以 They are 开头）",
+      "answer": "They are the bike repairers' red helmets.",
+      "accepted_answers": [
+        "They are the bike repairers' red helmets."
+      ],
+      "explanation": "repairers 是以 -s 结尾的复数，所有格为 repairers'。",
+      "english": "Question 29",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "rewrite-8",
+      "type": "rewrite",
+      "prompt": "This is Amy's work apron.（用 Whose 对所属者提问，以 Whose work apron 开头）",
+      "answer": "Whose work apron is this?",
+      "accepted_answers": [
+        "Whose work apron is this?"
+      ],
+      "explanation": "Whose + work apron 置于句首，再用 is this 构成疑问句。",
+      "english": "Question 30",
+      "chinese": "句型转换"
+    },
+    {
+      "id": "reading-bridge-1",
+      "type": "reading_choice",
+      "prompt": "A Bridge That Would Not Stand\n\nOn his first day in the engineering club, Ben wanted to show everyone that he could build a paper bridge. His bridge looked neat, but it bent as soon as he put an eraser on it. Ben was ready to throw it away. Mei asked him to put it aside and test just one change at a time.\n\nThey folded the sides of a new sheet upwards. This time the bridge held the eraser but bent under a second one. Ben wanted to add more paper. Mei suggested trying a shorter distance between the two supports first. They did that, and the bridge held three erasers. In his notebook Ben drew the three designs and wrote what he had changed.\n\nThe next week, a new member said, “Mine doesn't work either.” Ben opened his notebook and showed her the first drawing. “This one was mine,” he said. “Which thing would you like to change first?”\n\nWhat happened to Ben’s first bridge?",
+      "options": [
+        {
+          "id": "a",
+          "text": "It fell into water."
+        },
+        {
+          "id": "b",
+          "text": "It held three erasers."
+        },
+        {
+          "id": "c",
+          "text": "It bent under one eraser."
+        },
+        {
+          "id": "d",
+          "text": "It was too wide for the supports."
+        }
+      ],
+      "answer": "c",
+      "explanation": "第一段说桥一放上橡皮就弯了（bent as soon as he put an eraser on it）。",
+      "passage_id": "reading-bridge",
+      "question_text": "What happened to Ben’s first bridge?",
+      "english": "Question 31",
+      "chinese": "What happened to Ben’s first bridge?"
+    },
+    {
+      "id": "reading-bridge-2",
+      "type": "reading_choice",
+      "prompt": "A Bridge That Would Not Stand\n\nOn his first day in the engineering club, Ben wanted to show everyone that he could build a paper bridge. His bridge looked neat, but it bent as soon as he put an eraser on it. Ben was ready to throw it away. Mei asked him to put it aside and test just one change at a time.\n\nThey folded the sides of a new sheet upwards. This time the bridge held the eraser but bent under a second one. Ben wanted to add more paper. Mei suggested trying a shorter distance between the two supports first. They did that, and the bridge held three erasers. In his notebook Ben drew the three designs and wrote what he had changed.\n\nThe next week, a new member said, “Mine doesn't work either.” Ben opened his notebook and showed her the first drawing. “This one was mine,” he said. “Which thing would you like to change first?”\n\nWhat was the last change Ben and Mei tried?",
+      "options": [
+        {
+          "id": "a",
+          "text": "They added another sheet of paper."
+        },
+        {
+          "id": "b",
+          "text": "They moved the supports closer together."
+        },
+        {
+          "id": "c",
+          "text": "They folded the sides down."
+        },
+        {
+          "id": "d",
+          "text": "They used a lighter eraser."
+        }
+      ],
+      "answer": "b",
+      "explanation": "最后尝试的是缩短两处支撑之间的距离。",
+      "passage_id": "reading-bridge",
+      "question_text": "What was the last change Ben and Mei tried?",
+      "english": "Question 32",
+      "chinese": "What was the last change Ben and Mei tried?"
+    },
+    {
+      "id": "reading-bridge-3",
+      "type": "reading_choice",
+      "prompt": "A Bridge That Would Not Stand\n\nOn his first day in the engineering club, Ben wanted to show everyone that he could build a paper bridge. His bridge looked neat, but it bent as soon as he put an eraser on it. Ben was ready to throw it away. Mei asked him to put it aside and test just one change at a time.\n\nThey folded the sides of a new sheet upwards. This time the bridge held the eraser but bent under a second one. Ben wanted to add more paper. Mei suggested trying a shorter distance between the two supports first. They did that, and the bridge held three erasers. In his notebook Ben drew the three designs and wrote what he had changed.\n\nThe next week, a new member said, “Mine doesn't work either.” Ben opened his notebook and showed her the first drawing. “This one was mine,” he said. “Which thing would you like to change first?”\n\nWhy did Ben record the three designs?",
+      "options": [
+        {
+          "id": "a",
+          "text": "To enter the first design in a contest."
+        },
+        {
+          "id": "b",
+          "text": "To list materials he needed to buy."
+        },
+        {
+          "id": "c",
+          "text": "To show that he could draw well."
+        },
+        {
+          "id": "d",
+          "text": "To keep track of what changed in the tests."
+        }
+      ],
+      "answer": "d",
+      "explanation": "他记录图样和每次改动，方便对照测试结果。",
+      "passage_id": "reading-bridge",
+      "question_text": "Why did Ben record the three designs?",
+      "english": "Question 33",
+      "chinese": "Why did Ben record the three designs?"
+    },
+    {
+      "id": "reading-bridge-4",
+      "type": "reading_choice",
+      "prompt": "A Bridge That Would Not Stand\n\nOn his first day in the engineering club, Ben wanted to show everyone that he could build a paper bridge. His bridge looked neat, but it bent as soon as he put an eraser on it. Ben was ready to throw it away. Mei asked him to put it aside and test just one change at a time.\n\nThey folded the sides of a new sheet upwards. This time the bridge held the eraser but bent under a second one. Ben wanted to add more paper. Mei suggested trying a shorter distance between the two supports first. They did that, and the bridge held three erasers. In his notebook Ben drew the three designs and wrote what he had changed.\n\nThe next week, a new member said, “Mine doesn't work either.” Ben opened his notebook and showed her the first drawing. “This one was mine,” he said. “Which thing would you like to change first?”\n\nWhat does “Mine” refer to in the new member’s words?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Her bridge."
+        },
+        {
+          "id": "b",
+          "text": "Her notebook."
+        },
+        {
+          "id": "c",
+          "text": "Her eraser."
+        },
+        {
+          "id": "d",
+          "text": "Her drawing."
+        }
+      ],
+      "answer": "a",
+      "explanation": "新成员的桥也遇到问题，Mine 在这里指 my bridge。",
+      "passage_id": "reading-bridge",
+      "question_text": "What does “Mine” refer to in the new member’s words?",
+      "english": "Question 34",
+      "chinese": "What does “Mine” refer to in the new member’s words?"
+    },
+    {
+      "id": "reading-bridge-5",
+      "type": "reading_choice",
+      "prompt": "A Bridge That Would Not Stand\n\nOn his first day in the engineering club, Ben wanted to show everyone that he could build a paper bridge. His bridge looked neat, but it bent as soon as he put an eraser on it. Ben was ready to throw it away. Mei asked him to put it aside and test just one change at a time.\n\nThey folded the sides of a new sheet upwards. This time the bridge held the eraser but bent under a second one. Ben wanted to add more paper. Mei suggested trying a shorter distance between the two supports first. They did that, and the bridge held three erasers. In his notebook Ben drew the three designs and wrote what he had changed.\n\nThe next week, a new member said, “Mine doesn't work either.” Ben opened his notebook and showed her the first drawing. “This one was mine,” he said. “Which thing would you like to change first?”\n\nWhat does Ben’s question at the end show?",
+      "options": [
+        {
+          "id": "a",
+          "text": "He wanted the new member to copy his best design."
+        },
+        {
+          "id": "b",
+          "text": "He could already tell why the new bridge failed."
+        },
+        {
+          "id": "c",
+          "text": "He had learnt a way to help someone test an idea."
+        },
+        {
+          "id": "d",
+          "text": "He no longer made changes to his own designs."
+        }
+      ],
+      "answer": "c",
+      "explanation": "他和 Mei 从一次只改一个条件开始，后来也用提问帮助新成员自己试验。",
+      "passage_id": "reading-bridge",
+      "question_text": "What does Ben’s question at the end show?",
+      "english": "Question 35",
+      "chinese": "What does Ben’s question at the end show?"
+    },
+    {
+      "id": "reading-jobs-1",
+      "type": "reading_choice",
+      "prompt": "Behind the Library Desk\n\nFor Careers Week, Class Seven interviewed Eva, a library assistant. Some students thought her main job was stamping books. Eva took them to a trolley beside the desk. It held books that readers had returned. “A book in the wrong place can be as hard to find as a lost one,” she said. She showed the class how she checked the label on each book before putting it back.\n\nEva also told them about a reader who could describe a bird but did not know its name. Instead of guessing, Eva asked where the reader had seen it and what its tail looked like. Then she brought two field guides. The reader compared the pictures and found the right one.\n\nAfter the visit, the students wrote two useful qualifications on a card for their job display. One was being careful with details. The other was asking clear questions.\n\nWhich books were on the trolley?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Books on display for Careers Week."
+        },
+        {
+          "id": "b",
+          "text": "Books about birds only."
+        },
+        {
+          "id": "c",
+          "text": "Books Eva planned to buy."
+        },
+        {
+          "id": "d",
+          "text": "Books that readers had returned."
+        }
+      ],
+      "answer": "d",
+      "explanation": "第一段用 books that readers had returned 说明推车里是读者归还的书。",
+      "passage_id": "reading-jobs",
+      "question_text": "Which books were on the trolley?",
+      "english": "Question 36",
+      "chinese": "Which books were on the trolley?"
+    },
+    {
+      "id": "reading-jobs-2",
+      "type": "reading_choice",
+      "prompt": "Behind the Library Desk\n\nFor Careers Week, Class Seven interviewed Eva, a library assistant. Some students thought her main job was stamping books. Eva took them to a trolley beside the desk. It held books that readers had returned. “A book in the wrong place can be as hard to find as a lost one,” she said. She showed the class how she checked the label on each book before putting it back.\n\nEva also told them about a reader who could describe a bird but did not know its name. Instead of guessing, Eva asked where the reader had seen it and what its tail looked like. Then she brought two field guides. The reader compared the pictures and found the right one.\n\nAfter the visit, the students wrote two useful qualifications on a card for their job display. One was being careful with details. The other was asking clear questions.\n\nWhy does Eva check the label before putting a book back?",
+      "options": [
+        {
+          "id": "a",
+          "text": "To find the right place for it."
+        },
+        {
+          "id": "b",
+          "text": "To identify the reader who borrowed it."
+        },
+        {
+          "id": "c",
+          "text": "To tell whether its pictures are clear."
+        },
+        {
+          "id": "d",
+          "text": "To decide how long it may be borrowed."
+        }
+      ],
+      "answer": "a",
+      "explanation": "书放错就很难找，查看标签能确定书应放在哪个位置。",
+      "passage_id": "reading-jobs",
+      "question_text": "Why does Eva check the label before putting a book back?",
+      "english": "Question 37",
+      "chinese": "Why does Eva check the label before putting a book back?"
+    },
+    {
+      "id": "reading-jobs-3",
+      "type": "reading_choice",
+      "prompt": "Behind the Library Desk\n\nFor Careers Week, Class Seven interviewed Eva, a library assistant. Some students thought her main job was stamping books. Eva took them to a trolley beside the desk. It held books that readers had returned. “A book in the wrong place can be as hard to find as a lost one,” she said. She showed the class how she checked the label on each book before putting it back.\n\nEva also told them about a reader who could describe a bird but did not know its name. Instead of guessing, Eva asked where the reader had seen it and what its tail looked like. Then she brought two field guides. The reader compared the pictures and found the right one.\n\nAfter the visit, the students wrote two useful qualifications on a card for their job display. One was being careful with details. The other was asking clear questions.\n\nWhat did Eva do before bringing the guides?",
+      "options": [
+        {
+          "id": "a",
+          "text": "She picked a bird’s name."
+        },
+        {
+          "id": "b",
+          "text": "She drew the bird herself."
+        },
+        {
+          "id": "c",
+          "text": "She asked about the bird’s location and tail."
+        },
+        {
+          "id": "d",
+          "text": "She showed the class how to stamp a book."
+        }
+      ],
+      "answer": "c",
+      "explanation": "Eva 先问读者在哪里看见鸟、尾巴有什么特征，再找图鉴。",
+      "passage_id": "reading-jobs",
+      "question_text": "What did Eva do before bringing the guides?",
+      "english": "Question 38",
+      "chinese": "What did Eva do before bringing the guides?"
+    },
+    {
+      "id": "reading-jobs-4",
+      "type": "reading_choice",
+      "prompt": "Behind the Library Desk\n\nFor Careers Week, Class Seven interviewed Eva, a library assistant. Some students thought her main job was stamping books. Eva took them to a trolley beside the desk. It held books that readers had returned. “A book in the wrong place can be as hard to find as a lost one,” she said. She showed the class how she checked the label on each book before putting it back.\n\nEva also told them about a reader who could describe a bird but did not know its name. Instead of guessing, Eva asked where the reader had seen it and what its tail looked like. Then she brought two field guides. The reader compared the pictures and found the right one.\n\nAfter the visit, the students wrote two useful qualifications on a card for their job display. One was being careful with details. The other was asking clear questions.\n\nWhich pair of qualifications did the students write down?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Speed and physical strength."
+        },
+        {
+          "id": "b",
+          "text": "Care with details and clear questions."
+        },
+        {
+          "id": "c",
+          "text": "Drawing skills and public speaking."
+        },
+        {
+          "id": "d",
+          "text": "Good memory and bicycle repair skills."
+        }
+      ],
+      "answer": "b",
+      "explanation": "末段给出两项能力：留意细节、提出清楚的问题。",
+      "passage_id": "reading-jobs",
+      "question_text": "Which pair of qualifications did the students write down?",
+      "english": "Question 39",
+      "chinese": "Which pair of qualifications did the students write down?"
+    },
+    {
+      "id": "reading-jobs-5",
+      "type": "reading_choice",
+      "prompt": "Behind the Library Desk\n\nFor Careers Week, Class Seven interviewed Eva, a library assistant. Some students thought her main job was stamping books. Eva took them to a trolley beside the desk. It held books that readers had returned. “A book in the wrong place can be as hard to find as a lost one,” she said. She showed the class how she checked the label on each book before putting it back.\n\nEva also told them about a reader who could describe a bird but did not know its name. Instead of guessing, Eva asked where the reader had seen it and what its tail looked like. Then she brought two field guides. The reader compared the pictures and found the right one.\n\nAfter the visit, the students wrote two useful qualifications on a card for their job display. One was being careful with details. The other was asking clear questions.\n\nWhat is the main purpose of the passage?",
+      "options": [
+        {
+          "id": "a",
+          "text": "To explain how to photograph a wild bird."
+        },
+        {
+          "id": "b",
+          "text": "To compare two kinds of libraries."
+        },
+        {
+          "id": "c",
+          "text": "To show why library books have different shapes."
+        },
+        {
+          "id": "d",
+          "text": "To show what a library assistant does through examples."
+        }
+      ],
+      "answer": "d",
+      "explanation": "归类还书和帮助读者查资料两个事例共同解释图书馆助理的职责。",
+      "passage_id": "reading-jobs",
+      "question_text": "What is the main purpose of the passage?",
+      "english": "Question 40",
+      "chinese": "What is the main purpose of the passage?"
+    }
+  ]
+}

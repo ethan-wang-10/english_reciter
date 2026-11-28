@@ -25,7 +25,7 @@ from build_grade4_final_materials import (
 
 
 def labels(data: dict) -> tuple[str, str, str]:
-    grade = {4: '四', 5: '五'}.get(data['grade'], str(data['grade']))
+    grade = {4: '四', 5: '五', 7: '七'}.get(data['grade'], str(data['grade']))
     semester = f"上海{grade}年级{'上' if data['term'] == 1 else '下'}册英语"
     kind = '期中' if '期中' in data['name'] else '期末'
     return semester, kind, data['scope']
@@ -65,7 +65,7 @@ def knowledge_story(data: dict, st: dict) -> list:
              p(data['edition'], st['small']), p(data['source_note'], st['small']),
              Spacer(1, 10), box(data['knowledge']['intro'], st['body']), Spacer(1, 14)]
     units = [section for section in data['knowledge']['sections']
-             if re.fullmatch(r'(?:m\d+[-_]?)?u\d+', section['id'], re.I)]
+             if section['id'] == 'starter' or re.fullmatch(r'(?:m\d+[-_]?)?u\d+', section['id'], re.I)]
     rows = [[p('复习单元', st['tablehead'], True), p('主题', st['tablehead'], True)]]
     for section in units:
         rows.append([p(section['id'].upper(), st['table']), p(section['title'], st['table'])])
