@@ -384,6 +384,8 @@ def _performance_after_request(response: Response) -> Response:
         ("learning_lock_wait_ms", "learning_lock"),
         ("learning_load_ms", "learning_load"),
         ("learning_save_ms", "learning_save"),
+        ("practice_pk_ms", "practice_pk"),
+        ("practice_reward_ms", "practice_reward"),
     ):
         value = getattr(g, attr, None)
         if isinstance(value, (int, float)):
@@ -419,6 +421,17 @@ def _performance_after_request(response: Response) -> Response:
         "user_agent": _safe_user_agent(),
         "referrer_path": _safe_referrer_path(),
         "user": _performance_user_context(),
+    }
+    event["timings_ms"] = {
+        name: round(float(value), 1)
+        for attr, name in (
+            ("learning_lock_wait_ms", "learning_lock"),
+            ("learning_load_ms", "learning_load"),
+            ("learning_save_ms", "learning_save"),
+            ("practice_pk_ms", "practice_pk"),
+            ("practice_reward_ms", "practice_reward"),
+        )
+        if isinstance((value := getattr(g, attr, None)), (int, float))
     }
     _record_performance_event(event)
     return response

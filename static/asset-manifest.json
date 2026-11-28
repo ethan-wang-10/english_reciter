@@ -51,9 +51,9 @@
       "url": "/static/assets/js/admin.c768f0b63b2a1459.js"
     },
     "/static/js/app.js": {
-      "bytes": 461119,
-      "sha256": "9e01ae1beb52446b59549be87990ee65ae5e3a04963793cf860754753afdda54",
-      "url": "/static/assets/js/app.9e01ae1beb52446b.js"
+      "bytes": 461116,
+      "sha256": "d73f09c0a9378606192a7a374db9c77d65105b8e0641ecff09ee8339a213a795",
+      "url": "/static/assets/js/app.d73f09c0a9378606.js"
     },
     "/static/js/chat-sidebar.js": {
       "bytes": 34598,

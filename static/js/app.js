@@ -6215,19 +6215,19 @@ function reviewFeedbackDelayMs(word, result, { isSemantic = false } = {}) {
         .reduce((total, length) => total + length, 0);
     const detailSteps = Math.min(3, Math.ceil(semanticDetailLength / 70));
     if (isSemantic) {
-        const base = result?.correct ? 1400 : 2600;
-        const maximum = result?.correct ? 3000 : 4200;
-        return Math.min(maximum, base + detailSteps * 350);
+        const base = result?.correct ? 900 : 1800;
+        const maximum = result?.correct ? 1800 : 3000;
+        return Math.min(maximum, base + detailSteps * 250);
     }
 
     const answerLength = String(word?._targetAnswer || word?.english || '').length;
     const longAnswerExtra = answerLength > 10 ? 300 : 0;
-    if (!result?.correct) return 1800 + longAnswerExtra;
+    if (!result?.correct) return 1200 + longAnswerExtra;
     const hasExtendedMeaning = Boolean(
         word?.review_polyseme
         || (Array.isArray(result?.other_senses_extra) && result.other_senses_extra.length > 0),
     );
-    return 1000 + longAnswerExtra + (hasExtendedMeaning ? 1100 : 0);
+    return 600 + longAnswerExtra + (hasExtendedMeaning ? 600 : 0);
 }
 
 function handleSemanticQuestionKeydown(event) {

@@ -274,9 +274,13 @@ def register_routes(app, services):
                         answer_feedback = services.gaokao_questions.answer_explanation(question)
                 gam_payload = None
                 if is_correct and (recorded or review_event_id):
+                    pk_started = services.time()
                     pkw, pkm = services._pk_stats_for_gamification(username)
+                    services.g.practice_pk_ms = round((services.time() - pk_started) * 1000, 1)
                     bonus_session_completed = bool(bonus_practice and reciter.is_bonus_practice_completion_event(bonus_session_id, word_id, review_event_id))
+                    reward_started = services.time()
                     gam_payload = services.gamification_mod.award_correct_answer(services.DATA_DIR, username, bonus_practice=bonus_practice, remedial=applied['remedial'], old_success_count=applied['old_success_count'], new_success_count=applied['new_success_count'], mastered_now=mastered_now, mastered_words=len(reciter.mastered_words), pk_wins=pkw, pk_matches=pkm, event_id=services.hashlib.sha256(f'{reciter.word_state_key(word)}\x00{review_event_id}'.encode('utf-8')).hexdigest(), event_scope=reciter.word_state_key(word), bonus_session_completed=bonus_session_completed)
+                    services.g.practice_reward_ms = round((services.time() - reward_started) * 1000, 1)
                 body = {'correct': is_correct, 'message': message, 'recorded': recorded, 'mastered_now': mastered_now, 'remedial': applied['remedial'], 'attempt_number': applied['attempt_number'], 'attempt_limit': applied['attempt_limit'], 'final_attempt': applied['final_attempt'], 'task_remedial': bool(task_item and (task_item.get('phase') == 'remedial' or reciter.task_attempt_count(task_item) >= applied['attempt_limit'])), 'exercise_type': exercise_type, 'task_progress': reciter.daily_task_progress(), 'word': {'english': word.english, 'chinese': word.chinese, 'success_count': word.success_count, 'next_review_date': word.next_review_date.isoformat(), **reciter.review_state_payload(word)}}
                 if gam_payload is not None:
                     body['gamification'] = gam_payload

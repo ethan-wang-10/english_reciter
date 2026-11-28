@@ -13,6 +13,7 @@ import pytest
 import challenges as ch
 import gamification as gm
 import leaderboard_periods as periods
+import reward_schema
 import reward_store
 from storage_utils import PersistentStateLoadError
 
@@ -281,16 +282,91 @@ def test_connections_close_after_successful_and_failed_transactions(tmp_path, mo
             connection.execute("SELECT 1")
 
 
-def test_practice_idempotency_survives_payload_cache_pruning(tmp_path, monkeypatch):
-    monkeypatch.setattr(gm, "PRACTICE_EVENT_LIMIT", 2)
+def test_practice_idempotency_uses_permanent_event_ledger(tmp_path):
     kwargs = dict(bonus_practice=False, remedial=False, old_success_count=0,
                   new_success_count=1, mastered_now=False, mastered_words=0, event_scope="apple")
     first = gm.award_correct_answer(tmp_path, "alice", event_id="review:0", **kwargs)
     for index in (1, 2):
         gm.award_correct_answer(tmp_path, "alice", event_id=f"review:{index}", **kwargs)
-    assert len(gm.load_state(tmp_path, "alice")["practice_events"]) == 2
+    state = gm.load_state(tmp_path, "alice")
+    assert state["practice_events"] == []
+    assert state["practice_event_ledger_version"] == gm.PRACTICE_EVENT_LEDGER_VERSION
+    with _database(tmp_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM reward_events WHERE username='alice' AND kind='practice'"
+        ).fetchone()[0] == 3
     assert gm.award_correct_answer(tmp_path, "alice", event_id="review:0", **kwargs) == first
     assert gm.load_state(tmp_path, "alice")["total_correct"] == 3
+
+
+def test_legacy_practice_events_seed_ledger_and_compact_document(tmp_path):
+    payload = {"xp_gained": 7, "total_xp": 7, "legacy": True}
+    source = gm.gamification_path(tmp_path, "alice")
+    source.parent.mkdir()
+    source.write_text(json.dumps({
+        "total_xp": 7,
+        "practice_events": [{
+            "event_id": "legacy-review",
+            "scope": "apple",
+            "payload": payload,
+        }],
+    }), encoding="utf-8")
+
+    state = gm.load_state(tmp_path, "alice")
+
+    assert state["practice_events"] == []
+    assert state["practice_event_ledger_version"] == gm.PRACTICE_EVENT_LEDGER_VERSION
+    replay = gm.award_correct_answer(
+        tmp_path,
+        "alice",
+        bonus_practice=False,
+        remedial=False,
+        old_success_count=0,
+        new_success_count=1,
+        mastered_now=False,
+        mastered_words=0,
+        event_id="legacy-review",
+        event_scope="apple",
+    )
+    assert replay == payload
+    with _database(tmp_path) as connection:
+        stored = connection.execute(
+            "SELECT payload FROM reward_documents WHERE document_key='alice/gamification.json'"
+        ).fetchone()[0]
+    assert json.loads(stored)["practice_events"] == []
+
+
+def test_existing_sqlite_document_is_compacted_once(tmp_path):
+    payload = {"xp_gained": 3, "legacy_sqlite": True}
+    state = gm.default_state()
+    state.pop("practice_event_ledger_version")
+    state["practice_events"] = [{
+        "event_id": "sqlite-review",
+        "payload": payload,
+    }]
+    with reward_store.transaction(tmp_path):
+        reward_store.save_document(
+            tmp_path,
+            gm.gamification_path(tmp_path, "alice"),
+            state,
+            reward_schema.gamification_state,
+        )
+
+    loaded = gm.load_state(tmp_path, "alice")
+
+    assert loaded["practice_events"] == []
+    assert loaded["practice_event_ledger_version"] == gm.PRACTICE_EVENT_LEDGER_VERSION
+    assert gm.award_correct_answer(
+        tmp_path,
+        "alice",
+        bonus_practice=False,
+        remedial=False,
+        old_success_count=0,
+        new_success_count=1,
+        mastered_now=False,
+        mastered_words=0,
+        event_id="sqlite-review",
+    ) == payload
 
 
 def test_migration_seeds_historical_idempotency_records(tmp_path, monkeypatch):

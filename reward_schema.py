@@ -89,7 +89,7 @@ def gamification_state(value: Any) -> None:
     row = _object(value, "gamification")
     _json(row)
     _optional_fields(row, (
-        "xp_account_version", "lifetime_xp", "xp_balance", "total_xp", "total_correct", "streak",
+        "xp_account_version", "practice_event_ledger_version", "lifetime_xp", "xp_balance", "total_xp", "total_correct", "streak",
     ), _integer)
     version = row.get("xp_account_version", 0)
     _require(version in (0, 1, 2), "xp_account_version")

@@ -27,6 +27,7 @@ XP_BONUS_PRACTICE = 1
 DAILY_XP_SOFT_CAP = 400
 DAILY_XP_HARD_CAP = 700
 PRACTICE_EVENT_LIMIT = 100
+PRACTICE_EVENT_LEDGER_VERSION = 1
 XP_TRANSACTION_LIMIT = 2000
 # Soft-cap 后仍给少量收益，避免高强度学习完全没有反馈。
 OVER_CAP_MULTIPLIER = 0.2
@@ -170,6 +171,7 @@ def default_state() -> Dict[str, Any]:
         "xp_gain_history": {},
         "xp_transactions": {},
         "practice_events": [],
+        "practice_event_ledger_version": PRACTICE_EVENT_LEDGER_VERSION,
         "achievements": {},
         "leaderboard_opt_in": True,
         # 本月打卡天数目标：与 mcheckin_goal_month 同时有效
@@ -188,8 +190,19 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
     path = gamification_path(data_dir, username)
     raw = reward_store.load_document(
         data_dir, path, default_state(), reward_schema.gamification_state,
-        on_migrate=lambda state: _seed_reward_events(data_dir, username, state),
+        on_migrate=lambda state: _migrate_practice_event_ledger(data_dir, username, state),
     )
+    if int(raw.get("practice_event_ledger_version") or 0) < PRACTICE_EVENT_LEDGER_VERSION:
+        with reward_store.transaction(data_dir):
+            current = reward_store.load_document(
+                data_dir, path, default_state(), reward_schema.gamification_state,
+            )
+            if int(current.get("practice_event_ledger_version") or 0) < PRACTICE_EVENT_LEDGER_VERSION:
+                _migrate_practice_event_ledger(data_dir, username, current)
+                reward_store.save_document(
+                    data_dir, path, current, reward_schema.gamification_state,
+                )
+            raw = current
     base = default_state()
     for k in base:
         if k in raw:
@@ -221,28 +234,8 @@ def load_state(data_dir: Path, username: str) -> Dict[str, Any]:
         except (TypeError, ValueError):
             base["xp_balance"] = 0
     base["total_xp"] = int(base["lifetime_xp"])
-    if "practice_events" in raw and isinstance(raw["practice_events"], list):
-        events_reversed: List[Dict[str, Any]] = []
-        scope_counts: Dict[str, int] = {}
-        for event in reversed(raw["practice_events"]):
-            if not isinstance(event, dict) or not isinstance(event.get("payload"), dict):
-                continue
-            event_id = str(event.get("event_id") or "").strip()[:96]
-            if not event_id:
-                continue
-            event_scope = _stored_practice_event_scope_key(
-                event.get("scope"),
-                event.get("scope_encoding"),
-            )
-            if scope_counts.get(event_scope, 0) >= PRACTICE_EVENT_LIMIT:
-                continue
-            normalized_event = {"event_id": event_id, "payload": dict(event["payload"])}
-            if event_scope:
-                normalized_event["scope"] = event_scope
-                normalized_event["scope_encoding"] = "sha256-v1"
-            events_reversed.append(normalized_event)
-            scope_counts[event_scope] = scope_counts.get(event_scope, 0) + 1
-        base["practice_events"] = list(reversed(events_reversed))
+    base["practice_events"] = []
+    base["practice_event_ledger_version"] = PRACTICE_EVENT_LEDGER_VERSION
     if "daily_xp" in raw and isinstance(raw["daily_xp"], dict):
         base["daily_xp"] = {str(k): int(v) for k, v in raw["daily_xp"].items()}
     if "xp_gain_history" in raw and isinstance(raw["xp_gain_history"], dict):
@@ -345,6 +338,8 @@ def _save_state_unlocked(data_dir: Path, username: str, state: Dict[str, Any]) -
     state["lifetime_xp"] = max(0, int(state.get("lifetime_xp") or 0))
     state["xp_balance"] = max(0, int(state.get("xp_balance") or 0))
     state["total_xp"] = int(state["lifetime_xp"])
+    state["practice_events"] = []
+    state["practice_event_ledger_version"] = PRACTICE_EVENT_LEDGER_VERSION
     path = gamification_path(data_dir, username)
     reward_store.save_document(data_dir, path, state, reward_schema.gamification_state)
 
@@ -353,8 +348,8 @@ def save_state(data_dir: Path, username: str, state: Dict[str, Any]) -> None:
     reward_schema.gamification_state(state)
     with _locked_user_state(data_dir, username):
         load_state(data_dir, username)
-        _save_state_unlocked(data_dir, username, state)
         _seed_reward_events(data_dir, username, state)
+        _save_state_unlocked(data_dir, username, state)
 
 
 def _practice_ledger_key(scope: str, event_id: str) -> str:
@@ -375,6 +370,16 @@ def _seed_reward_events(data_dir: Path, username: str, state: Dict[str, Any]) ->
         reward_store.put_event(
             data_dir, username, "practice", _practice_ledger_key(scope, event["event_id"].strip()[:96]), event["payload"],
         )
+
+
+def _migrate_practice_event_ledger(
+    data_dir: Path,
+    username: str,
+    state: Dict[str, Any],
+) -> None:
+    _seed_reward_events(data_dir, username, state)
+    state["practice_events"] = []
+    state["practice_event_ledger_version"] = PRACTICE_EVENT_LEDGER_VERSION
 
 
 def days_inclusive_today_through_month_end(today: date) -> int:
@@ -1581,25 +1586,6 @@ def award_correct_answer(
                 )
             if replay is not None:
                 return replay
-        practice_events = state.setdefault('practice_events', [])
-        if not isinstance(practice_events, list):
-            practice_events = []
-            state['practice_events'] = practice_events
-        if event_key:
-            for event in practice_events:
-                if not isinstance(event, dict) or event.get('event_id') != event_key:
-                    continue
-                stored_scope = _stored_practice_event_scope_key(
-                    event.get('scope'),
-                    event.get('scope_encoding'),
-                )
-                if event_scope_key and stored_scope not in ('', event_scope_key):
-                    continue
-                if not event_scope_key and stored_scope:
-                    continue
-                payload = event.get('payload')
-                if isinstance(payload, dict):
-                    return dict(payload)
         today = china_today()
         day_key = today.isoformat()
         ym = today.strftime("%Y-%m")
@@ -1698,28 +1684,6 @@ def award_correct_answer(
             reward_store.put_event(
                 data_dir, username, "practice", _practice_ledger_key(event_scope_key, event_key), payload,
             )
-            event_record = {'event_id': event_key, 'payload': payload}
-            if event_scope_key:
-                event_record['scope'] = event_scope_key
-                event_record['scope_encoding'] = 'sha256-v1'
-            practice_events.append(event_record)
-            matching_seen = 0
-            retained_reversed = []
-            for event in reversed(practice_events):
-                stored_scope = (
-                    _stored_practice_event_scope_key(
-                        event.get('scope'),
-                        event.get('scope_encoding'),
-                    )
-                    if isinstance(event, dict)
-                    else ''
-                )
-                if stored_scope == event_scope_key:
-                    matching_seen += 1
-                    if matching_seen > PRACTICE_EVENT_LIMIT:
-                        continue
-                retained_reversed.append(event)
-            practice_events[:] = reversed(retained_reversed)
         _save_state_unlocked(data_dir, username, state)
         return payload
 

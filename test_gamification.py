@@ -313,7 +313,7 @@ class TestPracticeAwardIdempotency(unittest.TestCase):
             self.assertEqual(replay, first)
             self.assertEqual(state['total_correct'], 101)
 
-    def test_practice_event_results_are_bounded_per_word_scope(self):
+    def test_practice_event_results_live_only_in_permanent_ledger(self):
         with temp_data_dir() as data_dir:
             common = {
                 'bonus_practice': True,
@@ -324,22 +324,31 @@ class TestPracticeAwardIdempotency(unittest.TestCase):
                 'mastered_words': 0,
                 'event_scope': 'bounded-word',
             }
+            first = None
             for index in range(gm.PRACTICE_EVENT_LIMIT + 1):
-                gm.award_correct_answer(
+                result = gm.award_correct_answer(
                     data_dir,
                     'bounded-event-user',
                     event_id=f'bounded-event-{index}',
                     **common,
                 )
+                if index == 0:
+                    first = result
 
             state = gm.load_state(data_dir, 'bounded-event-user')
-            scoped = [
-                event
-                for event in state['practice_events']
-                if event.get('scope') == gm._practice_event_scope_key('bounded-word')
-            ]
-            self.assertEqual(len(scoped), gm.PRACTICE_EVENT_LIMIT)
-            self.assertNotIn('bounded-event-0', {event['event_id'] for event in scoped})
+            self.assertEqual(state['practice_events'], [])
+            self.assertEqual(
+                state['practice_event_ledger_version'],
+                gm.PRACTICE_EVENT_LEDGER_VERSION,
+            )
+            replay = gm.award_correct_answer(
+                data_dir,
+                'bounded-event-user',
+                event_id='bounded-event-0',
+                **common,
+            )
+            self.assertEqual(replay, first)
+            self.assertEqual(state['total_correct'], gm.PRACTICE_EVENT_LIMIT + 1)
 
 
 class TestBonusPracticeRoundReward(unittest.TestCase):

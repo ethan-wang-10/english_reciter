@@ -1017,6 +1017,8 @@ def test_bonus_review_rewards_completed_round_once(
     last_request = {**requests[-1], 'remedial': remedial, 'attempt_number': 2}
     completed = client.post('/api/words/practice', headers=headers, json=last_request)
     assert completed.status_code == 200
+    assert 'practice_pk;dur=' in completed.headers['Server-Timing']
+    assert 'practice_reward;dur=' in completed.headers['Server-Timing']
     reward = completed.get_json()['gamification']
     assert reward['xp_gained'] == 1
     assert reward['answer_xp_gained'] == 1
