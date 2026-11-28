@@ -153,6 +153,7 @@
         wordRemoveButtons.forEach((button) => { button.disabled = busy; });
         el('exam-sentence-count').textContent = `${sentenceRows.length} 道`;
         el('exam-add-sentence').disabled = busy || sentenceRows.length >= 100;
+        el('exam-start').hidden = isParentSession;
         el('exam-start').disabled = busy || !!editingPaper || !selectedPaper || isParentSession;
         const selected = papers.find((paper) => paper.id === selectedPaper);
         el('exam-edit-paper').hidden = !!selected?.builtin;
@@ -587,7 +588,11 @@
     function updateMistakeControls() {
         const selected = papers.find((paper) => paper.id === selectedPaper);
         const count = Math.max(0, Number(selected?.mistake_count) || 0);
+        const viewResult = el('exam-view-last-result');
+        viewResult.hidden = !isParentSession || !selected?.attempt_count;
+        viewResult.disabled = busy || viewResult.hidden;
         el('exam-paper-mistake-count').textContent = count ? `待复习错题 ${count} 题` : '暂无待复习错题';
+        el('exam-review-paper-mistakes').hidden = isParentSession;
         el('exam-review-paper-mistakes').disabled = busy || isParentSession || !selectedPaper || count === 0;
         el('exam-review-paper-mistakes').textContent = count ? `复习错题（${count} 题）` : '复习错题';
         const remaining = Math.max(0, Number(result?.mistake_count) || 0);
@@ -661,8 +666,27 @@
         }
     }
 
+    async function openLastResult() {
+        const paper = papers.find((item) => item.id === selectedPaper);
+        if (busy || !isParentSession || !paper?.attempt_count) return;
+        const ctx = context();
+        setBusy(true);
+        message('正在加载已交答卷…');
+        try {
+            const data = await apiRequest(`${base}/papers/${encodeURIComponent(paper.id)}/latest-result`);
+            if (!current(ctx)) return;
+            applyResult({ ...data, mistake_count: paper.mistake_count ?? 0 });
+            message();
+            renderResult();
+        } catch (error) {
+            if (current(ctx)) message(error.message || '答卷加载失败，请重试', true);
+        } finally {
+            if (current(ctx)) setBusy(false);
+        }
+    }
+
     async function open() {
-        draftKey = `english-reciter-exam:${sessionStudentUsername()}`;
+        draftKey = isParentSession ? '' : `english-reciter-exam:${sessionStudentUsername()}`;
         if (attempt || result) return;
         const ctx = context();
         showView('setup');
@@ -671,8 +695,8 @@
         try {
             await refreshPapers();
             if (!current(ctx)) return;
-            const draft = readDraft();
-            if (draft?.id && !isParentSession && !busy && !attempt && !result) {
+            const draft = draftKey ? readDraft() : null;
+            if (draft?.id && !busy && !attempt && !result) {
                 const data = await apiRequest(`${base}/attempts/${encodeURIComponent(draft.id)}?supports_listening=1`);
                 if (!current(ctx) || busy || attempt || result) return;
                 if (data.result) {
@@ -902,7 +926,7 @@
     }
 
     async function submitExam() {
-        if (busy || !attempt) return;
+        if (busy || !attempt || isParentSession) return;
         const ctx = context();
         setBusy(true);
         message('正在批改考卷…');
@@ -924,26 +948,29 @@
 
     function renderResult() {
         showView('result');
+        const readOnly = isParentSession;
         const reviewing = result.mode === 'wrong_review';
-        el('exam-result-heading').textContent = reviewing ? '错题复习完成' : '考试完成';
+        el('exam-result-heading').textContent = readOnly ? '最近答卷' : (reviewing ? '错题复习完成' : '考试完成');
         el('exam-result-name').textContent = result.paper_name;
         el('exam-result-score').textContent = `${result.score} 分`;
         el('exam-result-summary').textContent = `共 ${result.total} 题，答对 ${result.correct_count} 题，答错 ${result.wrong_count} 题。`;
-        el('exam-result-perfect').hidden = result.wrong_count > 0;
-        el('exam-mistake-status').textContent = result.mistake_count
+        el('exam-result-perfect').hidden = readOnly || result.wrong_count > 0;
+        el('exam-mistake-status').textContent = readOnly ? `待复习错题 ${result.mistake_count} 题。` : result.mistake_count
             ? `错题已保存，待复习 ${result.mistake_count} 题。返回考卷后也可以继续复习。`
             : reviewing ? '错题已全部巩固，继续保持！' : '当前没有待复习错题。';
         updateMistakeControls();
-        el('exam-wrong-title').textContent = `错题回顾（${result.wrong_count} 题）`;
+        el('exam-wrong-title').textContent = readOnly ? `答卷详情（${result.total} 题）` : `错题回顾（${result.wrong_count} 题）`;
         const list = el('exam-wrong-list');
         list.replaceChildren();
-        for (const question of result.questions.filter((row) => !row.correct)) {
+        const questions = readOnly ? result.questions : result.questions.filter((row) => !row.correct);
+        for (const [position, question] of questions.entries()) {
             const card = document.createElement('article');
             card.className = 'exam-wrong-card';
             const title = document.createElement('h4');
-            title.textContent = ['translation', 'fill_blank', 'rewrite', 'reading_choice', 'listening_choice'].includes(question.type) ? typeNames[question.type] : `${question.english} · ${typeNames[question.type]}`;
+            const typeLabel = ['translation', 'fill_blank', 'rewrite', 'reading_choice', 'listening_choice'].includes(question.type) ? typeNames[question.type] : `${question.english} · ${typeNames[question.type]}`;
+            title.textContent = readOnly ? `第 ${position + 1} 题 · ${typeLabel} · ${question.correct ? '正确' : '错误'}` : typeLabel;
             card.appendChild(title);
-            [question.prompt, `你的答案：${question.user_answer || '未作答'}`, `正确答案：${question.correct_answer}`,
+            [question.prompt, `${readOnly ? '学生答案' : '你的答案'}：${question.user_answer || '未作答'}`, `正确答案：${question.correct_answer}`,
                 question.translation, question.explanation].filter(Boolean).forEach((text) => {
                 const line = document.createElement('p');
                 line.textContent = text;
@@ -1063,6 +1090,7 @@
             if (!busy) hideMissingImport();
         });
         el('exam-start').addEventListener('click', startExam);
+        el('exam-view-last-result').addEventListener('click', openLastResult);
         el('exam-review-paper-mistakes').addEventListener('click', () => startMistakeReview(selectedPaper));
         el('exam-review-mistakes').addEventListener('click', () => startMistakeReview(result?.paper_id));
         el('exam-previous').addEventListener('click', () => moveQuestion(-1));

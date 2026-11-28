@@ -39,6 +39,7 @@ def register_routes(app, services):
 
     @blueprint.route('/api/chat/messages', methods=['POST'])
     @services.token_required
+    @services.parent_forbidden
     def api_chat_messages_post(username):
         if not services._rate_allow(f'chat_post:{username}', services._RATE_MAX_CHAT_POST):
             return (services.jsonify({'error': '发送过于频繁，请稍后再试'}), 429)

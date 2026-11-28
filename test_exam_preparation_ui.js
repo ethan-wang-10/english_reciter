@@ -101,6 +101,7 @@ function examUI(storage = new Map()) {
             const body = options.body ? JSON.parse(options.body) : null;
             state.calls.push({ url, body, method: options.method || 'GET' });
             if (url.endsWith('/knowledge')) return typeof state.knowledge === 'function' ? state.knowledge() : state.knowledge;
+            if (url.endsWith('/latest-result')) return state.latestResult;
             if (url === '/wordbank/csv/import-words') {
                 if (state.import) return state.import(body);
                 state.failCreation = false;
@@ -416,6 +417,32 @@ test('parent can see preparation but cannot start an exam', async () => {
     assert.equal(ui.field('exam-start').disabled, true);
     await ui.field('exam-start').fire('click');
     assert.equal(ui.state.calls.some((call) => call.url.endsWith('/attempts')), false);
+});
+
+test('parent sees the last submitted answers without touching the student draft', async () => {
+    const key = 'english-reciter-exam:alice';
+    const draft = JSON.stringify({ id: 'pending-attempt', answers: { q1: 'draft' } });
+    const ui = examUI(new Map([[key, draft]]));
+    ui.context.isParentSession = true;
+    ui.state.paper.attempt_count = 1;
+    ui.state.latestResult = { result: {
+        paper_id: ui.state.paper.id, paper_name: ui.state.paper.name, score: 50, total: 2, correct_count: 1, wrong_count: 1,
+        questions: [
+            { type: 'spelling', prompt: '苹果', english: 'apple', user_answer: 'apple', correct_answer: 'apple', correct: true },
+            { type: 'spelling', prompt: '照顾', english: 'look after', user_answer: '', correct_answer: 'look after', correct: false },
+        ],
+    } };
+    await ui.api.open();
+    assert.equal(ui.field('exam-view-last-result').hidden, false);
+    await ui.field('exam-view-last-result').fire('click');
+    assert.equal(ui.field('exam-result-view').hidden, false);
+    assert.equal(ui.field('exam-attempt-view').hidden, true);
+    assert.equal(ui.field('exam-wrong-list').children.length, 2);
+    assert.equal(ui.field('exam-wrong-list').children[0].children[2].textContent, '学生答案：apple');
+    assert.equal(ui.field('exam-review-mistakes').hidden, true);
+    assert.equal(ui.state.calls.some((call) => call.url.includes('/attempts/')), false);
+    ui.api.reset();
+    assert.equal(ui.storage.get(key), draft);
 });
 
 test('editing loads the selected paper beside the list and cancellation restores a new paper draft', async () => {

@@ -78,6 +78,7 @@ def register_routes(app, services):
 
     @blueprint.route('/api/words/extra-review', methods=['GET'])
     @services.token_required
+    @services.parent_forbidden
     def get_extra_review_list(username):
         """今日无待复习时：按复习次数最少优先、同层随机抽取 10 个加练词。"""
         try:

@@ -1,5 +1,49 @@
 // ==================== 进度功能 ====================
 
+async function addParentPendingWord(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = document.getElementById('parent-add-word-submit');
+    if (!isParentSession || button.disabled) return;
+
+    const account = captureAccountContext();
+    const englishInput = document.getElementById('parent-add-word-english');
+    const chineseInput = document.getElementById('parent-add-word-chinese');
+    const status = document.getElementById('parent-add-word-status');
+    const englishDraft = englishInput.value;
+    const chineseDraft = chineseInput.value;
+    const english = englishDraft.normalize('NFKC').trim().replace(/[’‘]/g, "'").replace(/\s+/g, ' ');
+    const chinese = chineseDraft.trim();
+    status.hidden = false;
+    if (!/^[a-z0-9 .'-]{1,120}$/i.test(english) || !/[a-z]/i.test(english) || !chinese) {
+        status.textContent = '请填写英文单词或词组及中文释义。';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = '正在加入待复习…';
+    try {
+        const data = await apiRequest('/words/import-json', { method: 'POST', body: JSON.stringify([{ english, chinese }]) });
+        if (!isAccountContextCurrent(account)) return;
+        if (data.added > 0) {
+            status.textContent = `「${english}」已加入学生的待复习。`;
+            if (englishInput.value === englishDraft && chineseInput.value === chineseDraft) {
+                form.reset();
+                englishInput.focus();
+            }
+            invalidateReviewDataAfterImport();
+            void loadStats();
+            void loadProgress();
+        } else {
+            status.textContent = data.skipped_duplicate > 0 ? `「${english}」已在待复习或已掌握中。` : (data.message || '未能加入待复习。');
+        }
+    } catch (error) {
+        if (isAccountContextCurrent(account)) status.textContent = error.message || '加入失败，请重试。';
+    } finally {
+        if (isAccountContextCurrent(account)) button.disabled = false;
+    }
+}
+
 function _renderProgressWordItem(word) {
     const nextLine = escapeHtml(formatNextReviewLine(word));
     const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';

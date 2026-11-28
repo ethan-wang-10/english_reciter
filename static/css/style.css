@@ -8218,6 +8218,38 @@ button.import-article-chip--selected:hover {
     }
 }
 
+.parent-add-word {
+    margin-bottom: 20px;
+    padding-block: 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.parent-add-word h3 {
+    font-size: 1rem;
+    margin: 0 0 10px;
+}
+
+.parent-add-word-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.parent-add-word-fields label {
+    flex: 1 1 12rem;
+    min-width: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.parent-add-word-fields input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    margin-top: 4px;
+}
+
 /* ---------- 学习地图（按已掌握词数里程碑） ---------- */
 .learning-map-panel {
     margin: 0 0 24px;
@@ -10387,6 +10419,10 @@ body.chat-sidebar-open {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+}
+
+.chat-compose[hidden] {
+    display: none;
 }
 
 .chat-compose-input-wrap {

@@ -6,6 +6,57 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, 'static/js/app.js'), 'utf8');
 
+test('parent navigation keeps word browsing and the quick form adds a private pending word', async () => {
+    const inputEnglish = { value: '  look   after  ', focus() {} };
+    const inputChinese = { value: ' 照顾 ' };
+    const form = { hidden: true, reset() { inputEnglish.value = ''; inputChinese.value = ''; } };
+    const submit = { disabled: false };
+    const status = { hidden: true };
+    const fields = {
+        'parent-add-word-form': form,
+        'parent-add-word-english': inputEnglish,
+        'parent-add-word-chinese': inputChinese,
+        'parent-add-word-submit': submit,
+        'parent-add-word-status': status,
+    };
+    const pages = { review: { style: {} }, discover: { style: {} }, textbook: { style: {} } };
+    const context = vm.createContext({
+        URLSearchParams,
+        window: { location: { search: '' } },
+        localStorage: { getItem: (key) => ({ token: 'parent-token', username: 'alice_parent', session_is_parent: '1' }[key] || null) },
+        document: {
+            getElementById: (id) => fields[id] || null,
+            querySelectorAll: (selector) => {
+                const page = pages[selector.match(/data-page="([a-z]+)"/)?.[1]];
+                return page ? [page] : [];
+            },
+            addEventListener() {},
+        },
+    });
+    vm.runInContext(source, context);
+    const calls = [];
+    context.apiRequest = async (endpoint, options) => {
+        calls.push({ endpoint, method: options.method, body: JSON.parse(options.body) });
+        return { added: 1 };
+    };
+    context.loadStats = () => {};
+    context.loadProgress = () => {};
+    context.applyParentNavMode();
+    assert.equal(form.hidden, false);
+    assert.equal(pages.review.style.display, 'none');
+    assert.notEqual(pages.discover.style.display, 'none');
+    assert.notEqual(pages.textbook.style.display, 'none');
+
+    const event = { preventDefault() {}, currentTarget: form };
+    const pending = context.addParentPendingWord(event);
+    event.currentTarget = null;
+    await pending;
+    assert.deepEqual(calls, [{ endpoint: '/words/import-json', method: 'POST', body: [{ english: 'look after', chinese: '照顾' }] }]);
+    assert.match(status.textContent, /已加入学生的待复习/);
+    assert.equal(inputEnglish.value, '');
+    assert.equal(submit.disabled, false);
+});
+
 test('startup renders learning before deferred rewards and requests the lightweight bootstrap', async () => {
     const elements = new Map();
     class Element {

@@ -226,6 +226,8 @@ document.addEventListener('DOMContentLoaded', function() {
         openSettings();
     });
 
+    document.getElementById('parent-add-word-form')?.addEventListener('submit', addParentPendingWord);
+
     document.querySelectorAll('.js-pk-hub-open').forEach((btn) => {
         btn.addEventListener('click', () => {
             void (async () => {

@@ -5244,6 +5244,15 @@ function resetAccountSessionView() {
     articleAiExtractEnabled = false;
     serverPiperAvailable = false;
     resetArticleImportPickUI();
+    const parentWordForm = document.getElementById('parent-add-word-form');
+    if (parentWordForm) {
+        parentWordForm.reset();
+        parentWordForm.hidden = true;
+        document.getElementById('parent-add-word-submit').disabled = false;
+        const status = document.getElementById('parent-add-word-status');
+        status.textContent = '';
+        status.hidden = true;
+    }
     importVocabBusy = false;
     const vocabInput = document.getElementById('import-vocab-textarea');
     if (vocabInput) vocabInput.value = '';
@@ -5277,17 +5286,13 @@ function showLoginPage() {
 
 function applyParentNavMode() {
     const hide = isParentSession;
-    ['review', 'discover', 'textbook'].forEach((page) => {
-        document.querySelectorAll(`.nav-item[data-page="${page}"]`).forEach((el) => {
-            el.style.display = hide ? 'none' : '';
-        });
-        document.querySelectorAll(`.mobile-tab[data-page="${page}"]`).forEach((el) => {
-            el.style.display = hide ? 'none' : '';
-        });
-        document.querySelectorAll(`.mobile-more-link[data-page="${page}"]`).forEach((el) => {
-            el.style.display = hide ? 'none' : '';
-        });
+    document.querySelectorAll('[data-page="review"]').forEach((el) => {
+        el.style.display = hide ? 'none' : '';
     });
+    const parentWordForm = document.getElementById('parent-add-word-form');
+    if (parentWordForm) parentWordForm.hidden = !isParentSession;
+    const chatCompose = document.getElementById('chat-compose');
+    if (chatCompose) chatCompose.hidden = isParentSession;
     document.querySelectorAll('#ng-pk-active, #mobile-ng-pk-active').forEach((el) => {
         if (el) el.style.display = hide ? 'none' : '';
     });
@@ -5446,12 +5451,12 @@ async function showMainPage() {
     const udisp = document.getElementById('username-display');
     if (udisp) {
         udisp.textContent =
-            isParentSession && childUsername ? `${childUsername}（家长查看）` : username;
+            isParentSession && childUsername ? `${childUsername}（家长模式）` : username;
     }
     document.querySelector('#main-page .nav-user')?.setAttribute(
         'aria-label',
         isParentSession && childUsername
-            ? `家长查看 ${childUsername}`
+            ? `${childUsername} 的家长模式`
             : username
               ? `当前用户 ${username}`
               : ''
@@ -5586,6 +5591,7 @@ function syncReviewSectionChromeClass() {
 }
 
 function showSection(sectionId) {
+    if (isParentSession && sectionId === 'review') sectionId = 'progress';
     if (sectionId !== 'english-dictation') window.englishDictation?.leaveView();
     closeDailySummaryPopover();
     closeDesktopMoreMenu(true);
@@ -8180,6 +8186,50 @@ function renderLearningMap(masteredWords) {
 // Source: static/js/app/wordbank.js
 // ==================== 进度功能 ====================
 
+async function addParentPendingWord(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = document.getElementById('parent-add-word-submit');
+    if (!isParentSession || button.disabled) return;
+
+    const account = captureAccountContext();
+    const englishInput = document.getElementById('parent-add-word-english');
+    const chineseInput = document.getElementById('parent-add-word-chinese');
+    const status = document.getElementById('parent-add-word-status');
+    const englishDraft = englishInput.value;
+    const chineseDraft = chineseInput.value;
+    const english = englishDraft.normalize('NFKC').trim().replace(/[’‘]/g, "'").replace(/\s+/g, ' ');
+    const chinese = chineseDraft.trim();
+    status.hidden = false;
+    if (!/^[a-z0-9 .'-]{1,120}$/i.test(english) || !/[a-z]/i.test(english) || !chinese) {
+        status.textContent = '请填写英文单词或词组及中文释义。';
+        return;
+    }
+
+    button.disabled = true;
+    status.textContent = '正在加入待复习…';
+    try {
+        const data = await apiRequest('/words/import-json', { method: 'POST', body: JSON.stringify([{ english, chinese }]) });
+        if (!isAccountContextCurrent(account)) return;
+        if (data.added > 0) {
+            status.textContent = `「${english}」已加入学生的待复习。`;
+            if (englishInput.value === englishDraft && chineseInput.value === chineseDraft) {
+                form.reset();
+                englishInput.focus();
+            }
+            invalidateReviewDataAfterImport();
+            void loadStats();
+            void loadProgress();
+        } else {
+            status.textContent = data.skipped_duplicate > 0 ? `「${english}」已在待复习或已掌握中。` : (data.message || '未能加入待复习。');
+        }
+    } catch (error) {
+        if (isAccountContextCurrent(account)) status.textContent = error.message || '加入失败，请重试。';
+    } finally {
+        if (isAccountContextCurrent(account)) button.disabled = false;
+    }
+}
+
 function _renderProgressWordItem(word) {
     const nextLine = escapeHtml(formatNextReviewLine(word));
     const phoneticHtml = word.phonetic ? `<span class="word-item-phonetic">${escapeHtml(word.phonetic)}</span>` : '';
@@ -10591,6 +10641,8 @@ document.addEventListener('DOMContentLoaded', function() {
         closeMobileMoreSheet();
         openSettings();
     });
+
+    document.getElementById('parent-add-word-form')?.addEventListener('submit', addParentPendingWord);
 
     document.querySelectorAll('.js-pk-hub-open').forEach((btn) => {
         btn.addEventListener('click', () => {

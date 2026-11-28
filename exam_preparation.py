@@ -448,6 +448,19 @@ class ExamPreparationStore:
                 "result": json.loads(row["result_json"]) if row["result_json"] else None,
             }
 
+    def latest_result(self, paper_id: str) -> dict:
+        if not self.path.is_file():
+            raise ExamPreparationError("这张考卷暂无已交答卷", 404)
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT result_json FROM exam_attempts a WHERE paper_id=? AND result_json IS NOT NULL "
+                "AND NOT EXISTS (SELECT 1 FROM exam_mistake_reviews r WHERE r.attempt_id=a.id) "
+                "ORDER BY submitted_at DESC, a.rowid DESC LIMIT 1", (paper_id,),
+            ).fetchone()
+        if row is None:
+            raise ExamPreparationError("这张考卷暂无已交答卷", 404)
+        return json.loads(row["result_json"])
+
     def submit_attempt(self, attempt_id: str, answers: object) -> dict:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")

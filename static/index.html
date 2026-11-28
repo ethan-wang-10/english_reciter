@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#58CC02">
     <title>智能英语背诵系统</title>
     <link rel="icon" type="image/svg+xml" href="/static/assets/brand/logo-mark.39d2e72c73f29bc0.svg">
-    <link rel="stylesheet" href="/static/assets/css/style.5a475613d811f533.css">
+    <link rel="stylesheet" href="/static/assets/css/style.bff6544a59c68f70.css">
     <link rel="stylesheet" href="/static/assets/css/exam-preparation.1b272a86e5061bea.css">
     <link rel="stylesheet" href="/static/assets/css/subject-switch.4a8cdd20b9fb56be.css">
     <link rel="stylesheet" href="/static/assets/css/english-dictation.8b8ec94a7bc03075.css">
@@ -610,8 +610,9 @@
                             </div>
                             <div id="exam-paper-settings" hidden>
                                 <p id="exam-builtin-hint" class="exam-hint" hidden></p>
-                                <p id="exam-parent-hint" class="exam-hint" hidden>家长可以为孩子创建考卷，请使用学生账号参加考试。</p>
+                                <p id="exam-parent-hint" class="exam-hint" hidden>家长可准备考卷和查看已交答卷。考试和错题复习由学生完成。</p>
                                 <button id="exam-start" type="button" class="btn btn-primary" disabled>开始考试</button>
+                                <button id="exam-view-last-result" type="button" class="btn btn-secondary" hidden>查看最近答卷</button>
                                 <div class="exam-paper-mistakes">
                                     <p id="exam-paper-mistake-count" class="exam-hint" aria-live="polite">暂无待复习错题</p>
                                     <button id="exam-review-paper-mistakes" type="button" class="btn btn-secondary" disabled>复习错题</button>
@@ -692,6 +693,19 @@
             <div id="progress-section" class="section">
                 <div class="container">
                     <h2>学习进度</h2>
+                    <form id="parent-add-word-form" class="parent-add-word" aria-labelledby="parent-add-word-title" hidden>
+                        <h3 id="parent-add-word-title">给学生加生词</h3>
+                        <div class="parent-add-word-fields">
+                            <label for="parent-add-word-english">英文单词或词组
+                                <input id="parent-add-word-english" class="wordbank-search" maxlength="120" autocapitalize="none" autocomplete="off" spellcheck="false" required>
+                            </label>
+                            <label for="parent-add-word-chinese">中文释义
+                                <input id="parent-add-word-chinese" class="wordbank-search" maxlength="500" autocomplete="off" required>
+                            </label>
+                            <button id="parent-add-word-submit" type="submit" class="btn btn-primary">加入待复习</button>
+                        </div>
+                        <p id="parent-add-word-status" class="settings-hint" role="status" hidden></p>
+                    </form>
                     <div class="learning-map-panel">
                         <h3 class="learning-map-heading">学习地图</h3>
                         <p class="learning-map-intro">共 <strong>12 词数阶</strong>，按已掌握词数解锁；路径横向延伸并在行间转弯，终极为 <strong>4000</strong> 词。未解锁节点有半透明遮挡。</p>
@@ -1582,7 +1596,7 @@
                 <button type="button" id="chat-sidebar-close" class="chat-sidebar-close" aria-label="关闭聊天室">×</button>
             </div>
             <div id="chat-log" class="chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
-            <div class="chat-compose">
+            <div class="chat-compose" id="chat-compose">
                 <div class="chat-compose-input-wrap">
                     <div id="chat-at-suggest" class="chat-at-suggest" role="listbox" aria-label="提及用户" hidden></div>
                     <div id="chat-emoji-panel" class="chat-emoji-panel" role="listbox" aria-label="表情" hidden></div>
@@ -1597,10 +1611,10 @@
     </div>
     
     <script src="/static/assets/js/performance.cabc7fdc8aff1192.js" defer></script>
-    <script src="/static/assets/js/app.d73f09c0a9378606.js" defer></script>
+    <script src="/static/assets/js/app.6879f8c8d0fe7239.js" defer></script>
     <script src="/static/assets/js/english-dictation-host.10c6b22669f3fff1.js" defer></script>
     <script src="/static/assets/js/english-dictation.4df2e4d003cec3c5.js" defer></script>
-    <script src="/static/assets/js/exam-preparation.630db8337157ce1e.js" defer></script>
+    <script src="/static/assets/js/exam-preparation.4489aae2c8a8182d.js" defer></script>
     <script src="/static/assets/js/chat-sidebar.8edef40ea8fe6819.js" defer></script>
     <script src="/static/assets/js/textbook.0528bf065ba0644e.js" defer></script>
     <script src="/static/assets/js/admin.c768f0b63b2a1459.js" defer></script>

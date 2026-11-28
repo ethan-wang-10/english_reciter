@@ -172,6 +172,15 @@ function resetAccountSessionView() {
     articleAiExtractEnabled = false;
     serverPiperAvailable = false;
     resetArticleImportPickUI();
+    const parentWordForm = document.getElementById('parent-add-word-form');
+    if (parentWordForm) {
+        parentWordForm.reset();
+        parentWordForm.hidden = true;
+        document.getElementById('parent-add-word-submit').disabled = false;
+        const status = document.getElementById('parent-add-word-status');
+        status.textContent = '';
+        status.hidden = true;
+    }
     importVocabBusy = false;
     const vocabInput = document.getElementById('import-vocab-textarea');
     if (vocabInput) vocabInput.value = '';
@@ -205,17 +214,13 @@ function showLoginPage() {
 
 function applyParentNavMode() {
     const hide = isParentSession;
-    ['review', 'discover', 'textbook'].forEach((page) => {
-        document.querySelectorAll(`.nav-item[data-page="${page}"]`).forEach((el) => {
-            el.style.display = hide ? 'none' : '';
-        });
-        document.querySelectorAll(`.mobile-tab[data-page="${page}"]`).forEach((el) => {
-            el.style.display = hide ? 'none' : '';
-        });
-        document.querySelectorAll(`.mobile-more-link[data-page="${page}"]`).forEach((el) => {
-            el.style.display = hide ? 'none' : '';
-        });
+    document.querySelectorAll('[data-page="review"]').forEach((el) => {
+        el.style.display = hide ? 'none' : '';
     });
+    const parentWordForm = document.getElementById('parent-add-word-form');
+    if (parentWordForm) parentWordForm.hidden = !isParentSession;
+    const chatCompose = document.getElementById('chat-compose');
+    if (chatCompose) chatCompose.hidden = isParentSession;
     document.querySelectorAll('#ng-pk-active, #mobile-ng-pk-active').forEach((el) => {
         if (el) el.style.display = hide ? 'none' : '';
     });
@@ -374,12 +379,12 @@ async function showMainPage() {
     const udisp = document.getElementById('username-display');
     if (udisp) {
         udisp.textContent =
-            isParentSession && childUsername ? `${childUsername}（家长查看）` : username;
+            isParentSession && childUsername ? `${childUsername}（家长模式）` : username;
     }
     document.querySelector('#main-page .nav-user')?.setAttribute(
         'aria-label',
         isParentSession && childUsername
-            ? `家长查看 ${childUsername}`
+            ? `${childUsername} 的家长模式`
             : username
               ? `当前用户 ${username}`
               : ''
@@ -514,6 +519,7 @@ function syncReviewSectionChromeClass() {
 }
 
 function showSection(sectionId) {
+    if (isParentSession && sectionId === 'review') sectionId = 'progress';
     if (sectionId !== 'english-dictation') window.englishDictation?.leaveView();
     closeDailySummaryPopover();
     closeDesktopMoreMenu(true);

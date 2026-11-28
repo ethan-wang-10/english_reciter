@@ -297,7 +297,7 @@ def test_exam_api_authentication_and_user_isolation(client, exam_environment):
     assert client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=bob, json={'answers': {}}).status_code == 404
 
 
-def test_parent_can_prepare_child_paper_but_cannot_take_exam(client, exam_environment):
+def test_parent_can_prepare_and_read_the_childs_submitted_paper_but_cannot_take_exam(client, exam_environment):
     parent = {'Authorization': 'Bearer alice_parent'}
     child = {'Authorization': 'Bearer alice'}
     paper = client.post('/api/exam-preparation/papers', headers=parent, json={'name': '家长准备', 'words': 'apple'}).get_json()['paper']
@@ -306,6 +306,24 @@ def test_parent_can_prepare_child_paper_but_cannot_take_exam(client, exam_enviro
     attempt = client.post(f"/api/exam-preparation/papers/{paper['id']}/attempts", headers=child, json={}).get_json()['attempt']
     assert client.get(f"/api/exam-preparation/attempts/{attempt['id']}", headers=parent).status_code == 403
     assert client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=parent, json={'answers': {}}).status_code == 403
+    paper_url = f"/api/exam-preparation/papers/{paper['id']}"
+    latest = paper_url + '/latest-result'
+    assert client.get(latest, headers=parent).status_code == 404
+    submitted = client.post(f"/api/exam-preparation/attempts/{attempt['id']}/submit", headers=child, json={'answers': {}})
+    assert submitted.status_code == 200
+    result = submitted.get_json()['result']
+    assert result['score'] == 0
+
+    review = client.post(paper_url + '/mistake-reviews', headers=child, json={}).get_json()['attempt']
+    assert client.post(f"/api/exam-preparation/attempts/{review['id']}/submit", headers=child,
+                       json={'answers': {review['questions'][0]['id']: 'apple'}}).status_code == 200
+    assert client.post(paper_url + '/attempts', headers=child, json={}).status_code == 201
+    seen = client.get(latest, headers=parent)
+    assert seen.get_json() == {'result': result}
+    assert seen.cache_control.no_store
+    assert client.get(latest).status_code == 401
+    assert client.get(latest, headers={'Authorization': 'Bearer bob'}).status_code == 404
+    assert not (exam_environment / 'alice_parent').exists()
 
 
 def test_exam_api_choices_require_real_boolean(client, exam_environment):
@@ -1333,6 +1351,39 @@ def _mock_parent_session(monkeypatch) -> None:
     }
     monkeypatch.setattr(web, "verify_token", lambda token: "alice_parent")
     monkeypatch.setattr(web, "get_user", lambda username: users.get(username))
+
+
+def test_parent_adds_new_words_only_to_the_linked_students_pending_list(client, monkeypatch, tmp_path):
+    users = {
+        'alice': {'enabled': True}, 'bob': {'enabled': True},
+        'alice_parent': {'enabled': True, 'role': 'parent', 'child_username': 'alice'},
+    }
+    monkeypatch.setattr(web, 'DATA_DIR', tmp_path)
+    monkeypatch.setattr(web, 'get_user', users.get)
+    monkeypatch.setattr(web, 'verify_token', lambda token: token if token in users else None)
+    monkeypatch.setattr(web, '_rate_allow', lambda *args: True)
+    monkeypatch.setattr(web, 'lookup_csv_word', lambda *args: None)
+    parent = {'Authorization': 'Bearer alice_parent'}
+    phrase = {'english': 'make time for', 'chinese': '为……腾出时间', 'success_count': 5, 'review_count': 10}
+    assert client.post('/api/words/import-json', headers=parent, json=[phrase]).get_json()['added'] == 1
+    assert client.post('/api/words/import-json', headers=parent, json=[phrase]).get_json()['skipped_duplicate'] == 1
+    pending = client.get('/api/words/status', headers={'Authorization': 'Bearer alice'}).get_json()['words']
+    assert [(word['english'], word['chinese'], word['success_count'], word['review_count']) for word in pending] == [
+        ('make time for', '为……腾出时间', 0, 0),
+    ]
+    assert not client.get('/api/words/status', headers={'Authorization': 'Bearer bob'}).get_json()['words']
+    assert not (tmp_path / 'alice_parent').exists()
+    assert client.get('/api/words/extra-review', headers=parent).status_code == 403
+    assert client.post('/api/words/practice', headers=parent, json={}).status_code == 403
+
+
+def test_parent_can_read_chat_but_cannot_send_as_the_student(client, monkeypatch):
+    _mock_parent_session(monkeypatch)
+    monkeypatch.setattr(web, '_rate_allow', lambda *args: True)
+    monkeypatch.setattr(web.chat_room, 'get_messages', lambda **kwargs: [])
+    parent = {'Authorization': 'Bearer parent-test'}
+    assert client.get('/api/chat/messages', headers=parent).get_json() == {'messages': []}
+    assert client.post('/api/chat/messages', headers=parent, json={'body': '消息'}).status_code == 403
 
 
 def test_parent_can_update_student_learning_limits(client, monkeypatch, tmp_path) -> None:

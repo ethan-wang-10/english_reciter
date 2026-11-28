@@ -10,7 +10,7 @@ def register_routes(app, services):
     @blueprint.route('/api/words/import-json', methods=['POST'])
     @services.token_required
     def import_words_json(username):
-        """家长粘贴学习数据格式的 JSON，合并到当前用户的待复习词库。"""
+        """将词条加入当前学生的待复习词库。"""
         if not services._rate_allow(f'import_json:{username}', services._RATE_MAX_IMPORT_JSON):
             return (services.jsonify({'error': '导入过于频繁，请稍后再试'}), 429)
         items, err = services._parse_import_json_body(services.request)
@@ -20,12 +20,16 @@ def register_routes(app, services):
             return (services.jsonify({'error': '单词列表为空'}), 400)
         if len(items) > 5000:
             return (services.jsonify({'error': '单次最多导入 5000 条'}), 400)
+        is_parent = getattr(services.g, 'is_parent', False)
         norm_items: services.List[dict] = []
         for it in items:
             if not isinstance(it, dict):
                 norm_items.append(it)
                 continue
-            row = dict(it)
+            if is_parent:
+                row = {key: it[key] for key in ('english', 'chinese', 'example') if isinstance(it.get(key), str)}
+            else:
+                row = dict(it)
             en = str(row.get('english', '')).strip()
             if en:
                 row['english'] = services._normalize_import_english_surface(en)[:500]

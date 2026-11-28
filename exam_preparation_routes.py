@@ -55,6 +55,13 @@ def register_exam_preparation_routes(app, token_required, parent_forbidden, data
             raise ExamPreparationError('这张考卷暂无知识点梳理', 404)
         return jsonify(builtin_exam_catalog.knowledge(paper_id))
 
+    @routes.get('/papers/<paper_id>/latest-result')
+    @token_required
+    def paper_latest_result(username, paper_id):
+        response = jsonify({'result': store(username).latest_result(paper_id)})
+        response.cache_control.no_store = True
+        return response
+
     def paper_content(username, body):
         name = body.get("name")
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > MAX_PAPER_NAME:

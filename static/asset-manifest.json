@@ -16,9 +16,9 @@
       "url": "/static/assets/css/exam-preparation.1b272a86e5061bea.css"
     },
     "/static/css/style.css": {
-      "bytes": 218119,
-      "sha256": "5a475613d811f533ea635bca3db25ccfe30f3046978b9c531e821afcc4c39410",
-      "url": "/static/assets/css/style.5a475613d811f533.css"
+      "bytes": 218695,
+      "sha256": "bff6544a59c68f700d6f032e78387befa576db0571195b03615552d708120d18",
+      "url": "/static/assets/css/style.bff6544a59c68f70.css"
     },
     "/static/css/subject-dictation.css": {
       "bytes": 23866,
@@ -51,9 +51,9 @@
       "url": "/static/assets/js/admin.c768f0b63b2a1459.js"
     },
     "/static/js/app.js": {
-      "bytes": 461116,
-      "sha256": "d73f09c0a9378606192a7a374db9c77d65105b8e0641ecff09ee8339a213a795",
-      "url": "/static/assets/js/app.d73f09c0a9378606.js"
+      "bytes": 463614,
+      "sha256": "6879f8c8d0fe72398522c7eb7e3084fa2ed0ae91a631cbb1123fb3f1c358e421",
+      "url": "/static/assets/js/app.6879f8c8d0fe7239.js"
     },
     "/static/js/chat-sidebar.js": {
       "bytes": 34598,
@@ -71,9 +71,9 @@
       "url": "/static/assets/js/english-dictation.4df2e4d003cec3c5.js"
     },
     "/static/js/exam-preparation.js": {
-      "bytes": 54418,
-      "sha256": "630db8337157ce1e14fe882736226702e636448bfe03d077670a31b610ed9f5c",
-      "url": "/static/assets/js/exam-preparation.630db8337157ce1e.js"
+      "bytes": 56082,
+      "sha256": "4489aae2c8a8182d750ed242a854abe4f9fcbe3ffe25fa53587c58044e7a99d8",
+      "url": "/static/assets/js/exam-preparation.4489aae2c8a8182d.js"
     },
     "/static/js/performance.js": {
       "bytes": 17312,
